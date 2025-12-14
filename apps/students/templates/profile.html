@@ -1,0 +1,679 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+  <!-- CSS for CropperJS, SweetAlert2, MagnifiPopup -->
+  <link href="{% static 'vendor/cropperjs/dist/cropper.min.css' %}" rel="stylesheet">
+  <link href="{% static 'vendor/sweetalert2/dist/sweetalert2.min.css' %}" rel="stylesheet">
+  <link href="{% static 'vendor/magnific-popup/magnific-popup.css' %}" rel="stylesheet">
+
+    <style>
+        /* Profile Image Styling */
+        .profile-image-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 20px;
+        }
+
+        .profile-image-container .profile-avatar {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 50%;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            border: 3px solid #fff;
+        }
+
+        .avatar-placeholder {
+            width: 120px;
+            height: 120px;
+            background-color: #f8f9fa;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #fff;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .avatar-title {
+            font-size: 48px;
+            color: #556ee6;
+            font-weight: 500;
+        }
+
+        .profile-image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 120px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            cursor: pointer;
+        }
+
+        .profile-image-container:hover .profile-image-overlay {
+            opacity: 1;
+        }
+
+        .profile-image-overlay i {
+            color: white;
+            font-size: 24px;
+        }
+
+        /* Image Cropper Modal Styling */
+        #image-container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            max-height: 400px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .cropper-container {
+            margin: 0 auto;
+        }
+
+        .change-indicator {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .validation-summary {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .field-group {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #fdfdfe;
+        }
+
+        .field-group-header {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .image-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .image-upload-area:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .image-upload-area.dragover {
+            border-color: #667eea;
+            background-color: #f0f2ff;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+    </style>
+
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                    Student Profile
+                <div class="page-title-subheading">
+                    View student personal information from here
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'students:student_create' %}" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i> Add New Student
+                    </a>
+
+                    <!-- Excel Export -->
+                    <a href="" class="btn btn-outline-success">
+                        <i class="fa fa-file-excel me-1"></i> Export Excel
+                    </a>
+
+                    <!-- PDF Export -->
+                    
+                    <a href="" class="btn btn-outline-danger">
+                        <i class="fa fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-1"></i>
+        {{ message}}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+{% endif %}
+
+<section class="section profile">
+    <div class="row">
+        <div class="col-xl-4">
+            <div class="card">
+                <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
+                    {% if student.photo %}
+                        <img id="currentProfileImage" src="{{ student.photo.url }}" alt="{{ student.get_full_name }}" class="profile-avatar me-2">
+                    {% else %}
+                        <div class="avatar-placeholder me-2">
+                            <div class="avatar-title">
+                                {% if student.first_name %}{{ student.first_name|first }}{% endif %}{% if student.last_name %}{{ student.last_name|first }}{% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <div class="mt-3">
+                        <a href="#" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#profileImageModal">
+                            <i class="bi bi-image"></i> Change Photo
+                        </a>
+                    </div>
+                    <h2 class="mt-3">{{ student.get_full_name }}</h2>
+                    <h3 class="mt-3">{{ student.get_current_academic_level_display }}</h3>
+
+                    <div class="mt-3">
+                        {% if student.enrollment_status == 'active' %}
+                            <span class="badge bg-success">{{ student.enrollment_status }}</span>
+                        {% elif student.enrollment_status == 'graduated' %}
+                            <span class="badge bg-warning text-dark">{{ student.enrollment_status }}</span>
+                        {% elif student.enrollment_status == 'dismissed' %}
+                            <span class="badge bg-danger">{{ student.enrollment_status }}</span>
+                        {% elif student.enrollment_status == 'transferred' %}
+                            <span class="badge bg-secondary">{{ student.enrollment_status }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <a href="{% url 'students:student_edit' student.pk %}" class="btn btn-sm btn-warning me-1">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                        <a href="#" class="btn btn-sm btn-danger me-1" data-bs-toggle="modal" data-bs-target="#deleteStudent{{ student.pk }}">
+                            <i class="bi bi-trash"></i> Delete
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Quick Stats</h5>
+                    <div class="d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="bi bi-calendar-event text-primary"></i>Age:</span>
+                            <strong>{{ student.get_age}} years</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span><i class="bi bi-gender-ambiguous text-primary"></i>Gender:</span>
+                            <strong>{{ student.get_gender_display}}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span><i class="bi bi-book text-primary"></i>Level:</span>
+                            <strong>{{ student.current_academic_level}}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span><i class="bi bi-person-check text-primary"></i>Status:</span>
+                            <strong>{{ student.get_enrollment_status_display}}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8">
+            <div class="card">
+                <div class="card-body pt-3">
+                    <!-- Bordered Tabs -->
+                    <ul class="nav nav-tabs nav-tabs-bordered">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#profile-overview">Overview</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#academic-info">Academic Info</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log">Activity Log</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content pt-4">
+                        <!-- Overview Tab -->
+                        <div class="tab-pane fade show active profile-overview" id="profile-overview">
+                            <h5 class="card-title">Personal Information</h5>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Full Name
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.get_full_name }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    First Name
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.first_name }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Last Name
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.last_name }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Gender
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.get_gender_display }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Date of Birth
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.date_of_birth }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Age
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.get_age }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Student ID
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    <code>{{ student.admission_number }}</code>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Academic Info Tab -->
+                        <div class="tab-pane fade profile-overview" id="academic-info">
+                            <h5 class="card-title">Academic Details</h5>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Current Level
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.get_enrollment_status_display }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Enrollment Status
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {% if student.enrollment_status == 'active' %}
+                                        <span class="badge bg-success">{{ student.enrollment_status }}</span>
+                                    {% elif student.enrollment_status == 'graduated' %}
+                                        <span class="badge bg-warning text-dark">{{ student.enrollment_status }}</span>
+                                    {% elif student.enrollment_status == 'dismissed' %}
+                                        <span class="badge bg-danger">{{ student.enrollment_status }}</span>
+                                    {% elif student.enrollment_status == 'transferred' %}
+                                        <span class="badge bg-secondary">{{ student.enrollment_status }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Enrolled Since
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.created_at|date:"F d, Y" }}
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-lg-3 col-md-4 label fw-bold">
+                                    Last Updated
+                                </div>
+                                <div class="col-lg-9 col-md-8">
+                                    {{ student.updated_at }}
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Activity Log Tab -->
+                        <div class="tab-pane fade profile-overview" id="activity-log">
+                            <h5 class="card-title">Recent Activity</h5>
+
+                            <div class="activity">
+                                <div class="activity-item d-flex align-items-start mb-3">
+                                    <div class="activity-time text-muted small me-3">
+                                        {{ student.updated_at|timesince }} ago
+                                    </div>
+                                    <div class="activity-icon me-3">
+                                        <i class="bi bi-check-circle-fill text-sucess fs-5"></i>
+                                    </div>
+                                    <div class="activity-details">
+                                        <span class="fw-semibold">Profile updated</span>
+                                        <div class="text-muted small">The student information was modified</div>
+                                    </div>
+                                </div>             
+                            </div>
+
+                            <div class="activity">
+                                <div class="activity-item d-flex align-items-start mb-3">
+                                    <div class="activity-time text-muted small me-3">
+                                        {{ student.created_at|timesince }} ago
+                                    </div>
+                                    <div class="activity-icon me-3">
+                                        <i class="bi bi-check-circle-fill text-sucess fs-5"></i>
+                                    </div>
+                                    <div class="activity-details">
+                                        <span class="fw-semibold">Student enrolled</span>
+                                        <div class="text-muted small">Initial profile was created</div>
+                                    </div>
+                                </div>             
+                            </div>
+
+                        </div>
+
+                    </div>
+                    <!-- End Bordered Tabs -->
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Delete Modal -->
+<div class="modal fade" tabindex="-1" id="deleteStudent{{ student.pk }}">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-3">
+            <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                <p>Are you sure you want to delete {{ student }}?.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+
+        <form action="{% url 'students:student_delete' student.pk %}" method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Delete Student</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Image Modal -->
+<div class="modal fade" id="profileImageModal" tabindex="-1" role="dialog" aria-labelledby="profileImageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="profileImageModalLabel">
+                    <i class="fa fa-camera me-2"></i>Update Student Photo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Browse Section -->
+                <div id="browse-section" class="text-center">
+                    <div class="image-upload-area" onclick="document.getElementById('uploadImage').click()">
+                        <i class="fa fa-cloud-upload upload-icon"></i>
+                        <h6>Choose an image to upload</h6>
+                        <p class="text-muted mb-0">Click here or drag and drop your image</p>
+                        <small class="text-muted">Supports JPG, PNG, GIF (Max: 5MB)</small>
+                    </div>
+                    <input type="file" id="uploadImage" accept="image/*" class="d-none">
+                </div>
+                
+                <!-- Image Preview Section -->
+                <div id="image-container" class="text-center mt-3" style="display: none;">
+                    <img id="imagePreview" src="" alt="Image Preview" class="img-fluid">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" id="btnCrop" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-crop me-1"></i>Crop Image
+                </button>
+                <button type="button" id="btnSave" class="btn btn-success" style="display: none;">
+                    <i class="fas fa-save me-1"></i>Use This Photo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'vendor/cropperjs/dist/cropper.min.js' %}"></script>
+<script src="{% static 'vendor/sweetalert2/dist/sweetalert2.all.min.js' %}"></script>
+<script src="{% static 'vendor/magnific-popup/jquery.magnific-popup.min.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadImage = document.querySelector("#uploadImage"),
+          imagePreview = document.querySelector("#imagePreview"),
+          btnCrop = document.querySelector("#btnCrop"),
+          btnSave = document.querySelector("#btnSave"),
+          browseSection = document.querySelector("#browse-section"),
+          imageContainer = document.querySelector("#image-container");
+
+    const updateProfilePictureUrl = "{% url 'students:ajax_update_student_profile_picture' %}";
+    const studentId = "{{ student.id }}";
+
+    let cropper = null;
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    // Handle image selection
+    if (uploadImage) {
+        uploadImage.addEventListener("change", (evt) => {
+            const file = evt.target.files[0];
+            if (!file) return;
+
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+            if (!allowedTypes.includes(file.type)) {
+                Swal.fire({
+                    title: 'Invalid File Type!',
+                    text: 'Please select a JPG or PNG image.',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+                uploadImage.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const originalImage = e.target.result;
+                browseSection.style.display = "none";
+                imageContainer.style.display = "block";
+                imagePreview.src = originalImage;
+
+                // Destroy old cropper if exists
+                if (cropper) cropper.destroy();
+
+                // Initialize cropper immediately after image loads
+                cropper = new Cropper(imagePreview, {
+                    aspectRatio: 1,
+                    viewMode: 2,
+                    dragMode: "move",
+                    background: true,
+                    responsive: true,
+                    ready() {
+                        btnCrop.style.display = "inline-block";
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Handle cropping
+    btnCrop.addEventListener("click", () => {
+        if (!cropper) return;
+
+        const canvas = cropper.getCroppedCanvas({ width: 350, height: 350 });
+        imagePreview.src = canvas.toDataURL("image/jpeg", 1.0);
+
+        cropper.destroy();
+        cropper = null;
+
+        btnCrop.style.display = "none";
+        btnSave.style.display = "inline-block";
+    });
+
+    // Handle save
+    btnSave.addEventListener("click", () => {
+        if (!imagePreview.src) {
+            Swal.fire({
+                title: 'Error!',
+                text: 'No image to save!',
+                icon: 'error',
+            });
+            return;
+        }
+
+        Swal.fire({
+            title: 'Uploading...',
+            text: 'Please wait while we save your profile picture',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        fetch(updateProfilePictureUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrftoken,
+            },
+            body: JSON.stringify({
+                student_id: studentId,
+                image: imagePreview.src
+            }),
+        })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new TypeError("Server didn't return JSON. Please try again");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                Swal.fire({
+                    title: 'Success',
+                    text: data.message,
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    window.location.href = data.redirect_url;
+                });
+            } else {
+                Swal.fire({ 
+                    title: 'Error!', 
+                    text: data.message || 'Failed to update profile picture.', 
+                    icon: 'error' 
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            Swal.fire({ 
+                title: 'Error!', 
+                text: error.message || 'An unexpected error occurred.', 
+                icon: 'error' 
+            });
+        });
+    });
+
+    // Optional: Magnific Popup
+    if (window.jQuery && $('.image-popup-no-margins').length) {
+        $('.image-popup-no-margins').magnificPopup({
+            type: 'image',
+            closeOnContentClick: true,
+            closeBtnInside: false,
+            fixedContentPos: true,
+            mainClass: 'mfp-no-margins mfp-with-zoom',
+            image: { verticalFit: true },
+            zoom: { enabled: true, duration: 300 }
+        });
+    }
+
+});
+</script>
+{% endblock %}
+
+

@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    .level-card {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.3s ease;
+        padding: 15px;
+        text-align: center;
+    }
+
+    .level-card:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+    }
+
+    .badge-yes { background-color: #28a745; }
+    .badge-no { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-notebook icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Academic Levels
+                <div class="page-title-subheading">
+                    Manage and view all academic levels/classes
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'academics:academic_level_create' %}" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i> Add New Level
+                    </a>
+
+                    <!-- Excel Export -->
+                    <a href="" class="btn btn-outline-success">
+                        <i class="fa fa-file-excel me-1"></i> Export Excel
+                    </a>
+
+                    <!-- PDF Export -->
+                    
+                    <a href="" class="btn btn-outline-danger">
+                        <i class="fa fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Levels Table -->
+<div class="main-card mb-3 card">
+    <div class="card-body">
+
+        <!-- Search & Filter -->
+        <section class="section mb-4">
+            <form id="levelSearchForm" class="row g-2">
+                <div class="col-md-4">
+                    <input type="text" name="q" id="levelSearchInput" class="form-control" placeholder="Search by name or code...">
+                </div>
+                <div class="col-md-2">
+                    <select name="is_active" id="activeFilter" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="True">Active</option>
+                        <option value="False">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="has_sections" id="sectionsFilter" class="form-select">
+                        <option value="">All Sections</option>
+                        <option value="True">Has Sections</option>
+                        <option value="False">No Sections</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="is_graduation_level" id="graduationFilter" class="form-select">
+                        <option value="">All Levels</option>
+                        <option value="True">Graduation Level</option>
+                        <option value="False">Regular Level</option>
+                    </select>
+                </div>
+            </form>
+        </section>
+
+        <div id="levelResults">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Code</th>
+                        <th>Order</th>
+                        <th>Next Level</th>
+                        <th>Sections</th>
+                        <th>Active</th>
+                        <th>Graduation</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="levelTableBody">
+                    {% for level in levels %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ level.name }}</td>
+                        <td>{{ level.code }}</td>
+                        <td>{{ level.order }}</td>
+                        <td>
+                            {% if level.next_level %}
+                                {{ level.next_level.name }}
+                            {% else %}
+                                &mdash;
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if level.has_sections %}
+                                <span class="badge badge-yes">Yes</span>
+                            {% else %}
+                                <span class="badge badge-no">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if level.is_active %}
+                                <span class="badge badge-yes">Yes</span>
+                            {% else %}
+                                <span class="badge badge-no">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if level.is_graduation_level %}
+                                <span class="badge badge-yes">Yes</span>
+                            {% else %}
+                                <span class="badge badge-no">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-light">Actions</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-light dropdown-toggle dropdown-toggle-split"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                </button>
+
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item text-warning" href="#">Edit</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="#">Delete</a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="#">More Actions</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted">No academic levels found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    function fetchLevels() {
+        $.ajax({
+            url: "{% url 'academics:academic_level_search' %}",  // AJAX endpoint for level search
+            data: $('#levelSearchForm').serialize(),
+            dataType: 'json',
+            success: function(data) {
+                let tbody = '';
+                if(data.levels.length > 0){
+                    data.levels.forEach(function(level, index){
+                        tbody += `<tr>
+                            <td>${index + 1}</td>
+                            <td>${level.name}</td>
+                            <td>${level.code}</td>
+                            <td>${level.order}</td>
+                            <td>${level.next_level || '—'}</td>
+                            <td><span class="badge ${level.has_sections ? 'badge-yes' : 'badge-no'}">${level.has_sections ? 'Yes' : 'No'}</span></td>
+                            <td><span class="badge ${level.is_active ? 'badge-yes' : 'badge-no'}">${level.is_active ? 'Yes' : 'No'}</span></td>
+                            <td><span class="badge ${level.is_graduation_level ? 'badge-yes' : 'badge-no'}">${level.is_graduation_level ? 'Yes' : 'No'}</span></td>
+                            <td>
+                                <a href="/academics/edit/${level.id}/" class="btn btn-sm btn-warning">Edit</a>
+                                <a href="/academics/delete/${level.id}/" class="btn btn-sm btn-danger">Delete</a>
+                            </td>
+                        </tr>`;
+                    });
+                } else {
+                    tbody = `<tr><td colspan="9" class="text-center text-muted">No academic levels found.</td></tr>`;
+                }
+                $('#levelTableBody').html(tbody);
+            }
+        });
+    }
+
+    $('#levelSearchInput, #activeFilter, #sectionsFilter, #graduationFilter').on('input change', fetchLevels);
+});
+</script>
+{% endblock %}
+

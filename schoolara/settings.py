@@ -43,23 +43,38 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Custom Schoolara apps
-    'core',          # Homepage and first dashboard
-    'accounts',      # User authentication and roles
-    'students',      # Student management
-    'academics',     # Academic sessions, classes, subjects
-    'exams',         # Exam tables and report cards
-    'hr',            # Staff/HR management
-    'fees',          # Student financial accounts
-    'finance',       # School expenses, budgets, vouchers
-    'inventory',     # Stock items and categories
-    'uniforms',      # Uniform vouchers linked to inventory
-    'dashboard',     # Analytics, charts, KPIs
-    'utils',         # Shared helpers, base models, utilities
+    'core',
+    'accounts',
+    'students',
+    'academics',
+    'exams',
+    'hr',
+    'fees',
+    'finance',
+    'inventory',
+    'uniforms',
+    'utils',
 
     # Third-party Apps
     'image_cropping',
-    'sorl.thumbnail',
+    'easy_thumbnails',
+    'django.contrib.humanize',
+    'widget_tweaks',   
 ]
+
+
+# Image Cropping Configuration
+THUMBNAIL_PROCESSORS = (
+    'image_cropping.thumbnail_processors.crop_corners',
+    'easy_thumbnails.processors.colorspace',
+    'easy_thumbnails.processors.autocrop',
+    'easy_thumbnails.processors.scale_and_crop',
+    'easy_thumbnails.processors.filters',
+)
+
+# Optional: Image cropping widget settings
+IMAGE_CROPPING_THUMB_SIZE = (300, 300)
+IMAGE_CROPPING_SIZE_WARNING = True
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -72,6 +87,7 @@ MIDDLEWARE = [
 
     # Add school database middleware AFTER authentication
     'schoolara.middleware.SchoolDatabaseMiddleware',
+    'utils.context.AuditContextMiddleware'
 ]
 
 # Logging configuration for debugging
@@ -123,13 +139,19 @@ ROOT_URLCONF = 'schoolara.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
+        'DIRS': [
+            BASE_DIR / 'templates',   # ← project-wide templates
+        ],
+        'APP_DIRS': True,            # ← enables app templates
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.active_school',
+                'core.context_processors.user_context',
+                'core.context_processors.theme_colors',
             ],
         },
     },
@@ -174,18 +196,7 @@ DATABASES = {
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
-    },
-    'seeta_high': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'seeta_high_db',
-        'USER': 'root',
-        'PASSWORD': '',
-        'HOST': 'localhost',
-        'PORT': '3306',
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-        },
-    },
+    }
 }
 
 DATABASE_ROUTERS = ['schoolara.routers.SchoolRouter']
@@ -225,6 +236,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',     # ← Project-level static folder
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
