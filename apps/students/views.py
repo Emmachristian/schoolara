@@ -24,6 +24,8 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
 from datetime import datetime
 from django.db.models import Q
+import logging
+logger = logging.getLogger(__name__)
 
 from .utils import get_student_statistics
 from .forms import (
@@ -35,7 +37,7 @@ from .forms import (
 @login_required
 def student_list(request):
     # Fixed: Use different variable name for queryset
-    students_queryset = Student.objects.all().order_by('-created_at')
+    students_queryset = Student.objects.all().order_by('-updated_at')
     academic_levels = AcademicLevel.objects.all()
 
     # Get statistics directly from utils
@@ -77,7 +79,7 @@ class StudentCreateWizard(SessionWizardView):
     """
 
     form_list = STUDENT_WIZARD_FORMS
-    template_name = 'wizard.html'
+    template_name = 'wizard.html'  # Make sure path is correct
     file_storage = StudentWizardFileStorage()
 
     def get_context_data(self, form, **kwargs):
@@ -85,15 +87,32 @@ class StudentCreateWizard(SessionWizardView):
         context = super().get_context_data(form=form, **kwargs)
 
         total_steps = len(self.form_list)
-        current_step = self.steps.step1  # 1-indexed
+        current_step_index = list(self.form_list).index(self.steps.current)
 
         context.update({
             'step_names': STUDENT_WIZARD_STEP_NAMES,
             'current_step_name': STUDENT_WIZARD_STEP_NAMES.get(
                 self.steps.current, 'Step'
             ),
-            'progress_percentage': (current_step / total_steps) * 100,
+            'progress_percentage': ((current_step_index) / (total_steps - 1)) * 100 if total_steps > 1 else 100,
         })
+
+        # Add review data for confirmation step
+        if self.steps.current == 'confirmation':
+            context['basic_data'] = self.get_cleaned_data_for_step('basic_info')
+            context['contact_data'] = self.get_cleaned_data_for_step('contact_info')
+            context['academic_data'] = self.get_cleaned_data_for_step('academic_info')
+            context['health_data'] = self.get_cleaned_data_for_step('health_info')
+            context['guardian_data'] = self.get_cleaned_data_for_step('guardian_info')
+            
+            logger.info("=" * 50)
+            logger.info("CONFIRMATION STEP - Review Data:")
+            logger.info(f"Basic: {context['basic_data']}")
+            logger.info(f"Contact: {context['contact_data']}")
+            logger.info(f"Academic: {context['academic_data']}")
+            logger.info(f"Health: {context['health_data']}")
+            logger.info(f"Guardian: {context['guardian_data']}")
+            logger.info("=" * 50)
 
         return context
 
@@ -109,21 +128,64 @@ class StudentCreateWizard(SessionWizardView):
 
         return kwargs
 
+    def post(self, *args, **kwargs):
+        """Override post to add debugging"""
+        logger.info("=" * 50)
+        logger.info(f"POST REQUEST - Current step: {self.steps.current}")
+        logger.info(f"All steps: {list(self.form_list.keys())}")
+        logger.info(f"Is last step: {self.steps.current == self.steps.last}")
+        logger.info(f"POST keys: {list(self.request.POST.keys())}")
+        logger.info("=" * 50)
+        return super().post(*args, **kwargs)
+
+    def process_step(self, form):
+        """Process each step and store data"""
+        logger.info(f"Processing step: {self.steps.current}")
+        logger.info(f"Form is valid: {form.is_valid()}")
+        if not form.is_valid():
+            logger.error(f"Form errors: {form.errors}")
+        else:
+            logger.info(f"Form data: {form.cleaned_data}")
+        return super().process_step(form)
+
     @transaction.atomic
     def done(self, form_list, **kwargs):
         """Persist all wizard data and create student"""
+        
+        logger.info("=" * 80)
+        logger.info("WIZARD DONE METHOD CALLED!!!")
+        logger.info(f"Number of forms: {len(list(form_list))}")
+        logger.info("=" * 80)
 
         try:
             # Merge cleaned data from all steps
             form_data = {}
-            for form in form_list:
+            form_dict = {}  # Create a dictionary of forms by step name
+            
+            for step, form in zip(self.form_list.keys(), form_list):
+                logger.info(f"Processing form: {form.__class__.__name__}")
+                logger.info(f"Cleaned data: {form.cleaned_data}")
                 form_data.update(form.cleaned_data)
+                form_dict[step] = form  # Store form by step name
+
+            logger.info("=" * 50)
+            logger.info("MERGED FORM DATA:")
+            logger.info(form_data)
+            logger.info("=" * 50)
 
             # ------------------------------------------------------------------
-            # Step 1: Create student instance (Basic Info form only)
+            # Step 1: Create student instance from BasicInfoForm
             # ------------------------------------------------------------------
-            basic_form = self.get_form_instance('basic_info')
+            # Get the basic_info form from our dictionary
+            basic_form = form_dict.get('basic_info')
+            
+            if not basic_form:
+                raise ValueError("Basic info form not found in form list!")
+            
+            # Create student instance but don't save yet
             student = basic_form.save(commit=False)
+            
+            logger.info(f"Student instance created: {student}")
 
             # ------------------------------------------------------------------
             # Step 2: Contact & logistics
@@ -134,13 +196,9 @@ class StudentCreateWizard(SessionWizardView):
             student.mailing_address = form_data.get('mailing_address', '')
             student.district = form_data.get('district', '')
             student.region = form_data.get('region', '')
-            student.country_of_residence = form_data.get(
-                'country_of_residence', 'UG'
-            )
+            student.country_of_residence = form_data.get('country_of_residence', 'UG')
 
-            student.transportation_required = form_data.get(
-                'transportation_required', False
-            )
+            student.transportation_required = form_data.get('transportation_required', False)
             student.transport_route = form_data.get('transport_route', '')
             student.pickup_point = form_data.get('pickup_point', '')
             student.pickup_time = form_data.get('pickup_time')
@@ -148,29 +206,15 @@ class StudentCreateWizard(SessionWizardView):
             # ------------------------------------------------------------------
             # Step 3: Academic information
             # ------------------------------------------------------------------
-            student.admission_academic_level = form_data.get(
-                'admission_academic_level'
-            )
-            student.current_academic_level = form_data.get(
-                'current_academic_level'
-            )
-            student.enrollment_status = form_data.get(
-                'enrollment_status', 'active'
-            )
+            student.admission_academic_level = form_data.get('admission_academic_level')
+            student.current_academic_level = form_data.get('current_academic_level')
+            student.enrollment_status = form_data.get('enrollment_status', 'active')
 
             student.previous_school = form_data.get('previous_school', '')
-            student.previous_school_address = form_data.get(
-                'previous_school_address', ''
-            )
-            student.previous_academic_level = form_data.get(
-                'previous_academic_level'
-            )
-            student.transfer_certificate_number = form_data.get(
-                'transfer_certificate_number', ''
-            )
-            student.previous_school_completion_date = form_data.get(
-                'previous_school_completion_date'
-            )
+            student.previous_school_address = form_data.get('previous_school_address', '')
+            student.previous_academic_level = form_data.get('previous_academic_level')
+            student.transfer_certificate_number = form_data.get('transfer_certificate_number', '')
+            student.previous_school_completion_date = form_data.get('previous_school_completion_date')
             student.transfer_reason = form_data.get('transfer_reason', '')
 
             # ------------------------------------------------------------------
@@ -196,7 +240,9 @@ class StudentCreateWizard(SessionWizardView):
             # ------------------------------------------------------------------
             # Save student (admission number generated automatically here)
             # ------------------------------------------------------------------
+            logger.info("About to save student...")
             student.save()
+            logger.info(f"Student saved successfully! ID: {student.pk}, Admission #: {student.admission_number}")
 
             # ------------------------------------------------------------------
             # Step 5: Guardian (existing or new)
@@ -204,9 +250,15 @@ class StudentCreateWizard(SessionWizardView):
             guardian_option = form_data.get('guardian_option')
             relationship = form_data.get('relationship')
 
+            logger.info(f"Guardian option: {guardian_option}")
+
             if guardian_option == 'existing':
                 guardian = form_data.get('existing_guardian')
+                logger.info(f"Using existing guardian: {guardian}")
             else:
+                # Create new guardian
+                from .models import Guardian  # Adjust import path as needed
+                
                 guardian = Guardian.objects.create(
                     first_name=form_data.get('guardian_first_name'),
                     last_name=form_data.get('guardian_last_name'),
@@ -216,12 +268,14 @@ class StudentCreateWizard(SessionWizardView):
                     occupation=form_data.get('guardian_occupation', ''),
                     is_active=True,
                 )
+                logger.info(f"Created new guardian: {guardian}")
 
             student.guardians.add(guardian)
+            logger.info("Guardian added to student")
 
             # Optional pivot model
             try:
-                from .models import StudentGuardian
+                from apps.students.models import StudentGuardian  # Adjust import path
 
                 StudentGuardian.objects.create(
                     student=student,
@@ -231,24 +285,34 @@ class StudentCreateWizard(SessionWizardView):
                     is_financial_responsible=True,
                     can_pickup=True,
                 )
+                logger.info("StudentGuardian pivot record created")
             except ImportError:
-                pass
+                logger.warning("StudentGuardian model not found - skipping pivot table")
 
             # ------------------------------------------------------------------
             # Success
             # ------------------------------------------------------------------
+            logger.info("=" * 80)
+            logger.info("STUDENT CREATED SUCCESSFULLY!")
+            logger.info(f"Student: {student.get_full_name()}")
+            logger.info(f"ID: {student.pk}")
+            logger.info(f"Admission Number: {student.admission_number}")
+            logger.info("=" * 80)
+
             messages.success(
                 self.request,
                 f"Student {student.get_full_name()} "
                 f"(#{student.admission_number}) was created successfully!"
             )
 
-            return redirect(
-                'students:student_profile',
-                pk=student.pk
-            )
+            return redirect('students:student_profile', pk=student.pk)
 
         except Exception as exc:
+            logger.exception("=" * 80)
+            logger.exception("ERROR IN WIZARD DONE METHOD:")
+            logger.exception(exc)
+            logger.exception("=" * 80)
+            
             messages.error(
                 self.request,
                 f"Error creating student: {exc}"

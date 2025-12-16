@@ -36,6 +36,26 @@
         .form-control.is-invalid {
             border-color: #dc3545;
         }
+
+        /* Horizontal radio buttons */
+        #id_basic_info-gender {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        
+        #id_basic_info-gender label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+        
+        #id_basic_info-gender input[type="radio"] {
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
     </style>
 {% endblock %}
 
@@ -77,7 +97,7 @@
                 </div>
 
                 <!-- Wizard Form -->
-                <form method="post" enctype="multipart/form-data" novalidate>
+                <form method="post" action="{% url 'students:student_create' %}" enctype="multipart/form-data" novalidate>
                     {% csrf_token %}
                     {{ wizard.management_form }}
                     
@@ -885,21 +905,111 @@
                     <!-- Step 6: Confirmation -->
                     {% if wizard.steps.current == 'confirmation' %}
                         <div class="text-center py-5">
-                            <div class="swal2-icon swal2-success swal2-animate-success-icon">
-                                <div class="swal2-success-circular-line-left" style="background-color: rgb(255, 255, 255);"></div>
-                                <span class="swal2-success-line-tip"></span>
-                                <span class="swal2-success-line-long"></span>
-                                <div class="swal2-success-ring"></div>
-                                <div class="swal2-success-fix" style="background-color: rgb(255, 255, 255);"></div>
-                                <div class="swal2-success-circular-line-right" style="background-color: rgb(255, 255, 255);"></div>
-                            </div>
-                            <h3 class="mt-4">Almost Done!</h3>
+                            <h3 class="mt-4">Review Your Information</h3>
                             <div class="mt-3 mb-3">
-                                <p class="text-muted">Please review all the information you've entered before submitting. You can go back to any previous step to make changes.</p>
+                                <p class="text-muted">Please review all the information you've entered before submitting.</p>
                             </div>
                         </div>
 
-                        <div class="row">
+                        <!-- Basic Information Review -->
+                        {% if basic_data %}
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Basic Information</strong>
+                                <button type="submit" name="wizard_goto_step" value="basic_info" 
+                                        class="btn btn-sm btn-outline-primary float-end">Edit</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Name:</strong> {{ basic_data.first_name }} {{ basic_data.middle_name|default:"" }} {{ basic_data.last_name }}</p>
+                                        <p><strong>Date of Birth:</strong> {{ basic_data.date_of_birth|date:"F d, Y" }}</p>
+                                        <p><strong>Gender:</strong> {{ basic_data.get_gender_display|default:basic_data.gender }}</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Admission Date:</strong> {{ basic_data.admission_date|date:"F d, Y" }}</p>
+                                        <p><strong>Nationality:</strong> {{ basic_data.nationality|default:"Not specified" }}</p>
+                                        <p><strong>Birth Place:</strong> {{ basic_data.birth_place|default:"Not specified" }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Contact Information Review -->
+                        {% if contact_data %}
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Contact Information</strong>
+                                <button type="submit" name="wizard_goto_step" value="contact_info" 
+                                        class="btn btn-sm btn-outline-primary float-end">Edit</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Email:</strong> {{ contact_data.personal_email|default:"Not provided" }}</p>
+                                        <p><strong>Phone:</strong> {{ contact_data.phone_number|default:"Not provided" }}</p>
+                                        <p><strong>Home Address:</strong> {{ contact_data.home_address }}</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>District:</strong> {{ contact_data.district|default:"Not specified" }}</p>
+                                        <p><strong>Region:</strong> {{ contact_data.region|default:"Not specified" }}</p>
+                                        <p><strong>Transportation:</strong> {% if contact_data.transportation_required %}Yes{% else %}No{% endif %}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Academic Information Review -->
+                        {% if academic_data %}
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Academic Information</strong>
+                                <button type="submit" name="wizard_goto_step" value="academic_info" 
+                                        class="btn btn-sm btn-outline-primary float-end">Edit</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Admission Level:</strong> {{ academic_data.admission_academic_level }}</p>
+                                        <p><strong>Current Level:</strong> {{ academic_data.current_academic_level }}</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Enrollment Status:</strong> {{ academic_data.get_enrollment_status_display|default:academic_data.enrollment_status }}</p>
+                                        <p><strong>Previous School:</strong> {{ academic_data.previous_school|default:"Not specified" }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Guardian Information Review -->
+                        {% if guardian_data %}
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Guardian Information</strong>
+                                <button type="submit" name="wizard_goto_step" value="guardian_info" 
+                                        class="btn btn-sm btn-outline-primary float-end">Edit</button>
+                            </div>
+                            <div class="card-body">
+                                {% if guardian_data.guardian_option == 'new' %}
+                                    <p><strong>Guardian:</strong> {{ guardian_data.guardian_first_name }} {{ guardian_data.guardian_last_name }}</p>
+                                    <p><strong>Phone:</strong> {{ guardian_data.guardian_phone }}</p>
+                                    <p><strong>Email:</strong> {{ guardian_data.guardian_email|default:"Not provided" }}</p>
+                                {% else %}
+                                    <p><strong>Guardian:</strong> {{ guardian_data.existing_guardian }}</p>
+                                {% endif %}
+                                <p><strong>Relationship:</strong> {{ guardian_data.relationship }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> If you need to make changes, click the "Edit" button on any section above, or use the "Previous" button below.
+                        </div>
+
+                        <div class="row mt-4">
                             <div class="col-md-12">
                                 <div class="position-relative mb-3">
                                     <div class="form-check">

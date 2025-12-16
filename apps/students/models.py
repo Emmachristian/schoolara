@@ -77,7 +77,7 @@ class Student(BaseModel):
     admission_academic_level = models.ForeignKey('academics.AcademicLevel', verbose_name="Admission Academic Level", on_delete=models.SET_NULL, null=True, blank=True, related_name='admitted_students')
     
     # Demographics & Cultural Info
-    nationality = CountryField("Nationality", default='UG')
+    nationality = CountryField("Nationality", blank=True, null=True)
     ethnicity = models.CharField("Ethnicity", max_length=50, blank=True)
     birth_place = models.CharField("Place of Birth", max_length=100, blank=True)
     birth_country = CountryField(verbose_name="Country of Birth", blank=True, null=True)
@@ -90,7 +90,7 @@ class Student(BaseModel):
     mailing_address = models.TextField("Mailing Address", blank=True)
     district = models.CharField("District", max_length=50, blank=True)
     region = models.CharField("Region/Province", max_length=50, blank=True)
-    country_of_residence = CountryField(verbose_name="Country of Residence", default='UG')
+    country_of_residence = CountryField(verbose_name="Country of Residence", blank=True, null=True)
     
     # Health & Medical Information
     health_condition = models.CharField("Health Condition", max_length=20, choices=HEALTH_CONDITION_CHOICES, default='Good')
@@ -158,12 +158,29 @@ class Student(BaseModel):
     def save(self, *args, **kwargs):
         """
         Automatically generate a century-safe admission number on first save.
+        Gets school from current database context.
         """
         if not self.admission_number:
             from .utils import generate_student_admission_number
+            from accounts.models import School
+            from schoolara.managers import get_current_db
+            
+            # Get the current database alias
+            current_db = get_current_db()
+            
+            # Find the school that matches this database
+            try:
+                school = School.objects.get(database_alias=current_db)
+            except School.DoesNotExist:
+                # Fallback: try to get from default database
+                school = School.objects.using('default').filter(database_alias=current_db).first()
+            
+            # Generate admission number with school context
             self.admission_number = generate_student_admission_number(
+                school=school,
                 admission_year=self.admission_date.year if self.admission_date else None
             )
+        
         super().save(*args, **kwargs)
 
 class Guardian(BaseModel):

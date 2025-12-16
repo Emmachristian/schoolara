@@ -86,64 +86,75 @@ def parse_admission_year_from_number(admission_number):
 # ADMISSION NUMBER GENERATION (CENTURY-SAFE)
 # =============================================================================
 
-def generate_student_admission_number(request=None, user=None, school=None, admission_year=None):
+def generate_student_admission_number(
+    *,
+    school=None,
+    user=None,
+    admission_year=None
+):
     """
-    Generate a unique century-safe admission number for a student
-    
-    Args:
-        request: HTTP request object (optional)
-        user: User object (optional)
-        school: School object (optional)
-        admission_year: Year of admission (optional, defaults to current year)
-        
-    Returns:
-        str: Unique admission number in format "YY/ABBREV/NNNN" or "AYY/ABBREV/NNNN"
-        
-    Examples:
-        "24/SCH/0001" (2024)
-        "25/HSC/0142" (2025)
-        "A00/SCH/0001" (2100)
+    Generate a unique century-safe admission number.
+
+    Format:
+        YY/ABBR/NNNN
+        AYY/ABBR/NNNN
     """
+
     from .models import Student
+    from accounts.models import UserProfile
 
     current_year = admission_year or timezone.now().year
     year_suffix = get_century_safe_year_suffix(current_year)
 
-    school_abbrev = 'SCH'
-    if school:
-        school_abbrev = getattr(school, 'abbreviation', 'SCH')
-    elif user and getattr(user, 'school', None):
-        school_abbrev = getattr(user.school, 'abbreviation', 'SCH')
+    # -----------------------------
+    # Resolve school abbreviation
+    # -----------------------------
+    school_abbrev = "SCH"
+
+    if school and school.abbreviation:
+        school_abbrev = school.abbreviation
+
+    elif user:
+        try:
+            profile = UserProfile.objects.select_related("school").get(user=user)
+            if profile.school and profile.school.abbreviation:
+                school_abbrev = profile.school.abbreviation
+        except UserProfile.DoesNotExist:
+            pass
 
     prefix = f"{year_suffix}/{school_abbrev}/"
 
+    # -----------------------------
+    # Generate sequential number
+    # -----------------------------
     while True:
         with transaction.atomic():
-            last_admitted = (
+            last_student = (
                 Student.objects
                 .select_for_update()
                 .filter(admission_number__startswith=prefix)
-                .order_by('-admission_number')
+                .order_by("-admission_number")
                 .first()
             )
 
-            if last_admitted:
+            if last_student:
                 try:
-                    last_number = int(last_admitted.admission_number.split('/')[-1])
-                    new_number = last_number + 1
+                    last_seq = int(last_student.admission_number.split("/")[-1])
+                    next_seq = last_seq + 1
                 except (ValueError, IndexError):
-                    new_number = (
+                    next_seq = (
                         Student.objects
                         .filter(admission_number__startswith=prefix)
                         .count() + 1
                     )
             else:
-                new_number = 1
+                next_seq = 1
 
-            admission_number = f"{prefix}{new_number:04d}"
+            admission_number = f"{prefix}{next_seq:04d}"
 
             if not Student.objects.filter(admission_number=admission_number).exists():
                 return admission_number
+
 
 
 # =============================================================================

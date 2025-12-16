@@ -162,12 +162,9 @@ class UserProfile(DefaultDatabaseModel):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
-
-    name_of_person_in_charge = models.CharField(max_length=255, blank=True)
     role = models.CharField(max_length=30, choices=USER_ROLES)
 
     photo = models.ImageField("Photo", upload_to='user_photos/', blank=True, null=True)
-    cropping = ImageRatioField('photo', '300x300')   # FIXED FIELD NAME
 
     # Theme settings
     fixed_header = models.BooleanField(default=False)

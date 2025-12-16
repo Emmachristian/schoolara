@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+<style>
+    .form-section {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border: none;
+    }
+    
+    .section-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px 8px 0 0;
+        margin: 0;
+    }
+    
+    .section-header h6 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    
+    .section-header p {
+        margin: 5px 0 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+    
+    .section-body {
+        padding: 25px;
+    }
+    
+    .form-floating {
+        margin-bottom: 1.2rem;
+    }
+    
+    .form-floating label {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.15);
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .form-help {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .form-help h6 {
+        color: #1976d2;
+        margin-bottom: 10px;
+    }
+    
+    .readonly-field {
+        background-color: #f8f9fa !important;
+        cursor: not-allowed;
+    }
+    
+    .btn-save-group {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-top: 20px;
+        border: 1px solid #dee2e6;
+    }
+    
+    /* Profile Image Styling */
+    .profile-image-container {
+        position: relative;
+        width: 150px;
+        height: 150px;
+        margin: 0 auto 20px;
+    }
+
+    .profile-image-container .profile-avatar {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 50%;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        border: 3px solid #fff;
+    }
+
+    .avatar-placeholder {
+        width: 150px;
+        height: 150px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid #fff;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .avatar-title {
+        font-size: 60px;
+        color: white;
+        font-weight: 600;
+    }
+
+    .profile-image-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 150px;
+        height: 150px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        cursor: pointer;
+    }
+
+    .profile-image-container:hover .profile-image-overlay {
+        opacity: 1;
+    }
+
+    .profile-image-overlay i {
+        color: white;
+        font-size: 28px;
+    }
+
+    /* Image Cropper Modal Styling */
+    #image-container {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    #imagePreview {
+        max-width: 100%;
+        max-height: 400px;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .cropper-container {
+        margin: 0 auto;
+    }
+    
+    .image-upload-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .image-upload-area:hover {
+        border-color: #667eea;
+        background-color: #f8f9ff;
+    }
+
+    .image-upload-area.dragover {
+        border-color: #667eea;
+        background-color: #f0f2ff;
+    }
+
+    .upload-icon {
+        font-size: 3rem;
+        color: #667eea;
+        margin-bottom: 1rem;
+    }
+    
+    .error-summary {
+        background-color: #fff5f5;
+        border: 1px solid #fed7d7;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .error-summary h6 {
+        color: #c53030;
+        margin-bottom: 10px;
+    }
+
+    .error-list {
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    .error-list li {
+        color: #742a2a;
+        margin-bottom: 5px;
+    }
+
+    .field-group {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #fdfdfe;
+    }
+    
+    .field-group-header {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 15px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .info-display {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .info-label {
+        font-weight: 600;
+        color: #6c757d;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+    }
+
+    .info-value {
+        font-size: 1.1rem;
+        color: #212529;
+    }
+    
+    @media (max-width: 768px) {
+        .section-body {
+            padding: 15px;
+        }
+        
+        .btn-save-group {
+            padding: 15px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-config icon-gradient bg-mean-fruit"></i>
+            </div>
+            <div>
+                Account Settings
+                <div class="page-title-subheading">
+                    Manage your profile information and account preferences
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <button type="button" class="btn btn-outline-secondary" onclick="window.history.back()">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Form Help Section -->
+<div class="form-help">
+    <h6><i class="fa fa-info-circle me-1"></i> Account Settings Guidelines</h6>
+    <div class="row">
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Username and Email</strong> cannot be changed (contact administrator)</li>
+                <li><strong>School assignment</strong> is managed by administrators</li>
+                <li><strong>Profile photo</strong> should be a clear headshot (max 5MB)</li>
+            </ul>
+        </div>
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Password changes</strong> require entering a new password twice</li>
+                <li><strong>Leave password blank</strong> if you don't want to change it</li>
+                <li>Click "Save Changes" to apply all modifications</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Error Display Section -->
+{% if form.errors or form.non_field_errors %}
+<div class="error-summary">
+    <h6><i class="fa fa-exclamation-triangle me-2"></i>Please correct the following errors:</h6>
+    
+    {% if form.non_field_errors %}
+        <div class="mb-3">
+            <strong>Form Errors:</strong>
+            <ul class="error-list">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+    
+    {% if form.errors %}
+        <div class="mb-3">
+            <strong>Field Errors:</strong>
+            <ul class="error-list">
+                {% for field, errors in form.errors.items %}
+                    {% if field != '__all__' %}
+                        <li><strong>{{ field|title }}:</strong>
+                            {% for error in errors %}
+                                {{ error }}{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Main Form -->
+<form method="post" enctype="multipart/form-data" id="account-settings-form" novalidate>
+    {% csrf_token %}
+    
+    <!-- Profile Photo Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-camera me-2"></i>Profile Photo</h6>
+            <p>Update your profile picture</p>
+        </div>
+        <div class="section-body">
+            <div class="row align-items-center">
+                <div class="col-md-3 text-center">
+                    <div class="profile-image-container mb-3">
+                        {% if user_profile.photo %}
+                            <img id="currentProfileImage" src="{{ user_profile.photo.url }}" alt="{{ user.get_full_name }}" class="profile-avatar">
+                        {% else %}
+                            <div class="avatar-placeholder">
+                                <div class="avatar-title">
+                                    {{ user.first_name|first|upper }}{{ user.last_name|first|upper }}
+                                </div>
+                            </div>
+                        {% endif %}
+                        <div class="profile-image-overlay">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                    </div>
+                    <div class="small text-muted">Click to change photo</div>
+                </div>
+                <div class="col-md-9">
+                    <div class="mt-2">
+                        <strong>Profile Photo Guidelines</strong>
+                        <div class="small text-muted mt-1">
+                            Click on the image to update your photo.<br>
+                            Supported formats: JPG, PNG, GIF (Max: 5MB)<br>
+                            Recommended: Square image, minimum 300x300 pixels
+                        </div>
+                    </div>
+                    <!-- Hidden file input for form submission -->
+                    {{ form.photo|add_class:"d-none" }}
+                    {% if form.photo.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.photo.errors %}
+                                {{ error }}{% if not forloop.last %}<br>{% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Basic Information Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-user me-2"></i>Basic Information</h6>
+            <p>Your personal details and identification</p>
+        </div>
+        <div class="section-body">
+            <!-- Read-only fields -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-lock me-2"></i>Account Information (Read-Only)
+                </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="info-display">
+                            <div class="info-label">Username</div>
+                            <div class="info-value">{{ user.username }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-display">
+                            <div class="info-label">Email Address</div>
+                            <div class="info-value">{{ user.email|default:"Not set" }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-display">
+                            <div class="info-label">School</div>
+                            <div class="info-value">{{ user_profile.school|default:"Not assigned" }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-text">
+                    <i class="fa fa-info-circle me-1"></i>
+                    Contact your administrator to change username, email, or school assignment
+                </div>
+            </div>
+
+            <!-- Editable fields -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-edit me-2"></i>Personal Details
+                </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.first_name|add_class:"form-control" }}
+                            <label for="{{ form.first_name.id_for_label }}">First Name</label>
+                            {% if form.first_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.first_name.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.last_name|add_class:"form-control" }}
+                            <label for="{{ form.last_name.id_for_label }}">Last Name</label>
+                            {% if form.last_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.last_name.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            {{ form.role|add_class:"form-select" }}
+                            <label for="{{ form.role.id_for_label }}" class="{% if form.role.field.required %}required-field{% endif %}">Role</label>
+                            {% if form.role.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.role.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-lock me-2"></i>Security</h6>
+            <p>Change your password (leave blank to keep current password)</p>
+        </div>
+        <div class="section-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.password|add_class:"form-control" }}
+                        <label for="{{ form.password.id_for_label }}">New Password</label>
+                        {% if form.password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.password.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Leave blank if you don't want to change your password. Must be at least 8 characters.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.confirm_password|add_class:"form-control" }}
+                        <label for="{{ form.confirm_password.id_for_label }}">Confirm New Password</label>
+                        {% if form.confirm_password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.confirm_password.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Re-enter your new password to confirm
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="btn-save-group">
+        <button type="submit" class="btn btn-success btn-lg px-5">
+            <i class="fa fa-save me-2"></i>Save Changes
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-lg px-4 ms-2" onclick="window.history.back()">
+            <i class="fa fa-times me-2"></i>Cancel
+        </button>
+    </div>
+</form>
+
+<!-- Profile Image Modal -->
+<div class="modal fade" id="profileImageModal" tabindex="-1" role="dialog" aria-labelledby="profileImageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="profileImageModalLabel">
+                    <i class="fa fa-camera me-2"></i>Update Profile Photo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Browse Section -->
+                <div id="browse-section" class="text-center">
+                    <div class="image-upload-area" onclick="document.getElementById('uploadImage').click()">
+                        <i class="fa fa-cloud-upload upload-icon"></i>
+                        <h6>Choose an image to upload</h6>
+                        <p class="text-muted mb-0">Click here or drag and drop your image</p>
+                        <small class="text-muted">Supports JPG, PNG, GIF (Max: 5MB)</small>
+                    </div>
+                    <input type="file" id="uploadImage" accept="image/*" class="d-none">
+                </div>
+                
+                <!-- Image Preview Section -->
+                <div id="image-container" class="text-center mt-3" style="display: none;">
+                    <img id="imagePreview" src="" alt="Image Preview" class="img-fluid">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" id="btnCrop" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-crop me-1"></i>Crop Image
+                </button>
+                <button type="button" id="btnSave" class="btn btn-success" style="display: none;">
+                    <i class="fas fa-save me-1"></i>Use This Photo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    setupImageHandling();
+});
+
+// Setup image handling with cropper
+function setupImageHandling() {
+    const uploadImageInput = document.getElementById("uploadImage");
+    const imagePreview = document.getElementById("imagePreview");
+    const btnCrop = document.getElementById("btnCrop");
+    const btnSave = document.getElementById("btnSave");
+    const browseSection = document.getElementById("browse-section");
+    const imageContainer = document.getElementById("image-container");
+    const profileImageModal = document.getElementById('profileImageModal');
+    
+    if (!profileImageModal) {
+        console.error("Profile image modal not found!");
+        return;
+    }
+    
+    const modalInstance = new bootstrap.Modal(profileImageModal);
+    
+    // Variable to store cropper instance and cropped image data
+    let cropper = null;
+    let croppedImageData = null;
+
+    // Function to show alerts
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            <i class="fa fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        // Insert at top of form
+        const form = document.getElementById('account-settings-form');
+        form.insertAdjacentElement('afterbegin', alert);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alert.parentNode) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+    
+    // Function to reset cropper and modal state
+    function resetCropper() {
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        if (imagePreview) imagePreview.src = '';
+        if (browseSection) browseSection.style.display = "block";
+        if (imageContainer) imageContainer.style.display = "none";
+        if (btnCrop) btnCrop.style.display = "none";
+        if (btnSave) btnSave.style.display = "none";
+        
+        // Reset the file input
+        if (uploadImageInput) {
+            uploadImageInput.value = '';
+        }
+    }
+
+    // Connect the overlay click handler with the modal
+    const profileImageOverlay = document.querySelector('.profile-image-overlay');
+    if (profileImageOverlay) {
+        profileImageOverlay.addEventListener('click', function(e) {
+            e.preventDefault();
+            modalInstance.show();
+        });
+    }
+    
+    // Reset modal when it's hidden
+    profileImageModal.addEventListener('hidden.bs.modal', function() {
+        resetCropper();
+    });
+
+    // Handle file input change inside the modal
+    if (uploadImageInput) {
+        uploadImageInput.addEventListener("change", function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // File size validation
+            if (file.size > 5 * 1024 * 1024) {
+                showAlert('danger', 'File size must be less than 5MB.');
+                return;
+            }
+            
+            // File type validation
+            if (!file.type.startsWith('image/')) {
+                showAlert('danger', 'Please select a valid image file.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (browseSection) browseSection.style.display = "none";
+                if (imageContainer) imageContainer.style.display = "block";
+                if (imagePreview) imagePreview.src = e.target.result;
+                
+                // Initialize cropper
+                if (cropper) {
+                    cropper.destroy();
+                }
+                
+                if (imagePreview) {
+                    setTimeout(() => {
+                        try {
+                            cropper = new Cropper(imagePreview, {
+                                aspectRatio: 1,
+                                viewMode: 2,
+                                dragMode: "move",
+                                background: true,
+                                responsive: true,
+                                autoCropArea: 0.8,
+                                ready: function() {
+                                    if (btnCrop) btnCrop.style.display = "inline-block";
+                                }
+                            });
+                        } catch (err) {
+                            console.error("Cropper initialization error:", err);
+                            showAlert('danger', 'Error initializing image cropper. Please try again.');
+                        }
+                    }, 200);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Handle Image cropping
+    if (btnCrop) {
+        btnCrop.addEventListener("click", function() {
+            if (!cropper) return;
+            
+            try {
+                const canvas = cropper.getCroppedCanvas({
+                    width: 300,
+                    height: 300,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                });
+                
+                croppedImageData = canvas.toDataURL("image/jpeg", 0.9);
+                if (imagePreview) imagePreview.src = croppedImageData;
+                
+                // Destroy cropper after cropping
+                cropper.destroy();
+                cropper = null;
+                
+                // Show save button, hide crop button
+                if (btnCrop) btnCrop.style.display = "none";
+                if (btnSave) btnSave.style.display = "inline-block";
+            } catch (err) {
+                console.error("Cropping error:", err);
+                showAlert('danger', 'Error cropping image. Please try again.');
+            }
+        });
+    }
+
+    // Save the cropped image
+    if (btnSave) {
+        btnSave.addEventListener("click", function() {
+            if (!croppedImageData) return;
+
+            // Show loading state
+            btnSave.disabled = true;
+            btnSave.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Saving...';
+
+            try {
+                // Convert base64 to blob
+                const blobBin = atob(croppedImageData.split(',')[1]);
+                const array = [];
+                for(let i = 0; i < blobBin.length; i++) {
+                    array.push(blobBin.charCodeAt(i));
+                }
+                const file = new Blob([new Uint8Array(array)], {type: 'image/jpeg'});
+
+                // Create a File object and set it to the hidden input
+                const dt = new DataTransfer();
+                dt.items.add(new File([file], 'profile.jpg', {type: 'image/jpeg'}));
+                
+                const hiddenFileInput = document.querySelector('input[name="photo"]');
+                if (hiddenFileInput) {
+                    hiddenFileInput.files = dt.files;
+                }
+
+                // Update the profile image preview on the page
+                const currentProfileImage = document.getElementById("currentProfileImage");
+                if (currentProfileImage) {
+                    currentProfileImage.src = croppedImageData;
+                } else {
+                    // If there was no image before (using avatar placeholder), replace with new image
+                    const placeholder = document.querySelector('.avatar-placeholder');
+                    if (placeholder) {
+                        const container = placeholder.parentElement;
+                        container.innerHTML = `
+                            <img id="currentProfileImage" src="${croppedImageData}" alt="Profile Picture" class="profile-avatar">
+                            <div class="profile-image-overlay">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        `;
+                        
+                        // Re-attach click handler
+                        const newOverlay = container.querySelector('.profile-image-overlay');
+                        if (newOverlay) {
+                            newOverlay.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                modalInstance.show();
+                            });
+                        }
+                    }
+                }
+                
+                // Show success message
+                showAlert('success', 'Profile photo updated! Remember to save the form to apply changes.');
+                
+                // Close modal
+                modalInstance.hide();
+            } catch (err) {
+                console.error("Error preparing image:", err);
+                showAlert('danger', 'Error preparing image. Please try again.');
+            } finally {
+                // Reset button state
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="fas fa-save me-1"></i>Use This Photo';
+            }
+        });
+    }
+    
+    // Drag and drop functionality
+    const uploadArea = document.querySelector('.image-upload-area');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadImageInput.files = files;
+                uploadImageInput.dispatchEvent(new Event('change'));
+            }
+        });
+    }
+}
+</script>
+{% endblock %}%

@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 class StudentBasicInfoForm(forms.ModelForm):
     """Step 1: Basic personal information and admission details"""
     
+    # Override gender field to use ChoiceField instead of ModelChoiceField
+    gender = forms.ChoiceField(
+        label="Gender",
+        choices=Student.GENDER_CHOICES,
+        widget=forms.RadioSelect(),
+        required=True
+    )
+    
     class Meta:
         model = Student
         fields = [
@@ -42,7 +50,6 @@ class StudentBasicInfoForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'date'
             }),
-            'gender': forms.RadioSelect(),
             'admission_date': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date'
@@ -76,15 +83,14 @@ class StudentBasicInfoForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         
         # Set required fields
-        required_fields = ['first_name', 'last_name', 'admission_date', 'date_of_birth', 'gender']
+        required_fields = ['first_name', 'last_name', 'admission_date', 'date_of_birth']
         for field_name in required_fields:
             if field_name in self.fields:
                 self.fields[field_name].required = True
         
-        # Set up nationality choices with Uganda as default
-        nationality_choices = [('UG', 'Uganda')] + [(code, name) for code, name in countries if code != 'UG']
+        # Set up nationality choices **with a blank option first**
+        nationality_choices = [('', 'Select Nationality')] + list(countries)
         self.fields['nationality'].choices = nationality_choices
-        self.fields['nationality'].initial = 'UG'
         
         # Set up religious affiliation choices
         religious_choices = [('', 'Select Religious Affiliation')] + list(Student.RELIGIOUS_AFFILIATION_CHOICES)
@@ -691,6 +697,13 @@ STUDENT_WIZARD_STEP_NAMES = {
 # =============================================================================
 
 class StudentForm(forms.ModelForm):
+
+    religious_affiliation = forms.ChoiceField(
+        choices=Student.RELIGIOUS_AFFILIATION_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
     class Meta:
         model = Student
         fields = [
@@ -787,7 +800,6 @@ class StudentForm(forms.ModelForm):
             'ethnicity': forms.TextInput(attrs={'class': 'form-control'}),
             'birth_place': forms.TextInput(attrs={'class': 'form-control'}),
             'birth_country': forms.Select(attrs={'class': 'form-select'}),
-            'religious_affiliation': forms.Select(choices=Student.RELIGIOUS_AFFILIATION_CHOICES, attrs={'class': 'form-select'}),
             'personal_email': forms.EmailInput(attrs={'class': 'form-control'}),
             'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
             'home_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),

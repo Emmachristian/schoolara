@@ -56,8 +56,6 @@ INSTALLED_APPS = [
     'utils',
 
     # Third-party Apps
-    'image_cropping',
-    'easy_thumbnails',
     'django.contrib.humanize',
     'widget_tweaks',   
 ]
@@ -111,15 +109,24 @@ LOGGING = {
             'formatter': 'verbose',
         },
     },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
     'loggers': {
-        'your_project': {
+        'students': {  # Add this - replace 'students' with your app name
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
             'propagate': False,
         },
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'django.db.backends': {
             'handlers': ['console'],
-            'level': 'INFO',  # Set to DEBUG to see SQL queries
+            'level': 'DEBUG',  # Changed to DEBUG to see SQL queries
             'propagate': False,
         },
     },

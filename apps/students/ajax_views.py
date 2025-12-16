@@ -116,6 +116,7 @@ def student_search(request):
         for term in terms:
             q_objects &= (
                 Q(first_name__icontains=term) |
+                Q(middle_name__icontains=term) |
                 Q(last_name__icontains=term) |
                 Q(admission_number__icontains=term) |
                 Q(current_academic_level__name__icontains=term)
