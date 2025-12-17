@@ -1,0 +1,1340 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load custom_filters %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+    .class-card {
+        border-radius: 0.5rem;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+        transition: transform 0.2s;
+    }
+    .class-card:hover {
+        transform: translateY(-2px);
+    }
+    .teacher-info {
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
+    .teacher-name {
+        color: #495057;
+        font-weight: 500;
+    }
+    .enrollment-badge {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .section-badge {
+        background: #e9ecef;
+        color: #495057;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .search-form {
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+    }
+    .no-teacher {
+        color: #6c757d;
+        font-style: italic;
+        font-size: 0.85rem;
+    }
+    .session-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .current-session {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    .session-stats {
+        display: flex;
+        gap: 2rem;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .session-stat {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .bulk-actions {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 1px solid #90caf9;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .bulk-actions.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+    
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .stats-card {
+        border-radius: 1rem;
+        padding: 1.5rem;
+        color: white;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stats-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(45deg);
+    }
+
+    .stats-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .stats-label {
+        opacity: 0.8;
+        position: relative;
+        z-index: 1;
+    }
+
+    .utilization-bar {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+
+    .utilization-fill {
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        transition: width 0.3s ease;
+    }
+
+    .session-actions {
+        opacity: 0.9;
+    }
+
+    .session-actions:hover {
+        opacity: 1;
+    }
+
+    .empty-state {
+        padding: 3rem 1rem;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    
+    #printableTable,
+    #printableTable * {
+        visibility: visible;
+    }
+    
+    #printableTable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    
+    .print-header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #333;
+    }
+    
+    .print-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .print-date {
+        font-size: 12px;
+        color: #666;
+    }
+    
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    .print-table th {
+        background-color: #4472C4 !important;
+        color: white !important;
+        padding: 10px;
+        text-align: left;
+        border: 1px solid #333;
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .print-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+    
+    .print-table tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .print-footer {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+        border-top: 1px solid #ddd;
+        padding-top: 10px;
+    }
+    
+    .print-table {
+        page-break-inside: auto;
+    }
+    
+    .print-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    .print-table thead {
+        display: table-header-group;
+    }
+    
+    .print-table tfoot {
+        display: table-footer-group;
+    }
+    
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .stats-summary {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 10px;
+    }
+    
+    .teacher-info {
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .enrollment-badge,
+    .section-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Class Management
+                <div class="page-title-subheading">
+                    Manage and monitor classes with comprehensive tracking and administration
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'academics:class_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add New Class
+                    </a>
+
+                    <!-- Print Button -->
+                    <a href="#" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
+                        <i class="fa fa-print me-1"></i> Print
+                    </a>
+
+                    <!-- Excel Export -->
+                    <a href="#" id="excelExportBtn" class="btn btn-outline-success">
+                        <i class="fa fa-file-excel me-1"></i> Export Excel
+                    </a>
+
+                    <!-- PDF Export -->
+                    <a href="#" id="pdfExportBtn" class="btn btn-outline-danger">
+                        <i class="fa fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Summary -->
+<div class="stats-summary">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <h3 class="mb-1">{{ stats.total_classes|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Classes</p>
+                <small class="opacity-6">
+                    <i class="fa fa-users me-1"></i>
+                    All classes
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <h3 class="mb-1">{{ stats.active_classes|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Active Classes</p>
+                <small class="opacity-6">
+                    <i class="fa fa-check-circle me-1"></i>
+                    Currently active
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                <h3 class="mb-1">{{ stats.total_students|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Students</p>
+                <small class="opacity-6">
+                    <i class="fa fa-user-graduate me-1"></i>
+                    Enrolled
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+                <h3 class="mb-1">{{ stats.avg_class_size|floatformat:0|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Avg Class Size</p>
+                <small class="opacity-6">
+                    <i class="fa fa-chart-bar me-1"></i>
+                    Students per class
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- Search & Filters -->
+                    <form id="searchForm" class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <input type="text" name="q" id="searchInput" class="form-control" 
+                                   placeholder="Search by class name, level...">
+                        </div>
+                        <div class="col-md-2">
+                            <select name="academic_level" id="levelFilter" class="form-select">
+                                <option value="">All Levels</option>
+                                {% for level in academic_levels %}
+                                    <option value="{{ level.id }}">{{ level.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="academic_session" id="sessionFilter" class="form-select">
+                                <option value="">All Sessions</option>
+                                {% for session in academic_sessions %}
+                                    <option value="{{ session.id }}" {% if session.is_current %}selected{% endif %}>
+                                        {{ session.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="is_active" id="statusFilter" class="form-select">
+                                <option value="">All Status</option>
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="has_teacher" id="teacherFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="true">Has Teacher</option>
+                                <option value="false">No Teacher</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <select name="section" id="sectionFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                            </select>
+                        </div>
+                    </form>
+
+                    <!-- Results Table -->
+                    <div id="results">
+                        {% if classes %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 50px;">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="selectAllTable">
+                                            </div>
+                                        </th>
+                                        <th style="width: 50px;">#</th>
+                                        <th>Class</th>
+                                        <th>Level Details</th>
+                                        <th>Teachers</th>
+                                        <th>Classroom</th>
+                                        <th>Enrollment</th>
+                                        <th>Status</th>
+                                        <th style="width: 120px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="classTableBody">
+                                    {% for class in classes %}
+                                    <tr data-class-id="{{ class.pk }}">
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input class-checkbox" type="checkbox" 
+                                                    name="class_ids" value="{{ class.pk }}" id="class_{{ class.pk }}">
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <strong>{{ forloop.counter }}</strong>
+                                        </td>
+                                        <td>
+                                            <div>
+                                                <strong>{{ class.academic_level.name }}</strong>
+                                                {% if class.section %}
+                                                    <span class="section-badge ms-2">Section {{ class.section }}</span>
+                                                {% endif %}
+                                                {% if class.class_motto %}
+                                                    <br><small class="text-muted fst-italic">"{{ class.class_motto }}"</small>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div>
+                                                {{ class.academic_level.name }}
+                                                <br><small class="text-muted">
+                                                    Order: {{ class.academic_level.order }}
+                                                    {% if class.academic_level.curriculum_type %}
+                                                        | {{ class.academic_level.get_curriculum_type_display }}
+                                                    {% endif %}
+                                                </small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="teacher-info">
+                                                {% if class.class_teacher %}
+                                                    <div>
+                                                        <i class="fa fa-user me-1"></i>
+                                                        <span class="teacher-name">
+                                                            {{ class.class_teacher.get_full_name|default:class.class_teacher.username }}
+                                                        </span>
+                                                    </div>
+                                                {% else %}
+                                                    <div class="no-teacher">
+                                                        <i class="fa fa-user-times me-1"></i>
+                                                        No class teacher
+                                                    </div>
+                                                {% endif %}
+                                                
+                                                {% if class.assistant_teacher %}
+                                                    <div class="mt-1">
+                                                        <i class="fa fa-user-plus me-1"></i>
+                                                        <small>
+                                                            Assistant: 
+                                                            <span class="teacher-name">
+                                                                {{ class.assistant_teacher.get_full_name|default:class.assistant_teacher.username }}
+                                                            </span>
+                                                        </small>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if class.classroom %}
+                                                <div>
+                                                    <i class="fa fa-door-open me-1"></i>
+                                                    {{ class.classroom.name }}
+                                                    <br><small class="text-muted">
+                                                        {{ class.classroom.room_number }}
+                                                        {% if class.classroom.room_type != 'REGULAR' %}
+                                                            | {{ class.classroom.get_room_type_display }}
+                                                        {% endif %}
+                                                    </small>
+                                                </div>
+                                            {% else %}
+                                                <small class="text-muted">
+                                                    <i class="fa fa-home me-1"></i>
+                                                    No classroom assigned
+                                                </small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <span class="enrollment-badge">
+                                                    {{ class.enrollment_count|default:0 }} / {{ class.max_students }}
+                                                </span>
+                                            </div>
+                                            {% if class.max_students > 0 %}
+                                                {% with utilization=class.enrollment_count|default:0|mul:100|div:class.max_students %}
+                                                <div class="progress mt-1" style="height: 4px;">
+                                                    <div class="progress-bar 
+                                                        {% if utilization < 70 %}bg-success
+                                                        {% elif utilization < 90 %}bg-warning
+                                                        {% else %}bg-danger{% endif %}" 
+                                                        role="progressbar" 
+                                                        style="width: {{ utilization }}%"
+                                                        aria-valuenow="{{ utilization }}" 
+                                                        aria-valuemin="0" aria-valuemax="100"></div>
+                                                </div>
+                                                <small class="text-muted">{{ utilization|floatformat:0 }}% full</small>
+                                                {% endwith %}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if class.is_active %}
+                                                <span class="badge bg-success">
+                                                    <i class="fa fa-check-circle me-1"></i>Active
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fa fa-times-circle me-1"></i>Inactive
+                                                </span>
+                                            {% endif %}
+                                            {% if class.enrollment_count >= class.max_students %}
+                                                <br><span class="badge bg-warning text-dark mt-1">
+                                                    <i class="fa fa-users me-1"></i>Full
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <a href="{% url 'academics:class_detail' class.pk %}" 
+                                                   class="btn btn-sm btn-outline-primary" 
+                                                   data-bs-toggle="tooltip" title="View Details">
+                                                    <i class="fa fa-eye"></i>
+                                                </a>
+                                                <a href="{% url 'academics:class_update' class.pk %}" 
+                                                   class="btn btn-sm btn-outline-warning"
+                                                   data-bs-toggle="tooltip" title="Edit Class">
+                                                    <i class="fa fa-edit"></i>
+                                                </a>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                                                            type="button" data-bs-toggle="dropdown">
+                                                        <i class="fa fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <a class="dropdown-item" href="{% url 'academics:class_detail' class.pk %}">
+                                                                <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <a class="dropdown-item text-danger" href="#"
+                                                               data-bs-toggle="modal" data-bs-target="#deleteClass{{ class.pk }}">
+                                                                <i class="fa fa-trash me-2"></i>Delete
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-5 empty-state">
+                            <div class="mb-3">
+                                <i class="pe-7s-users text-muted"></i>
+                            </div>
+                            <h5 class="text-muted">No Classes Found</h5>
+                            <p class="text-muted">
+                                Get started by creating your first class
+                            </p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Pagination -->
+                        <div id="paginationContainer" style="display: none;">
+                            <nav class="mb-3" aria-label="Page navigation">
+                                <ul class="pagination justify-content-center" id="paginationNav">
+                                    <!-- Pagination will be dynamically inserted here -->
+                                </ul>
+                            </nav>
+
+                            <!-- Showing X-Y of Z results -->
+                            <div class="text-center text-muted mb-3" id="resultsCount">
+                                <!-- Results count will be dynamically inserted here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete Modals -->
+                    {% for class in classes %}
+                    <div class="modal fade" id="deleteClass{{ class.pk }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Delete Class</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1 mb-3"></i>
+                                    <h5>Are you sure you want to delete "<strong>{{ class.get_display_name }}</strong>"?</h5>
+                                    <p class="text-muted">This action cannot be undone.</p>
+                                </div>
+                                <form action="{% url 'academics:class_delete' class.pk %}" method="post">
+                                    {% csrf_token %}
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-danger">Delete Class</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <!-- Print Modal -->
+                    <div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="printModalLabel">
+                                        <i class="fa fa-print me-2"></i>Print Class List
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="text-muted mb-3">Select the columns you want to include in the printout:</p>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="number" id="col_number" checked>
+                                                <label class="form-check-label" for="col_number">#</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="class_name" id="col_class_name" checked>
+                                                <label class="form-check-label" for="col_class_name">Class Name</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="level" id="col_level" checked>
+                                                <label class="form-check-label" for="col_level">Academic Level</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="teacher" id="col_teacher" checked>
+                                                <label class="form-check-label" for="col_teacher">Class Teacher</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="classroom" id="col_classroom" checked>
+                                                <label class="form-check-label" for="col_classroom">Classroom</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="enrollment" id="col_enrollment" checked>
+                                                <label class="form-check-label" for="col_enrollment">Enrollment</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="capacity" id="col_capacity">
+                                                <label class="form-check-label" for="col_capacity">Max Capacity</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="status" id="col_status">
+                                                <label class="form-check-label" for="col_status">Status</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr class="my-3">
+                                    
+                                    <div class="d-flex justify-content-between">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllColumns()">
+                                            <i class="fa fa-check-square me-1"></i> Select All
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllColumns()">
+                                            <i class="fa fa-square me-1"></i> Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-primary" onclick="printClassTable()">
+                                        <i class="fa fa-print me-1"></i> Print
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+/* ============================================================================
+   DJANGO URL TEMPLATES
+============================================================================ */
+const CLASS_DETAIL_URL = "{% url 'academics:class_detail' '00000000-0000-0000-0000-000000000000' %}";
+const CLASS_EDIT_URL = "{% url 'academics:class_update' '00000000-0000-0000-0000-000000000000' %}";
+
+// ============================================================================
+// MAIN CLASS LIST FUNCTIONALITY
+// ============================================================================
+$(document).ready(function() {
+    let currentPage = 1;
+
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // ------------------------------------------------------------------------
+    // AJAX Functions - Fetch and Display Classes
+    // ------------------------------------------------------------------------
+    function fetchResults(page = 1) {
+        const formData = $('#searchForm').serialize() + '&page=' + page;
+        
+        $.ajax({
+            url: "{% url 'academics:class_search' %}",
+            data: formData,
+            dataType: 'json',
+            success: function(data) {
+                renderClassTable(data);
+                updatePagination(data);
+                updateStatistics(data.stats);
+                currentPage = data.current_page;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                $('#classTableBody').html(
+                    `<tr>
+                        <td colspan="9" class="text-center text-danger">
+                            Error loading classes. Please try again.
+                        </td>
+                    </tr>`
+                );
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Statistics Update Function
+    // ------------------------------------------------------------------------
+    function updateStatistics(stats) {
+        // Update statistics in the summary cards
+        $('.stats-card:eq(0) h3').text(stats.total_classes || 0);
+        $('.stats-card:eq(1) h3').text(stats.active_classes || 0);
+        $('.stats-card:eq(2) h3').text(stats.total_students || 0);
+        $('.stats-card:eq(3) h3').text(Math.round(stats.avg_class_size || 0));
+    }
+
+    function renderClassTable(data) {
+        let tbody = '';
+        
+        if (data.classes.length > 0) {
+            data.classes.forEach(function(cls, index) {
+                tbody += buildClassRow(cls, index, data.current_page);
+            });
+        } else {
+            tbody = `<tr>
+                <td colspan="9" class="text-center text-muted">
+                    No classes found.
+                </td>
+            </tr>`;
+        }
+        
+        $('#classTableBody').html(tbody);
+        
+        // Reinitialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+
+    function buildClassRow(cls, index, currentPage) {
+        const rowNumber = ((currentPage - 1) * 10) + index + 1;
+        
+        return `
+            <tr data-class-id="${cls.id}">
+                <td>
+                    <div class="form-check">
+                        <input class="form-check-input class-checkbox" type="checkbox" 
+                            name="class_ids" value="${cls.id}" id="class_${cls.id}">
+                    </div>
+                </td>
+                <td><strong>${rowNumber}</strong></td>
+                <td>
+                    <div>
+                        <strong>${cls.level_name}</strong>
+                        ${cls.section ? `<span class="section-badge ms-2">Section ${cls.section}</span>` : ''}
+                        ${cls.class_motto ? `<br><small class="text-muted fst-italic">"${cls.class_motto}"</small>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div>
+                        ${cls.level_name}
+                        <br><small class="text-muted">
+                            Order: ${cls.level_order}
+                            ${cls.curriculum_type ? ` | ${cls.curriculum_type}` : ''}
+                        </small>
+                    </div>
+                </td>
+                <td>
+                    ${buildTeacherInfo(cls)}
+                </td>
+                <td>
+                    ${buildClassroomInfo(cls)}
+                </td>
+                <td>
+                    ${buildEnrollmentInfo(cls)}
+                </td>
+                <td>
+                    ${buildStatusBadges(cls)}
+                </td>
+                <td>
+                    ${buildActionsDropdown(cls.id)}
+                </td>
+            </tr>
+        `;
+    }
+
+    function buildTeacherInfo(cls) {
+        let html = '<div class="teacher-info">';
+        
+        if (cls.class_teacher) {
+            html += `
+                <div>
+                    <i class="fa fa-user me-1"></i>
+                    <span class="teacher-name">${cls.class_teacher}</span>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="no-teacher">
+                    <i class="fa fa-user-times me-1"></i>
+                    No class teacher
+                </div>
+            `;
+        }
+        
+        if (cls.assistant_teacher) {
+            html += `
+                <div class="mt-1">
+                    <i class="fa fa-user-plus me-1"></i>
+                    <small>
+                        Assistant: 
+                        <span class="teacher-name">${cls.assistant_teacher}</span>
+                    </small>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        return html;
+    }
+
+    function buildClassroomInfo(cls) {
+        if (cls.classroom_name) {
+            return `
+                <div>
+                    <i class="fa fa-door-open me-1"></i>
+                    ${cls.classroom_name}
+                    <br><small class="text-muted">
+                        ${cls.classroom_number || ''}
+                        ${cls.room_type && cls.room_type !== 'REGULAR' ? ` | ${cls.room_type}` : ''}
+                    </small>
+                </div>
+            `;
+        } else {
+            return `
+                <small class="text-muted">
+                    <i class="fa fa-home me-1"></i>
+                    No classroom assigned
+                </small>
+            `;
+        }
+    }
+
+    function buildEnrollmentInfo(cls) {
+        let html = `
+            <div class="d-flex align-items-center">
+                <span class="enrollment-badge">
+                    ${cls.enrollment_count || 0} / ${cls.max_students}
+                </span>
+            </div>
+        `;
+        
+        if (cls.max_students > 0) {
+            const utilization = Math.round((cls.enrollment_count || 0) * 100 / cls.max_students);
+            let progressClass = 'bg-success';
+            if (utilization >= 90) progressClass = 'bg-danger';
+            else if (utilization >= 70) progressClass = 'bg-warning';
+            
+            html += `
+                <div class="progress mt-1" style="height: 4px;">
+                    <div class="progress-bar ${progressClass}" role="progressbar" 
+                        style="width: ${utilization}%"
+                        aria-valuenow="${utilization}" 
+                        aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <small class="text-muted">${utilization}% full</small>
+            `;
+        }
+        
+        return html;
+    }
+
+    function buildStatusBadges(cls) {
+        let html = '';
+        
+        if (cls.is_active) {
+            html += `
+                <span class="badge bg-success">
+                    <i class="fa fa-check-circle me-1"></i>Active
+                </span>
+            `;
+        } else {
+            html += `
+                <span class="badge bg-danger">
+                    <i class="fa fa-times-circle me-1"></i>Inactive
+                </span>
+            `;
+        }
+        
+        if (cls.enrollment_count >= cls.max_students) {
+            html += `
+                <br><span class="badge bg-warning text-dark mt-1">
+                    <i class="fa fa-users me-1"></i>Full
+                </span>
+            `;
+        }
+        
+        return html;
+    }
+
+    function buildActionsDropdown(classId) {
+        const detailUrl = CLASS_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', classId);
+        const editUrl = CLASS_EDIT_URL.replace('00000000-0000-0000-0000-000000000000', classId);
+
+        return `
+            <div class="btn-group" role="group">
+                <a href="${detailUrl}" class="btn btn-sm btn-outline-primary" 
+                   data-bs-toggle="tooltip" title="View Details">
+                    <i class="fa fa-eye"></i>
+                </a>
+                <a href="${editUrl}" class="btn btn-sm btn-outline-warning"
+                   data-bs-toggle="tooltip" title="Edit Class">
+                    <i class="fa fa-edit"></i>
+                </a>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                            type="button" data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="${detailUrl}">
+                                <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="#" onclick="confirmDelete('${classId}')">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------------------
+    // Pagination Functions
+    // ------------------------------------------------------------------------
+    function updatePagination(data) {
+        if (data.total_pages <= 1) {
+            $('#paginationContainer').hide();
+            return;
+        }
+
+        $('#paginationContainer').show();
+        $('#paginationNav').html(buildPaginationHtml(data));
+        $('#resultsCount').html(
+            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} classes`
+        );
+    }
+
+    function buildPaginationHtml(data) {
+        let html = '';
+
+        // Previous button
+        html += buildPaginationButton(
+            data.has_previous,
+            data.current_page - 1,
+            '«',
+            'Previous'
+        );
+
+        // Page numbers
+        for (let i = 1; i <= data.total_pages; i++) {
+            if (i === data.current_page) {
+                html += `
+                    <li class="page-item active" aria-current="page">
+                        <a class="page-link" href="#">${i}</a>
+                    </li>
+                `;
+            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link pagination-link" href="#" data-page="${i}">${i}</a>
+                    </li>
+                `;
+            }
+        }
+
+        // Next button
+        html += buildPaginationButton(
+            data.has_next,
+            data.current_page + 1,
+            '»',
+            'Next'
+        );
+
+        return html;
+    }
+
+    function buildPaginationButton(isEnabled, page, symbol, label) {
+        if (isEnabled) {
+            return `
+                <li class="page-item">
+                    <a class="page-link pagination-link" href="#" data-page="${page}" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                        <span class="visually-hidden">${label}</span>
+                    </a>
+                </li>
+            `;
+        } else {
+            return `
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                        <span class="visually-hidden">${label}</span>
+                    </a>
+                </li>
+            `;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Export Functions
+    // ------------------------------------------------------------------------
+    function updateExportLinks() {
+        const formData = $('#searchForm').serialize();
+        const excelUrl = "#" + (formData ? '?' + formData : '');
+        const pdfUrl = "#" + (formData ? '?' + formData : '');
+        
+        $('#excelExportBtn').attr('href', excelUrl);
+        $('#pdfExportBtn').attr('href', pdfUrl);
+    }
+
+    // ------------------------------------------------------------------------
+    // Event Handlers
+    // ------------------------------------------------------------------------
+    
+    // Search and filter changes
+    $('#searchInput, #levelFilter, #sessionFilter, #statusFilter, #teacherFilter, #sectionFilter')
+        .on('input change', function() {
+            updateExportLinks();
+            fetchResults(1);
+        });
+
+    // Pagination clicks
+    $(document).on('click', '.pagination-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        fetchResults(page);
+        
+        // Scroll to top of results
+        $('html, body').animate({
+            scrollTop: $("#results").offset().top - 100
+        }, 300);
+    });
+
+    // Select all checkbox
+    $('#selectAllTable').on('change', function() {
+        $('.class-checkbox').prop('checked', $(this).prop('checked'));
+    });
+
+    // ------------------------------------------------------------------------
+    // Initialize
+    // ------------------------------------------------------------------------
+    updateExportLinks();
+    fetchResults(1);
+});
+
+// ============================================================================
+// PRINT FUNCTIONALITY
+// ============================================================================
+
+function selectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+function printClassTable() {
+    const selectedColumns = getSelectedColumns();
+    
+    if (selectedColumns.length === 0) {
+        alert('Please select at least one column to print');
+        return;
+    }
+    
+    const printBtn = document.querySelector('#printModal .btn-primary');
+    const originalText = printBtn.innerHTML;
+    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Loading...';
+    printBtn.disabled = true;
+    
+    fetchAllClassesForPrint(selectedColumns, printBtn, originalText);
+}
+
+function fetchAllClassesForPrint(selectedColumns, printBtn, originalText) {
+    const formData = $('#searchForm').serialize();
+    
+    $.ajax({
+        url: "{% url 'academics:class_search' %}",
+        data: formData + '&page=all',
+        dataType: 'json',
+        success: function(data) {
+            const printHTML = buildPrintHTMLFromData(data.classes, selectedColumns);
+            displayPrintPreview(printHTML);
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        },
+        error: function(xhr, status, error) {
+            console.error('Print Error:', error);
+            alert('Error loading classes for print. Please try again.');
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        }
+    });
+}
+
+function getSelectedColumns() {
+    const columns = [];
+    document.querySelectorAll('.print-column:checked').forEach(checkbox => {
+        columns.push(checkbox.value);
+    });
+    return columns;
+}
+
+function buildPrintHTMLFromData(classes, selectedColumns) {
+    const columnMap = {
+        'number': { header: '#' },
+        'class_name': { header: 'Class Name' },
+        'level': { header: 'Academic Level' },
+        'teacher': { header: 'Class Teacher' },
+        'classroom': { header: 'Classroom' },
+        'enrollment': { header: 'Enrollment' },
+        'capacity': { header: 'Max Capacity' },
+        'status': { header: 'Status' }
+    };
+    
+    let html = `
+        <div id="printableTable">
+            <div class="print-header">
+                <div class="print-title">Class Management</div>
+                <div class="print-date">Generated on: ${new Date().toLocaleString()}</div>
+            </div>
+            
+            <table class="print-table">
+                <thead>
+                    <tr>
+    `;
+    
+    selectedColumns.forEach(col => {
+        html += `<th>${columnMap[col].header}</th>`;
+    });
+    
+    html += '</tr></thead><tbody>';
+    
+    classes.forEach((cls, index) => {
+        html += '<tr>';
+        
+        selectedColumns.forEach(col => {
+            const cellContent = extractCellContentFromData(cls, col, index);
+            html += `<td>${cellContent}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    
+    html += `
+                </tbody>
+            </table>
+            
+            <div class="print-footer">
+                <p>Total Classes: ${classes.length}</p>
+                <p>Date: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function extractCellContentFromData(cls, columnType, index) {
+    switch(columnType) {
+        case 'number':
+            return index + 1;
+        case 'class_name':
+            return `${cls.level_name}${cls.section ? ' - Section ' + cls.section : ''}`;
+        case 'level':
+            return cls.level_name;
+        case 'teacher':
+            return cls.class_teacher || 'Not assigned';
+        case 'classroom':
+            return cls.classroom_name || 'Not assigned';
+        case 'enrollment':
+            return `${cls.enrollment_count || 0} students`;
+        case 'capacity':
+            return cls.max_students;
+        case 'status':
+            return cls.is_active ? 'Active' : 'Inactive';
+        default:
+            return '';
+    }
+}
+
+function displayPrintPreview(printHTML) {
+    const existingContainer = document.getElementById('printableTable');
+    if (existingContainer) {
+        existingContainer.remove();
+    }
+    
+    const tempContainer = document.createElement('div');
+    tempContainer.innerHTML = printHTML;
+    document.body.appendChild(tempContainer);
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    setTimeout(() => {
+        window.print();
+        
+        setTimeout(() => {
+            if (tempContainer && tempContainer.parentNode) {
+                tempContainer.remove();
+            }
+        }, 1000);
+    }, 500);
+}
+
+window.addEventListener('afterprint', function() {
+    const printContainer = document.getElementById('printableTable');
+    if (printContainer) {
+        printContainer.remove();
+    }
+});
+
+// Helper function for confirming delete
+function confirmDelete(classId) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteClass' + classId));
+    modal.show();
+}
+</script>
+{% endblock %}

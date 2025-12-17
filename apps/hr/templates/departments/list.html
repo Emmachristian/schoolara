@@ -1,0 +1,905 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   STATISTICS SUMMARY SECTION
+   ============================================================================ */
+
+.stats-summary {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 8px 32px rgba(23, 162, 184, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-summary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="80" cy="80" r="3" fill="rgba(255,255,255,0.05)"/><circle cx="40" cy="70" r="1" fill="rgba(255,255,255,0.1)"/></svg>');
+    pointer-events: none;
+}
+
+.stats-card {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+/* ============================================================================
+   DEPARTMENT CARD STYLING
+   ============================================================================ */
+
+.department-card {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    background: white;
+    overflow: hidden;
+}
+
+.department-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transform: translateY(-4px);
+    border-color: #17a2b8;
+}
+
+.department-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 20px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.department-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+}
+
+.department-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0 0 5px 0;
+}
+
+.department-code {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-family: 'Courier New', monospace;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.department-body {
+    padding: 20px;
+}
+
+.department-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+    min-height: 40px;
+}
+
+.department-stats {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.stat-item {
+    flex: 1;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #17a2b8;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.department-footer {
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+}
+
+/* ============================================================================
+   HIERARCHY VISUALIZATION
+   ============================================================================ */
+
+.hierarchy-indicator {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-right: 5px;
+}
+
+.hierarchy-parent {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.hierarchy-child {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.parent-department-link {
+    color: #17a2b8;
+    text-decoration: none;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.parent-department-link:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 20px;
+}
+
+.empty-state h5 {
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+/* ============================================================================
+   BADGES & INDICATORS
+   ============================================================================ */
+
+.active-badge {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid #c3e6cb;
+}
+
+.inactive-badge {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid #f5c6cb;
+}
+
+/* ============================================================================
+   SEARCH & FILTERS
+   ============================================================================ */
+
+.search-filter-bar {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .stats-summary {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 10px;
+    }
+    
+    .department-header {
+        padding: 15px;
+    }
+    
+    .department-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+    
+    .department-name {
+        font-size: 1.1rem;
+    }
+    
+    .department-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    .department-card {
+        margin-bottom: 15px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-culture icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Departments
+                <div class="page-title-subheading">
+                    Manage organizational structure and departmental hierarchy
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'hr:department_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add New Department
+                    </a>
+
+                    <!-- Export Options -->
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                        <i class="fa fa-download me-1"></i> Export
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <a class="dropdown-item" href="#" id="exportExcel">
+                            <i class="fa fa-file-excel me-2 text-success"></i> Export to Excel
+                        </a>
+                        <a class="dropdown-item" href="#" id="exportPdf">
+                            <i class="fa fa-file-pdf me-2 text-danger"></i> Export to PDF
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" href="#" onclick="window.print()">
+                            <i class="fa fa-print me-2"></i> Print List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Summary -->
+<div class="stats-summary">
+    <div class="row">
+        <!-- Total Departments -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_departments|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Departments</p>
+                <small class="opacity-6">
+                    <i class="fa fa-building me-1"></i>
+                    All departments
+                </small>
+            </div>
+        </div>
+        
+        <!-- Active Departments -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.active_departments|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Active Departments</p>
+                <small class="opacity-6">
+                    <i class="fa fa-check-circle me-1"></i>
+                    Currently active
+                </small>
+            </div>
+        </div>
+        
+        <!-- Total Staff -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_staff|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Staff</p>
+                <small class="opacity-6">
+                    <i class="fa fa-users me-1"></i>
+                    Across all departments
+                </small>
+            </div>
+        </div>
+        
+        <!-- Top-Level Departments -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.parent_departments|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Top-Level Depts</p>
+                <small class="opacity-6">
+                    <i class="fa fa-sitemap me-1"></i>
+                    Main departments
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="search-filter-bar">
+    <form id="searchForm" class="row g-3">
+        <div class="col-md-6">
+            <input type="text" name="q" id="searchInput" class="form-control" placeholder="Search departments by name, code, or description...">
+        </div>
+        <div class="col-md-3">
+            <select name="is_active" id="statusFilter" class="form-select">
+                <option value="">All Status</option>
+                <option value="true">Active Only</option>
+                <option value="false">Inactive Only</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select name="has_parent" id="hierarchyFilter" class="form-select">
+                <option value="">All Departments</option>
+                <option value="false">Top-Level Only</option>
+                <option value="true">Sub-Departments Only</option>
+            </select>
+        </div>
+    </form>
+</div>
+
+<!-- Departments Grid -->
+<section class="section">
+    <div class="row" id="departmentsGrid">
+        {% for department in departments %}
+        <div class="col-lg-4 col-md-6 mb-4 department-item">
+            <div class="department-card">
+                <div class="department-header">
+                    <div class="d-flex align-items-start">
+                        <div class="department-icon me-3">
+                            <i class="fa fa-building"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="department-name">{{ department.name }}</h5>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="department-code">{{ department.code }}</span>
+                                {% if department.is_active %}
+                                    <span class="active-badge">Active</span>
+                                {% else %}
+                                    <span class="inactive-badge">Inactive</span>
+                                {% endif %}
+                                {% if department.parent_department %}
+                                    <span class="hierarchy-indicator hierarchy-child">
+                                        <i class="fa fa-level-up-alt fa-rotate-90"></i> Sub-Dept
+                                    </span>
+                                {% else %}
+                                    <span class="hierarchy-indicator hierarchy-parent">
+                                        <i class="fa fa-layer-group"></i> Parent
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="department-body">
+                    {% if department.parent_department %}
+                        <div class="mb-2">
+                            <small class="text-muted">Parent Department:</small><br>
+                            <a href="{% url 'hr:department_detail' department.parent_department.pk %}" class="parent-department-link">
+                                <i class="fa fa-arrow-up"></i>
+                                {{ department.parent_department.name }}
+                            </a>
+                        </div>
+                    {% endif %}
+                    
+                    <p class="department-description">
+                        {% if department.description %}
+                            {{ department.description|truncatewords:20 }}
+                        {% else %}
+                            <em class="text-muted">No description provided</em>
+                        {% endif %}
+                    </p>
+                    
+                    <div class="department-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ department.staff_count|default:0 }}</div>
+                            <div class="stat-label">Staff</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{{ department.sub_departments_count|default:0 }}</div>
+                            <div class="stat-label">Sub-Depts</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="department-footer">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fa fa-calendar me-1"></i>
+                            Created: {{ department.created_at|date:"M d, Y" }}
+                        </small>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{% url 'hr:department_detail' department.pk %}" class="btn btn-outline-info" title="View Details">
+                                <i class="fa fa-eye"></i>
+                            </a>
+                            <a href="{% url 'hr:department_update' department.pk %}" class="btn btn-outline-warning" title="Edit">
+                                <i class="fa fa-edit"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteDepartment{{ department.pk }}" title="Delete">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Modal -->
+        <div class="modal fade" id="deleteDepartment{{ department.pk }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Delete Department</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <i class="fa fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                        <h5>Are you sure you want to delete "<strong>{{ department.name }}</strong>"?</h5>
+                        
+                        {% if department.staff_count > 0 or department.sub_departments_count > 0 %}
+                            <div class="alert alert-warning mt-3">
+                                <strong>Warning:</strong> This department has:
+                                <ul class="mb-0 text-start">
+                                    {% if department.staff_count > 0 %}
+                                        <li>{{ department.staff_count }} staff member(s)</li>
+                                    {% endif %}
+                                    {% if department.sub_departments_count > 0 %}
+                                        <li>{{ department.sub_departments_count }} sub-department(s)</li>
+                                    {% endif %}
+                                </ul>
+                                Please reassign or remove them first before deleting this department.
+                            </div>
+                        {% else %}
+                            <p class="text-muted">This action cannot be undone.</p>
+                        {% endif %}
+                    </div>
+                    <form action="{% url 'hr:department_delete' department.pk %}" method="post">
+                        {% csrf_token %}
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            {% if department.staff_count == 0 and department.sub_departments_count == 0 %}
+                                <button type="submit" class="btn btn-danger">Delete Department</button>
+                            {% else %}
+                                <button type="button" class="btn btn-danger" disabled>Cannot Delete</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fa fa-building"></i>
+                </div>
+                <h5>No Departments Found</h5>
+                <p class="text-muted">Start by creating your first department to organize your staff.</p>
+                <a href="{% url 'hr:department_create' %}" class="btn btn-primary mt-3">
+                    <i class="fa fa-plus me-2"></i> Create First Department
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <div id="paginationContainer" style="display: none;">
+        <nav class="mb-3" aria-label="Page navigation">
+            <ul class="pagination justify-content-center" id="paginationNav">
+                <!-- Pagination will be dynamically inserted here -->
+            </ul>
+        </nav>
+
+        <!-- Showing X-Y of Z results -->
+        <div class="text-center text-muted mb-3" id="resultsCount">
+            <!-- Results count will be dynamically inserted here -->
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ============================================================================
+   DJANGO URL TEMPLATES
+============================================================================ */
+const DEPARTMENT_DETAIL_URL =
+    "{% url 'hr:department_detail' '00000000-0000-0000-0000-000000000000' %}";
+const DEPARTMENT_EDIT_URL =
+    "{% url 'hr:department_update' '00000000-0000-0000-0000-000000000000' %}";
+
+// ============================================================================
+// MAIN DEPARTMENT LIST FUNCTIONALITY
+// ============================================================================
+$(document).ready(function() {
+    let currentPage = 1;
+
+    // ------------------------------------------------------------------------
+    // AJAX Functions - Fetch and Display Departments
+    // ------------------------------------------------------------------------
+    function fetchResults(page = 1) {
+        const formData = $('#searchForm').serialize() + '&page=' + page;
+        
+        $.ajax({
+            url: "{% url 'hr:department_search' %}",
+            data: formData,
+            dataType: 'json',
+            success: function(data) {
+                renderDepartmentsGrid(data);
+                updatePagination(data);
+                updateStatistics(data.stats);
+                currentPage = data.current_page;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                $('#departmentsGrid').html(
+                    `<div class="col-12">
+                        <div class="alert alert-danger text-center">
+                            Error loading departments. Please try again.
+                        </div>
+                    </div>`
+                );
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Statistics Update Function
+    // ------------------------------------------------------------------------
+    function updateStatistics(stats) {
+        $('.stats-card:eq(0) h3').text(stats.total_departments || 0);
+        $('.stats-card:eq(1) h3').text(stats.active_departments || 0);
+        $('.stats-card:eq(2) h3').text(stats.total_staff || 0);
+        $('.stats-card:eq(3) h3').text(stats.parent_departments || 0);
+    }
+
+    function renderDepartmentsGrid(data) {
+        let html = '';
+        
+        if (data.departments.length > 0) {
+            data.departments.forEach(function(dept) {
+                html += buildDepartmentCard(dept);
+            });
+        } else {
+            html = `
+                <div class="col-12">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fa fa-building"></i>
+                        </div>
+                        <h5>No Departments Found</h5>
+                        <p class="text-muted">Try adjusting your search filters.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        $('#departmentsGrid').html(html);
+    }
+
+    function buildDepartmentCard(dept) {
+        const detailUrl = DEPARTMENT_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', dept.id);
+        const editUrl = DEPARTMENT_EDIT_URL.replace('00000000-0000-0000-0000-000000000000', dept.id);
+        
+        const statusBadge = dept.is_active 
+            ? '<span class="active-badge">Active</span>'
+            : '<span class="inactive-badge">Inactive</span>';
+        
+        const hierarchyBadge = dept.parent_department
+            ? '<span class="hierarchy-indicator hierarchy-child"><i class="fa fa-level-up-alt fa-rotate-90"></i> Sub-Dept</span>'
+            : '<span class="hierarchy-indicator hierarchy-parent"><i class="fa fa-layer-group"></i> Parent</span>';
+        
+        const parentInfo = dept.parent_department
+            ? `<div class="mb-2">
+                <small class="text-muted">Parent Department:</small><br>
+                <a href="${DEPARTMENT_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', dept.parent_department.id)}" class="parent-department-link">
+                    <i class="fa fa-arrow-up"></i>
+                    ${dept.parent_department.name}
+                </a>
+            </div>`
+            : '';
+        
+        const description = dept.description
+            ? dept.description
+            : '<em class="text-muted">No description provided</em>';
+        
+        const deleteWarning = (dept.staff_count > 0 || dept.sub_departments_count > 0)
+            ? `<div class="alert alert-warning mt-3">
+                <strong>Warning:</strong> This department has:
+                <ul class="mb-0 text-start">
+                    ${dept.staff_count > 0 ? `<li>${dept.staff_count} staff member(s)</li>` : ''}
+                    ${dept.sub_departments_count > 0 ? `<li>${dept.sub_departments_count} sub-department(s)</li>` : ''}
+                </ul>
+                Please reassign or remove them first.
+            </div>`
+            : '<p class="text-muted">This action cannot be undone.</p>';
+        
+        const deleteButton = (dept.staff_count == 0 && dept.sub_departments_count == 0)
+            ? '<button type="submit" class="btn btn-danger">Delete Department</button>'
+            : '<button type="button" class="btn btn-danger" disabled>Cannot Delete</button>';
+
+        return `
+            <div class="col-lg-4 col-md-6 mb-4 department-item">
+                <div class="department-card">
+                    <div class="department-header">
+                        <div class="d-flex align-items-start">
+                            <div class="department-icon me-3">
+                                <i class="fa fa-building"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h5 class="department-name">${dept.name}</h5>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="department-code">${dept.code}</span>
+                                    ${statusBadge}
+                                    ${hierarchyBadge}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="department-body">
+                        ${parentInfo}
+                        
+                        <p class="department-description">${description}</p>
+                        
+                        <div class="department-stats">
+                            <div class="stat-item">
+                                <div class="stat-value">${dept.staff_count || 0}</div>
+                                <div class="stat-label">Staff</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${dept.sub_departments_count || 0}</div>
+                                <div class="stat-label">Sub-Depts</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="department-footer">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fa fa-calendar me-1"></i>
+                                Created: ${dept.created_at}
+                            </small>
+                            <div class="btn-group btn-group-sm">
+                                <a href="${detailUrl}" class="btn btn-outline-info" title="View Details">
+                                    <i class="fa fa-eye"></i>
+                                </a>
+                                <a href="${editUrl}" class="btn btn-outline-warning" title="Edit">
+                                    <i class="fa fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteDept${dept.id}" title="Delete">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Delete Modal -->
+                <div class="modal fade" id="deleteDept${dept.id}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Delete Department</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <i class="fa fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                                <h5>Are you sure you want to delete "<strong>${dept.name}</strong>"?</h5>
+                                ${deleteWarning}
+                            </div>
+                            <form action="/hr/departments/${dept.id}/delete/" method="post">
+                                <input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    ${deleteButton}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------------------
+    // Pagination Functions
+    // ------------------------------------------------------------------------
+    function updatePagination(data) {
+        if (data.total_pages <= 1) {
+            $('#paginationContainer').hide();
+            return;
+        }
+
+        $('#paginationContainer').show();
+        $('#paginationNav').html(buildPaginationHtml(data));
+        $('#resultsCount').html(
+            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} departments`
+        );
+    }
+
+    function buildPaginationHtml(data) {
+        let html = '';
+
+        // Previous button
+        html += buildPaginationButton(
+            data.has_previous,
+            data.current_page - 1,
+            '«',
+            'Previous'
+        );
+
+        // Page numbers
+        for (let i = 1; i <= data.total_pages; i++) {
+            if (i === data.current_page) {
+                html += `
+                    <li class="page-item active" aria-current="page">
+                        <a class="page-link" href="#">${i}</a>
+                    </li>
+                `;
+            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link pagination-link" href="#" data-page="${i}">${i}</a>
+                    </li>
+                `;
+            }
+        }
+
+        // Next button
+        html += buildPaginationButton(
+            data.has_next,
+            data.current_page + 1,
+            '»',
+            'Next'
+        );
+
+        return html;
+    }
+
+    function buildPaginationButton(isEnabled, page, symbol, label) {
+        if (isEnabled) {
+            return `
+                <li class="page-item">
+                    <a class="page-link pagination-link" href="#" data-page="${page}" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                    </a>
+                </li>
+            `;
+        } else {
+            return `
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
+                        <span aria-hidden="true">${symbol}</span>
+                    </a>
+                </li>
+            `;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Helper Functions
+    // ------------------------------------------------------------------------
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // ------------------------------------------------------------------------
+    // Event Handlers
+    // ------------------------------------------------------------------------
+    
+    // Search and filter changes
+    $('#searchInput, #statusFilter, #hierarchyFilter').on('input change', function() {
+        fetchResults(1);
+    });
+
+    // Pagination clicks
+    $(document).on('click', '.pagination-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        fetchResults(page);
+        
+        // Scroll to top of results
+        $('html, body').animate({
+            scrollTop: $("#departmentsGrid").offset().top - 100
+        }, 300);
+    });
+
+    // Export handlers
+    $('#exportExcel').on('click', function(e) {
+        e.preventDefault();
+        alert('Excel export functionality - to be implemented');
+    });
+
+    $('#exportPdf').on('click', function(e) {
+        e.preventDefault();
+        alert('PDF export functionality - to be implemented');
+    });
+
+    // ------------------------------------------------------------------------
+    // Initialize
+    // ------------------------------------------------------------------------
+    // If AJAX search endpoint exists, use it; otherwise keep server-rendered
+    {% if departments %}
+        // Server-rendered - keep as is
+    {% else %}
+        fetchResults(1);
+    {% endif %}
+});
+
+console.log('Department List JavaScript loaded successfully');
+</script>
+{% endblock %}

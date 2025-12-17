@@ -1,0 +1,1505 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+<style>
+    .form-section {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border: none;
+    }
+    
+    .section-header {
+        background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px 8px 0 0;
+        margin: 0;
+    }
+    
+    .section-header h6 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    
+    .section-header p {
+        margin: 5px 0 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+    
+    .section-body {
+        padding: 25px;
+    }
+    
+    .form-floating {
+        margin-bottom: 1.2rem;
+    }
+    
+    .form-floating label {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .form-control:focus {
+        border-color: #6f42c1;
+        box-shadow: 0 0 0 0.25rem rgba(111, 66, 193, 0.15);
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .form-help {
+        background-color: #f3e5f5;
+        border-left: 4px solid #6f42c1;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .form-help h6 {
+        color: #6f42c1;
+        margin-bottom: 10px;
+    }
+    
+    .current-value {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid #6f42c1;
+    }
+    
+    .current-value-label {
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .current-value-text {
+        font-size: 1.1rem;
+        color: #212529;
+        margin-top: 5px;
+    }
+    
+    .btn-save-group {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-top: 20px;
+        border: 1px solid #dee2e6;
+    }
+    
+    /* Profile Image Styling */
+    .profile-image-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 20px;
+    }
+
+    .profile-image-container .profile-avatar {
+        width: 120px;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 50%;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        border: 3px solid #fff;
+    }
+
+    .avatar-placeholder {
+        width: 120px;
+        height: 120px;
+        background-color: #f8f9fa;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid #fff;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .avatar-title {
+        font-size: 48px;
+        color: #6f42c1;
+        font-weight: 500;
+    }
+
+    .profile-image-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 120px;
+        height: 120px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        cursor: pointer;
+    }
+
+    .profile-image-container:hover .profile-image-overlay {
+        opacity: 1;
+    }
+
+    .profile-image-overlay i {
+        color: white;
+        font-size: 24px;
+    }
+
+    /* Image Cropper Modal Styling */
+    #image-container {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    #imagePreview {
+        max-width: 100%;
+        max-height: 400px;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .cropper-container {
+        margin: 0 auto;
+    }
+    
+    .field-group {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #fdfdfe;
+    }
+    
+    .field-group-header {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 15px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .image-upload-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .image-upload-area:hover {
+        border-color: #6f42c1;
+        background-color: #f8f6fc;
+    }
+
+    .image-upload-area.dragover {
+        border-color: #6f42c1;
+        background-color: #f3e5f5;
+    }
+
+    .upload-icon {
+        font-size: 3rem;
+        color: #6f42c1;
+        margin-bottom: 1rem;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-ft { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-pt { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    .status-ct { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+    .status-pr { background-color: #e7e7ff; color: #4c4cac; border: 1px solid #d5d5f5; }
+    
+    .disabled-field {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    .readonly-field {
+        background-color: #f8f9fa !important;
+        cursor: not-allowed;
+    }
+    
+    .error-summary {
+        background-color: #fff5f5;
+        border: 1px solid #fed7d7;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .error-summary h6 {
+        color: #c53030;
+        margin-bottom: 10px;
+    }
+
+    .error-list {
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    .error-list li {
+        color: #742a2a;
+        margin-bottom: 5px;
+    }
+    
+    @media (max-width: 768px) {
+        .section-body {
+            padding: 15px;
+        }
+        
+        .btn-save-group {
+            padding: 15px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-mean-fruit"></i>
+            </div>
+            <div>
+                {% if form.instance.pk %}Update Staff Member{% else %}Add New Staff Member{% endif %}
+                <div class="page-title-subheading">
+                    {% if form.instance.pk %}
+                        Update information for {{ form.instance.full_name }} ({{ form.instance.staff_id }})
+                    {% else %}
+                        Add a new staff member to the system
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="dropdown">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fa fa-ellipsis-v me-1"></i> Actions
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    {% if form.instance.pk %}
+                        <a class="dropdown-item" href="{% url 'hr:staff_profile' form.instance.pk %}">
+                            <i class="fa fa-eye me-2"></i> View Profile
+                        </a>
+                        <a class="dropdown-item" href="{% url 'hr:contract_list' %}?staff={{ form.instance.pk }}">
+                            <i class="fa fa-file-contract me-2"></i> Contracts
+                        </a>
+                        <a class="dropdown-item" href="#">
+                            <i class="fa fa-award me-2"></i> Designations
+                        </a>
+                        <div class="dropdown-divider"></div>
+                    {% endif %}
+                    <a class="dropdown-item" href="{% url 'hr:staff_list' %}">
+                        <i class="fa fa-list me-2"></i> Back to Staff List
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Form Help Section -->
+<div class="form-help">
+    <h6><i class="fa fa-info-circle me-1"></i> {% if form.instance.pk %}Update{% else %}Registration{% endif %} Guidelines</h6>
+    <div class="row">
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Required fields</strong> are marked with an asterisk (*)</li>
+                {% if form.instance.pk %}
+                    <li><strong>Staff ID</strong> cannot be changed after creation</li>
+                    <li><strong>Employment status changes</strong> will be tracked</li>
+                {% else %}
+                    <li><strong>Staff ID</strong> will be auto-generated if not provided</li>
+                    <li><strong>Department</strong> can be changed later</li>
+                {% endif %}
+            </ul>
+        </div>
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Profile photos</strong> should be professional headshots (max 5MB)</li>
+                {% if form.instance.pk %}
+                    <li><strong>Banking details</strong> are confidential and secure</li>
+                    <li>Use "Save Changes" to apply all modifications</li>
+                {% else %}
+                    <li><strong>Contracts</strong> can be created after staff registration</li>
+                    <li>Use "Save Staff Member" to create the record</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Error Display Section -->
+{% if form.errors or form.non_field_errors %}
+<div class="error-summary">
+    <h6><i class="fa fa-exclamation-triangle me-2"></i>Please correct the following errors:</h6>
+    
+    {% if form.non_field_errors %}
+        <div class="mb-3">
+            <strong>Form Errors:</strong>
+            <ul class="error-list">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+    
+    {% if form.errors %}
+        <div class="mb-3">
+            <strong>Field Errors:</strong>
+            <ul class="error-list">
+                {% for field, errors in form.errors.items %}
+                    {% if field != '__all__' %}
+                        <li><strong>{{ field|title }}:</strong>
+                            {% for error in errors %}
+                                {{ error }}{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Current Status Display (for updates only) -->
+{% if form.instance.pk %}
+<div class="current-value">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <div class="current-value-label">Current Employment Status</div>
+            <div class="current-value-text">
+                <span class="status-badge status-{{ form.instance.employment_status|lower }}">
+                    {{ form.instance.get_employment_status_display }}
+                </span>
+                {% if form.instance.primary_department %}
+                    in {{ form.instance.primary_department.name }}
+                {% endif %}
+                {% if form.instance.get_years_of_service %}
+                    <small class="text-muted ms-2">{{ form.instance.get_years_of_service }} years of service</small>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <small class="text-muted">
+                Joined: {{ form.instance.date_of_joining|date:"M d, Y" }}<br>
+                {% if form.instance.date_of_leaving %}
+                    Left: {{ form.instance.date_of_leaving|date:"M d, Y" }}
+                {% endif %}
+            </small>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Main Form -->
+<form method="post" enctype="multipart/form-data" id="staff-update-form" novalidate>
+    {% csrf_token %}
+    
+    <!-- Basic Information Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-user me-2"></i>Basic Information</h6>
+            <p>Personal details and identification information</p>
+        </div>
+        <div class="section-body">
+            <!-- Staff ID -->
+            <div class="form-floating">
+                {% if form.instance.pk %}
+                    {{ form.staff_id|add_class:"form-control readonly-field" }}
+                {% else %}
+                    {{ form.staff_id|add_class:"form-control" }}
+                {% endif %}
+                <label for="{{ form.staff_id.id_for_label }}">Staff ID</label>
+                {% if form.staff_id.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.staff_id.errors %}
+                            {{ error }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.instance.pk %}
+                    <div class="form-text">Staff ID cannot be changed after creation</div>
+                {% else %}
+                    <div class="form-text">Leave blank to auto-generate</div>
+                {% endif %}
+            </div>
+            
+            <!-- Salutation -->
+            <div class="row">
+                <div class="col-md-2">
+                    <div class="form-floating">
+                        {{ form.salutation|add_class:"form-select" }}
+                        <label for="{{ form.salutation.id_for_label }}">Salutation</label>
+                        {% if form.salutation.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.salutation.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.first_name|add_class:"form-control" }}
+                        <label for="{{ form.first_name.id_for_label }}" class="{% if form.first_name.field.required %}required-field{% endif %}">First Name</label>
+                        {% if form.first_name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.first_name.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        {{ form.middle_name|add_class:"form-control" }}
+                        <label for="{{ form.middle_name.id_for_label }}">Middle Name</label>
+                        {% if form.middle_name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.middle_name.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        {{ form.last_name|add_class:"form-control" }}
+                        <label for="{{ form.last_name.id_for_label }}" class="{% if form.last_name.field.required %}required-field{% endif %}">Last Name</label>
+                        {% if form.last_name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.last_name.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.date_of_birth|add_class:"form-control" }}
+                        <label for="{{ form.date_of_birth.id_for_label }}" class="{% if form.date_of_birth.field.required %}required-field{% endif %}">Date of Birth</label>
+                        {% if form.date_of_birth.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.date_of_birth.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.gender|add_class:"form-select" }}
+                        <label for="{{ form.gender.id_for_label }}" class="{% if form.gender.field.required %}required-field{% endif %}">Gender</label>
+                        {% if form.gender.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.gender.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.marital_status|add_class:"form-select" }}
+                        <label for="{{ form.marital_status.id_for_label }}">Marital Status</label>
+                        {% if form.marital_status.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.marital_status.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.nationality|add_class:"form-select" }}
+                        <label for="{{ form.nationality.id_for_label }}">Nationality</label>
+                        {% if form.nationality.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.nationality.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.national_id|add_class:"form-control" }}
+                        <label for="{{ form.national_id.id_for_label }}">National ID</label>
+                        {% if form.national_id.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.national_id.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.passport_number|add_class:"form-control" }}
+                        <label for="{{ form.passport_number.id_for_label }}">Passport Number</label>
+                        {% if form.passport_number.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.passport_number.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.ethnicity|add_class:"form-control" }}
+                        <label for="{{ form.ethnicity.id_for_label }}">Ethnicity</label>
+                        {% if form.ethnicity.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.ethnicity.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.religious_affiliation|add_class:"form-select" }}
+                        <label for="{{ form.religious_affiliation.id_for_label }}">Religious Affiliation</label>
+                        {% if form.religious_affiliation.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.religious_affiliation.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Profile Photo -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-camera me-2"></i>Profile Photo
+                </div>
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="profile-image-container mb-3">
+                            {% if form.instance.photo %}
+                                <img id="currentProfileImage" src="{{ form.instance.photo.url }}" alt="{{ form.instance.full_name }}" class="profile-avatar">
+                            {% else %}
+                                <div class="avatar-placeholder">
+                                    <div class="avatar-title">
+                                        {% if form.instance.first_name %}{{ form.instance.first_name|first }}{% endif %}{% if form.instance.last_name %}{{ form.instance.last_name|first }}{% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="profile-image-overlay">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        </div>
+                        <div class="small text-muted">Click to change photo</div>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="mt-2">
+                            <strong>Profile Photo</strong>
+                            <div class="small text-muted mt-1">
+                                Click on the image to update the staff member's photo.<br>
+                                Supported formats: JPG, PNG, GIF (Max: 5MB)<br>
+                                Recommended: Professional headshot, minimum 200x200 pixels
+                            </div>
+                        </div>
+                        {{ form.photo|add_class:"d-none" }}
+                        {% if form.photo.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.photo.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contact Information Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-envelope me-2"></i>Contact Information</h6>
+            <p>Phone, email, and emergency contact details</p>
+        </div>
+        <div class="section-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.phone_number|add_class:"form-control" }}
+                        <label for="{{ form.phone_number.id_for_label }}" class="{% if form.phone_number.field.required %}required-field{% endif %}">Phone Number</label>
+                        {% if form.phone_number.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.phone_number.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Format: +256xxxxxxxxx</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.alternative_phone|add_class:"form-control" }}
+                        <label for="{{ form.alternative_phone.id_for_label }}">Alternative Phone</label>
+                        {% if form.alternative_phone.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.alternative_phone.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-floating">
+                {{ form.personal_email|add_class:"form-control" }}
+                <label for="{{ form.personal_email.id_for_label }}">Personal Email</label>
+                {% if form.personal_email.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.personal_email.errors %}
+                            {{ error }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Emergency Contact -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-phone me-2"></i>Emergency Contact
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.emergency_contact_name|add_class:"form-control" }}
+                            <label for="{{ form.emergency_contact_name.id_for_label }}" class="{% if form.emergency_contact_name.field.required %}required-field{% endif %}">Emergency Contact Name</label>
+                            {% if form.emergency_contact_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.emergency_contact_name.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.emergency_contact_relationship|add_class:"form-control" }}
+                            <label for="{{ form.emergency_contact_relationship.id_for_label }}" class="{% if form.emergency_contact_relationship.field.required %}required-field{% endif %}">Relationship</label>
+                            {% if form.emergency_contact_relationship.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.emergency_contact_relationship.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.emergency_contact_phone|add_class:"form-control" }}
+                            <label for="{{ form.emergency_contact_phone.id_for_label }}" class="{% if form.emergency_contact_phone.field.required %}required-field{% endif %}">Emergency Contact Phone</label>
+                            {% if form.emergency_contact_phone.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.emergency_contact_phone.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.emergency_contact_address|add_class:"form-control" }}
+                            <label for="{{ form.emergency_contact_address.id_for_label }}">Emergency Contact Address</label>
+                            {% if form.emergency_contact_address.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.emergency_contact_address.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Employment Information Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-briefcase me-2"></i>Employment Information</h6>
+            <p>Job details, department assignment, and employment dates</p>
+        </div>
+        <div class="section-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.date_of_joining|add_class:"form-control" }}
+                        <label for="{{ form.date_of_joining.id_for_label }}" class="{% if form.date_of_joining.field.required %}required-field{% endif %}">Date of Joining</label>
+                        {% if form.date_of_joining.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.date_of_joining.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.date_of_leaving|add_class:"form-control" }}
+                        <label for="{{ form.date_of_leaving.id_for_label }}">Date of Leaving</label>
+                        {% if form.date_of_leaving.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.date_of_leaving.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Leave blank if currently employed</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.employment_status|add_class:"form-select" }}
+                        <label for="{{ form.employment_status.id_for_label }}" class="{% if form.employment_status.field.required %}required-field{% endif %}">Employment Status</label>
+                        {% if form.employment_status.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.employment_status.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.primary_department|add_class:"form-select" }}
+                        <label for="{{ form.primary_department.id_for_label }}" class="{% if form.primary_department.field.required %}required-field{% endif %}">Primary Department</label>
+                        {% if form.primary_department.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.primary_department.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Qualifications Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-graduation-cap me-2"></i>Qualifications & Experience</h6>
+            <p>Educational background, work experience, and professional skills</p>
+        </div>
+        <div class="section-body">
+            <div class="form-floating">
+                {{ form.qualification|add_class:"form-control" }}
+                <label for="{{ form.qualification.id_for_label }}">Educational Qualifications</label>
+                {% if form.qualification.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.qualification.errors %}
+                            {{ error }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="form-text">List degrees, certificates, and educational achievements</div>
+            </div>
+            
+            <div class="form-floating">
+                {{ form.experience|add_class:"form-control" }}
+                <label for="{{ form.experience.id_for_label }}">Work Experience</label>
+                {% if form.experience.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.experience.errors %}
+                            {{ error }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="form-text">Describe previous work experience and roles</div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.skills|add_class:"form-control" }}
+                        <label for="{{ form.skills.id_for_label }}">Professional Skills</label>
+                        {% if form.skills.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.skills.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.languages_spoken|add_class:"form-control" }}
+                        <label for="{{ form.languages_spoken.id_for_label }}">Languages Spoken</label>
+                        {% if form.languages_spoken.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.languages_spoken.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.professional_memberships|add_class:"form-control" }}
+                        <label for="{{ form.professional_memberships.id_for_label }}">Professional Memberships</label>
+                        {% if form.professional_memberships.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.professional_memberships.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.certifications|add_class:"form-control" }}
+                        <label for="{{ form.certifications.id_for_label }}">Certifications</label>
+                        {% if form.certifications.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.certifications.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Banking & Statutory Information Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-university me-2"></i>Banking & Statutory Information</h6>
+            <p>Bank account details and tax information (confidential)</p>
+        </div>
+        <div class="section-body">
+            <!-- Banking Information -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-piggy-bank me-2"></i>Banking Information
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.bank_account_name|add_class:"form-control" }}
+                            <label for="{{ form.bank_account_name.id_for_label }}">Bank Account Name</label>
+                            {% if form.bank_account_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.bank_account_name.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.bank_account_number|add_class:"form-control" }}
+                            <label for="{{ form.bank_account_number.id_for_label }}">Bank Account Number</label>
+                            {% if form.bank_account_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.bank_account_number.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.bank_name|add_class:"form-control" }}
+                            <label for="{{ form.bank_name.id_for_label }}">Bank Name</label>
+                            {% if form.bank_name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.bank_name.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.bank_branch|add_class:"form-control" }}
+                            <label for="{{ form.bank_branch.id_for_label }}">Bank Branch</label>
+                            {% if form.bank_branch.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.bank_branch.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statutory Information -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-file-invoice me-2"></i>Statutory Information
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.tax_identification_number|add_class:"form-control" }}
+                            <label for="{{ form.tax_identification_number.id_for_label }}">Tax Identification Number (TIN)</label>
+                            {% if form.tax_identification_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.tax_identification_number.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">Uganda Revenue Authority TIN</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {{ form.social_security_number|add_class:"form-control" }}
+                            <label for="{{ form.social_security_number.id_for_label }}">NSSF Number</label>
+                            {% if form.social_security_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.social_security_number.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">National Social Security Fund Number</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-toggle-on me-2"></i>Status</h6>
+            <p>Account status and activity</p>
+        </div>
+        <div class="section-body">
+            <div class="form-check form-switch">
+                {{ form.is_active|add_class:"form-check-input" }}
+                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                    <strong>Active Status</strong>
+                    <small class="d-block text-muted">Uncheck to deactivate staff member</small>
+                </label>
+                {% if form.is_active.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.is_active.errors %}
+                            {{ error }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Save Button Group -->
+    <div class="btn-save-group">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <a href="{% url 'hr:staff_list' %}" class="btn btn-outline-secondary">
+                    <i class="fa fa-times me-1"></i> Cancel
+                </a>
+                {% if form.instance.pk %}
+                <a href="{% url 'hr:staff_profile' form.instance.pk %}" class="btn btn-outline-info ms-2">
+                    <i class="fa fa-eye me-1"></i> View Profile
+                </a>
+                {% endif %}
+            </div>
+            <div>
+                <button type="button" class="btn btn-outline-warning me-2" onclick="resetForm()">
+                    <i class="fa fa-undo me-1"></i> Reset Changes
+                </button>
+                <button type="submit" class="btn btn-primary" id="save-btn">
+                    <span class="spinner-border spinner-border-sm me-1" style="display: none;" id="save-spinner"></span>
+                    <i class="fa fa-save me-1" id="save-icon"></i>
+                    {% if form.instance.pk %}Save Changes{% else %}Save Staff Member{% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Profile Image Modal (same as student form) -->
+<div class="modal fade" id="profileImageModal" tabindex="-1" role="dialog" aria-labelledby="profileImageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="profileImageModalLabel">
+                    <i class="fa fa-camera me-2"></i>Update Staff Photo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="browse-section" class="text-center">
+                    <div class="image-upload-area" onclick="document.getElementById('uploadImage').click()">
+                        <i class="fa fa-cloud-upload upload-icon"></i>
+                        <h6>Choose an image to upload</h6>
+                        <p class="text-muted mb-0">Click here or drag and drop your image</p>
+                        <small class="text-muted">Supports JPG, PNG, GIF (Max: 5MB)</small>
+                    </div>
+                    <input type="file" id="uploadImage" accept="image/*" class="d-none">
+                </div>
+                
+                <div id="image-container" class="text-center mt-3" style="display: none;">
+                    <img id="imagePreview" src="" alt="Image Preview" class="img-fluid">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" id="btnCrop" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-crop me-1"></i>Crop Image
+                </button>
+                <button type="button" id="btnSave" class="btn btn-success" style="display: none;">
+                    <i class="fas fa-save me-1"></i>Use This Photo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<script>
+// Use the same JavaScript from the student form, just change references from "student" to "staff"
+document.addEventListener('DOMContentLoaded', function() {
+    initializeFormValidation();
+    setupImageHandling();
+    trackFormChanges();
+    setupFieldEnhancements();
+});
+
+// Initialize form validation
+function initializeFormValidation() {
+    const form = document.getElementById('staff-update-form');
+    
+    form.addEventListener('submit', function(e) {
+        const saveBtn = document.getElementById('save-btn');
+        const saveSpinner = document.getElementById('save-spinner');
+        const saveIcon = document.getElementById('save-icon');
+        
+        const invalidFields = form.querySelectorAll(':invalid');
+        if (invalidFields.length > 0) {
+            e.preventDefault();
+            showFormValidationErrors();
+            return false;
+        }
+        
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            if (saveSpinner) saveSpinner.style.display = 'inline-block';
+            if (saveIcon) saveIcon.style.display = 'none';
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+        }
+        
+        return true;
+    });
+    
+    // Real-time validation
+    const requiredFields = form.querySelectorAll('[required]');
+    requiredFields.forEach(field => {
+        field.addEventListener('blur', function() {
+            validateField(this);
+        });
+    });
+}
+
+function showFormValidationErrors() {
+    const form = document.getElementById('staff-update-form');
+    const invalidFields = form.querySelectorAll(':invalid');
+    
+    if (invalidFields.length > 0) {
+        invalidFields[0].focus();
+        invalidFields[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        invalidFields.forEach(field => {
+            field.classList.add('is-invalid');
+        });
+    }
+}
+
+function validateField(field) {
+    field.classList.remove('is-invalid', 'is-valid');
+    
+    if (field.hasAttribute('required') && !field.value.trim()) {
+        field.classList.add('is-invalid');
+        return false;
+    }
+    
+    if (field.type === 'email' && field.value && !isValidEmail(field.value)) {
+        field.classList.add('is-invalid');
+        return false;
+    }
+    
+    if (field.value.trim()) {
+        field.classList.add('is-valid');
+    }
+    
+    return true;
+}
+
+function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+let hasUnsavedChanges = false;
+
+function trackFormChanges() {
+    const form = document.getElementById('staff-update-form');
+    const formFields = form.querySelectorAll('input, select, textarea');
+    
+    formFields.forEach(field => {
+        field.addEventListener('change', function() {
+            hasUnsavedChanges = true;
+            if (this.type === 'checkbox') {
+                this.parentElement.classList.add('border-warning');
+            } else {
+                this.classList.add('border-warning');
+            }
+        });
+    });
+    
+    form.addEventListener('submit', function() {
+        hasUnsavedChanges = false;
+    });
+}
+
+function setupImageHandling() {
+    const uploadImageInput = document.getElementById("uploadImage");
+    const imagePreview = document.getElementById("imagePreview");
+    const btnCrop = document.getElementById("btnCrop");
+    const btnSave = document.getElementById("btnSave");
+    const browseSection = document.getElementById("browse-section");
+    const imageContainer = document.getElementById("image-container");
+    const profileImageModal = document.getElementById('profileImageModal');
+    
+    if (!profileImageModal) return;
+    
+    const modalInstance = new bootstrap.Modal(profileImageModal);
+    let cropper = null;
+    let croppedImageData = null;
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            <i class="fa fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        const form = document.getElementById('staff-update-form');
+        form.insertAdjacentElement('afterbegin', alert);
+        
+        setTimeout(() => {
+            if (alert.parentNode) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+    
+    function resetCropper() {
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        if (imagePreview) imagePreview.src = '';
+        if (browseSection) browseSection.style.display = "block";
+        if (imageContainer) imageContainer.style.display = "none";
+        if (btnCrop) btnCrop.style.display = "none";
+        if (btnSave) btnSave.style.display = "none";
+        if (uploadImageInput) uploadImageInput.value = '';
+    }
+
+    const profileImageOverlay = document.querySelector('.profile-image-overlay');
+    if (profileImageOverlay) {
+        profileImageOverlay.addEventListener('click', function(e) {
+            e.preventDefault();
+            modalInstance.show();
+        });
+    }
+    
+    profileImageModal.addEventListener('hidden.bs.modal', function() {
+        resetCropper();
+    });
+
+    if (uploadImageInput) {
+        uploadImageInput.addEventListener("change", function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (file.size > 5 * 1024 * 1024) {
+                showAlert('danger', 'File size must be less than 5MB.');
+                return;
+            }
+            
+            if (!file.type.startsWith('image/')) {
+                showAlert('danger', 'Please select a valid image file.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (browseSection) browseSection.style.display = "none";
+                if (imageContainer) imageContainer.style.display = "block";
+                if (imagePreview) imagePreview.src = e.target.result;
+                
+                if (cropper) {
+                    cropper.destroy();
+                }
+                
+                if (imagePreview) {
+                    setTimeout(() => {
+                        try {
+                            cropper = new Cropper(imagePreview, {
+                                aspectRatio: 1,
+                                viewMode: 2,
+                                dragMode: "move",
+                                background: true,
+                                responsive: true,
+                                autoCropArea: 0.8,
+                                ready: function() {
+                                    if (btnCrop) btnCrop.style.display = "inline-block";
+                                }
+                            });
+                        } catch (err) {
+                            console.error("Cropper initialization error:", err);
+                            showAlert('danger', 'Error initializing image cropper. Please try again.');
+                        }
+                    }, 200);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    if (btnCrop) {
+        btnCrop.addEventListener("click", function() {
+            if (!cropper) return;
+            
+            try {
+                const canvas = cropper.getCroppedCanvas({
+                    width: 300,
+                    height: 300,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                });
+                
+                croppedImageData = canvas.toDataURL("image/jpeg", 0.9);
+                if (imagePreview) imagePreview.src = croppedImageData;
+                
+                cropper.destroy();
+                cropper = null;
+                
+                if (btnCrop) btnCrop.style.display = "none";
+                if (btnSave) btnSave.style.display = "inline-block";
+            } catch (err) {
+                console.error("Cropping error:", err);
+                showAlert('danger', 'Error cropping image. Please try again.');
+            }
+        });
+    }
+
+    if (btnSave) {
+        btnSave.addEventListener("click", function() {
+            if (!croppedImageData) return;
+
+            btnSave.disabled = true;
+            btnSave.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Saving...';
+
+            try {
+                const blobBin = atob(croppedImageData.split(',')[1]);
+                const array = [];
+                for(let i = 0; i < blobBin.length; i++) {
+                    array.push(blobBin.charCodeAt(i));
+                }
+                const file = new Blob([new Uint8Array(array)], {type: 'image/jpeg'});
+
+                const dt = new DataTransfer();
+                dt.items.add(new File([file], 'profile.jpg', {type: 'image/jpeg'}));
+                
+                const hiddenFileInput = document.querySelector('input[name="photo"]');
+                if (hiddenFileInput) {
+                    hiddenFileInput.files = dt.files;
+                }
+
+                const currentProfileImage = document.getElementById("currentProfileImage");
+                if (currentProfileImage) {
+                    currentProfileImage.src = croppedImageData;
+                } else {
+                    const placeholder = document.querySelector('.avatar-placeholder');
+                    if (placeholder) {
+                        const container = placeholder.parentElement;
+                        container.innerHTML = `
+                            <img id="currentProfileImage" src="${croppedImageData}" alt="Profile Picture" class="profile-avatar">
+                            <div class="profile-image-overlay">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        `;
+                        
+                        const newOverlay = container.querySelector('.profile-image-overlay');
+                        if (newOverlay) {
+                            newOverlay.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                modalInstance.show();
+                            });
+                        }
+                    }
+                }
+                
+                showAlert('success', 'Staff photo updated! Remember to save the form to apply changes.');
+                modalInstance.hide();
+            } catch (err) {
+                console.error("Error preparing image:", err);
+                showAlert('danger', 'Error preparing image. Please try again.');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="fas fa-save me-1"></i>Use This Photo';
+            }
+        });
+    }
+}
+
+function setupFieldEnhancements() {
+    // Capitalize names automatically
+    const nameFields = document.querySelectorAll('input[name*="name"]:not([name*="user"]):not([name*="bank"])');
+    nameFields.forEach(field => {
+        field.addEventListener('input', function() {
+            const words = this.value.split(' ');
+            const capitalizedWords = words.map(word => {
+                if (word.length > 0) {
+                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                }
+                return word;
+            });
+            this.value = capitalizedWords.join(' ');
+        });
+    });
+    
+    // Format ID numbers
+    const idFields = document.querySelectorAll('input[name*="national_id"], input[name="passport_number"]');
+    idFields.forEach(field => {
+        field.addEventListener('input', function() {
+            this.value = this.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        });
+    });
+    
+    // Phone number formatting
+    const phoneFields = document.querySelectorAll('input[name*="phone"]');
+    phoneFields.forEach(field => {
+        field.addEventListener('input', function() {
+            let value = this.value.replace(/[^\d+]/g, '');
+            
+            if (value.startsWith('0') && value.length === 10) {
+                value = '+256' + value.substring(1);
+            } else if (value.startsWith('256') && value.length === 12) {
+                value = '+' + value;
+            } else if (value.startsWith('7') && value.length === 9) {
+                value = '+256' + value;
+            }
+            
+            this.value = value;
+        });
+    });
+}
+
+function resetForm() {
+    if (confirm('Are you sure you want to reset all changes? This will restore the original values.')) {
+        location.reload();
+    }
+}
+
+console.log('Staff Form JavaScript loaded successfully');
+</script>
+
+{% endblock %}

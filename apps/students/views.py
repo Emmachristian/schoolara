@@ -1,18 +1,15 @@
+# students/views.py
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .forms import StudentForm
-from .models import Student, Guardian
-from academics.models import AcademicLevel
-from schoolara.managers import get_current_db
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
 from django.db import transaction
+from django.db.models import Q, Count, Prefetch
+from django.http import HttpResponse
 from formtools.wizard.views import SessionWizardView
 from django.core.files.storage import FileSystemStorage
 import os
-from django.contrib.auth.decorators import login_required
-
-from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from reportlab.lib import colors
@@ -22,17 +19,35 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
-from datetime import datetime
-from django.db.models import Q
+from datetime import datetime, date, timedelta
+from django.utils import timezone
 import logging
-logger = logging.getLogger(__name__)
 
-from .utils import get_student_statistics
 from .forms import (
     STUDENT_WIZARD_FORMS,
     STUDENT_WIZARD_STEP_NAMES,
     StudentForm,
+    GuardianForm,
+    StudentGuardianForm,
+    DormitoryForm,
+    BoardingEnrollmentForm,
 )
+from .models import (
+    Student, 
+    Guardian, 
+    StudentGuardian,
+    StudentClassEnrollment,
+    Dormitory,
+    BoardingEnrollment
+)
+from .stats import get_student_statistics
+from academics.models import AcademicLevel
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# STUDENT VIEWS
+# =============================================================================
 
 @login_required
 def student_list(request):
@@ -60,7 +75,7 @@ def student_list(request):
         'academic_levels': academic_levels,
         'stats': stats,
     }
-    return render(request, 'list.html', context)
+    return render(request, 'students/list.html', context)
 
 class StudentWizardFileStorage(FileSystemStorage):
     """Custom storage for handling file uploads in wizard"""
@@ -79,7 +94,7 @@ class StudentCreateWizard(SessionWizardView):
     """
 
     form_list = STUDENT_WIZARD_FORMS
-    template_name = 'wizard.html'  # Make sure path is correct
+    template_name = 'students/wizard.html'  # Make sure path is correct
     file_storage = StudentWizardFileStorage()
 
     def get_context_data(self, form, **kwargs):
@@ -340,7 +355,7 @@ def student_edit(request, pk):
         'title': 'Update Student',
     }
 
-    return render(request, 'form.html', context)
+    return render(request, 'students/form.html', context)
 
 def student_delete(request, pk):
 
@@ -359,7 +374,285 @@ def student_profile(request, pk):
         'student': student,
     }
     
-    return render(request, "profile.html", context)
+    return render(request, "students/profile.html", context)
+
+# =============================================================================
+# GUARDIAN VIEWS
+# =============================================================================
+
+@login_required
+def guardian_list(request):
+    """List all guardians"""
+    guardians = Guardian.objects.annotate(
+        student_count=Count('student_relationships', filter=Q(student_relationships__is_active=True))
+    ).order_by('last_name', 'first_name')
+
+    # Pagination
+    paginator = Paginator(guardians, 10)
+    page = request.GET.get('page', 1)
+
+    try:
+        guardians_page = paginator.page(page)
+    except PageNotAnInteger:
+        guardians_page = paginator.page(1)
+    except EmptyPage:
+        guardians_page = paginator.page(paginator.num_pages)
+
+    context = {
+        'guardians': guardians_page,
+    }
+    return render(request, 'guardians/list.html', context)
+
+
+@login_required
+def guardian_create(request):
+    """Create a new guardian"""
+    if request.method == 'POST':
+        form = GuardianForm(request.POST, request.FILES)
+        if form.is_valid():
+            guardian = form.save()
+            messages.success(request, f"Guardian {guardian.get_full_name()} created successfully")
+            return redirect('students:guardian_profile', pk=guardian.pk)
+    else:
+        form = GuardianForm()
+
+    context = {
+        'form': form,
+        'title': 'Add New Guardian',
+    }
+    return render(request, 'guardians/form.html', context)
+
+
+@login_required
+def guardian_edit(request, pk):
+    """Edit guardian information"""
+    guardian = get_object_or_404(Guardian, pk=pk)
+
+    if request.method == 'POST':
+        form = GuardianForm(request.POST, request.FILES, instance=guardian)
+        if form.is_valid():
+            guardian = form.save()
+            messages.success(request, f"Guardian {guardian.get_full_name()} updated successfully")
+            return redirect('students:guardian_profile', pk=guardian.pk)
+    else:
+        form = GuardianForm(instance=guardian)
+
+    context = {
+        'form': form,
+        'guardian': guardian,
+        'title': 'Update Guardian',
+    }
+    return render(request, 'guardians/form.html', context)
+
+
+@login_required
+def guardian_profile(request, pk):
+    """View guardian profile with all students"""
+    guardian = get_object_or_404(
+        Guardian.objects.prefetch_related(
+            Prefetch(
+                'student_relationships',
+                queryset=StudentGuardian.objects.select_related('student').filter(is_active=True)
+            )
+        ),
+        pk=pk
+    )
+
+    students = guardian.student_relationships.filter(is_active=True).select_related('student')
+
+    context = {
+        'guardian': guardian,
+        'students': students,
+    }
+    return render(request, 'guardians/profile.html', context)
+
+@login_required
+def student_add_guardian(request, student_pk):
+    """Add an additional guardian to a student"""
+    student = get_object_or_404(Student, pk=student_pk)
+    
+    if request.method == 'POST':
+        form = StudentGuardianForm(request.POST)
+        if form.is_valid():
+            relationship = form.save(commit=False)
+            relationship.student = student
+            relationship.save()
+            messages.success(
+                request,
+                f"Guardian {relationship.guardian.get_full_name()} added to {student.get_full_name()}"
+            )
+            return redirect('students:student_profile', pk=student.pk)
+    else:
+        # Pre-fill student
+        form = StudentGuardianForm(initial={'student': student})
+        from django import forms
+        form.fields['student'].widget = forms.HiddenInput()
+    
+    context = {
+        'form': form,
+        'student': student,
+        'title': f'Add Guardian for {student.get_full_name()}',
+    }
+    return render(request, 'guardians/add_guardian.html', context)
+
+
+@login_required
+def student_edit_guardian_relationship(request, relationship_pk):
+    """Edit student-guardian relationship details"""
+    relationship = get_object_or_404(StudentGuardian, pk=relationship_pk)
+    
+    if request.method == 'POST':
+        form = StudentGuardianForm(request.POST, instance=relationship)
+        if form.is_valid():
+            relationship = form.save()
+            messages.success(
+                request,
+                f"Relationship updated for {relationship.guardian.get_full_name()}"
+            )
+            return redirect('students:student_profile', pk=relationship.student.pk)
+    else:
+        form = StudentGuardianForm(instance=relationship)
+        # Make student and guardian read-only
+        form.fields['student'].disabled = True
+        form.fields['guardian'].disabled = True
+    
+    context = {
+        'form': form,
+        'relationship': relationship,
+        'title': 'Edit Guardian Relationship',
+    }
+    return render(request, 'guardians/edit_guardian_relationship.html', context)
+
+
+@login_required
+def student_remove_guardian(request, relationship_pk):
+    """Remove guardian from student (soft delete - set is_active=False)"""
+    relationship = get_object_or_404(StudentGuardian, pk=relationship_pk)
+    
+    if request.method == 'POST':
+        student = relationship.student
+        guardian_name = relationship.guardian.get_full_name()
+        
+        # Soft delete - just deactivate
+        relationship.is_active = False
+        relationship.relationship_end_date = timezone.now().date()
+        relationship.save()
+        
+        messages.success(
+            request,
+            f"Guardian {guardian_name} removed from {student.get_full_name()}"
+        )
+        return redirect('students:student_profile', pk=student.pk)
+    
+    context = {
+        'relationship': relationship,
+        'title': 'Remove Guardian',
+    }
+    return render(request, 'guardians/remove_guardian_confirm.html', context)
+
+# =============================================================================
+# DORMITORY VIEWS
+# =============================================================================
+
+@login_required
+def dormitory_list(request):
+    """List all dormitories"""
+    dormitories = Dormitory.objects.select_related(
+        'dormitory_master',
+        'assistant_dormitory_master'
+    ).annotate(
+        resident_count=Count('boarding_enrollments', filter=Q(boarding_enrollments__status='ACTIVE'))
+    ).order_by('dormitory_type', 'name')
+
+    # Pagination
+    paginator = Paginator(dormitories, 10)
+    page = request.GET.get('page', 1)
+
+    try:
+        dormitories_page = paginator.page(page)
+    except PageNotAnInteger:
+        dormitories_page = paginator.page(1)
+    except EmptyPage:
+        dormitories_page = paginator.page(paginator.num_pages)
+
+    context = {
+        'dormitories': dormitories_page,
+    }
+    return render(request, 'dormitory/list.html', context)
+
+
+@login_required
+def dormitory_create(request):
+    """Create a new dormitory"""
+    if request.method == 'POST':
+        form = DormitoryForm(request.POST)
+        if form.is_valid():
+            dormitory = form.save()
+            messages.success(request, f"Dormitory {dormitory.name} created successfully")
+            return redirect('students:dormitory_detail', pk=dormitory.pk)
+    else:
+        form = DormitoryForm()
+
+    context = {
+        'form': form,
+        'title': 'Add New Dormitory',
+    }
+    return render(request, 'dormitory/form.html', context)
+
+
+@login_required
+def dormitory_detail(request, pk):
+    """View dormitory details with current residents"""
+    dormitory = get_object_or_404(
+        Dormitory.objects.select_related(
+            'dormitory_master',
+            'assistant_dormitory_master'
+        ).prefetch_related(
+            Prefetch(
+                'boarding_enrollments',
+                queryset=BoardingEnrollment.objects.filter(status='ACTIVE').select_related('student', 'academic_session')
+            )
+        ),
+        pk=pk
+    )
+
+    residents = dormitory.boarding_enrollments.filter(status='ACTIVE').order_by('boarding_roll_number')
+
+    context = {
+        'dormitory': dormitory,
+        'residents': residents,
+    }
+    return render(request, 'dormitory/detail.html', context)
+
+
+# =============================================================================
+# BOARDING ENROLLMENT VIEWS
+# =============================================================================
+
+@login_required
+def boarding_enrollment_create(request):
+    """Create a new boarding enrollment"""
+    if request.method == 'POST':
+        form = BoardingEnrollmentForm(request.POST, request.FILES)
+        if form.is_valid():
+            enrollment = form.save()
+            messages.success(
+                request,
+                f"Boarding enrollment created for {enrollment.student.get_full_name()}"
+            )
+            return redirect('students:student_profile', pk=enrollment.student.pk)
+    else:
+        form = BoardingEnrollmentForm()
+
+    context = {
+        'form': form,
+        'title': 'Create Boarding Enrollment',
+    }
+    return render(request, 'boarding_enrollment/form.html', context)
+
+# =============================================================================
+# EXPORT VIEWS
+# =============================================================================
 
 @login_required
 def export_students_excel(request):

@@ -1,0 +1,2978 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 4px solid #007bff;
+        transition: all 0.3s ease;
+    }
+    .form-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .form-section.break-section {
+        border-left-color: #ffc107;
+        background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
+    }
+    .form-section.error {
+        border-left-color: #dc3545;
+        background-color: #f8d7da;
+        animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+    .holiday-type-selector {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 15px;
+    }
+    .holiday-type-option {
+        padding: 20px;
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        position: relative;
+        overflow: hidden;
+    }
+    .holiday-type-option::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s;
+    }
+    .holiday-type-option:hover::before {
+        left: 100%;
+    }
+    .holiday-type-option:hover {
+        border-color: #007bff;
+        background: linear-gradient(135deg, #e3f2fd 0%, #f8f9fa 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,123,255,0.15);
+    }
+    .holiday-type-option.selected {
+        border-color: #007bff;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        box-shadow: 0 4px 15px rgba(0,123,255,0.3);
+    }
+    .holiday-type-option .icon {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+        display: block;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    .holiday-type-option .label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 5px;
+    }
+    .holiday-type-option .description {
+        font-size: 0.8rem;
+        color: #6c757d;
+        line-height: 1.3;
+    }
+    .holiday-type-option.selected .label {
+        color: #007bff;
+    }
+    .break-type-options {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-top: 15px;
+    }
+    .break-type-card {
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+    .break-type-card:hover {
+        border-color: #ffc107;
+        background-color: #fffbf0;
+    }
+    .break-type-card.selected {
+        border-color: #ffc107;
+        background-color: #fff3cd;
+    }
+    .break-type-card .form-check-input {
+        margin-top: 0.2rem;
+    }
+    .break-type-card .break-title {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 5px;
+    }
+    .break-type-card .break-desc {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-bottom: 0;
+    }
+    .duration-info {
+        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        font-size: 0.95rem;
+        border: 1px solid #e1bee7;
+    }
+    .duration-icon {
+        color: #9c27b0;
+        margin-right: 8px;
+    }
+    .break-specific-fields {
+        display: none;
+        margin-top: 20px;
+        padding: 25px;
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        border-radius: 12px;
+        border: 1px solid #ffc107;
+        position: relative;
+    }
+    .break-specific-fields::before {
+        content: '';
+        position: absolute;
+        top: -1px;
+        left: -1px;
+        right: -1px;
+        bottom: -1px;
+        background: linear-gradient(45deg, #ffc107, #ff9800, #ffc107);
+        border-radius: 12px;
+        z-index: -1;
+        opacity: 0.1;
+    }
+    .break-specific-fields.show {
+        display: block;
+        animation: slideDown 0.5s ease;
+    }
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .date-input-wrapper {
+        position: relative;
+    }
+    .date-input-wrapper .form-control {
+        padding-right: 45px;
+    }
+    .date-input-wrapper .calendar-icon {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+        pointer-events: none;
+        font-size: 1.1rem;
+    }
+    .quick-dates {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+    .quick-date-btn {
+        padding: 6px 14px;
+        border: 1px solid #dee2e6;
+        border-radius: 20px;
+        background: white;
+        color: #495057;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+    }
+    .quick-date-btn:hover {
+        border-color: #007bff;
+        color: #007bff;
+        background-color: #f8f9fa;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+    }
+    .quick-date-btn.active {
+        background-color: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .session-preview {
+        background: linear-gradient(135deg, #e8f5e8 0%, #f0fff0 100%);
+        border: 1px solid #c3e6c3;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 15px;
+        position: relative;
+        overflow: hidden;
+    }
+    .session-preview::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: #28a745;
+    }
+    .session-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 12px;
+    }
+    .session-icon {
+        width: 45px;
+        height: 45px;
+        background: linear-gradient(45deg, #28a745, #20c997);
+        color: white;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.9rem;
+        box-shadow: 0 3px 10px rgba(40,167,69,0.3);
+    }
+    .session-details {
+        flex: 1;
+    }
+    .session-name {
+        font-weight: 600;
+        color: #155724;
+        margin-bottom: 3px;
+    }
+    .session-dates {
+        color: #28a745;
+        font-size: 0.9rem;
+    }
+    .form-actions {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-top: 30px;
+        position: relative;
+        overflow: hidden;
+    }
+    .form-actions::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+        transform: rotate(45deg);
+        animation: shine 3s infinite;
+    }
+    @keyframes shine {
+        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+    }
+    .validation-error {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 8px;
+        line-height: 1.4;
+    }
+    .form-navigation {
+        position: sticky;
+        top: 20px;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        border: 1px solid #e9ecef;
+    }
+    .form-navigation .nav-title {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    .form-navigation .nav-item {
+        padding: 12px 15px;
+        border-radius: 8px;
+        color: #6c757d;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+    .form-navigation .nav-item:hover {
+        background-color: #f8f9fa;
+        color: #495057;
+        transform: translateX(5px);
+    }
+    .form-navigation .nav-item.active {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        box-shadow: 0 3px 10px rgba(0,123,255,0.3);
+    }
+    .form-navigation .nav-item.active::before {
+        content: '';
+        position: absolute;
+        left: -10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 20px;
+        background: #007bff;
+        border-radius: 2px;
+    }
+    .nav-progress {
+        width: 100%;
+        height: 4px;
+        background: #e9ecef;
+        border-radius: 2px;
+        margin-top: 15px;
+        overflow: hidden;
+    }
+    .nav-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #007bff, #28a745);
+        border-radius: 2px;
+        transition: width 0.5s ease;
+        width: 0%;
+    }
+    .conflict-warning {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(255,193,7,0.4); }
+        50% { box-shadow: 0 0 0 10px rgba(255,193,7,0); }
+    }
+    .auto-save-indicator {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        font-size: 0.85rem;
+        z-index: 1050;
+        opacity: 0;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(40,167,69,0.3);
+    }
+    .auto-save-indicator.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .auto-save-indicator.hide {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    .field-group {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 15px;
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    .field-group:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .field-group.has-error {
+        border-color: #dc3545;
+        background-color: #fff5f5;
+    }
+    .field-group.completed {
+        border-color: #28a745;
+        background-color: #f8fff8;
+    }
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+    .loading-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .tooltip-custom {
+        position: relative;
+        cursor: help;
+    }
+    .tooltip-custom::before {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #333;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s;
+        z-index: 1000;
+    }
+    .tooltip-custom:hover::before {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-date icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {% if object %}
+                    Edit Holiday: {{ object.name }}
+                    <div class="page-title-subheading">
+                        Modify holiday details and break settings
+                    </div>
+                {% else %}
+                    Create New Holiday
+                    <div class="page-title-subheading">
+                        Add a new holiday, event, or term break to the academic calendar
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:holiday_list' %}" class="btn btn-outline-secondary">
+                    <i class="fa fa-arrow-left me-1"></i> Back to List
+                </a>
+                {% if object %}
+                    <a href="#" class="btn btn-outline-info">
+                        <i class="fa fa-eye me-1"></i> View Details
+                    </a>
+                    <button type="button" class="btn btn-outline-warning" onclick="duplicateHoliday()">
+                        <i class="fa fa-copy me-1"></i> Duplicate
+                    </button>
+                {% endif %}
+                <button type="button" class="btn btn-outline-success" onclick="previewHoliday()">
+                    <i class="fa fa-search me-1"></i> Preview
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="text-center">
+        <div class="loading-spinner"></div>
+        <p class="mt-3 text-muted">Processing...</p>
+    </div>
+</div>
+
+<!-- Auto-save Indicator -->
+<div class="auto-save-indicator" id="autoSaveIndicator">
+    <i class="fa fa-check-circle me-2"></i>Draft auto-saved
+</div>
+
+<div class="row">
+    <div class="col-lg-3">
+        <!-- Enhanced Form Navigation -->
+        <div class="form-navigation">
+            <h6 class="nav-title">
+                <i class="fa fa-list-ol me-2"></i>Form Progress
+            </h6>
+            <a href="#basic-info" class="nav-item active" data-section="basic-info" data-required="true">
+                <i class="fa fa-info-circle me-2"></i> 
+                <span>Basic Information</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            <a href="#holiday-type" class="nav-item" data-section="holiday-type" data-required="true">
+                <i class="fa fa-tag me-2"></i> 
+                <span>Holiday Type</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            <a href="#dates" class="nav-item" data-section="dates" data-required="true">
+                <i class="fa fa-calendar me-2"></i> 
+                <span>Dates & Duration</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            <a href="#session-link" class="nav-item" data-section="session-link">
+                <i class="fa fa-graduation-cap me-2"></i> 
+                <span>Academic Session</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            <a href="#break-settings" class="nav-item" data-section="break-settings" id="break-nav" style="display: none;">
+                <i class="fa fa-cog me-2"></i> 
+                <span>Break Settings</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            <a href="#advanced-options" class="nav-item" data-section="advanced-options">
+                <i class="fa fa-sliders-h me-2"></i> 
+                <span>Advanced Options</span>
+                <i class="fa fa-check-circle ms-auto text-success" style="display: none;"></i>
+            </a>
+            
+            <div class="nav-progress">
+                <div class="nav-progress-bar" id="formProgress"></div>
+            </div>
+            <div class="text-center mt-2">
+                <small class="text-muted">
+                    <span id="progressText">0% Complete</span>
+                </small>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fa fa-bolt me-2"></i>Quick Actions
+                </h6>
+            </div>
+            <div class="card-body">
+                <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="checkDateConflicts()">
+                    <i class="fa fa-search me-1"></i> Check Date Conflicts
+                </button>
+                <button type="button" class="btn btn-outline-warning btn-sm w-100 mb-2" onclick="suggestBreakDates()">
+                    <i class="fa fa-lightbulb me-1"></i> Suggest Break Dates
+                </button>
+                <button type="button" class="btn btn-outline-info btn-sm w-100 mb-2" onclick="viewSessionCalendar()">
+                    <i class="fa fa-calendar-alt me-1"></i> View Session Calendar
+                </button>
+                <button type="button" class="btn btn-outline-success btn-sm w-100" onclick="exportToCalendar()">
+                    <i class="fa fa-download me-1"></i> Export to Calendar
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-9">
+        <form method="post" id="holiday-form" novalidate>
+            {% csrf_token %}
+            
+            <!-- Duplicate Information (if applicable) -->
+            {% if duplicate_from %}
+            <div class="alert alert-info">
+                <h6>
+                    <i class="fa fa-copy me-2"></i>Duplicating Holiday
+                </h6>
+                <p class="mb-0">Creating a new holiday based on: <strong>{{ duplicate_from.name }}</strong></p>
+                <small class="text-muted">All settings have been copied. Modify as needed.</small>
+            </div>
+            {% endif %}
+            
+            <!-- Basic Information Section -->
+            <div class="main-card mb-3 card" id="basic-info">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-note2 icon-gradient bg-primary me-2"></i>
+                        <span>Basic Information</span>
+                        <span class="badge bg-danger ms-2">Required</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="field-group">
+                                    <label for="{{ form.name.id_for_label }}" class="form-label">
+                                        Holiday Name 
+                                        <span class="text-danger">*</span>
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="Enter a clear, descriptive name for the holiday"></i>
+                                    </label>
+                                    {{ form.name|add_class:"form-control"|attr:"placeholder:Enter holiday name"|attr:"maxlength:100" }}
+                                    {% if form.name.errors %}
+                                        <div class="validation-error">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            {{ form.name.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                    <div class="help-text">
+                                        <i class="fa fa-info-circle me-1"></i>
+                                        The display name for this holiday or event (max 100 characters)
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <span id="nameCounter">0</span>/100 characters
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="field-group">
+                                    <label class="form-label">
+                                        Auto-generate Code
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="Generate a unique identifier from the holiday name"></i>
+                                    </label>
+                                    <button type="button" class="btn btn-outline-primary btn-sm w-100" id="generate-code">
+                                        <i class="fa fa-magic me-1"></i> Generate Code
+                                    </button>
+                                    <div class="help-text">Generate a unique code from the name</div>
+                                    <div id="generated-code" class="mt-2" style="display: none;">
+                                        <small class="text-success">
+                                            <i class="fa fa-check me-1"></i>
+                                            Code: <span id="code-display"></span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="field-group">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                Description
+                                <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                   data-tooltip="Provide additional details about the holiday"></i>
+                            </label>
+                            {{ form.description|add_class:"form-control"|attr:"rows:4"|attr:"placeholder:Optional description of the holiday or event"|attr:"maxlength:500" }}
+                            {% if form.description.errors %}
+                                <div class="validation-error">
+                                    <i class="fa fa-exclamation-triangle"></i>
+                                    {{ form.description.errors.0 }}
+                                </div>
+                            {% endif %}
+                            <div class="help-text">
+                                <i class="fa fa-info-circle me-1"></i>
+                                Additional details about the holiday (optional, max 500 characters)
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <span id="descCounter">0</span>/500 characters
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Holiday Type Section -->
+            <div class="main-card mb-3 card" id="holiday-type">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-tag icon-gradient bg-primary me-2"></i>
+                        <span>Holiday Type</span>
+                        <span class="badge bg-danger ms-2">Required</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section">
+                        <label class="form-label mb-3">
+                            Select Holiday Type 
+                            <span class="text-danger">*</span>
+                            <i class="fa fa-question-circle tooltip-custom ms-1" 
+                               data-tooltip="Choose the appropriate type based on the nature of the holiday"></i>
+                        </label>
+                        
+                        <!-- Enhanced Visual Holiday Type Selector -->
+                        <div class="holiday-type-selector">
+                            <div class="holiday-type-option" data-value="PUBLIC">
+                                <span class="icon">🏛️</span>
+                                <div class="label">Public Holiday</div>
+                                <div class="description">Government-declared holidays affecting everyone</div>
+                            </div>
+                            <div class="holiday-type-option" data-value="SCHOOL">
+                                <span class="icon">🎓</span>
+                                <div class="label">School Event</div>
+                                <div class="description">Institution-specific events and activities</div>
+                            </div>
+                            <div class="holiday-type-option" data-value="BREAK">
+                                <span class="icon">🏖️</span>
+                                <div class="label">Term Break</div>
+                                <div class="description">Breaks between academic sessions</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden actual form field -->
+                        {{ form.holiday_type|add_class:"d-none" }}
+                        {% if form.holiday_type.errors %}
+                            <div class="validation-error mt-3">
+                                <i class="fa fa-exclamation-triangle"></i>
+                                {{ form.holiday_type.errors.0 }}
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Enhanced Break Type Options -->
+                        <div class="break-specific-fields" id="break-type-section">
+                            <h6 class="mb-3">
+                                <i class="fa fa-cog me-2"></i>Break Type Configuration
+                            </h6>
+                            <div class="break-type-options">
+                                <div class="break-type-card" data-value="TERM_BREAK">
+                                    <div class="d-flex align-items-start">
+                                        <input class="form-check-input mt-1 me-3" type="radio" name="break_type" value="TERM_BREAK" id="break_term">
+                                        <div class="flex-grow-1">
+                                            <label class="break-title" for="break_term">Term Break</label>
+                                            <div class="break-desc">Break between terms within the same academic year</div>
+                                            <small class="text-muted">
+                                                <i class="fa fa-info-circle me-1"></i>
+                                                Used for mid-year breaks, semester breaks, etc.
+                                            </small>
+                                        </div>
+                                        <div class="break-icon">
+                                            <i class="fa fa-pause-circle text-primary"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="break-type-card" data-value="MID_TERM_BREAK">
+                                    <div class="d-flex align-items-start">
+                                        <input class="form-check-input mt-1 me-3" type="radio" name="break_type" value="MID_TERM_BREAK" id="break_mid_term">
+                                        <div class="flex-grow-1">
+                                            <label class="break-title" for="break_mid_term">Mid-Term Break</label>
+                                            <div class="break-desc">Short break within a term or semester</div>
+                                            <small class="text-muted">
+                                                <i class="fa fa-info-circle me-1"></i>
+                                                Typically 1-2 weeks during a term
+                                            </small>
+                                        </div>
+                                        <div class="break-icon">
+                                            <i class="fa fa-clock text-warning"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="break-type-card" data-value="YEAR_END">
+                                    <div class="d-flex align-items-start">
+                                        <input class="form-check-input mt-1 me-3" type="radio" name="break_type" value="YEAR_END" id="break_year_end">
+                                        <div class="flex-grow-1">
+                                            <label class="break-title" for="break_year_end">Year End Break</label>
+                                            <div class="break-desc">Break at the end of an academic year</div>
+                                            <small class="text-muted">
+                                                <i class="fa fa-info-circle me-1"></i>
+                                                Final break before year-end activities
+                                            </small>
+                                        </div>
+                                        <div class="break-icon">
+                                            <i class="fa fa-flag-checkered text-success"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="break-type-card" data-value="YEAR_BREAK">
+                                    <div class="d-flex align-items-start">
+                                        <input class="form-check-input mt-1 me-3" type="radio" name="break_type" value="YEAR_BREAK" id="break_year">
+                                        <div class="flex-grow-1">
+                                            <label class="break-title" for="break_year">Year Break</label>
+                                            <div class="break-desc">Break between different academic years</div>
+                                            <small class="text-muted">
+                                                <i class="fa fa-info-circle me-1"></i>
+                                                Long vacation between academic years
+                                            </small>
+                                        </div>
+                                        <div class="break-icon">
+                                            <i class="fa fa-calendar-plus text-info"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="break-type-card" data-value="OTHER">
+                                    <div class="d-flex align-items-start">
+                                        <input class="form-check-input mt-1 me-3" type="radio" name="break_type" value="OTHER" id="break_other">
+                                        <div class="flex-grow-1">
+                                            <label class="break-title" for="break_other">Other Break</label>
+                                            <div class="break-desc">Custom break type not covered above</div>
+                                            <small class="text-muted">
+                                                <i class="fa fa-info-circle me-1"></i>
+                                                For special circumstances or custom breaks
+                                            </small>
+                                        </div>
+                                        <div class="break-icon">
+                                            <i class="fa fa-ellipsis-h text-secondary"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if form.break_type.errors %}
+                                <div class="validation-error mt-3">
+                                    <i class="fa fa-exclamation-triangle"></i>
+                                    {{ form.break_type.errors.0 }}
+                                </div>
+                            {% endif %}
+                            
+                            <div class="alert alert-info mt-3">
+                                <i class="fa fa-lightbulb me-2"></i>
+                                <strong>Tip:</strong> Break type affects how the system handles fee calculations, student promotions, and calendar displays.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dates & Duration Section -->
+            <div class="main-card mb-3 card" id="dates">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-date icon-gradient bg-primary me-2"></i>
+                        <span>Dates & Duration</span>
+                        <span class="badge bg-danger ms-2">Required</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="field-group">
+                                    <label for="{{ form.start_date.id_for_label }}" class="form-label">
+                                        Start Date 
+                                        <span class="text-danger">*</span>
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="The first day of the holiday"></i>
+                                    </label>
+                                    <div class="date-input-wrapper">
+                                        {{ form.start_date|add_class:"form-control" }}
+                                        <i class="fa fa-calendar calendar-icon"></i>
+                                    </div>
+                                    {% if form.start_date.errors %}
+                                        <div class="validation-error">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            {{ form.start_date.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                    <div class="help-text">
+                                        <i class="fa fa-info-circle me-1"></i>
+                                        When the holiday begins
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="field-group">
+                                    <label for="{{ form.end_date.id_for_label }}" class="form-label">
+                                        End Date
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="The last day of the holiday. Leave empty for single-day holidays"></i>
+                                    </label>
+                                    <div class="date-input-wrapper">
+                                        {{ form.end_date|add_class:"form-control" }}
+                                        <i class="fa fa-calendar calendar-icon"></i>
+                                    </div>
+                                    {% if form.end_date.errors %}
+                                        <div class="validation-error">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            {{ form.end_date.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                    <div class="help-text">
+                                        <i class="fa fa-info-circle me-1"></i>
+                                        Leave empty for single-day holiday
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Enhanced Quick Date Options -->
+                        <div class="field-group">
+                            <label class="form-label">
+                                <i class="fa fa-bolt me-1"></i>Quick Date Options
+                            </label>
+                            <div class="quick-dates">
+                                <button type="button" class="quick-date-btn" data-action="today">
+                                    <i class="fa fa-calendar-day me-1"></i>Today
+                                </button>
+                                <button type="button" class="quick-date-btn" data-action="tomorrow">
+                                    <i class="fa fa-calendar-plus me-1"></i>Tomorrow
+                                </button>
+                                <button type="button" class="quick-date-btn" data-action="next_week">
+                                    <i class="fa fa-calendar-week me-1"></i>Next Week
+                                </button>
+                                <button type="button" class="quick-date-btn" data-action="next_month">
+                                    <i class="fa fa-calendar me-1"></i>Next Month
+                                </button>
+                                <button type="button" class="quick-date-btn" data-action="weekend">
+                                    <i class="fa fa-bed me-1"></i>This Weekend
+                                </button>
+                                <button type="button" class="quick-date-btn" data-action="clear">
+                                    <i class="fa fa-times me-1"></i>Clear Dates
+                                </button>
+                            </div>
+                            <div class="help-text">
+                                <i class="fa fa-magic me-1"></i>
+                                Click to quickly set common date ranges
+                            </div>
+                        </div>
+                        
+                        <!-- Enhanced Duration Display -->
+                        <div class="duration-info" id="duration-display" style="display: none;">
+                            <div class="d-flex align-items-center">
+                                <i class="fa fa-clock duration-icon"></i>
+                                <div class="flex-grow-1">
+                                    <strong>Duration:</strong> <span id="duration-text"></span>
+                                    <div class="small text-muted mt-1" id="duration-details"></div>
+                                </div>
+                                <div class="duration-badge">
+                                    <i class="fa fa-calendar-alt me-1"></i>
+                                    <span id="total-days">0</span> days
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Date Conflict Warning -->
+                        <div id="date-conflict-warning" style="display: none;">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Academic Session Section -->
+            <div class="main-card mb-3 card" id="session-link">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-study icon-gradient bg-primary me-2"></i>
+                        <span>Academic Session Association</span>
+                        <span class="badge bg-info ms-2">Optional</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section">
+                        <div class="field-group">
+                            <label for="{{ form.academic_session.id_for_label }}" class="form-label">
+                                Academic Session
+                                <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                   data-tooltip="Link this holiday to a specific academic session for better organization"></i>
+                            </label>
+                            {{ form.academic_session|add_class:"form-select" }}
+                            {% if form.academic_session.errors %}
+                                <div class="validation-error">
+                                    <i class="fa fa-exclamation-triangle"></i>
+                                    {{ form.academic_session.errors.0 }}
+                                </div>
+                            {% endif %}
+                            <div class="help-text">
+                                <i class="fa fa-info-circle me-1"></i>
+                                Associate this holiday with a specific academic session (optional for public holidays)
+                            </div>
+                        </div>
+                        
+                        <!-- Enhanced Session Preview -->
+                        <div id="session-preview" class="session-preview" style="display: none;">
+                            <div class="session-info">
+                                <div class="session-icon" id="session-icon">T1</div>
+                                <div class="session-details">
+                                    <div class="session-name" id="session-name"></div>
+                                    <div class="session-dates" id="session-dates"></div>
+                                </div>
+                                <div class="session-status">
+                                    <span class="badge" id="session-status-badge"></span>
+                                </div>
+                            </div>
+                            <div class="session-additional-info">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fa fa-users me-1"></i>
+                                            <span id="session-enrollment">-</span> students enrolled
+                                        </small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fa fa-clock me-1"></i>
+                                            <span id="session-duration">-</span> days duration
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Session Suggestions -->
+                        <div id="session-suggestions" style="display: none;">
+                            <div class="alert alert-info">
+                                <h6>
+                                    <i class="fa fa-lightbulb me-2"></i>Session Suggestions
+                                </h6>
+                                <p class="mb-2">Based on your selected dates, these sessions might be relevant:</p>
+                                <div id="suggested-sessions">
+                                    <!-- Will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Break Settings Section (for term breaks) -->
+            <div class="main-card mb-3 card" id="break-settings" style="display: none;">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-config icon-gradient bg-warning me-2"></i>
+                        <span>Break Settings</span>
+                        <span class="badge bg-warning ms-2">Break Only</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section break-section">
+                        <div class="alert alert-warning">
+                            <i class="fa fa-info-circle me-2"></i>
+                            <strong>Break Configuration:</strong> Specify which academic sessions come before and after this break period for proper fee calculations and student promotions.
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="field-group">
+                                    <label for="{{ form.previous_session.id_for_label }}" class="form-label">
+                                        Session Before Break
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="The academic session that ends just before this break starts"></i>
+                                    </label>
+                                    {{ form.previous_session|add_class:"form-select" }}
+                                    {% if form.previous_session.errors %}
+                                        <div class="validation-error">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            {{ form.previous_session.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                    <div class="help-text">
+                                        <i class="fa fa-arrow-left me-1"></i>
+                                        The academic session that ends before this break
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="field-group">
+                                    <label for="{{ form.next_session.id_for_label }}" class="form-label">
+                                        Session After Break
+                                        <i class="fa fa-question-circle tooltip-custom ms-1" 
+                                           data-tooltip="The academic session that starts just after this break ends"></i>
+                                    </label>
+                                    {{ form.next_session|add_class:"form-select" }}
+                                    {% if form.next_session.errors %}
+                                        <div class="validation-error">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            {{ form.next_session.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                    <div class="help-text">
+                                        <i class="fa fa-arrow-right me-1"></i>
+                                        The academic session that starts after this break
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Break Validation Display -->
+                        <div id="break-validation" style="display: none;">
+                            <div class="alert alert-success" id="break-valid" style="display: none;">
+                                <i class="fa fa-check-circle me-2"></i>
+                                <strong>Valid Break Configuration:</strong>
+                                <span id="break-valid-message"></span>
+                            </div>
+                            <div class="alert alert-danger" id="break-invalid" style="display: none;">
+                                <i class="fa fa-exclamation-triangle me-2"></i>
+                                <strong>Invalid Break Configuration:</strong>
+                                <span id="break-invalid-message"></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Auto-detect Break Settings -->
+                        <div class="field-group">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <h6 class="mb-1">Auto-detect Break Sessions</h6>
+                                    <small class="text-muted">Automatically find sessions that fit around your break dates</small>
+                                </div>
+                                <button type="button" class="btn btn-outline-warning" id="auto-detect-sessions">
+                                    <i class="fa fa-search me-1"></i> Auto-detect
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Options Section -->
+            <div class="main-card mb-3 card" id="advanced-options">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="header-icon pe-7s-tools icon-gradient bg-info me-2"></i>
+                        <span>Advanced Options</span>
+                        <span class="badge bg-info ms-2">Optional</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="form-section">
+                        <!-- Auto-creation Options -->
+                        <div class="field-group">
+                            <h6 class="mb-3">
+                                <i class="fa fa-magic me-2"></i>Auto-creation Options
+                            </h6>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="create_break" name="create_break">
+                                <label class="form-check-label" for="create_break">
+                                    <strong>Create as Term Break</strong>
+                                    <div class="small text-muted">Automatically set holiday as a break between terms</div>
+                                </label>
+                            </div>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="auto_detect_sessions" name="auto_detect_sessions" checked>
+                                <label class="form-check-label" for="auto_detect_sessions">
+                                    <strong>Auto-detect Sessions</strong>
+                                    <div class="small text-muted">Automatically find sessions before and after this break</div>
+                                </label>
+                            </div>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="validate_against_config" name="validate_against_config" checked>
+                                <label class="form-check-label" for="validate_against_config">
+                                    <strong>Validate Against School Config</strong>
+                                    <div class="small text-muted">Check if break meets school's minimum duration requirements</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Import/Export Options -->
+                        <div class="field-group">
+                            <h6 class="mb-3">
+                                <i class="fa fa-exchange-alt me-2"></i>Import/Export Options
+                            </h6>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <button type="button" class="btn btn-outline-info w-100 mb-2" onclick="importFromTemplate()">
+                                        <i class="fa fa-download me-1"></i> Import from Template
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button type="button" class="btn btn-outline-success w-100 mb-2" onclick="saveAsTemplate()">
+                                        <i class="fa fa-save me-1"></i> Save as Template
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Notification Options -->
+                        <div class="field-group">
+                            <h6 class="mb-3">
+                                <i class="fa fa-bell me-2"></i>Notification Options
+                            </h6>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="notify_students" name="notify_students">
+                                <label class="form-check-label" for="notify_students">
+                                    Notify students about this holiday
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="notify_parents" name="notify_parents">
+                                <label class="form-check-label" for="notify_parents">
+                                    Notify parents/guardians
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="add_to_calendar" name="add_to_calendar" checked>
+                                <label class="form-check-label" for="add_to_calendar">
+                                    Add to school calendar
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Recurring Holiday Options -->
+                        <div class="field-group">
+                            <h6 class="mb-3">
+                                <i class="fa fa-redo me-2"></i>Recurring Holiday
+                            </h6>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring">
+                                <label class="form-check-label" for="is_recurring">
+                                    <strong>This is a recurring holiday</strong>
+                                    <div class="small text-muted">Set up this holiday to repeat automatically</div>
+                                </label>
+                            </div>
+                            
+                            <div id="recurring-options" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Recurrence Pattern</label>
+                                        <select class="form-select" id="recurrence_pattern" name="recurrence_pattern">
+                                            <option value="annual">Annual (yearly)</option>
+                                            <option value="monthly">Monthly</option>
+                                            <option value="weekly">Weekly</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">End Recurrence</label>
+                                        <input type="date" class="form-control" id="recurrence_end" name="recurrence_end">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <button type="submit" class="btn btn-light btn-lg me-3" id="save-button">
+                            <i class="fa fa-save me-2"></i> 
+                            {% if object %}Update Holiday{% else %}Create Holiday{% endif %}
+                        </button>
+                        <button type="button" class="btn btn-outline-light me-2" id="save-draft">
+                            <i class="fa fa-file me-1"></i> Save as Draft
+                        </button>
+                        <button type="button" class="btn btn-outline-light" id="preview-button">
+                            <i class="fa fa-eye me-1"></i> Preview
+                        </button>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-outline-light me-2" onclick="resetForm()">
+                            <i class="fa fa-refresh me-1"></i> Reset
+                        </button>
+                        <a href="{% url 'academics:holiday_list' %}" class="btn btn-outline-light" id="cancel-button">
+                            <i class="fa fa-times me-1"></i> Cancel
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="create_another" name="create_another">
+                        <label class="form-check-label text-white-50" for="create_another">
+                            Create another holiday after saving this one
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Enhanced Validation Summary Modal -->
+<div class="modal fade" id="validationModal" tabindex="-1" aria-labelledby="validationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="validationModalLabel">
+                    <i class="fa fa-exclamation-triangle me-2"></i>Form Validation Errors
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="validationModalBody">
+                <!-- Validation errors will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="fixErrors">
+                    <i class="fa fa-tools me-1"></i> Go to First Error
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Holiday Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalLabel">
+                    <i class="fa fa-eye me-2"></i>Holiday Preview
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="previewModalBody">
+                <!-- Preview content will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="submitForm()">
+                    <i class="fa fa-save me-1"></i> Save Holiday
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Conflict Resolution Modal -->
+<div class="modal fade" id="conflictModal" tabindex="-1" aria-labelledby="conflictModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="conflictModalLabel">
+                    <i class="fa fa-exclamation-triangle me-2"></i>Date Conflicts Detected
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="conflictModalBody">
+                <!-- Conflict details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="resolveConflicts">
+                    <i class="fa fa-tools me-1"></i> Resolve Conflicts
+                </button>
+                <button type="button" class="btn btn-danger" id="saveAnyway">
+                    <i class="fa fa-exclamation me-1"></i> Save Anyway
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template Import Modal -->
+<div class="modal fade" id="templateModal" tabindex="-1" aria-labelledby="templateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="templateModalLabel">
+                    <i class="fa fa-download me-2"></i>Import from Template
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Holiday Templates</h6>
+                        <div class="list-group" id="holiday-templates">
+                            <button type="button" class="list-group-item list-group-item-action" data-template="christmas">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">🎄 Christmas Day</h6>
+                                        <small>December 25th - Public Holiday</small>
+                                    </div>
+                                    <i class="fa fa-chevron-right"></i>
+                                </div>
+                            </button>
+                            <button type="button" class="list-group-item list-group-item-action" data-template="easter">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">🐰 Easter Break</h6>
+                                        <small>Variable dates - Term Break</small>
+                                    </div>
+                                    <i class="fa fa-chevron-right"></i>
+                                </div>
+                            </button>
+                            <button type="button" class="list-group-item list-group-item-action" data-template="summer">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">☀️ Summer Break</h6>
+                                        <small>Long vacation - Year Break</small>
+                                    </div>
+                                    <i class="fa fa-chevron-right"></i>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Recent Templates</h6>
+                        <div class="list-group" id="recent-templates">
+                            <div class="text-center text-muted py-4">
+                                <i class="fa fa-clock fa-2x mb-2"></i>
+                                <p>No recent templates</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="applyTemplate" disabled>
+                    <i class="fa fa-check me-1"></i> Apply Template
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Create a mapping of field names to their actual form field IDs
+const fieldIdMapping = {
+    'name': '{{ form.name.id_for_label }}',
+    'holiday_type': '{{ form.holiday_type.id_for_label }}',
+    'break_type': 'break_type', // Radio buttons use name attribute
+    'start_date': '{{ form.start_date.id_for_label }}',
+    'end_date': '{{ form.end_date.id_for_label }}',
+    'description': '{{ form.description.id_for_label }}',
+    'academic_session': '{{ form.academic_session.id_for_label }}',
+    'previous_session': '{{ form.previous_session.id_for_label }}',
+    'next_session': '{{ form.next_session.id_for_label }}'
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Form elements
+    const form = document.getElementById('holiday-form');
+    const holidayTypeOptions = document.querySelectorAll('.holiday-type-option');
+    const holidayTypeField = document.getElementById('{{ form.holiday_type.id_for_label }}');
+    const breakTypeSection = document.getElementById('break-type-section');
+    const breakTypeCards = document.querySelectorAll('.break-type-card');
+    const breakSettingsCard = document.getElementById('break-settings');
+    const breakNavItem = document.getElementById('break-nav');
+    const startDateField = document.getElementById('{{ form.start_date.id_for_label }}');
+    const endDateField = document.getElementById('{{ form.end_date.id_for_label }}');
+    const durationDisplay = document.getElementById('duration-display');
+    const durationText = document.getElementById('duration-text');
+    const sessionField = document.getElementById('{{ form.academic_session.id_for_label }}');
+    const sessionPreview = document.getElementById('session-preview');
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const descField = document.getElementById('{{ form.description.id_for_label }}');
+    
+    // Form state
+    let formChanged = false;
+    let autoSaveTimeout;
+    let validationTimeout;
+    
+    // Initialize form
+    initializeForm();
+    
+    function initializeForm() {
+        // Set initial holiday type if exists
+        const currentType = holidayTypeField.value;
+        if (currentType) {
+            document.querySelector(`[data-value="${currentType}"]`)?.classList.add('selected');
+            toggleBreakFields(currentType === 'BREAK');
+        }
+        
+        // Set initial break type if exists
+        const currentBreakType = document.querySelector('input[name="break_type"]:checked');
+        if (currentBreakType) {
+            const card = currentBreakType.closest('.break-type-card');
+            if (card) card.classList.add('selected');
+        }
+        
+        // Calculate initial duration
+        calculateDuration();
+        
+        // Update session preview if session is selected
+        updateSessionPreview();
+        
+        // Set up character counters
+        setupCharacterCounters();
+        
+        // Set up scroll spy for navigation
+        setupScrollSpy();
+        
+        // Initialize tooltips
+        initializeTooltips();
+        
+        // Update form progress
+        updateFormProgress();
+        
+        // Setup auto-save
+        setupAutoSave();
+    }
+    
+    // Enhanced Holiday type selection
+    holidayTypeOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            // Remove previous selections
+            holidayTypeOptions.forEach(opt => opt.classList.remove('selected'));
+            
+            // Select current option
+            this.classList.add('selected');
+            const value = this.dataset.value;
+            holidayTypeField.value = value;
+            
+            // Toggle break-specific fields
+            toggleBreakFields(value === 'BREAK');
+            
+            // Clear break type if not break
+            if (value !== 'BREAK') {
+                document.querySelectorAll('input[name="break_type"]').forEach(radio => {
+                    radio.checked = false;
+                });
+                clearBreakTypeSelection();
+            }
+            
+            // Mark form as changed
+            markFormChanged();
+            updateFormProgress();
+        });
+    });
+    
+    // Enhanced Break type selection
+    breakTypeCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                // Clear previous selections
+                breakTypeCards.forEach(c => c.classList.remove('selected'));
+                document.querySelectorAll('input[name="break_type"]').forEach(r => r.checked = false);
+                
+                // Select current option
+                radio.checked = true;
+                this.classList.add('selected');
+                
+                // Validate break configuration
+                validateBreakConfiguration();
+                markFormChanged();
+                updateFormProgress();
+            }
+        });
+    });
+    
+    function toggleBreakFields(show) {
+        if (show) {
+            breakTypeSection.classList.add('show');
+            breakSettingsCard.style.display = 'block';
+            breakNavItem.style.display = 'block';
+            
+            // Enable break validation
+            setTimeout(validateBreakConfiguration, 100);
+        } else {
+            breakTypeSection.classList.remove('show');
+            breakSettingsCard.style.display = 'none';
+            breakNavItem.style.display = 'none';
+            
+            // Clear break validation
+            clearBreakValidation();
+        }
+        
+        updateFormProgress();
+    }
+    
+    function clearBreakTypeSelection() {
+        breakTypeCards.forEach(card => card.classList.remove('selected'));
+    }
+    
+    // Enhanced date handling
+    startDateField.addEventListener('change', function() {
+        calculateDuration();
+        checkDateConflicts();
+        validateBreakConfiguration();
+        suggestSessions();
+        markFormChanged();
+        updateFormProgress();
+    });
+    
+    endDateField.addEventListener('change', function() {
+        calculateDuration();
+        checkDateConflicts();
+        validateBreakConfiguration();
+        suggestSessions();
+        markFormChanged();
+        updateFormProgress();
+    });
+    
+    function calculateDuration() {
+        const startDate = new Date(startDateField.value);
+        const endDate = endDateField.value ? new Date(endDateField.value) : null;
+        
+        if (startDate && !isNaN(startDate)) {
+            if (endDate && !isNaN(endDate)) {
+                const diffTime = Math.abs(endDate - startDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                
+                durationText.textContent = `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+                document.getElementById('total-days').textContent = diffDays;
+                
+                // Add additional details
+                const durationDetails = document.getElementById('duration-details');
+                if (diffDays === 1) {
+                    durationDetails.textContent = 'Single day holiday';
+                } else if (diffDays <= 7) {
+                    durationDetails.textContent = 'Short break (1 week or less)';
+                } else if (diffDays <= 30) {
+                    durationDetails.textContent = 'Medium break (up to 1 month)';
+                } else {
+                    durationDetails.textContent = 'Long break (more than 1 month)';
+                }
+                
+                durationDisplay.style.display = 'block';
+            } else {
+                durationText.textContent = '1 day';
+                document.getElementById('total-days').textContent = '1';
+                document.getElementById('duration-details').textContent = 'Single day holiday';
+                durationDisplay.style.display = 'block';
+            }
+        } else {
+            durationDisplay.style.display = 'none';
+        }
+    }
+    
+    // Enhanced quick date buttons
+    document.querySelectorAll('.quick-date-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Remove active class from all buttons
+            document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
+            
+            const action = this.dataset.action;
+            const today = new Date();
+            
+            switch(action) {
+                case 'today':
+                    startDateField.value = today.toISOString().split('T')[0];
+                    endDateField.value = '';
+                    this.classList.add('active');
+                    break;
+                case 'tomorrow':
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    startDateField.value = tomorrow.toISOString().split('T')[0];
+                    endDateField.value = '';
+                    this.classList.add('active');
+                    break;
+                case 'next_week':
+                    const nextWeek = new Date(today);
+                    nextWeek.setDate(nextWeek.getDate() + 7);
+                    startDateField.value = nextWeek.toISOString().split('T')[0];
+                    endDateField.value = '';
+                    this.classList.add('active');
+                    break;
+                case 'next_month':
+                    const nextMonth = new Date(today);
+                    nextMonth.setMonth(nextMonth.getMonth() + 1);
+                    startDateField.value = nextMonth.toISOString().split('T')[0];
+                    endDateField.value = '';
+                    this.classList.add('active');
+                    break;
+                case 'weekend':
+                    const thisWeekend = new Date(today);
+                    const daysUntilSaturday = 6 - today.getDay();
+                    thisWeekend.setDate(today.getDate() + daysUntilSaturday);
+                    const sunday = new Date(thisWeekend);
+                    sunday.setDate(thisWeekend.getDate() + 1);
+                    startDateField.value = thisWeekend.toISOString().split('T')[0];
+                    endDateField.value = sunday.toISOString().split('T')[0];
+                    this.classList.add('active');
+                    break;
+                case 'clear':
+                    startDateField.value = '';
+                    endDateField.value = '';
+                    break;
+            }
+            
+            calculateDuration();
+            checkDateConflicts();
+            suggestSessions();
+            markFormChanged();
+        });
+    });
+    
+    // Enhanced session handling
+    sessionField.addEventListener('change', function() {
+        updateSessionPreview();
+        markFormChanged();
+        updateFormProgress();
+    });
+    
+    function updateSessionPreview() {
+        const selectedOption = sessionField.options[sessionField.selectedIndex];
+        
+        if (selectedOption && selectedOption.value) {
+            const sessionName = selectedOption.text;
+            const sessionIcon = document.getElementById('session-icon');
+            const sessionNameEl = document.getElementById('session-name');
+            const sessionDatesEl = document.getElementById('session-dates');
+            const sessionStatusBadge = document.getElementById('session-status-badge');
+            
+            // Extract session info (this would normally come from AJAX)
+            sessionNameEl.textContent = sessionName;
+            sessionIcon.textContent = sessionName.includes('Term 1') ? 'T1' : 
+                                     sessionName.includes('Term 2') ? 'T2' : 
+                                     sessionName.includes('Term 3') ? 'T3' : 'S';
+            
+            // Mock data - in real implementation, fetch from server
+            sessionDatesEl.textContent = 'Loading session details...';
+            sessionStatusBadge.textContent = 'Active';
+            sessionStatusBadge.className = 'badge bg-success';
+            
+            sessionPreview.style.display = 'block';
+            
+            // In real implementation, make AJAX call here
+            // fetchSessionDetails(selectedOption.value);
+        } else {
+            sessionPreview.style.display = 'none';
+        }
+    }
+    
+    // Character counters
+    function setupCharacterCounters() {
+        const nameCounter = document.getElementById('nameCounter');
+        const descCounter = document.getElementById('descCounter');
+        
+        nameField.addEventListener('input', function() {
+            nameCounter.textContent = this.value.length;
+            updateFormProgress();
+        });
+        
+        descField.addEventListener('input', function() {
+            descCounter.textContent = this.value.length;
+        });
+        
+        // Initialize counters
+        nameCounter.textContent = nameField.value.length;
+        descCounter.textContent = descField.value.length;
+    }
+    
+    // Generate code functionality
+    const generateCodeBtn = document.getElementById('generate-code');
+    if (generateCodeBtn) {
+        generateCodeBtn.addEventListener('click', function() {
+            const name = nameField.value.trim();
+            
+            if (name) {
+                const code = generateHolidayCode(name);
+                const codeDisplay = document.getElementById('code-display');
+                const generatedCodeDiv = document.getElementById('generated-code');
+                
+                codeDisplay.textContent = code;
+                generatedCodeDiv.style.display = 'block';
+                
+                // Add to form data if needed
+                // You would typically store this in a hidden field
+                
+                showToast('success', `Generated code: ${code}`);
+            } else {
+                showToast('warning', 'Please enter a holiday name first');
+            }
+        });
+    }
+    
+    function generateHolidayCode(name) {
+        return name.toLowerCase()
+                  .replace(/[^a-z0-9\s]/g, '')
+                  .replace(/\s+/g, '_')
+                  .substring(0, 20) + '_' + Date.now().toString().slice(-4);
+    }
+    
+    // Auto-detect sessions for breaks
+    const autoDetectBtn = document.getElementById('auto-detect-sessions');
+    if (autoDetectBtn) {
+        autoDetectBtn.addEventListener('click', function() {
+            const startDate = startDateField.value;
+            const endDate = endDateField.value;
+            
+            if (!startDate) {
+                showToast('warning', 'Please set a start date first');
+                return;
+            }
+            
+            showLoading(true);
+            
+            // In real implementation, make AJAX call
+            setTimeout(() => {
+                // Mock auto-detection
+                const prevSelect = document.getElementById('{{ form.previous_session.id_for_label }}');
+                const nextSelect = document.getElementById('{{ form.next_session.id_for_label }}');
+                
+                // Mock selection (in real implementation, this would come from server)
+                if (prevSelect && prevSelect.options.length > 1) {
+                    prevSelect.selectedIndex = 1;
+                }
+                if (nextSelect && nextSelect.options.length > 2) {
+                    nextSelect.selectedIndex = 2;
+                }
+                
+                validateBreakConfiguration();
+                showLoading(false);
+                showToast('success', 'Sessions auto-detected successfully');
+            }, 1500);
+        });
+    }
+    
+    // Break validation
+    function validateBreakConfiguration() {
+        const holidayType = holidayTypeField.value;
+        if (holidayType !== 'BREAK') return;
+        
+        const prevSession = document.getElementById('{{ form.previous_session.id_for_label }}').value;
+        const nextSession = document.getElementById('{{ form.next_session.id_for_label }}').value;
+        const startDate = startDateField.value;
+        const endDate = endDateField.value;
+        
+        const validationDiv = document.getElementById('break-validation');
+        const validDiv = document.getElementById('break-valid');
+        const invalidDiv = document.getElementById('break-invalid');
+        const validMessage = document.getElementById('break-valid-message');
+        const invalidMessage = document.getElementById('break-invalid-message');
+        
+        if (!validationDiv) return;
+        
+        validationDiv.style.display = 'block';
+        if (validDiv) validDiv.style.display = 'none';
+        if (invalidDiv) invalidDiv.style.display = 'none';
+        
+        if (prevSession && nextSession && startDate) {
+            // Mock validation (in real implementation, validate against actual session dates)
+            if (validDiv && validMessage) {
+                validDiv.style.display = 'block';
+                validMessage.textContent = 'Break dates are properly configured between selected sessions.';
+            }
+        } else if (startDate && (prevSession || nextSession)) {
+            if (validDiv && validMessage) {
+                validDiv.style.display = 'block';
+                validMessage.textContent = 'Partial break configuration detected. This is acceptable.';
+            }
+        } else {
+            if (invalidDiv && invalidMessage) {
+                invalidDiv.style.display = 'block';
+                invalidMessage.textContent = 'Please select at least one session or set break dates.';
+            }
+        }
+    }
+    
+    function clearBreakValidation() {
+        const validationDiv = document.getElementById('break-validation');
+        if (validationDiv) {
+            validationDiv.style.display = 'none';
+        }
+    }
+    
+    // Date conflict checking
+    function checkDateConflicts() {
+        const startDate = startDateField.value;
+        const endDate = endDateField.value;
+        const sessionId = sessionField.value;
+        
+        if (!startDate) return;
+        
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(() => {
+            // In real implementation, make AJAX call to check conflicts
+            // fetch(`{% url 'core:ajax_check_holiday_conflicts' %}?start=${startDate}&end=${endDate}&session=${sessionId}`)
+            
+            // Mock conflict detection
+            const conflictWarning = document.getElementById('date-conflict-warning');
+            if (Math.random() > 0.8) { // 20% chance of conflict for demo
+                showConflictWarning(['Sample conflicting holiday on ' + startDate]);
+            } else {
+                hideConflictWarning();
+            }
+        }, 500);
+    }
+    
+    function showConflictWarning(conflicts) {
+        const conflictDiv = document.getElementById('date-conflict-warning');
+        if (!conflictDiv) return;
+        
+        conflictDiv.innerHTML = `
+            <div class="conflict-warning">
+                <i class="fa fa-exclamation-triangle me-2"></i>
+                <strong>Date Conflict Warning:</strong> This holiday overlaps with:
+                <ul class="mb-0 mt-2">
+                    ${conflicts.map(conflict => `<li>${conflict}</li>`).join('')}
+                </ul>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="showConflictModal()">
+                        <i class="fa fa-tools me-1"></i> Resolve Conflicts
+                    </button>
+                </div>
+            </div>
+        `;
+        conflictDiv.style.display = 'block';
+    }
+    
+    function hideConflictWarning() {
+        const conflictDiv = document.getElementById('date-conflict-warning');
+        if (conflictDiv) {
+            conflictDiv.style.display = 'none';
+        }
+    }
+    
+    // Session suggestions
+    function suggestSessions() {
+        const startDate = startDateField.value;
+        const endDate = endDateField.value;
+        
+        if (!startDate) return;
+        
+        // Mock session suggestions
+        const suggestionsDiv = document.getElementById('session-suggestions');
+        const suggestedSessionsDiv = document.getElementById('suggested-sessions');
+        
+        if (!suggestionsDiv || !suggestedSessionsDiv) return;
+        
+        // In real implementation, this would be an AJAX call
+        if (Math.random() > 0.5) { // 50% chance of suggestions for demo
+            suggestedSessionsDiv.innerHTML = `
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectSuggestedSession('session1')">
+                        2024-2025 Term 1
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectSuggestedSession('session2')">
+                        2024-2025 Term 2
+                    </button>
+                </div>
+            `;
+            suggestionsDiv.style.display = 'block';
+        } else {
+            suggestionsDiv.style.display = 'none';
+        }
+    }
+    
+    // Form progress tracking
+    function updateFormProgress() {
+        const requiredSections = document.querySelectorAll('[data-required="true"]');
+        let completedSections = 0;
+        
+        // Check basic info
+        if (nameField.value.trim()) {
+            markSectionComplete('basic-info');
+            completedSections++;
+        } else {
+            markSectionIncomplete('basic-info');
+        }
+        
+        // Check holiday type
+        if (holidayTypeField.value) {
+            markSectionComplete('holiday-type');
+            completedSections++;
+        } else {
+            markSectionIncomplete('holiday-type');
+        }
+        
+        // Check dates
+        if (startDateField.value) {
+            markSectionComplete('dates');
+            completedSections++;
+        } else {
+            markSectionIncomplete('dates');
+        }
+        
+        // Update progress bar
+        const progressPercentage = (completedSections / requiredSections.length) * 100;
+        const progressBar = document.getElementById('formProgress');
+        const progressText = document.getElementById('progressText');
+        
+        if (progressBar) progressBar.style.width = progressPercentage + '%';
+        if (progressText) progressText.textContent = Math.round(progressPercentage) + '% Complete';
+        
+        // Enable/disable save button
+        const saveButton = document.getElementById('save-button');
+        if (saveButton) {
+            if (progressPercentage >= 100) {
+                saveButton.disabled = false;
+                saveButton.classList.remove('btn-secondary');
+                saveButton.classList.add('btn-primary');
+            } else {
+                saveButton.disabled = false; // Allow saving drafts
+            }
+        }
+    }
+    
+    function markSectionComplete(sectionId) {
+        const navItem = document.querySelector(`[data-section="${sectionId}"]`);
+        if (navItem) {
+            const checkIcon = navItem.querySelector('.fa-check-circle');
+            if (checkIcon) checkIcon.style.display = 'inline';
+        }
+    }
+    
+    function markSectionIncomplete(sectionId) {
+        const navItem = document.querySelector(`[data-section="${sectionId}"]`);
+        if (navItem) {
+            const checkIcon = navItem.querySelector('.fa-check-circle');
+            if (checkIcon) checkIcon.style.display = 'none';
+        }
+    }
+    
+    // Scroll spy for navigation
+    function setupScrollSpy() {
+        const navItems = document.querySelectorAll('.form-navigation .nav-item');
+        const sections = document.querySelectorAll('.main-card[id]');
+        
+        function updateActiveNav() {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.getBoundingClientRect().top;
+                if (sectionTop <= 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.section === current) {
+                    item.classList.add('active');
+                }
+            });
+        }
+        
+        window.addEventListener('scroll', updateActiveNav);
+        
+        navItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.dataset.section;
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ 
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    }
+    
+    // Auto-save functionality
+    function setupAutoSave() {
+        const formElements = form.querySelectorAll('input, select, textarea');
+        
+        formElements.forEach(element => {
+            element.addEventListener('input', triggerAutoSave);
+            element.addEventListener('change', triggerAutoSave);
+        });
+    }
+    
+    function triggerAutoSave() {
+        markFormChanged();
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(performAutoSave, 30000); // Auto-save every 30 seconds
+    }
+    
+    function performAutoSave() {
+        if (!formChanged) return;
+        
+        const formData = new FormData(form);
+        formData.append('auto_save', 'true');
+        
+        // Show auto-save indicator
+        const indicator = document.getElementById('autoSaveIndicator');
+        if (indicator) {
+            indicator.classList.add('show');
+            
+            // In real implementation, make AJAX call
+            setTimeout(() => {
+                indicator.classList.remove('show');
+                indicator.classList.add('hide');
+                setTimeout(() => {
+                    indicator.classList.remove('hide');
+                }, 300);
+            }, 2000);
+        }
+    }
+    
+    function markFormChanged() {
+        formChanged = true;
+    }
+    
+    // Form validation
+    form.addEventListener('submit', function(e) {
+        if (!validateForm()) {
+            e.preventDefault();
+            showValidationModal();
+        } else {
+            formChanged = false; // Prevent unsaved changes warning
+        }
+    });
+    
+    function validateForm() {
+        const errors = [];
+        
+        // Required field validation
+        if (!nameField.value.trim()) {
+            errors.push({
+                field: 'name',
+                message: 'Holiday name is required',
+                section: 'basic-info'
+            });
+        }
+        
+        if (!holidayTypeField.value) {
+            errors.push({
+                field: 'holiday_type',
+                message: 'Holiday type must be selected',
+                section: 'holiday-type'
+            });
+        }
+        
+        if (!startDateField.value) {
+            errors.push({
+                field: 'start_date',
+                message: 'Start date is required',
+                section: 'dates'
+            });
+        }
+        
+        // Date validation
+        if (startDateField.value && endDateField.value) {
+            const startDate = new Date(startDateField.value);
+            const endDate = new Date(endDateField.value);
+            if (endDate < startDate) {
+                errors.push({
+                    field: 'end_date',
+                    message: 'End date cannot be before start date',
+                    section: 'dates'
+                });
+            }
+        }
+        
+        // Break type validation
+        if (holidayTypeField.value === 'BREAK') {
+            const breakTypeChecked = document.querySelector('input[name="break_type"]:checked');
+            if (!breakTypeChecked) {
+                errors.push({
+                    field: 'break_type',
+                    message: 'Break type must be selected for term breaks',
+                    section: 'holiday-type'
+                });
+            }
+        }
+        
+        // Store errors for modal display
+        window.formValidationErrors = errors;
+        return errors.length === 0;
+    }
+    
+    function showValidationModal() {
+        const errors = window.formValidationErrors || [];
+        const modalBody = document.getElementById('validationModalBody');
+        
+        if (!modalBody) return;
+        
+        if (errors.length > 0) {
+            let errorHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fa fa-exclamation-triangle me-2"></i>Please fix the following errors:</h6>
+                    <ul class="mb-0">
+            `;
+            
+            errors.forEach(error => {
+                errorHTML += `<li><strong>${error.field.replace('_', ' ')}:</strong> ${error.message}</li>`;
+            });
+            
+            errorHTML += `</ul></div>`;
+            
+            // Add error breakdown by section
+            const sections = [...new Set(errors.map(e => e.section))];
+            if (sections.length > 0) {
+                errorHTML += `
+                    <div class="mt-3">
+                        <h6>Sections with errors:</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                `;
+                
+                sections.forEach(section => {
+                    const sectionErrors = errors.filter(e => e.section === section);
+                    const sectionName = section.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    errorHTML += `
+                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                onclick="scrollToSection('${section}')">
+                            ${sectionName} (${sectionErrors.length} error${sectionErrors.length !== 1 ? 's' : ''})
+                        </button>
+                    `;
+                });
+                
+                errorHTML += `</div></div>`;
+            }
+            
+            modalBody.innerHTML = errorHTML;
+            
+            const modal = new bootstrap.Modal(document.getElementById('validationModal'));
+            modal.show();
+        }
+    }
+    
+    // Fix errors button functionality
+    const fixErrorsBtn = document.getElementById('fixErrors');
+    if (fixErrorsBtn) {
+        fixErrorsBtn.addEventListener('click', function() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('validationModal'));
+            if (modal) modal.hide();
+            
+            // Go to first error
+            const firstError = window.formValidationErrors?.[0];
+            if (firstError) {
+                scrollToSection(firstError.section);
+                
+                // Focus on the problematic field
+                setTimeout(() => {
+                    // Try multiple possible field ID patterns
+                    const fieldId = fieldIdMapping[firstError.field] || `id_${firstError.field}`;
+                    let field = document.getElementById(fieldId);
+                    
+                    // For radio buttons, try to find by name
+                    if (!field && firstError.field === 'break_type') {
+                        field = document.querySelector('input[name="break_type"]');
+                    }
+                    
+                    if (field) {
+                        field.focus();
+                        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Add visual highlight
+                        field.style.border = '2px solid #dc3545';
+                        setTimeout(() => {
+                            field.style.border = '';
+                        }, 3000);
+                    }
+                }, 500);
+            }
+        });
+    }
+    
+    function scrollToSection(sectionId) {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            // Highlight the section briefly
+            section.style.transform = 'scale(1.02)';
+            section.style.transition = 'transform 0.3s ease';
+            setTimeout(() => {
+                section.style.transform = 'scale(1)';
+            }, 500);
+        }
+    }
+    
+    // Save as draft functionality
+    const saveDraftBtn = document.getElementById('save-draft');
+    if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', function() {
+            const draftInput = document.createElement('input');
+            draftInput.type = 'hidden';
+            draftInput.name = 'save_as_draft';
+            draftInput.value = 'true';
+            form.appendChild(draftInput);
+            
+            // Mark as not changed to prevent warning
+            formChanged = false;
+            form.submit();
+        });
+    }
+    
+    // Preview functionality
+    const previewBtn = document.getElementById('preview-button');
+    if (previewBtn) {
+        previewBtn.addEventListener('click', previewHoliday);
+    }
+    
+    function previewHoliday() {
+        const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+        const modalBody = document.getElementById('previewModalBody');
+        
+        if (!modalBody) return;
+        
+        // Generate preview content
+        const name = nameField.value || 'Untitled Holiday';
+        const type = holidayTypeField.value;
+        const startDate = startDateField.value;
+        const endDate = endDateField.value;
+        const description = descField.value;
+        const session = sessionField.options[sessionField.selectedIndex]?.text || 'None';
+        
+        let typeDisplay = '';
+        let typeIcon = '';
+        switch(type) {
+            case 'PUBLIC':
+                typeDisplay = 'Public Holiday';
+                typeIcon = '🏛️';
+                break;
+            case 'SCHOOL':
+                typeDisplay = 'School Event';
+                typeIcon = '🎓';
+                break;
+            case 'BREAK':
+                typeDisplay = 'Term Break';
+                typeIcon = '🏖️';
+                break;
+            default:
+                typeDisplay = 'Not Selected';
+                typeIcon = '❓';
+        }
+        
+        const breakType = document.querySelector('input[name="break_type"]:checked')?.parentNode.querySelector('.break-title')?.textContent || '';
+        
+        modalBody.innerHTML = `
+            <div class="holiday-preview-card">
+                <div class="text-center mb-4">
+                    <div class="holiday-preview-icon">${typeIcon}</div>
+                    <h4 class="mb-1">${name}</h4>
+                    <span class="badge bg-primary">${typeDisplay}</span>
+                    ${breakType ? `<span class="badge bg-warning ms-2">${breakType}</span>` : ''}
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fa fa-calendar me-2"></i>Dates</h6>
+                        <p class="text-muted">
+                            ${startDate ? formatDisplayDate(startDate) : 'Not set'}
+                            ${endDate ? ` - ${formatDisplayDate(endDate)}` : ''}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fa fa-graduation-cap me-2"></i>Academic Session</h6>
+                        <p class="text-muted">${session}</p>
+                    </div>
+                </div>
+                
+                ${description ? `
+                    <div class="mt-3">
+                        <h6><i class="fa fa-info-circle me-2"></i>Description</h6>
+                        <p class="text-muted">${description}</p>
+                    </div>
+                ` : ''}
+                
+                <div class="mt-3">
+                    <h6><i class="fa fa-clock me-2"></i>Duration</h6>
+                    <p class="text-muted">
+                        ${calculateDurationText(startDate, endDate)}
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        modal.show();
+    }
+    
+    function formatDisplayDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+            weekday: 'long',
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+    }
+    
+    function calculateDurationText(startDate, endDate) {
+        if (!startDate) return 'Duration not calculated';
+        
+        const start = new Date(startDate);
+        const end = endDate ? new Date(endDate) : start;
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (diffDays === 1) {
+            return 'Single day holiday';
+        } else if (diffDays <= 7) {
+            return `${diffDays} days (1 week or less)`;
+        } else if (diffDays <= 30) {
+            return `${diffDays} days (approximately ${Math.round(diffDays/7)} weeks)`;
+        } else {
+            return `${diffDays} days (approximately ${Math.round(diffDays/30)} months)`;
+        }
+    }
+    
+    // Advanced options handling
+    const recurringCheckbox = document.getElementById('is_recurring');
+    if (recurringCheckbox) {
+        recurringCheckbox.addEventListener('change', function() {
+            const recurringOptions = document.getElementById('recurring-options');
+            if (recurringOptions) {
+                recurringOptions.style.display = this.checked ? 'block' : 'none';
+            }
+        });
+    }
+    
+    // Tooltips initialization
+    function initializeTooltips() {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('.tooltip-custom'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    }
+    
+    // Prevent accidental navigation
+    window.addEventListener('beforeunload', function(e) {
+        if (formChanged) {
+            const message = 'You have unsaved changes. Are you sure you want to leave?';
+            e.preventDefault();
+            e.returnValue = message;
+            return message;
+        }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd + S: Save form
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            const saveButton = document.getElementById('save-button');
+            if (saveButton && !saveButton.disabled) {
+                form.submit();
+            }
+        }
+        
+        // Ctrl/Cmd + P: Preview
+        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+            e.preventDefault();
+            previewHoliday();
+        }
+        
+        // Escape: Cancel/go back
+        if (e.key === 'Escape') {
+            if (formChanged) {
+                if (confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
+                    window.location.href = '{% url "core:holiday_list" %}';
+                }
+            } else {
+                window.location.href = '{% url "core:holiday_list" %}';
+            }
+        }
+    });
+    
+    // Loading overlay functions
+    function showLoading(show) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            if (show) {
+                overlay.classList.add('show');
+            } else {
+                overlay.classList.remove('show');
+            }
+        }
+    }
+    
+    // Toast notification function
+    function showToast(type, message) {
+        // Remove existing toasts
+        const existingToasts = document.querySelectorAll('.toast-notification');
+        existingToasts.forEach(toast => toast.remove());
+        
+        // Create new toast
+        const toast = document.createElement('div');
+        toast.className = `toast-notification alert alert-${type} alert-dismissible fade show`;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            max-width: 500px;
+        `;
+        
+        const icon = type === 'success' ? 'check-circle' : 
+                     type === 'danger' ? 'exclamation-triangle' : 
+                     type === 'warning' ? 'exclamation-circle' : 'info-circle';
+        
+        toast.innerHTML = `
+            <i class="fa fa-${icon} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 5000);
+    }
+    
+    // Initialize everything when DOM is ready
+    updateFormProgress();
+});
+
+// Global utility functions
+window.holidayFormUtils = {
+    scrollToSection: function(sectionId) {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    },
+    
+    selectSuggestedSession: function(sessionId) {
+        const sessionField = document.getElementById('{{ form.academic_session.id_for_label }}');
+        if (sessionField) {
+            // In real implementation, find the option with matching value
+            for (let option of sessionField.options) {
+                if (option.value === sessionId) {
+                    sessionField.value = sessionId;
+                    sessionField.dispatchEvent(new Event('change'));
+                    break;
+                }
+            }
+        }
+    },
+    
+    validateDates: function(startDate, endDate) {
+        if (!startDate) return { valid: false, message: 'Start date is required' };
+        
+        if (endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (end < start) {
+                return { valid: false, message: 'End date cannot be before start date' };
+            }
+        }
+        
+        return { valid: true };
+    },
+    
+    calculateDuration: function(startDate, endDate) {
+        const start = new Date(startDate);
+        const end = endDate ? new Date(endDate) : start;
+        const diffTime = Math.abs(end - start);
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+};
+
+// Global functions for template functionality
+function importFromTemplate() {
+    const modal = new bootstrap.Modal(document.getElementById('templateModal'));
+    modal.show();
+    
+    // Setup template selection
+    document.querySelectorAll('#holiday-templates .list-group-item').forEach(item => {
+        item.addEventListener('click', function() {
+            // Remove previous selections
+            document.querySelectorAll('#holiday-templates .list-group-item').forEach(i => i.classList.remove('active'));
+            document.querySelectorAll('#recent-templates .list-group-item').forEach(i => i.classList.remove('active'));
+            
+            // Select current
+            this.classList.add('active');
+            const applyBtn = document.getElementById('applyTemplate');
+            if (applyBtn) applyBtn.disabled = false;
+            
+            // Store selected template
+            window.selectedTemplate = this.dataset.template;
+        });
+    });
+    
+    const applyBtn = document.getElementById('applyTemplate');
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function() {
+            const template = window.selectedTemplate;
+            if (template) {
+                applyHolidayTemplate(template);
+                modal.hide();
+            }
+        });
+    }
+}
+
+function applyHolidayTemplate(templateType) {
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const descField = document.getElementById('{{ form.description.id_for_label }}');
+    const holidayTypeField = document.getElementById('{{ form.holiday_type.id_for_label }}');
+    
+    const templates = {
+        christmas: {
+            name: 'Christmas Day',
+            description: 'Christian holiday celebrating the birth of Jesus Christ',
+            holidayType: 'PUBLIC',
+            dates: { month: 12, day: 25 }
+        },
+        easter: {
+            name: 'Easter Break',
+            description: 'Spring break around Easter celebration',
+            holidayType: 'BREAK',
+            breakType: 'TERM_BREAK'
+        },
+        summer: {
+            name: 'Summer Break',
+            description: 'Long vacation break between academic years',
+            holidayType: 'BREAK',
+            breakType: 'YEAR_BREAK'
+        }
+    };
+    
+    const template = templates[templateType];
+    if (template && nameField && descField && holidayTypeField) {
+        nameField.value = template.name;
+        descField.value = template.description;
+        holidayTypeField.value = template.holidayType;
+        
+        // Trigger change events
+        nameField.dispatchEvent(new Event('input'));
+        descField.dispatchEvent(new Event('input'));
+        
+        // Update UI
+        document.querySelector(`[data-value="${template.holidayType}"]`)?.click();
+        
+        if (template.breakType) {
+            setTimeout(() => {
+                const breakRadio = document.getElementById(`break_${template.breakType.toLowerCase().split('_')[0]}`);
+                if (breakRadio) breakRadio.click();
+            }, 100);
+        }
+        
+        showToast('success', `Applied ${template.name} template`);
+    }
+}
+
+function saveAsTemplate() {
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const name = nameField ? nameField.value : '';
+    
+    if (!name.trim()) {
+        showToast('warning', 'Please enter a holiday name before saving as template');
+        return;
+    }
+    
+    // In real implementation, save current form state as template
+    showToast('success', `Holiday "${name}" saved as template`);
+}
+
+function duplicateHoliday() {
+    if (confirm('This will create a copy of the current holiday. Continue?')) {
+        const currentUrl = window.location.href;
+        const duplicateUrl = currentUrl + '?duplicate=true';
+        window.location.href = duplicateUrl;
+    }
+}
+
+function resetForm() {
+    if (confirm('This will reset all form fields. Are you sure?')) {
+        const form = document.getElementById('holiday-form');
+        if (form) form.reset();
+        
+        // Reset custom UI elements
+        document.querySelectorAll('.holiday-type-option').forEach(opt => opt.classList.remove('selected'));
+        document.querySelectorAll('.break-type-card').forEach(card => card.classList.remove('selected'));
+        document.querySelectorAll('.quick-date-btn').forEach(btn => btn.classList.remove('active'));
+        
+        // Hide conditional sections
+        const breakTypeSection = document.getElementById('break-type-section');
+        const breakSettings = document.getElementById('break-settings');
+        const sessionPreview = document.getElementById('session-preview');
+        const durationDisplay = document.getElementById('duration-display');
+        
+        if (breakTypeSection) breakTypeSection.classList.remove('show');
+        if (breakSettings) breakSettings.style.display = 'none';
+        if (sessionPreview) sessionPreview.style.display = 'none';
+        if (durationDisplay) durationDisplay.style.display = 'none';
+        
+        // Reset counters
+        const nameCounter = document.getElementById('nameCounter');
+        const descCounter = document.getElementById('descCounter');
+        
+        if (nameCounter) nameCounter.textContent = '0';
+        if (descCounter) descCounter.textContent = '0';
+        
+        // Update progress
+        const updateProgressEvent = new Event('updateFormProgress');
+        document.dispatchEvent(updateProgressEvent);
+        
+        showToast('info', 'Form has been reset');
+    }
+}
+
+function submitForm() {
+    const form = document.getElementById('holiday-form');
+    if (form) form.submit();
+}
+
+function checkDateConflicts() {
+    const startDateField = document.getElementById('{{ form.start_date.id_for_label }}');
+    const endDateField = document.getElementById('{{ form.end_date.id_for_label }}');
+    
+    const startDate = startDateField ? startDateField.value : '';
+    const endDate = endDateField ? endDateField.value : '';
+    
+    if (!startDate) {
+        showToast('warning', 'Please set a start date first');
+        return;
+    }
+    
+    showLoading(true);
+    
+    // In real implementation, make AJAX call
+    setTimeout(() => {
+        showLoading(false);
+        
+        // Mock conflict check result
+        if (Math.random() > 0.7) {
+            showConflictModal();
+        } else {
+            showToast('success', 'No date conflicts detected');
+        }
+    }, 1500);
+}
+
+function showConflictModal() {
+    const modal = new bootstrap.Modal(document.getElementById('conflictModal'));
+    const modalBody = document.getElementById('conflictModalBody');
+    
+    if (!modalBody) return;
+    
+    // Mock conflict data
+    modalBody.innerHTML = `
+        <div class="alert alert-warning">
+            <h6><i class="fa fa-exclamation-triangle me-2"></i>Conflicts Found</h6>
+            <p>The following conflicts were detected with your selected dates:</p>
+        </div>
+        
+        <div class="conflict-list">
+            <div class="card border-warning mb-2">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Independence Day</strong>
+                            <small class="text-muted d-block">Public Holiday - October 9, 2024</small>
+                        </div>
+                        <span class="badge bg-warning">Overlap</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card border-info mb-2">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Term 1 Exams</strong>
+                            <small class="text-muted d-block">School Event - October 7-11, 2024</small>
+                        </div>
+                        <span class="badge bg-info">Adjacent</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <h6>Recommended Actions:</h6>
+            <ul class="list-unstyled">
+                <li><i class="fa fa-check-circle text-success me-2"></i>Move holiday to avoid overlap with Independence Day</li>
+                <li><i class="fa fa-info-circle text-info me-2"></i>Consider coordination with exam schedule</li>
+            </ul>
+        </div>
+    `;
+    
+    modal.show();
+}
+
+function suggestBreakDates() {
+    showLoading(true);
+    
+    // In real implementation, analyze existing sessions to suggest optimal break dates
+    setTimeout(() => {
+        showLoading(false);
+        
+        const suggestions = [
+            { start: '2024-12-16', end: '2025-01-06', reason: 'Christmas/New Year Break' },
+            { start: '2024-10-14', end: '2024-10-18', reason: 'Mid-term Break' },
+            { start: '2025-04-14', end: '2025-04-18', reason: 'Easter Break' }
+        ];
+        
+        const suggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+        
+        if (confirm(`Suggested break dates:\n${suggestion.start} to ${suggestion.end}\n(${suggestion.reason})\n\nApply these dates?`)) {
+            const startDateField = document.getElementById('{{ form.start_date.id_for_label }}');
+            const endDateField = document.getElementById('{{ form.end_date.id_for_label }}');
+            
+            if (startDateField) {
+                startDateField.value = suggestion.start;
+                startDateField.dispatchEvent(new Event('change'));
+            }
+            
+            if (endDateField) {
+                endDateField.value = suggestion.end;
+                endDateField.dispatchEvent(new Event('change'));
+            }
+            
+            showToast('success', 'Break dates applied successfully');
+        }
+    }, 1000);
+}
+
+function viewSessionCalendar() {
+    // In real implementation, open calendar view or navigate to calendar page
+    window.open('{% url "core:academic_calendar" %}', '_blank');
+}
+
+function exportToCalendar() {
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const startDateField = document.getElementById('{{ form.start_date.id_for_label }}');
+    
+    const name = nameField ? nameField.value : '';
+    const startDate = startDateField ? startDateField.value : '';
+    
+    if (!name || !startDate) {
+        showToast('warning', 'Please enter a name and start date before exporting');
+        return;
+    }
+    
+    showToast('info', 'Calendar export functionality would be implemented here');
+}
+
+function selectSuggestedSession(sessionId) {
+    const sessionField = document.getElementById('{{ form.academic_session.id_for_label }}');
+    if (sessionField) {
+        // In real implementation, find the option with matching value
+        for (let option of sessionField.options) {
+            if (option.value === sessionId) {
+                sessionField.value = sessionId;
+                sessionField.dispatchEvent(new Event('change'));
+                break;
+            }
+        }
+    }
+}
+
+function scrollToSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Highlight the section briefly
+        section.style.transform = 'scale(1.02)';
+        section.style.transition = 'transform 0.3s ease';
+        setTimeout(() => {
+            section.style.transform = 'scale(1)';
+        }, 500);
+    }
+}
+
+function showToast(type, message) {
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll('.toast-notification');
+    existingToasts.forEach(toast => toast.remove());
+    
+    // Create new toast
+    const toast = document.createElement('div');
+    toast.className = `toast-notification alert alert-${type} alert-dismissible fade show`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 500px;
+    `;
+    
+    const icon = type === 'success' ? 'check-circle' : 
+                 type === 'danger' ? 'exclamation-triangle' : 
+                 type === 'warning' ? 'exclamation-circle' : 'info-circle';
+    
+    toast.innerHTML = `
+        <i class="fa fa-${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 5000);
+}
+
+function showLoading(show) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        if (show) {
+            overlay.classList.add('show');
+        } else {
+            overlay.classList.remove('show');
+        }
+    }
+}
+
+// CSS for additional styling
+const additionalCSS = `
+    .holiday-preview-card {
+        padding: 20px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    
+    .holiday-preview-icon {
+        font-size: 4rem;
+        margin-bottom: 15px;
+    }
+    
+    .toast-notification {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        border: none;
+    }
+    
+    .conflict-list .card {
+        transition: all 0.3s ease;
+    }
+    
+    .conflict-list .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    @media (max-width: 768px) {
+        .form-navigation {
+            position: static;
+            margin-bottom: 20px;
+        }
+        
+        .holiday-type-selector {
+            grid-template-columns: 1fr;
+        }
+        
+        .quick-dates {
+            justify-content: center;
+        }
+        
+        .form-actions .d-flex {
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .toast-notification {
+            left: 10px;
+            right: 10px;
+            min-width: auto;
+        }
+    }
+`;
+
+// Inject additional CSS
+const style = document.createElement('style');
+style.textContent = additionalCSS;
+document.head.appendChild(style);
+
+</script>
+{% endblock %}

@@ -1,0 +1,1267 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+    .alert-container {
+        position: relative;
+        z-index: 1050;
+    }
+    .alert {
+        border: none;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        margin-bottom: 0.75rem;
+    }
+    .alert:last-child {
+        margin-bottom: 0;
+    }
+    .alert .fa {
+        opacity: 0.8;
+    }
+    .alert-success {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border-left: 4px solid #28a745;
+        color: #155724;
+    }
+    .alert-danger {
+        background: linear-gradient(135deg, #f8d7da 0%, #f1b0b7 100%);
+        border-left: 4px solid #dc3545;
+        color: #721c24;
+    }
+    .alert-warning {
+        background: linear-gradient(135deg, #fff3cd 0%, #fde8ac 100%);
+        border-left: 4px solid #ffc107;
+        color: #856404;
+    }
+    .alert-info {
+        background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+        border-left: 4px solid #17a2b8;
+        color: #0c5460;
+    }
+    .alert-primary {
+        background: linear-gradient(135deg, #cce7ff 0%, #b3d9ff 100%);
+        border-left: 4px solid #007bff;
+        color: #004085;
+    }
+    
+    .subject-type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+    
+    .subject-code {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        background: #f8f9fa;
+        color: #495057;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 1px solid #dee2e6;
+    }
+    
+    .subject-actions {
+        white-space: nowrap;
+    }
+    
+    .search-form {
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+    }
+    
+    .table-container {
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+    }
+    
+    .credit-hours {
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        display: inline-block;
+        font-weight: 600;
+    }
+    
+    .department-tag {
+        background: #f3e5f5;
+        color: #7b1fa2;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        display: inline-block;
+    }
+    
+    .prerequisite-indicator {
+        background: #fff3e0;
+        color: #f57c00;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        display: inline-block;
+        margin-top: 0.25rem;
+    }
+    
+    .compulsory-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    
+    .subject-description {
+        color: #6c757d;
+        font-size: 0.875rem;
+        line-height: 1.4;
+        max-width: 300px;
+    }
+    
+    .subject-details-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .subject-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+    }
+
+    .filter-section {
+        border-radius: 0.5rem;
+        border: 1px solid #e9ecef;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: #f8f9fa;
+    }
+
+    .filter-section h6 {
+        color: #495057;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+
+    .advanced-filters {
+        display: none;
+    }
+
+    .form-check-input:checked {
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+
+    .bulk-actions-bar {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.75rem 1.5rem;
+    }
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+    /* Hide everything except printable content */
+    body * {
+        visibility: hidden;
+    }
+    
+    #printableTable,
+    #printableTable * {
+        visibility: visible;
+    }
+    
+    #printableTable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    
+    /* Print Header */
+    .print-header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #333;
+    }
+    
+    .print-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .print-date {
+        font-size: 12px;
+        color: #666;
+    }
+    
+    /* Print Table */
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    .print-table th {
+        background-color: #4472C4 !important;
+        color: white !important;
+        padding: 10px;
+        text-align: left;
+        border: 1px solid #333;
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .print-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+    
+    .print-table tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    /* Print Footer */
+    .print-footer {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+        border-top: 1px solid #ddd;
+        padding-top: 10px;
+    }
+    
+    /* Page Break Settings */
+    .print-table {
+        page-break-inside: auto;
+    }
+    
+    .print-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    .print-table thead {
+        display: table-header-group;
+    }
+    
+    .print-table tfoot {
+        display: table-footer-group;
+    }
+    
+    /* Ensure colors print correctly */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .stats-summary {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 10px;
+    }
+    
+    .subject-code {
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .subject-type-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Subject Directory
+                <div class="page-title-subheading">
+                    Manage and monitor academic subjects with comprehensive tracking and administration
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'academics:subject_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add New Subject
+                    </a>
+
+                    <!-- Print Button -->
+                    <a href="#" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
+                        <i class="fa fa-print me-1"></i> Print
+                    </a>
+
+                    <!-- Excel Export -->
+                    <a href="" id="excelExportBtn" class="btn btn-outline-success">
+                        <i class="fa fa-file-excel me-1"></i> Export Excel
+                    </a>
+
+                    <!-- PDF Export -->
+                    <a href="" id="pdfExportBtn" class="btn btn-outline-danger">
+                        <i class="fa fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Summary -->
+<div class="stats-summary">
+    <div class="row">
+        <!-- Total Subjects -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_subjects|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Subjects</p>
+                <small class="opacity-6">
+                    <i class="fa fa-book me-1"></i>
+                    All subjects
+                </small>
+            </div>
+        </div>
+        
+        <!-- Active Subjects -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.active_subjects|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Active Subjects</p>
+                <small class="opacity-6">
+                    <i class="fa fa-check-circle me-1"></i>
+                    Currently active
+                </small>
+            </div>
+        </div>
+        
+        <!-- Compulsory Subjects -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.compulsory_subjects|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Compulsory</p>
+                <small class="opacity-6">
+                    <i class="fa fa-star me-1"></i>
+                    Required subjects
+                </small>
+            </div>
+        </div>
+        
+        <!-- Average Credit Hours -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.credit_analysis.average_credit_hours|floatformat:1|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Avg Credit Hours</p>
+                <small class="opacity-6">
+                    <i class="fa fa-clock me-1"></i>
+                    Per subject
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- Search & Filters -->
+                    <form id="searchForm" class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <input type="text" name="q" id="searchInput" class="form-control" 
+                                   placeholder="Search by name, code, abbreviation...">
+                        </div>
+                        <div class="col-md-2">
+                            <select name="subject_type" id="subjectTypeFilter" class="form-select">
+                                <option value="">All Types</option>
+                                {% for value, label in subject_types %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="department" id="departmentFilter" class="form-select">
+                                <option value="">All Departments</option>
+                                {% for dept in departments %}
+                                    <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="is_active" id="statusFilter" class="form-select">
+                                <option value="">All Status</option>
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="is_compulsory" id="compulsoryFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="true">Compulsory</option>
+                                <option value="false">Optional</option>
+                            </select>
+                        </div>
+                    </form>
+
+                    <!-- Results Table -->
+                    <div id="results">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 60px;">#</th>
+                                    <th>Subject Details</th>
+                                    <th>Type & Credits</th>
+                                    <th>Department</th>
+                                    <th>Prerequisites</th>
+                                    <th>Pass Mark</th>
+                                    <th>Status</th>
+                                    <th style="width: 160px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subjectTableBody">
+                                {% for subject in subjects %}
+                                <tr data-subject-id="{{ subject.id }}" class="{% if not subject.is_active %}table-secondary{% endif %}">
+                                    <td>
+                                        <span class="fw-bold text-muted">
+                                            {% if subjects.has_other_pages %}
+                                                {{ subjects.start_index|add:forloop.counter0 }}
+                                            {% else %}
+                                                {{ forloop.counter }}
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="subject-details-summary">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <strong class="text-primary">{{ subject.name }}</strong>
+                                                <div class="subject-code ms-2">{{ subject.code }}</div>
+                                                {% if subject.abbreviation %}
+                                                <small class="text-muted ms-2 fw-bold">({{ subject.abbreviation }})</small>
+                                                {% endif %}
+                                            </div>
+                                            {% if subject.description %}
+                                            <div class="subject-description">
+                                                {{ subject.description|truncatechars:120 }}
+                                            </div>
+                                            {% endif %}
+                                            <div class="subject-meta">
+                                                {% if subject.is_compulsory %}
+                                                <div class="compulsory-indicator">
+                                                    <i class="fa fa-star text-warning"></i>
+                                                    <span class="text-warning fw-bold">Compulsory</span>
+                                                </div>
+                                                {% else %}
+                                                <div class="compulsory-indicator">
+                                                    <i class="fa fa-circle text-info"></i>
+                                                    <span class="text-info">Optional</span>
+                                                </div>
+                                                {% endif %}
+                                                {% if subject.weight_factor and subject.weight_factor != 1.0 %}
+                                                <span class="badge bg-info">
+                                                    Weight: {{ subject.weight_factor }}x
+                                                </span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="subject-type-badge bg-primary text-white mb-2">
+                                            {{ subject.get_subject_type_display }}
+                                        </div>
+                                        <div class="credit-hours">
+                                            <i class="fa fa-clock me-1"></i>{{ subject.credit_hours }} Credits
+                                        </div>
+                                        {% if subject.difficulty_level %}
+                                        <div class="mt-1">
+                                            <span class="badge bg-secondary">
+                                                {{ subject.get_difficulty_level_display }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if subject.department %}
+                                        <div class="department-tag">
+                                            <i class="fa fa-building me-1"></i>{{ subject.department.name }}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">
+                                            <i class="fa fa-minus"></i> Not Specified
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if subject.prerequisites.exists %}
+                                        <div class="prerequisite-indicator">
+                                            <i class="fa fa-link me-1"></i>{{ subject.prerequisites.count }} Prerequisites
+                                        </div>
+                                        <div class="mt-1">
+                                            {% for prereq in subject.prerequisites.all|slice:":2" %}
+                                                <small class="d-block text-muted">
+                                                    <i class="fa fa-arrow-right me-1"></i>{{ prereq.abbreviation|default:prereq.code }}
+                                                </small>
+                                            {% endfor %}
+                                            {% if subject.prerequisites.count > 2 %}
+                                                <small class="text-muted">
+                                                    <i class="fa fa-ellipsis-h"></i> +{{ subject.prerequisites.count|add:"-2" }} more
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-success">
+                                            <i class="fa fa-check-circle"></i> None Required
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if subject.pass_mark %}
+                                        <div class="badge bg-info">
+                                            <i class="fa fa-percentage me-1"></i>{{ subject.pass_mark }}%
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">
+                                            <i class="fa fa-minus"></i> Not Set
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if subject.is_active %}
+                                            <span class="badge bg-success">
+                                                <i class="fa fa-check-circle me-1"></i>Active
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-danger">
+                                                <i class="fa fa-times-circle me-1"></i>Inactive
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="subject-actions">
+                                            <a href="{% url 'academics:subject_detail' subject.pk %}" 
+                                               class="btn btn-sm btn-outline-info" 
+                                               data-bs-toggle="tooltip" title="View Details">
+                                                <i class="fa fa-eye"></i>
+                                            </a>
+                                            <a href="{% url 'academics:subject_update' subject.pk %}" 
+                                               class="btn btn-sm btn-outline-warning"
+                                               data-bs-toggle="tooltip" title="Edit Subject">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                            <div class="dropdown d-inline-block">
+                                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                                                        type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="fa fa-ellipsis-v"></i>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <a class="dropdown-item" href="{% url 'academics:subject_detail' subject.pk %}">
+                                                            <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                                                        </a>
+                                                    </li>
+                                                    {% if subject.prerequisites.exists %}
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#prerequisitesModal{{ subject.pk }}">
+                                                            <i class="fa fa-sitemap me-2 text-warning"></i>View Prerequisites
+                                                        </a>
+                                                    </li>
+                                                    {% endif %}
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li>
+                                                        <a class="dropdown-item text-danger" href="#"
+                                                           data-bs-toggle="modal" data-bs-target="#deleteSubject{{ subject.pk }}">
+                                                            <i class="fa fa-trash me-2"></i>Delete
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <!-- Pagination -->
+                        <div id="paginationContainer" style="display: none;">
+                            <nav class="mb-3" aria-label="Page navigation">
+                                <ul class="pagination justify-content-center" id="paginationNav">
+                                    <!-- Pagination will be dynamically inserted here -->
+                                </ul>
+                            </nav>
+
+                            <!-- Showing X-Y of Z results -->
+                            <div class="text-center text-muted mb-3" id="resultsCount">
+                                <!-- Results count will be dynamically inserted here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete Modals -->
+                    {% for subject in subjects %}
+                    <div class="modal fade" id="deleteSubject{{ subject.pk }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Delete Subject</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1 mb-3"></i>
+                                    <h5>Are you sure you want to delete "<strong>{{ subject.name }}</strong>"?</h5>
+                                    <p class="text-muted">This action cannot be undone.</p>
+                                </div>
+                                <form action="{% url 'academics:subject_delete' subject.pk %}" method="post">
+                                    {% csrf_token %}
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-danger">Delete Subject</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <!-- Print Modal -->
+                    <div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="printModalLabel">
+                                        <i class="fa fa-print me-2"></i>Print Subject List
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="text-muted mb-3">Select the columns you want to include in the printout:</p>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="number" id="col_number" checked>
+                                                <label class="form-check-label" for="col_number">#</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="name" id="col_name" checked>
+                                                <label class="form-check-label" for="col_name">Subject Name</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="code" id="col_code" checked>
+                                                <label class="form-check-label" for="col_code">Code</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="type" id="col_type" checked>
+                                                <label class="form-check-label" for="col_type">Subject Type</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="credits" id="col_credits" checked>
+                                                <label class="form-check-label" for="col_credits">Credit Hours</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="department" id="col_department">
+                                                <label class="form-check-label" for="col_department">Department</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="compulsory" id="col_compulsory">
+                                                <label class="form-check-label" for="col_compulsory">Compulsory</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="status" id="col_status">
+                                                <label class="form-check-label" for="col_status">Status</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr class="my-3">
+                                    
+                                    <div class="d-flex justify-content-between">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllColumns()">
+                                            <i class="fa fa-check-square me-1"></i> Select All
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllColumns()">
+                                            <i class="fa fa-square me-1"></i> Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-primary" onclick="printSubjectTable()">
+                                        <i class="fa fa-print me-1"></i> Print
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+/* ============================================================================
+   DJANGO URL TEMPLATES
+============================================================================ */
+const SUBJECT_DETAIL_URL = "{% url 'academics:subject_detail' '00000000-0000-0000-0000-000000000000' %}";
+const SUBJECT_EDIT_URL = "{% url 'academics:subject_update' '00000000-0000-0000-0000-000000000000' %}";
+
+// ============================================================================
+// MAIN SUBJECT LIST FUNCTIONALITY
+// ============================================================================
+$(document).ready(function() {
+    let currentPage = 1;
+
+    // ------------------------------------------------------------------------
+    // AJAX Functions - Fetch and Display Subjects
+    // ------------------------------------------------------------------------
+    function fetchResults(page = 1) {
+        const formData = $('#searchForm').serialize() + '&page=' + page;
+        
+        $.ajax({
+            url: "{% url 'academics:subject_search' %}",
+            data: formData,
+            dataType: 'json',
+            success: function(data) {
+                renderSubjectTable(data);
+                updatePagination(data);
+                updateStatistics(data.stats);
+                currentPage = data.current_page;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                $('#subjectTableBody').html(
+                    `<tr>
+                        <td colspan="9" class="text-center text-danger">
+                            Error loading subjects. Please try again.
+                        </td>
+                    </tr>`
+                );
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Statistics Update Function
+    // ------------------------------------------------------------------------
+    function updateStatistics(stats) {
+        // Update total subjects
+        $('.stats-card:eq(0) h3').text(stats.total_subjects || 0);
+        
+        // Update active subjects
+        $('.stats-card:eq(1) h3').text(stats.active_subjects || 0);
+        
+        // Update compulsory subjects
+        $('.stats-card:eq(2) h3').text(stats.compulsory_subjects || 0);
+        
+        // Update average credit hours
+        const avgCredits = stats.credit_analysis ? stats.credit_analysis.average_credit_hours : 0;
+        $('.stats-card:eq(3) h3').text(parseFloat(avgCredits).toFixed(1));
+    }
+
+    function renderSubjectTable(data) {
+        let tbody = '';
+        
+        if (data.subjects.length > 0) {
+            data.subjects.forEach(function(subject, index) {
+                tbody += buildSubjectRow(subject, index, data.current_page);
+            });
+        } else {
+            tbody = `<tr>
+                <td colspan="9" class="text-center text-muted">
+                    No subjects found.
+                </td>
+            </tr>`;
+        }
+        
+        $('#subjectTableBody').html(tbody);
+    }
+
+    function buildSubjectRow(subject, index, currentPage) {
+        const rowNumber = ((currentPage - 1) * 10) + index + 1;
+        const inactiveClass = subject.is_active ? '' : 'table-secondary';
+        
+        return `
+            <tr data-subject-id="${subject.id}" class="${inactiveClass}">
+                <td>
+                    <span class="fw-bold text-muted">${rowNumber}</span>
+                </td>
+                <td>
+                    <div class="subject-details-summary">
+                        <div class="d-flex align-items-center mb-1">
+                            <strong class="text-primary">${subject.name}</strong>
+                            <div class="subject-code ms-2">${subject.code}</div>
+                            ${subject.abbreviation ? `<small class="text-muted ms-2 fw-bold">(${subject.abbreviation})</small>` : ''}
+                        </div>
+                        <div class="subject-meta">
+                            ${buildCompulsoryBadge(subject.is_compulsory)}
+                            ${subject.weight_factor && subject.weight_factor != 1.0 ? `<span class="badge bg-info">Weight: ${subject.weight_factor}x</span>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div class="subject-type-badge bg-primary text-white mb-2">
+                        ${subject.subject_type}
+                    </div>
+                    <div class="credit-hours">
+                        <i class="fa fa-clock me-1"></i>${subject.credit_hours} Credits
+                    </div>
+                    ${subject.difficulty_level ? `<div class="mt-1"><span class="badge bg-secondary">${subject.difficulty_level}</span></div>` : ''}
+                </td>
+                <td>
+                    ${buildDepartmentTag(subject.department)}
+                </td>
+                <td>
+                    ${buildPrerequisitesInfo(subject)}
+                </td>
+                <td>
+                    ${subject.pass_mark ? `<div class="badge bg-info"><i class="fa fa-percentage me-1"></i>${subject.pass_mark}%</div>` : '<span class="text-muted"><i class="fa fa-minus"></i> Not Set</span>'}
+                </td>
+                <td>
+                    ${buildStatusBadge(subject.is_active)}
+                </td>
+                <td>
+                    ${buildActionsDropdown(subject.id)}
+                </td>
+            </tr>
+        `;
+    }
+
+    function buildCompulsoryBadge(isCompulsory) {
+        if (isCompulsory) {
+            return `<div class="compulsory-indicator">
+                <i class="fa fa-star text-warning"></i>
+                <span class="text-warning fw-bold">Compulsory</span>
+            </div>`;
+        } else {
+            return `<div class="compulsory-indicator">
+                <i class="fa fa-circle text-info"></i>
+                <span class="text-info">Optional</span>
+            </div>`;
+        }
+    }
+
+    function buildDepartmentTag(department) {
+        if (department) {
+            return `<div class="department-tag">
+                <i class="fa fa-building me-1"></i>${department}
+            </div>`;
+        } else {
+            return `<span class="text-muted">
+                <i class="fa fa-minus"></i> Not Specified
+            </span>`;
+        }
+    }
+
+    function buildPrerequisitesInfo(subject) {
+        // This would need to be included in the AJAX response
+        return `<span class="text-muted"><i class="fa fa-check-circle"></i> View Details</span>`;
+    }
+
+    function buildStatusBadge(isActive) {
+        if (isActive) {
+            return `<span class="badge bg-success">
+                <i class="fa fa-check-circle me-1"></i>Active
+            </span>`;
+        } else {
+            return `<span class="badge bg-danger">
+                <i class="fa fa-times-circle me-1"></i>Inactive
+            </span>`;
+        }
+    }
+
+    function buildActionsDropdown(subjectId) {
+        const detailUrl = SUBJECT_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', subjectId);
+        const editUrl = SUBJECT_EDIT_URL.replace('00000000-0000-0000-0000-000000000000', subjectId);
+
+        return `
+            <div class="subject-actions">
+                <a href="${detailUrl}" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="View Details">
+                    <i class="fa fa-eye"></i>
+                </a>
+                <a href="${editUrl}" class="btn btn-sm btn-outline-warning" data-bs-toggle="tooltip" title="Edit Subject">
+                    <i class="fa fa-edit"></i>
+                </a>
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="${detailUrl}">
+                                <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="#" onclick="confirmDelete('${subjectId}')">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------------------
+    // Pagination Functions
+    // ------------------------------------------------------------------------
+    function updatePagination(data) {
+        if (data.total_pages <= 1) {
+            $('#paginationContainer').hide();
+            return;
+        }
+
+        $('#paginationContainer').show();
+        $('#paginationNav').html(buildPaginationHtml(data));
+        $('#resultsCount').html(
+            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} subjects`
+        );
+    }
+
+    function buildPaginationHtml(data) {
+        let html = '';
+
+        // Previous button
+        html += buildPaginationButton(
+            data.has_previous,
+            data.current_page - 1,
+            '«',
+            'Previous'
+        );
+
+        // Page numbers
+        for (let i = 1; i <= data.total_pages; i++) {
+            if (i === data.current_page) {
+                html += `
+                    <li class="page-item active" aria-current="page">
+                        <a class="page-link" href="#">${i}</a>
+                    </li>
+                `;
+            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link pagination-link" href="#" data-page="${i}">${i}</a>
+                    </li>
+                `;
+            }
+        }
+
+        // Next button
+        html += buildPaginationButton(
+            data.has_next,
+            data.current_page + 1,
+            '»',
+            'Next'
+        );
+
+        return html;
+    }
+
+    function buildPaginationButton(isEnabled, page, symbol, label) {
+        if (isEnabled) {
+            return `
+                <li class="page-item">
+                    <a class="page-link pagination-link" href="#" data-page="${page}" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                        <span class="visually-hidden">${label}</span>
+                    </a>
+                </li>
+            `;
+        } else {
+            return `
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                        <span class="visually-hidden">${label}</span>
+                    </a>
+                </li>
+            `;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Export Functions
+    // ------------------------------------------------------------------------
+    function updateExportLinks() {
+        const formData = $('#searchForm').serialize();
+        const excelUrl = "" + (formData ? '?' + formData : '');
+        const pdfUrl = "" + (formData ? '?' + formData : '');
+        
+        $('#excelExportBtn').attr('href', excelUrl);
+        $('#pdfExportBtn').attr('href', pdfUrl);
+    }
+
+    // ------------------------------------------------------------------------
+    // Event Handlers
+    // ------------------------------------------------------------------------
+    
+    // Search and filter changes
+    $('#searchInput, #subjectTypeFilter, #departmentFilter, #statusFilter, #compulsoryFilter')
+        .on('input change', function() {
+            updateExportLinks();
+            fetchResults(1);
+        });
+
+    // Pagination clicks
+    $(document).on('click', '.pagination-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        fetchResults(page);
+        
+        // Scroll to top of results
+        $('html, body').animate({
+            scrollTop: $("#results").offset().top - 100
+        }, 300);
+    });
+
+    // ------------------------------------------------------------------------
+    // Initialize
+    // ------------------------------------------------------------------------
+    updateExportLinks();
+    fetchResults(1);
+});
+
+// ============================================================================
+// PRINT FUNCTIONALITY
+// ============================================================================
+
+function selectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+function printSubjectTable() {
+    const selectedColumns = getSelectedColumns();
+    
+    if (selectedColumns.length === 0) {
+        alert('Please select at least one column to print');
+        return;
+    }
+    
+    const printBtn = document.querySelector('#printModal .btn-primary');
+    const originalText = printBtn.innerHTML;
+    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Loading...';
+    printBtn.disabled = true;
+    
+    fetchAllSubjectsForPrint(selectedColumns, printBtn, originalText);
+}
+
+function fetchAllSubjectsForPrint(selectedColumns, printBtn, originalText) {
+    const formData = $('#searchForm').serialize();
+    
+    $.ajax({
+        url: "{% url 'academics:subject_search' %}",
+        data: formData + '&page=all',
+        dataType: 'json',
+        success: function(data) {
+            const printHTML = buildPrintHTMLFromData(data.subjects, selectedColumns);
+            displayPrintPreview(printHTML);
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        },
+        error: function(xhr, status, error) {
+            console.error('Print Error:', error);
+            alert('Error loading subjects for print. Please try again.');
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        }
+    });
+}
+
+function getSelectedColumns() {
+    const columns = [];
+    document.querySelectorAll('.print-column:checked').forEach(checkbox => {
+        columns.push(checkbox.value);
+    });
+    return columns;
+}
+
+function buildPrintHTMLFromData(subjects, selectedColumns) {
+    const columnMap = {
+        'number': { header: '#' },
+        'name': { header: 'Subject Name' },
+        'code': { header: 'Code' },
+        'type': { header: 'Subject Type' },
+        'credits': { header: 'Credit Hours' },
+        'department': { header: 'Department' },
+        'compulsory': { header: 'Compulsory' },
+        'status': { header: 'Status' }
+    };
+    
+    let html = `
+        <div id="printableTable">
+            <div class="print-header">
+                <div class="print-title">Subject Directory</div>
+                <div class="print-date">Generated on: ${new Date().toLocaleString()}</div>
+            </div>
+            
+            <table class="print-table">
+                <thead>
+                    <tr>
+    `;
+    
+    // Add headers
+    selectedColumns.forEach(col => {
+        html += `<th>${columnMap[col].header}</th>`;
+    });
+    
+    html += '</tr></thead><tbody>';
+    
+    // Add data rows
+    subjects.forEach((subject, index) => {
+        html += '<tr>';
+        
+        selectedColumns.forEach(col => {
+            const cellContent = extractCellContentFromData(subject, col, index);
+            html += `<td>${cellContent}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    
+    html += `
+                </tbody>
+            </table>
+            
+            <div class="print-footer">
+                <p>Total Subjects: ${subjects.length}</p>
+                <p>Date: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function extractCellContentFromData(subject, columnType, index) {
+    switch(columnType) {
+        case 'number':
+            return index + 1;
+        case 'name':
+            return subject.name;
+        case 'code':
+            return subject.code;
+        case 'type':
+            return subject.subject_type;
+        case 'credits':
+            return subject.credit_hours;
+        case 'department':
+            return subject.department || 'Not Specified';
+        case 'compulsory':
+            return subject.is_compulsory ? 'Yes' : 'No';
+        case 'status':
+            return subject.is_active ? 'Active' : 'Inactive';
+        default:
+            return '';
+    }
+}
+
+function displayPrintPreview(printHTML) {
+    const existingContainer = document.getElementById('printableTable');
+    if (existingContainer) {
+        existingContainer.remove();
+    }
+    
+    const tempContainer = document.createElement('div');
+    tempContainer.innerHTML = printHTML;
+    document.body.appendChild(tempContainer);
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    setTimeout(() => {
+        window.print();
+        
+        setTimeout(() => {
+            if (tempContainer && tempContainer.parentNode) {
+                tempContainer.remove();
+            }
+        }, 1000);
+    }, 500);
+}
+
+window.addEventListener('afterprint', function() {
+    const printContainer = document.getElementById('printableTable');
+    if (printContainer) {
+        printContainer.remove();
+    }
+});
+</script>
+{% endblock %}

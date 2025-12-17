@@ -1,0 +1,986 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   STATISTICS SUMMARY SECTION
+   ============================================================================ */
+
+.stats-summary {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 8px 32px rgba(23, 162, 184, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-summary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="80" cy="80" r="3" fill="rgba(255,255,255,0.05)"/><circle cx="40" cy="70" r="1" fill="rgba(255,255,255,0.1)"/></svg>');
+    pointer-events: none;
+}
+
+.stats-card {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+/* ============================================================================
+   DESIGNATION CARD STYLING
+   ============================================================================ */
+
+.designation-card {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    background: white;
+    overflow: hidden;
+    height: 100%;
+}
+
+.designation-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transform: translateY(-4px);
+    border-color: #17a2b8;
+}
+
+.designation-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 20px;
+    border-bottom: 2px solid #17a2b8;
+}
+
+.designation-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
+}
+
+.designation-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0 0 5px 0;
+}
+
+.designation-code {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-family: 'Courier New', monospace;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.designation-body {
+    padding: 20px;
+}
+
+.designation-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+    min-height: 40px;
+}
+
+.salary-range-display {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    border: 1px solid #dee2e6;
+}
+
+.salary-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+}
+
+.salary-amount {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #f5576c;
+}
+
+.salary-range-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.salary-min, .salary-max {
+    flex: 1;
+    text-align: center;
+}
+
+.salary-separator {
+    padding: 0 10px;
+    color: #6c757d;
+}
+
+.designation-stats {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.stat-item {
+    flex: 1;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #f5576c;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.designation-footer {
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+}
+
+/* ============================================================================
+   LEVEL BADGES
+   ============================================================================ */
+
+.level-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 5px;
+}
+
+.level-entry {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.level-junior {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.level-mid {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.level-senior {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.level-executive {
+    background-color: #e7e7ff;
+    color: #4c4cac;
+    border: 1px solid #d5d5f5;
+}
+
+/* ============================================================================
+   BADGES & INDICATORS
+   ============================================================================ */
+
+.active-badge {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid #c3e6cb;
+}
+
+.inactive-badge {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid #f5c6cb;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 20px;
+}
+
+.empty-state h5 {
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+/* ============================================================================
+   SEARCH & FILTERS
+   ============================================================================ */
+
+.search-filter-bar {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .stats-summary {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 10px;
+    }
+    
+    .designation-header {
+        padding: 15px;
+    }
+    
+    .designation-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+    
+    .designation-name {
+        font-size: 1.1rem;
+    }
+    
+    .designation-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .salary-range-bar {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    .designation-card {
+        margin-bottom: 15px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-medal icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Designations
+                <div class="page-title-subheading">
+                    Manage job titles, roles, and salary structures across the organization
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'hr:designation_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add New Designation
+                    </a>
+
+                    <!-- Export Options -->
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                        <i class="fa fa-download me-1"></i> Export
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <a class="dropdown-item" href="#" id="exportExcel">
+                            <i class="fa fa-file-excel me-2 text-success"></i> Export to Excel
+                        </a>
+                        <a class="dropdown-item" href="#" id="exportPdf">
+                            <i class="fa fa-file-pdf me-2 text-danger"></i> Export to PDF
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" href="#" onclick="window.print()">
+                            <i class="fa fa-print me-2"></i> Print List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Summary -->
+<div class="stats-summary">
+    <div class="row">
+        <!-- Total Designations -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_designations|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Designations</p>
+                <small class="opacity-6">
+                    <i class="fa fa-medal me-1"></i>
+                    All positions
+                </small>
+            </div>
+        </div>
+        
+        <!-- Active Designations -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.active_designations|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Active Designations</p>
+                <small class="opacity-6">
+                    <i class="fa fa-check-circle me-1"></i>
+                    Currently active
+                </small>
+            </div>
+        </div>
+        
+        <!-- Total Assigned -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_assigned|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Staff Assigned</p>
+                <small class="opacity-6">
+                    <i class="fa fa-users me-1"></i>
+                    Across all designations
+                </small>
+            </div>
+        </div>
+        
+        <!-- Average Salary -->
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.avg_salary|floatformat:0|default:0|intcomma }}</h3>
+                <p class="mb-0 opacity-8">Avg. Salary Range</p>
+                <small class="opacity-6">
+                    <i class="fa fa-money-bill me-1"></i>
+                    UGX per month
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="search-filter-bar">
+    <form id="searchForm" class="row g-3">
+        <div class="col-md-5">
+            <input type="text" name="q" id="searchInput" class="form-control" placeholder="Search designations by name, code, or description...">
+        </div>
+        <div class="col-md-3">
+            <select name="level" id="levelFilter" class="form-select">
+                <option value="">All Levels</option>
+                <option value="ENTRY">Entry Level</option>
+                <option value="JUNIOR">Junior</option>
+                <option value="MID">Mid-Level</option>
+                <option value="SENIOR">Senior</option>
+                <option value="EXECUTIVE">Executive</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="is_active" id="statusFilter" class="form-select">
+                <option value="">All Status</option>
+                <option value="true">Active Only</option>
+                <option value="false">Inactive Only</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="sort_by" id="sortFilter" class="form-select">
+                <option value="name">Name (A-Z)</option>
+                <option value="-name">Name (Z-A)</option>
+                <option value="level">Level</option>
+                <option value="-salary_min">Salary (High-Low)</option>
+                <option value="salary_min">Salary (Low-High)</option>
+            </select>
+        </div>
+    </form>
+</div>
+
+<!-- Designations Grid -->
+<section class="section">
+    <div class="row" id="designationsGrid">
+        {% for designation in designations %}
+        <div class="col-lg-4 col-md-6 mb-4 designation-item">
+            <div class="designation-card">
+                <div class="designation-header">
+                    <div class="d-flex align-items-start">
+                        <div class="designation-icon me-3">
+                            <i class="fa fa-award"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="designation-name">{{ designation.name }}</h5>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="designation-code">{{ designation.code }}</span>
+                                {% if designation.is_active %}
+                                    <span class="active-badge">Active</span>
+                                {% else %}
+                                    <span class="inactive-badge">Inactive</span>
+                                {% endif %}
+                                <span class="level-badge level-{{ designation.level|lower }}">
+                                    {{ designation.get_level_display }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="designation-body">
+                    <p class="designation-description">
+                        {% if designation.description %}
+                            {{ designation.description|truncatewords:20 }}
+                        {% else %}
+                            <em class="text-muted">No description provided</em>
+                        {% endif %}
+                    </p>
+                    
+                    {% if designation.salary_reference_min or designation.salary_reference_max %}
+                    <div class="salary-range-display">
+                        <div class="salary-label">Salary Reference Range</div>
+                        <div class="salary-range-bar">
+                            <div class="salary-min">
+                                <div class="salary-label">Minimum</div>
+                                <div class="salary-amount">
+                                    {% if designation.salary_reference_min %}
+                                        {{ designation.salary_reference_min|floatformat:0|intcomma }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="salary-separator">
+                                <i class="fa fa-arrows-alt-h"></i>
+                            </div>
+                            <div class="salary-max">
+                                <div class="salary-label">Maximum</div>
+                                <div class="salary-amount">
+                                    {% if designation.salary_reference_max %}
+                                        {{ designation.salary_reference_max|floatformat:0|intcomma }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2 text-center">UGX per month</small>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="designation-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ designation.staff_count|default:0 }}</div>
+                            <div class="stat-label">Staff</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">
+                                {% if designation.get_level_display %}
+                                    {{ designation.get_level_display|slice:":3" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </div>
+                            <div class="stat-label">Level</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="designation-footer">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fa fa-calendar me-1"></i>
+                            Created: {{ designation.created_at|date:"M d, Y" }}
+                        </small>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{% url 'hr:designation_detail' designation.pk %}" class="btn btn-outline-info" title="View Details">
+                                <i class="fa fa-eye"></i>
+                            </a>
+                            <a href="{% url 'hr:designation_update' designation.pk %}" class="btn btn-outline-warning" title="Edit">
+                                <i class="fa fa-edit"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteDesignation{{ designation.pk }}" title="Delete">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Modal -->
+        <div class="modal fade" id="deleteDesignation{{ designation.pk }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Delete Designation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <i class="fa fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                        <h5>Are you sure you want to delete "<strong>{{ designation.name }}</strong>"?</h5>
+                        
+                        {% if designation.staff_count > 0 %}
+                            <div class="alert alert-warning mt-3">
+                                <strong>Warning:</strong> This designation is currently assigned to {{ designation.staff_count }} staff member(s).
+                                Please reassign them before deleting this designation.
+                            </div>
+                        {% else %}
+                            <p class="text-muted">This action cannot be undone.</p>
+                        {% endif %}
+                    </div>
+                    <form action="{% url 'hr:designation_delete' designation.pk %}" method="post">
+                        {% csrf_token %}
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            {% if designation.staff_count == 0 %}
+                                <button type="submit" class="btn btn-danger">Delete Designation</button>
+                            {% else %}
+                                <button type="button" class="btn btn-danger" disabled>Cannot Delete</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fa fa-award"></i>
+                </div>
+                <h5>No Designations Found</h5>
+                <p class="text-muted">Start by creating your first designation to define staff roles and salary structures.</p>
+                <a href="{% url 'hr:designation_create' %}" class="btn btn-primary mt-3">
+                    <i class="fa fa-plus me-2"></i> Create First Designation
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <div id="paginationContainer" style="display: none;">
+        <nav class="mb-3" aria-label="Page navigation">
+            <ul class="pagination justify-content-center" id="paginationNav">
+                <!-- Pagination will be dynamically inserted here -->
+            </ul>
+        </nav>
+
+        <!-- Showing X-Y of Z results -->
+        <div class="text-center text-muted mb-3" id="resultsCount">
+            <!-- Results count will be dynamically inserted here -->
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ============================================================================
+   DJANGO URL TEMPLATES
+============================================================================ */
+const DESIGNATION_DETAIL_URL =
+    "{% url 'hr:designation_detail' '00000000-0000-0000-0000-000000000000' %}";
+const DESIGNATION_EDIT_URL =
+    "{% url 'hr:designation_update' '00000000-0000-0000-0000-000000000000' %}";
+
+// ============================================================================
+// MAIN DESIGNATION LIST FUNCTIONALITY
+// ============================================================================
+$(document).ready(function() {
+    let currentPage = 1;
+
+    // ------------------------------------------------------------------------
+    // AJAX Functions - Fetch and Display Designations
+    // ------------------------------------------------------------------------
+    function fetchResults(page = 1) {
+        const formData = $('#searchForm').serialize() + '&page=' + page;
+        
+        $.ajax({
+            url: "{% url 'hr:designation_search' %}",
+            data: formData,
+            dataType: 'json',
+            success: function(data) {
+                renderDesignationsGrid(data);
+                updatePagination(data);
+                updateStatistics(data.stats);
+                currentPage = data.current_page;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                $('#designationsGrid').html(
+                    `<div class="col-12">
+                        <div class="alert alert-danger text-center">
+                            Error loading designations. Please try again.
+                        </div>
+                    </div>`
+                );
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Statistics Update Function
+    // ------------------------------------------------------------------------
+    function updateStatistics(stats) {
+        $('.stats-card:eq(0) h3').text(stats.total_designations || 0);
+        $('.stats-card:eq(1) h3').text(stats.active_designations || 0);
+        $('.stats-card:eq(2) h3').text(stats.total_assigned || 0);
+        $('.stats-card:eq(3) h3').text((stats.avg_salary || 0).toLocaleString());
+    }
+
+    function renderDesignationsGrid(data) {
+        let html = '';
+        
+        if (data.designations.length > 0) {
+            data.designations.forEach(function(designation) {
+                html += buildDesignationCard(designation);
+            });
+        } else {
+            html = `
+                <div class="col-12">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fa fa-award"></i>
+                        </div>
+                        <h5>No Designations Found</h5>
+                        <p class="text-muted">Try adjusting your search filters.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        $('#designationsGrid').html(html);
+    }
+
+    function buildDesignationCard(designation) {
+        const detailUrl = DESIGNATION_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', designation.id);
+        const editUrl = DESIGNATION_EDIT_URL.replace('00000000-0000-0000-0000-000000000000', designation.id);
+        
+        const statusBadge = designation.is_active 
+            ? '<span class="active-badge">Active</span>'
+            : '<span class="inactive-badge">Inactive</span>';
+        
+        const levelClass = designation.level ? designation.level.toLowerCase() : 'entry';
+        const levelBadge = `<span class="level-badge level-${levelClass}">${designation.level_display}</span>`;
+        
+        const description = designation.description
+            ? designation.description
+            : '<em class="text-muted">No description provided</em>';
+        
+        const salaryDisplay = (designation.salary_min || designation.salary_max)
+            ? `<div class="salary-range-display">
+                <div class="salary-label">Salary Reference Range</div>
+                <div class="salary-range-bar">
+                    <div class="salary-min">
+                        <div class="salary-label">Minimum</div>
+                        <div class="salary-amount">${designation.salary_min ? parseInt(designation.salary_min).toLocaleString() : 'N/A'}</div>
+                    </div>
+                    <div class="salary-separator">
+                        <i class="fa fa-arrows-alt-h"></i>
+                    </div>
+                    <div class="salary-max">
+                        <div class="salary-label">Maximum</div>
+                        <div class="salary-amount">${designation.salary_max ? parseInt(designation.salary_max).toLocaleString() : 'N/A'}</div>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-2 text-center">UGX per month</small>
+            </div>`
+            : '';
+        
+        const deleteWarning = designation.staff_count > 0
+            ? `<div class="alert alert-warning mt-3">
+                <strong>Warning:</strong> This designation is currently assigned to ${designation.staff_count} staff member(s).
+                Please reassign them before deleting.
+            </div>`
+            : '<p class="text-muted">This action cannot be undone.</p>';
+        
+        const deleteButton = designation.staff_count == 0
+            ? '<button type="submit" class="btn btn-danger">Delete Designation</button>'
+            : '<button type="button" class="btn btn-danger" disabled>Cannot Delete</button>';
+
+        return `
+            <div class="col-lg-4 col-md-6 mb-4 designation-item">
+                <div class="designation-card">
+                    <div class="designation-header">
+                        <div class="d-flex align-items-start">
+                            <div class="designation-icon me-3">
+                                <i class="fa fa-award"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h5 class="designation-name">${designation.name}</h5>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="designation-code">${designation.code}</span>
+                                    ${statusBadge}
+                                    ${levelBadge}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="designation-body">
+                        <p class="designation-description">${description}</p>
+                        
+                        ${salaryDisplay}
+                        
+                        <div class="designation-stats">
+                            <div class="stat-item">
+                                <div class="stat-value">${designation.staff_count || 0}</div>
+                                <div class="stat-label">Staff</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${designation.level_display ? designation.level_display.substring(0, 3) : 'N/A'}</div>
+                                <div class="stat-label">Level</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="designation-footer">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fa fa-calendar me-1"></i>
+                                Created: ${designation.created_at}
+                            </small>
+                            <div class="btn-group btn-group-sm">
+                                <a href="${detailUrl}" class="btn btn-outline-info" title="View Details">
+                                    <i class="fa fa-eye"></i>
+                                </a>
+                                <a href="${editUrl}" class="btn btn-outline-warning" title="Edit">
+                                    <i class="fa fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteDesig${designation.id}" title="Delete">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Delete Modal -->
+                <div class="modal fade" id="deleteDesig${designation.id}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Delete Designation</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <i class="fa fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                                <h5>Are you sure you want to delete "<strong>${designation.name}</strong>"?</h5>
+                                ${deleteWarning}
+                            </div>
+                            <form action="/hr/designations/${designation.id}/delete/" method="post">
+                                <input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    ${deleteButton}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------------------
+    // Pagination Functions
+    // ------------------------------------------------------------------------
+    function updatePagination(data) {
+        if (data.total_pages <= 1) {
+            $('#paginationContainer').hide();
+            return;
+        }
+
+        $('#paginationContainer').show();
+        $('#paginationNav').html(buildPaginationHtml(data));
+        $('#resultsCount').html(
+            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} designations`
+        );
+    }
+
+    function buildPaginationHtml(data) {
+        let html = '';
+
+        // Previous button
+        html += buildPaginationButton(
+            data.has_previous,
+            data.current_page - 1,
+            '«',
+            'Previous'
+        );
+
+        // Page numbers
+        for (let i = 1; i <= data.total_pages; i++) {
+            if (i === data.current_page) {
+                html += `
+                    <li class="page-item active" aria-current="page">
+                        <a class="page-link" href="#">${i}</a>
+                    </li>
+                `;
+            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link pagination-link" href="#" data-page="${i}">${i}</a>
+                    </li>
+                `;
+            }
+        }
+
+        // Next button
+        html += buildPaginationButton(
+            data.has_next,
+            data.current_page + 1,
+            '»',
+            'Next'
+        );
+
+        return html;
+    }
+
+    function buildPaginationButton(isEnabled, page, symbol, label) {
+        if (isEnabled) {
+            return `
+                <li class="page-item">
+                    <a class="page-link pagination-link" href="#" data-page="${page}" 
+                       aria-label="${label}">
+                        <span aria-hidden="true">${symbol}</span>
+                    </a>
+                </li>
+            `;
+        } else {
+            return `
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
+                        <span aria-hidden="true">${symbol}</span>
+                    </a>
+                </li>
+            `;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Helper Functions
+    // ------------------------------------------------------------------------
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // ------------------------------------------------------------------------
+    // Event Handlers
+    // ------------------------------------------------------------------------
+    
+    // Search and filter changes
+    $('#searchInput, #levelFilter, #statusFilter, #sortFilter').on('input change', function() {
+        fetchResults(1);
+    });
+
+    // Pagination clicks
+    $(document).on('click', '.pagination-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        fetchResults(page);
+        
+        // Scroll to top of results
+        $('html, body').animate({
+            scrollTop: $("#designationsGrid").offset().top - 100
+        }, 300);
+    });
+
+    // Export handlers
+    $('#exportExcel').on('click', function(e) {
+        e.preventDefault();
+        alert('Excel export functionality - to be implemented');
+    });
+
+    $('#exportPdf').on('click', function(e) {
+        e.preventDefault();
+        alert('PDF export functionality - to be implemented');
+    });
+
+    // ------------------------------------------------------------------------
+    // Initialize
+    // ------------------------------------------------------------------------
+    // If AJAX search endpoint exists, use it; otherwise keep server-rendered
+    {% if designations %}
+        // Server-rendered - keep as is
+    {% else %}
+        fetchResults(1);
+    {% endif %}
+});
+
+console.log('Designation List JavaScript loaded successfully');
+</script>
+{% endblock %}

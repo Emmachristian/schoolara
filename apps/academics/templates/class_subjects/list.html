@@ -1,0 +1,1441 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+    .class-subject-filters {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 25px;
+        border: 1px solid #2196f3;
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+    }
+    
+    .assignment-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border-left: 4px solid transparent;
+        position: relative;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .assignment-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-left-color: #2196f3;
+    }
+    
+    .assignment-status {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .status-active { 
+        background: linear-gradient(135deg, #28a745, #20c997);
+        animation: pulse-green 2s infinite;
+    }
+    
+    .status-inactive { 
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+    }
+    
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+    }
+    
+    /* Subject Type Badges */
+    .subject-type-badge {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 15px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: inline-block;
+    }
+    
+    .type-math { 
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        color: #1565c0 !important; 
+        border: 1px solid #2196f3;
+    }
+    
+    .type-lang_arts { 
+        background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+        color: #2e7d32 !important; 
+        border: 1px solid #4caf50;
+    }
+    
+    .type-sciences { 
+        background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+        color: #e65100 !important; 
+        border: 1px solid #ff9800;
+    }
+    
+    .type-social { 
+        background: linear-gradient(135deg, #f3e5f5, #e1bee7);
+        color: #6a1b9a !important; 
+        border: 1px solid #9c27b0;
+    }
+    
+    .type-default { 
+        background: linear-gradient(135deg, #f5f5f5, #eeeeee);
+        color: #424242 !important; 
+        border: 1px solid #bdbdbd;
+    }
+    
+    /* Assessment Weight Bars */
+    .assessment-breakdown {
+        display: flex;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #f5f5f5;
+        margin-top: 8px;
+    }
+    
+    .continuous-weight {
+        background: linear-gradient(135deg, #4caf50, #66bb6a);
+        transition: width 0.3s ease;
+    }
+    
+    .final-weight {
+        background: linear-gradient(135deg, #ff9800, #ffb74d);
+        transition: width 0.3s ease;
+    }
+    
+    .stats-summary {
+        background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 8px 32px rgba(33, 150, 243, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .stats-summary::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="80" cy="80" r="3" fill="rgba(255,255,255,0.05)"/><circle cx="40" cy="70" r="1" fill="rgba(255,255,255,0.1)"/></svg>');
+        pointer-events: none;
+    }
+    
+    .stats-card {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+    }
+    
+    /* Subject Icons */
+    .subject-icon {
+        width: 45px;
+        height: 45px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: white;
+        margin-right: 15px;
+        font-size: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .icon-math { 
+        background: linear-gradient(135deg, #2196f3, #1976d2);
+    }
+    
+    .icon-lang_arts { 
+        background: linear-gradient(135deg, #4caf50, #388e3c);
+    }
+    
+    .icon-sciences { 
+        background: linear-gradient(135deg, #ff9800, #f57c00);
+    }
+    
+    .icon-social { 
+        background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+    }
+    
+    .icon-default { 
+        background: linear-gradient(135deg, #6c757d, #495057);
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    
+    .quick-actions .btn {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.75rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .quick-actions .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .bulk-actions {
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+        display: none;
+        border: 1px solid #2196f3;
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.15);
+    }
+    
+    .bulk-actions.show {
+        display: block;
+        animation: slideDown 0.3s ease-out;
+    }
+    
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .table-responsive {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid #e9ecef;
+    }
+    
+    .table thead th {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border: none;
+        color: #495057;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+        padding: 1rem 0.75rem;
+    }
+    
+    .table tbody tr {
+        transition: all 0.2s ease;
+        border: none;
+    }
+    
+    .table tbody tr:hover {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        transform: scale(1.001);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .hours-display {
+        font-weight: 600;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .class-info {
+        font-size: 0.85rem;
+        color: #666;
+    }
+    
+    .teacher-info {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 2px;
+    }
+    
+    .optional-indicator {
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+    
+    .is-compulsory {
+        background: linear-gradient(135deg, #d4edda, #c3e6cb);
+        color: #155724;
+        border: 1px solid #28a745;
+    }
+    
+    .is-optional {
+        background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+        color: #856404;
+        border: 1px solid #ffc107;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 80px 30px;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 15px;
+        margin: 30px 0;
+        border: 2px dashed #dee2e6;
+    }
+    
+    .empty-state-icon {
+        font-size: 5rem;
+        color: #dee2e6;
+        margin-bottom: 25px;
+        animation: float 3s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+    
+    .performance-info {
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        margin-top: 8px;
+    }
+    
+    .performance-excellent {
+        background: #e8f5e8;
+        border-left: 4px solid #4caf50;
+        color: #2e7d32;
+    }
+    
+    .performance-good {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        color: #1565c0;
+    }
+    
+    .performance-needs-improvement {
+        background: #fff8e1;
+        border-left: 4px solid #ffc107;
+        color: #f57f17;
+    }
+    
+    .performance-poor {
+        background: #ffebee;
+        border-left: 4px solid #f44336;
+        color: #c62828;
+    }
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    
+    #printableTable,
+    #printableTable * {
+        visibility: visible;
+    }
+    
+    #printableTable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    
+    .print-header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #333;
+    }
+    
+    .print-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .print-date {
+        font-size: 12px;
+        color: #666;
+    }
+    
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    .print-table th {
+        background-color: #4472C4 !important;
+        color: white !important;
+        padding: 10px;
+        text-align: left;
+        border: 1px solid #333;
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .print-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+    
+    .print-table tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .print-footer {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+        border-top: 1px solid #ddd;
+        padding-top: 10px;
+    }
+    
+    .print-table {
+        page-break-inside: auto;
+    }
+    
+    .print-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    .print-table thead {
+        display: table-header-group;
+    }
+    
+    .print-table tfoot {
+        display: table-footer-group;
+    }
+    
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .stats-summary {
+        padding: 15px;
+    }
+    
+    .subject-icon {
+        width: 35px;
+        height: 35px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 576px) {
+    .subject-type-badge,
+    .optional-indicator {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Subject Assignments
+                <div class="page-title-subheading">
+                    Manage and monitor class subject assignments with comprehensive tracking
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="ms-2">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'academics:class_subject_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Assign Subject
+                    </a>
+
+                    <!-- Print Button -->
+                    <a href="#" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
+                        <i class="fa fa-print me-1"></i> Print
+                    </a>
+
+                    <!-- Excel Export -->
+                    <a href="#" id="excelExportBtn" class="btn btn-outline-success">
+                        <i class="fa fa-file-excel me-1"></i> Export Excel
+                    </a>
+
+                    <!-- PDF Export -->
+                    <a href="#" id="pdfExportBtn" class="btn btn-outline-danger">
+                        <i class="fa fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Summary -->
+<div class="stats-summary">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.total_assignments|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Total Assignments</p>
+                <small class="opacity-6">
+                    <i class="fa fa-book me-1"></i>
+                    Subject-class pairs
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.active_assignments|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Active Assignments</p>
+                <small class="opacity-6">
+                    <i class="fa fa-check-circle me-1"></i>
+                    Currently active
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.unassigned_teachers|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Unassigned Teachers</p>
+                <small class="opacity-6">
+                    <i class="fa fa-user-slash me-1"></i>
+                    Need assignment
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card text-center p-3">
+                <h3 class="mb-1">{{ stats.avg_hours_per_week|floatformat:1|default:0 }}</h3>
+                <p class="mb-0 opacity-8">Avg Hours/Week</p>
+                <small class="opacity-6">
+                    <i class="fa fa-clock me-1"></i>
+                    Per subject
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- Search & Filters -->
+                    <form id="searchForm" class="class-subject-filters row g-2 mb-3">
+                        <div class="col-md-3">
+                            <input type="text" name="q" id="searchInput" class="form-control" 
+                                   placeholder="Search subject, class, teacher...">
+                        </div>
+                        <div class="col-md-2">
+                            <select name="subject_type" id="subjectTypeFilter" class="form-select">
+                                <option value="">All Subject Types</option>
+                                {% for value, label in subject_types %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="class" id="classFilter" class="form-select">
+                                <option value="">All Classes</option>
+                                {% for cls in classes %}
+                                    <option value="{{ cls.id }}">{{ cls.get_display_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="is_active" id="statusFilter" class="form-select">
+                                <option value="">All Status</option>
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="has_teacher" id="teacherFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="true">Has Teacher</option>
+                                <option value="false">No Teacher</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <select name="is_optional" id="optionalFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="false">Compulsory</option>
+                                <option value="true">Optional</option>
+                            </select>
+                        </div>
+                    </form>
+
+                    <!-- Results Table -->
+                    <div id="results">
+                        {% if class_subjects %}
+                        <div class="table-responsive">
+                            <table class="mb-0 table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 50px;">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="selectAllTable">
+                                            </div>
+                                        </th>
+                                        <th>Subject & Class</th>
+                                        <th>Teacher Assignment</th>
+                                        <th>Schedule & Hours</th>
+                                        <th>Assessment Breakdown</th>
+                                        <th>Type & Status</th>
+                                        <th style="width: 120px;" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="assignmentTableBody">
+                                    {% for assignment in class_subjects %}
+                                    <tr data-assignment-id="{{ assignment.id }}">
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input assignment-checkbox" type="checkbox" 
+                                                       value="{{ assignment.id }}" name="selected_assignments"
+                                                       id="assignment_{{ assignment.id }}">
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center position-relative">
+                                                <div class="subject-icon icon-{{ assignment.subject.subject_type|lower|default:'default' }}">
+                                                    {% if assignment.subject.subject_type == 'MATH' %}
+                                                        <i class="fa fa-calculator"></i>
+                                                    {% elif assignment.subject.subject_type == 'LANG_ARTS' %}
+                                                        <i class="fa fa-book"></i>
+                                                    {% elif assignment.subject.subject_type == 'SCIENCES' %}
+                                                        <i class="fa fa-flask"></i>
+                                                    {% elif assignment.subject.subject_type == 'SOCIAL' %}
+                                                        <i class="fa fa-globe"></i>
+                                                    {% else %}
+                                                        <i class="fa fa-book-open"></i>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="assignment-status status-{% if assignment.is_active %}active{% else %}inactive{% endif %}"></div>
+                                                <div class="flex-grow-1">
+                                                    <h6 class="mb-1">
+                                                        <a href="{% url 'academics:class_subject_detail' assignment.pk %}" 
+                                                           class="text-decoration-none fw-bold">
+                                                            {{ assignment.subject.name }}
+                                                        </a>
+                                                    </h6>
+                                                    <div class="class-info">
+                                                        <i class="fa fa-users me-1"></i>
+                                                        {{ assignment.class_instance.get_display_name }}
+                                                    </div>
+                                                    <div class="class-info">
+                                                        <i class="fa fa-calendar me-1"></i>
+                                                        {{ assignment.class_instance.academic_session.name }}
+                                                    </div>
+                                                    <div class="mt-1">
+                                                        <span class="subject-type-badge type-{{ assignment.subject.subject_type|lower|default:'default' }}">
+                                                            {{ assignment.subject.get_subject_type_display }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if assignment.teacher %}
+                                                <div class="mb-1">
+                                                    <strong>{{ assignment.teacher.get_full_name|default:"Unknown" }}</strong>
+                                                </div>
+                                                <div class="teacher-info">
+                                                    <i class="fa fa-id-badge me-1"></i>
+                                                    {{ assignment.teacher.username }}
+                                                </div>
+                                            {% else %}
+                                                <div class="text-muted">
+                                                    <i class="fa fa-user-slash me-1"></i>
+                                                    No teacher assigned
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-primary mt-1" 
+                                                        onclick="assignTeacher('{{ assignment.id }}')">
+                                                    <i class="fa fa-plus me-1"></i> Assign
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="mb-2">
+                                                <span class="hours-display">
+                                                    {{ assignment.hours_per_week|default:0 }} hrs/week
+                                                </span>
+                                            </div>
+                                            {% if assignment.total_hours %}
+                                                <div class="class-info">
+                                                    Total: {{ assignment.total_hours }} hours
+                                                </div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block">Assessment Weights</small>
+                                                <div class="assessment-breakdown">
+                                                    <div class="continuous-weight" 
+                                                         style="width: {{ assignment.continuous_assessment_weight|default:60 }}%"
+                                                         title="Continuous: {{ assignment.continuous_assessment_weight|default:60 }}%"></div>
+                                                    <div class="final-weight" 
+                                                         style="width: {{ assignment.final_exam_weight|default:40 }}%"
+                                                         title="Final: {{ assignment.final_exam_weight|default:40 }}%"></div>
+                                                </div>
+                                                <small class="text-muted">
+                                                    CA: {{ assignment.continuous_assessment_weight|default:60 }}% | 
+                                                    Final: {{ assignment.final_exam_weight|default:40 }}%
+                                                </small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="mb-2">
+                                                <span class="optional-indicator {% if assignment.is_optional %}is-optional{% else %}is-compulsory{% endif %}">
+                                                    {% if assignment.is_optional %}
+                                                        <i class="fa fa-plus-circle me-1"></i>Optional
+                                                    {% else %}
+                                                        <i class="fa fa-exclamation me-1"></i>Compulsory
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <div class="mt-2">
+                                                {% if assignment.is_active %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="quick-actions">
+                                                <a href="{% url 'academics:class_subject_detail' assignment.pk %}" 
+                                                   class="btn btn-sm btn-outline-info" 
+                                                   data-bs-toggle="tooltip" title="View Details">
+                                                    <i class="fa fa-eye"></i>
+                                                </a>
+                                                <a href="{% url 'academics:class_subject_update' assignment.pk %}" 
+                                                   class="btn btn-sm btn-outline-success"
+                                                   data-bs-toggle="tooltip" title="Edit">
+                                                    <i class="fa fa-edit"></i>
+                                                </a>
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                                                            data-bs-toggle="dropdown">
+                                                        <i class="fa fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <a class="dropdown-item" href="{% url 'academics:class_subject_detail' assignment.pk %}">
+                                                                <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <a class="dropdown-item text-danger" href="#"
+                                                               data-bs-toggle="modal" data-bs-target="#deleteAssignment{{ assignment.pk }}">
+                                                                <i class="fa fa-trash me-2"></i>Delete
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="pe-7s-study"></i>
+                            </div>
+                            <h4 class="text-muted mb-3">No Subject Assignments Found</h4>
+                            <p class="text-muted mb-4">
+                                No subject assignments have been created yet. Get started by assigning subjects to classes.
+                            </p>
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{% url 'academics:class_subject_create' %}" class="btn btn-primary">
+                                    <i class="fa fa-plus me-1"></i> Create Assignment
+                                </a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Pagination -->
+                        <div id="paginationContainer" style="display: none;">
+                            <nav class="mb-3" aria-label="Page navigation">
+                                <ul class="pagination justify-content-center" id="paginationNav">
+                                    <!-- Pagination will be dynamically inserted here -->
+                                </ul>
+                            </nav>
+
+                            <div class="text-center text-muted mb-3" id="resultsCount">
+                                <!-- Results count will be dynamically inserted here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete Modals -->
+                    {% for assignment in class_subjects %}
+                    <div class="modal fade" id="deleteAssignment{{ assignment.pk }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Delete Subject Assignment</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1 mb-3"></i>
+                                    <h5>Are you sure you want to delete this assignment?</h5>
+                                    <p class="text-muted">
+                                        <strong>{{ assignment.subject.name }}</strong> for 
+                                        <strong>{{ assignment.class_instance.get_display_name }}</strong>
+                                    </p>
+                                    <p class="text-muted">This action cannot be undone.</p>
+                                </div>
+                                <form action="{% url 'academics:class_subject_delete' assignment.pk %}" method="post">
+                                    {% csrf_token %}
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-danger">Delete Assignment</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <!-- Print Modal -->
+                    <div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="printModalLabel">
+                                        <i class="fa fa-print me-2"></i>Print Assignment List
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="text-muted mb-3">Select the columns you want to include in the printout:</p>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="number" id="col_number" checked>
+                                                <label class="form-check-label" for="col_number">#</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="subject" id="col_subject" checked>
+                                                <label class="form-check-label" for="col_subject">Subject</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="class" id="col_class" checked>
+                                                <label class="form-check-label" for="col_class">Class</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="teacher" id="col_teacher" checked>
+                                                <label class="form-check-label" for="col_teacher">Teacher</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="hours" id="col_hours" checked>
+                                                <label class="form-check-label" for="col_hours">Hours/Week</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="type" id="col_type">
+                                                <label class="form-check-label" for="col_type">Subject Type</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="optional" id="col_optional">
+                                                <label class="form-check-label" for="col_optional">Required/Optional</label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input print-column" type="checkbox" value="status" id="col_status">
+                                                <label class="form-check-label" for="col_status">Status</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr class="my-3">
+                                    
+                                    <div class="d-flex justify-content-between">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllColumns()">
+                                            <i class="fa fa-check-square me-1"></i> Select All
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllColumns()">
+                                            <i class="fa fa-square me-1"></i> Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-primary" onclick="printAssignmentTable()">
+                                        <i class="fa fa-print me-1"></i> Print
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+/* ============================================================================
+   DJANGO URL TEMPLATES
+============================================================================ */
+const ASSIGNMENT_DETAIL_URL = "#";
+const ASSIGNMENT_EDIT_URL = "{% url 'academics:class_subject_update' '00000000-0000-0000-0000-000000000000' %}";
+
+// ============================================================================
+// MAIN ASSIGNMENT LIST FUNCTIONALITY
+// ============================================================================
+$(document).ready(function() {
+    let currentPage = 1;
+
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // ------------------------------------------------------------------------
+    // AJAX Functions - Fetch and Display Assignments
+    // ------------------------------------------------------------------------
+    function fetchResults(page = 1) {
+        const formData = $('#searchForm').serialize() + '&page=' + page;
+        
+        $.ajax({
+            url: "{% url 'academics:class_subject_search' %}",
+            data: formData,
+            dataType: 'json',
+            success: function(data) {
+                renderAssignmentTable(data);
+                updatePagination(data);
+                updateStatistics(data.stats);
+                currentPage = data.current_page;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                $('#assignmentTableBody').html(
+                    `<tr>
+                        <td colspan="7" class="text-center text-danger">
+                            Error loading assignments. Please try again.
+                        </td>
+                    </tr>`
+                );
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Statistics Update Function
+    // ------------------------------------------------------------------------
+    function updateStatistics(stats) {
+        $('.stats-card:eq(0) h3').text(stats.total_assignments || 0);
+        $('.stats-card:eq(1) h3').text(stats.active_assignments || 0);
+        $('.stats-card:eq(2) h3').text(stats.unassigned_teachers || 0);
+        $('.stats-card:eq(3) h3').text((stats.avg_hours_per_week || 0).toFixed(1));
+    }
+
+    function renderAssignmentTable(data) {
+        let tbody = '';
+        
+        if (data.assignments.length > 0) {
+            data.assignments.forEach(function(assignment, index) {
+                tbody += buildAssignmentRow(assignment, index, data.current_page);
+            });
+        } else {
+            tbody = `<tr>
+                <td colspan="7" class="text-center text-muted">
+                    No assignments found.
+                </td>
+            </tr>`;
+        }
+        
+        $('#assignmentTableBody').html(tbody);
+        
+        // Reinitialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+
+    function buildAssignmentRow(assignment, index, currentPage) {
+        return `
+            <tr data-assignment-id="${assignment.id}">
+                <td>
+                    <div class="form-check">
+                        <input class="form-check-input assignment-checkbox" type="checkbox" 
+                               value="${assignment.id}" name="selected_assignments"
+                               id="assignment_${assignment.id}">
+                    </div>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center position-relative">
+                        <div class="subject-icon icon-${assignment.subject_type}">
+                            <i class="fa ${getSubjectIcon(assignment.subject_type)}"></i>
+                        </div>
+                        <div class="assignment-status status-${assignment.is_active ? 'active' : 'inactive'}"></div>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">
+                                <a href="${ASSIGNMENT_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', assignment.id)}" 
+                                   class="text-decoration-none fw-bold">
+                                    ${assignment.subject_name}
+                                </a>
+                            </h6>
+                            <div class="class-info">
+                                <i class="fa fa-users me-1"></i>
+                                ${assignment.class_name}
+                            </div>
+                            <div class="mt-1">
+                                <span class="subject-type-badge type-${assignment.subject_type}">
+                                    ${assignment.subject_type_display}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    ${buildTeacherInfo(assignment)}
+                </td>
+                <td>
+                    <div class="mb-2">
+                        <span class="hours-display">
+                            ${assignment.hours_per_week || 0} hrs/week
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    ${buildAssessmentBreakdown(assignment)}
+                </td>
+                <td>
+                    <div class="mb-2">
+                        <span class="optional-indicator ${assignment.is_optional ? 'is-optional' : 'is-compulsory'}">
+                            <i class="fa fa-${assignment.is_optional ? 'plus' : 'exclamation'}-circle me-1"></i>
+                            ${assignment.is_optional ? 'Optional' : 'Compulsory'}
+                        </span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="badge bg-${assignment.is_active ? 'success' : 'secondary'}">
+                            ${assignment.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                </td>
+                <td class="text-center">
+                    ${buildActionsDropdown(assignment.id)}
+                </td>
+            </tr>
+        `;
+    }
+
+    function getSubjectIcon(type) {
+        const icons = {
+            'math': 'fa-calculator',
+            'lang_arts': 'fa-book',
+            'sciences': 'fa-flask',
+            'social': 'fa-globe',
+            'default': 'fa-book-open'
+        };
+        return icons[type] || icons['default'];
+    }
+
+    function buildTeacherInfo(assignment) {
+        if (assignment.teacher_name) {
+            return `
+                <div class="mb-1">
+                    <strong>${assignment.teacher_name}</strong>
+                </div>
+                <div class="teacher-info">
+                    <i class="fa fa-id-badge me-1"></i>
+                    ${assignment.teacher_username || 'N/A'}
+                </div>
+            `;
+        } else {
+            return `
+                <div class="text-muted">
+                    <i class="fa fa-user-slash me-1"></i>
+                    No teacher assigned
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-1" 
+                        onclick="assignTeacher('${assignment.id}')">
+                    <i class="fa fa-plus me-1"></i> Assign
+                </button>
+            `;
+        }
+    }
+
+    function buildAssessmentBreakdown(assignment) {
+        const ca = assignment.continuous_assessment_weight || 60;
+        const final = assignment.final_exam_weight || 40;
+        
+        return `
+            <div class="mb-2">
+                <small class="text-muted d-block">Assessment Weights</small>
+                <div class="assessment-breakdown">
+                    <div class="continuous-weight" style="width: ${ca}%" title="Continuous: ${ca}%"></div>
+                    <div class="final-weight" style="width: ${final}%" title="Final: ${final}%"></div>
+                </div>
+                <small class="text-muted">CA: ${ca}% | Final: ${final}%</small>
+            </div>
+        `;
+    }
+
+    function buildActionsDropdown(assignmentId) {
+        const detailUrl = ASSIGNMENT_DETAIL_URL.replace('00000000-0000-0000-0000-000000000000', assignmentId);
+        const editUrl = ASSIGNMENT_EDIT_URL.replace('00000000-0000-0000-0000-000000000000', assignmentId);
+
+        return `
+            <div class="quick-actions">
+                <a href="${detailUrl}" class="btn btn-sm btn-outline-info" 
+                   data-bs-toggle="tooltip" title="View Details">
+                    <i class="fa fa-eye"></i>
+                </a>
+                <a href="${editUrl}" class="btn btn-sm btn-outline-success"
+                   data-bs-toggle="tooltip" title="Edit">
+                    <i class="fa fa-edit"></i>
+                </a>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                            data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="${detailUrl}">
+                                <i class="fa fa-info-circle me-2 text-info"></i>View Details
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="#" onclick="confirmDelete('${assignmentId}')">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------------------
+    // Pagination Functions
+    // ------------------------------------------------------------------------
+    function updatePagination(data) {
+        if (data.total_pages <= 1) {
+            $('#paginationContainer').hide();
+            return;
+        }
+
+        $('#paginationContainer').show();
+        $('#paginationNav').html(buildPaginationHtml(data));
+        $('#resultsCount').html(
+            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} assignments`
+        );
+    }
+
+    function buildPaginationHtml(data) {
+        let html = '';
+
+        html += buildPaginationButton(data.has_previous, data.current_page - 1, '«', 'Previous');
+
+        for (let i = 1; i <= data.total_pages; i++) {
+            if (i === data.current_page) {
+                html += `<li class="page-item active" aria-current="page"><a class="page-link" href="#">${i}</a></li>`;
+            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
+                html += `<li class="page-item"><a class="page-link pagination-link" href="#" data-page="${i}">${i}</a></li>`;
+            }
+        }
+
+        html += buildPaginationButton(data.has_next, data.current_page + 1, '»', 'Next');
+
+        return html;
+    }
+
+    function buildPaginationButton(isEnabled, page, symbol, label) {
+        if (isEnabled) {
+            return `<li class="page-item"><a class="page-link pagination-link" href="#" data-page="${page}" aria-label="${label}"><span aria-hidden="true">${symbol}</span></a></li>`;
+        } else {
+            return `<li class="page-item disabled"><a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="${label}"><span aria-hidden="true">${symbol}</span></a></li>`;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Export Functions
+    // ------------------------------------------------------------------------
+    function updateExportLinks() {
+        const formData = $('#searchForm').serialize();
+        const excelUrl = "#" + (formData ? '?' + formData : '');
+        const pdfUrl = "#" + (formData ? '?' + formData : '');
+        
+        $('#excelExportBtn').attr('href', excelUrl);
+        $('#pdfExportBtn').attr('href', pdfUrl);
+    }
+
+    // ------------------------------------------------------------------------
+    // Event Handlers
+    // ------------------------------------------------------------------------
+    
+    $('#searchInput, #subjectTypeFilter, #classFilter, #statusFilter, #teacherFilter, #optionalFilter')
+        .on('input change', function() {
+            updateExportLinks();
+            fetchResults(1);
+        });
+
+    $(document).on('click', '.pagination-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        fetchResults(page);
+        
+        $('html, body').animate({
+            scrollTop: $("#results").offset().top - 100
+        }, 300);
+    });
+
+    $('#selectAllTable').on('change', function() {
+        $('.assignment-checkbox').prop('checked', $(this).prop('checked'));
+    });
+
+    // ------------------------------------------------------------------------
+    // Initialize
+    // ------------------------------------------------------------------------
+    updateExportLinks();
+    fetchResults(1);
+});
+
+// ============================================================================
+// PRINT FUNCTIONALITY
+// ============================================================================
+
+function selectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAllColumns() {
+    document.querySelectorAll('.print-column').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+function printAssignmentTable() {
+    const selectedColumns = getSelectedColumns();
+    
+    if (selectedColumns.length === 0) {
+        alert('Please select at least one column to print');
+        return;
+    }
+    
+    const printBtn = document.querySelector('#printModal .btn-primary');
+    const originalText = printBtn.innerHTML;
+    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Loading...';
+    printBtn.disabled = true;
+    
+    fetchAllAssignmentsForPrint(selectedColumns, printBtn, originalText);
+}
+
+function fetchAllAssignmentsForPrint(selectedColumns, printBtn, originalText) {
+    const formData = $('#searchForm').serialize();
+    
+    $.ajax({
+        url: "{% url 'academics:class_subject_search' %}",
+        data: formData + '&page=all',
+        dataType: 'json',
+        success: function(data) {
+            const printHTML = buildPrintHTMLFromData(data.assignments, selectedColumns);
+            displayPrintPreview(printHTML);
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        },
+        error: function(xhr, status, error) {
+            console.error('Print Error:', error);
+            alert('Error loading assignments for print. Please try again.');
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        }
+    });
+}
+
+function getSelectedColumns() {
+    const columns = [];
+    document.querySelectorAll('.print-column:checked').forEach(checkbox => {
+        columns.push(checkbox.value);
+    });
+    return columns;
+}
+
+function buildPrintHTMLFromData(assignments, selectedColumns) {
+    const columnMap = {
+        'number': { header: '#' },
+        'subject': { header: 'Subject' },
+        'class': { header: 'Class' },
+        'teacher': { header: 'Teacher' },
+        'hours': { header: 'Hours/Week' },
+        'type': { header: 'Subject Type' },
+        'optional': { header: 'Required/Optional' },
+        'status': { header: 'Status' }
+    };
+    
+    let html = `
+        <div id="printableTable">
+            <div class="print-header">
+                <div class="print-title">Subject Assignments</div>
+                <div class="print-date">Generated on: ${new Date().toLocaleString()}</div>
+            </div>
+            
+            <table class="print-table">
+                <thead>
+                    <tr>
+    `;
+    
+    selectedColumns.forEach(col => {
+        html += `<th>${columnMap[col].header}</th>`;
+    });
+    
+    html += '</tr></thead><tbody>';
+    
+    assignments.forEach((assignment, index) => {
+        html += '<tr>';
+        
+        selectedColumns.forEach(col => {
+            const cellContent = extractCellContentFromData(assignment, col, index);
+            html += `<td>${cellContent}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    
+    html += `
+                </tbody>
+            </table>
+            
+            <div class="print-footer">
+                <p>Total Assignments: ${assignments.length}</p>
+                <p>Date: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function extractCellContentFromData(assignment, columnType, index) {
+    switch(columnType) {
+        case 'number':
+            return index + 1;
+        case 'subject':
+            return assignment.subject_name;
+        case 'class':
+            return assignment.class_name;
+        case 'teacher':
+            return assignment.teacher_name || 'Not assigned';
+        case 'hours':
+            return `${assignment.hours_per_week || 0} hrs`;
+        case 'type':
+            return assignment.subject_type_display;
+        case 'optional':
+            return assignment.is_optional ? 'Optional' : 'Compulsory';
+        case 'status':
+            return assignment.is_active ? 'Active' : 'Inactive';
+        default:
+            return '';
+    }
+}
+
+function displayPrintPreview(printHTML) {
+    const existingContainer = document.getElementById('printableTable');
+    if (existingContainer) {
+        existingContainer.remove();
+    }
+    
+    const tempContainer = document.createElement('div');
+    tempContainer.innerHTML = printHTML;
+    document.body.appendChild(tempContainer);
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    setTimeout(() => {
+        window.print();
+        
+        setTimeout(() => {
+            if (tempContainer && tempContainer.parentNode) {
+                tempContainer.remove();
+            }
+        }, 1000);
+    }, 500);
+}
+
+window.addEventListener('afterprint', function() {
+    const printContainer = document.getElementById('printableTable');
+    if (printContainer) {
+        printContainer.remove();
+    }
+});
+
+function assignTeacher(assignmentId) {
+    console.log('Assign teacher for assignment:', assignmentId);
+}
+
+function confirmDelete(assignmentId) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteAssignment' + assignmentId));
+    modal.show();
+}
+</script>
+{% endblock %}

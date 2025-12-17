@@ -2,9 +2,9 @@
 
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Student, Guardian
-import re
+from .models import Student, Guardian, StudentGuardian, StudentClassEnrollment, Dormitory, BoardingEnrollment
 import logging
+import re
 from django.utils import timezone
 from datetime import date, timedelta
 from django_countries import countries
@@ -869,56 +869,199 @@ class StudentForm(forms.ModelForm):
         if not self.is_bound:
             self.fields['admission_date'].initial = timezone.now().date()
 
+# =============================================================================
+# GUARDIAN FORM
+# =============================================================================
+
 class GuardianForm(forms.ModelForm):
+    """Form for creating/editing guardians"""
+    
     class Meta:
         model = Guardian
         fields = [
-            'first_name',
-            'middle_name',
-            'last_name',
-            'gender',
-            'guardian_type',
-            'date_of_birth',
-            'primary_phone',
-            'secondary_phone',
-            'email',
-            'occupation',
-            'employer',
-            'work_phone',
-            'monthly_income',
-            'home_address',
-            'work_address',
-            'national_id',
-            'passport_number',
-            'photo',
-            'is_active',
+            'first_name', 'middle_name', 'last_name', 'gender', 'guardian_type', 'date_of_birth',
+            'primary_phone', 'secondary_phone', 'email',
+            'occupation', 'employer', 'work_phone', 'monthly_income',
+            'home_address', 'work_address',
+            'national_id', 'passport_number',
+            'photo', 'is_active',
         ]
         widgets = {
-            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'First Name'}),
-            'middle_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Middle Name'}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Last Name'}),
-            'gender': forms.RadioSelect(choices=Guardian.GENDER_CHOICES, attrs={'class': 'custom-radio-buttons'}),
-            'guardian_type': forms.Select(choices=Guardian.GUARDIAN_TYPE_CHOICES, attrs={'class': 'form-select'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'middle_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'gender': forms.RadioSelect(choices=Guardian.GENDER_CHOICES),
+            'guardian_type': forms.Select(attrs={'class': 'form-select'}),
             'date_of_birth': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'primary_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Primary Phone'}),
-            'secondary_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Secondary Phone'}),
-            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'}),
-            'occupation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Occupation'}),
-            'employer': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Employer'}),
-            'work_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Work Phone'}),
-            'monthly_income': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Monthly Income'}),
-            'home_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Home Address'}),
-            'work_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Work Address'}),
-            'national_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'National ID'}),
-            'passport_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Passport Number'}),
+            'primary_phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'secondary_phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'home_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'photo': forms.FileInput(attrs={'class': 'form-control'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Optional: mark some fields as required
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
         self.fields['primary_phone'].required = True
         self.fields['home_address'].required = True
+
+
+# =============================================================================
+# STUDENT-GUARDIAN RELATIONSHIP FORM
+# =============================================================================
+
+class StudentGuardianForm(forms.ModelForm):
+    """Form for managing student-guardian relationships"""
+    
+    class Meta:
+        model = StudentGuardian
+        fields = [
+            'student', 'guardian', 'relationship',
+            'is_primary', 'is_financial_responsible', 'can_pickup', 'can_authorize_medical',
+            'emergency_contact_priority', 'has_custody', 'custody_percentage',
+            'receives_academic_reports', 'receives_financial_statements', 'receives_emergency_notifications',
+            'is_active', 'relationship_start_date', 'relationship_end_date',
+        ]
+        widgets = {
+            'student': forms.Select(attrs={'class': 'form-select'}),
+            'guardian': forms.Select(attrs={'class': 'form-select'}),
+            'relationship': forms.Select(attrs={'class': 'form-select'}),
+            'relationship_start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'relationship_end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'emergency_contact_priority': forms.NumberInput(attrs={'class': 'form-control'}),
+            'custody_percentage': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+
+
+# =============================================================================
+# DORMITORY FORM
+# =============================================================================
+
+class DormitoryForm(forms.ModelForm):
+    """Form for creating/editing dormitories"""
+    
+    class Meta:
+        model = Dormitory
+        fields = [
+            'name', 'code', 'dormitory_type',
+            'building', 'floor', 'wing',
+            'total_capacity', 'room_count', 'beds_per_room',
+            'has_bathroom', 'has_study_area', 'has_common_room', 'has_laundry',
+            'has_kitchen', 'has_wifi', 'has_security',
+            'dormitory_master', 'assistant_dormitory_master',
+            'is_active', 'is_available_for_new_admissions', 'maintenance_status',
+            'last_maintenance_date', 'next_maintenance_due',
+            'description', 'facilities_description', 'rules_and_regulations', 'emergency_procedures',
+            'dormitory_phone', 'dormitory_email',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'code': forms.TextInput(attrs={'class': 'form-control'}),
+            'dormitory_type': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'last_maintenance_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'next_maintenance_due': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        }
+
+# =============================================================================
+# CLASS ENROLLMENT FORM
+# =============================================================================
+
+class StudentClassEnrollmentForm(forms.ModelForm):
+    """Form for enrolling students in classes with enhanced validation and auto-generation"""
+    
+    class Meta:
+        model = StudentClassEnrollment
+        fields = [
+            'student', 'class_instance', 'academic_session', 'enrollment_date',
+            'roll_number', 'enrollment_type', 'progression_type', 
+            'previous_enrollment', 'enrollment_notes'
+        ]
+        
+        widgets = {
+            'student': forms.HiddenInput(),  # Hide the original student field
+            'enrollment_date': forms.DateInput(attrs={'type': 'date'}),
+            'roll_number': forms.TextInput(attrs={
+                'placeholder': 'Will be auto-generated',
+                'readonly': True,
+                'style': 'background-color: #f8f9fa;',
+                'data-field-name': 'roll_number'
+            }),
+            'enrollment_notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Filter students to only show active ones
+        self.fields['student'].queryset = Student.objects.filter(enrollment_status='active')
+            
+        from academics.models import Class, AcademicSession
+        self.fields['class_instance'].queryset = Class.objects.filter(is_active=True)
+        self.fields['academic_session'].queryset = AcademicSession.objects.all()
+
+    def clean_student(self):
+        """Validate student selection"""
+        student = self.cleaned_data.get('student')
+        if not student:
+            raise ValidationError("Please select a student.")
+        
+        if student.enrollment_status != 'active':
+            raise ValidationError(f"Selected student is {student.enrollment_status} and cannot be enrolled.")
+        
+        return student
+
+    def clean_enrollment_date(self):
+        enrollment_date = self.cleaned_data.get('enrollment_date')
+        if enrollment_date and enrollment_date > timezone.now().date():
+            raise ValidationError("Enrollment date cannot be in the future.")
+        return enrollment_date
+    
+# =============================================================================
+# BOARDING ENROLLMENT FORM
+# =============================================================================
+
+class BoardingEnrollmentForm(forms.ModelForm):
+    """Form for creating/editing boarding enrollments"""
+    
+    class Meta:
+        model = BoardingEnrollment
+        fields = [
+            'student', 'academic_session', 'boarding_type',
+            'dormitory', 'room_number', 'bed_number', 'boarding_roll_number',
+            'enrollment_date', 'effective_start_date', 'effective_end_date', 'status',
+            'guardian_consent', 'consent_date', 'consenting_guardian', 'consent_document',
+            'boarding_days',
+            'dietary_requirements', 'medical_requirements', 'special_accommodations',
+            'emergency_contact_during_boarding', 'emergency_contact_name', 'emergency_contact_relationship',
+            'reason_for_boarding', 'admin_notes',
+        ]
+        widgets = {
+            'student': forms.Select(attrs={'class': 'form-select'}),
+            'academic_session': forms.Select(attrs={'class': 'form-select'}),
+            'boarding_type': forms.Select(attrs={'class': 'form-select'}),
+            'dormitory': forms.Select(attrs={'class': 'form-select'}),
+            'enrollment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'boarding_roll_number': forms.TextInput(attrs={
+                'readonly': True,
+                'placeholder': 'Auto-generated',
+                'style': 'background-color:#f8f9fa;',
+            }),
+            'effective_start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'effective_end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'consent_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'dietary_requirements': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'medical_requirements': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'reason_for_boarding': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'admin_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set default enrollment date
+        if not self.is_bound:
+            self.fields['enrollment_date'].initial = timezone.now().date()
+            self.fields['effective_start_date'].initial = timezone.now().date()

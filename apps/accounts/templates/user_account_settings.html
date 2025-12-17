@@ -3,7 +3,10 @@
 {% load widget_tweaks %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+<!-- CSS for CropperJS, SweetAlert2, MagnifiPopup -->
+<link href="{% static 'vendors/cropperjs/dist/cropper.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendors/sweetalert2/dist/sweetalert2.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendors/magnific-popup/magnific-popup.css' %}" rel="stylesheet">
 <style>
     .form-section {
         background-color: #fff;
@@ -359,7 +362,7 @@
                                 </div>
                             </div>
                         {% endif %}
-                        <div class="profile-image-overlay">
+                        <div class="profile-image-overlay" data-bs-toggle="modal" data-bs-target="#profileImageModal">
                             <i class="fas fa-camera"></i>
                         </div>
                     </div>
@@ -572,11 +575,15 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+
+<!-- Scripts for CropperJS, SweetAlert2, MagnifiPopup -->
+<script src="{% static 'vendors/cropperjs/dist/cropper.min.js' %}"></script>
+<script src="{% static 'vendors/sweetalert2/dist/sweetalert2.all.min.js' %}"></script>
+<script src="{% static 'vendors/magnific-popup/jquery.magnific-popup.min.js' %}"></script>
+  
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     setupImageHandling();
@@ -596,8 +603,6 @@ function setupImageHandling() {
         console.error("Profile image modal not found!");
         return;
     }
-    
-    const modalInstance = new bootstrap.Modal(profileImageModal);
     
     // Variable to store cropper instance and cropped image data
     let cropper = null;
@@ -641,18 +646,12 @@ function setupImageHandling() {
         if (uploadImageInput) {
             uploadImageInput.value = '';
         }
-    }
-
-    // Connect the overlay click handler with the modal
-    const profileImageOverlay = document.querySelector('.profile-image-overlay');
-    if (profileImageOverlay) {
-        profileImageOverlay.addEventListener('click', function(e) {
-            e.preventDefault();
-            modalInstance.show();
-        });
+        
+        // Clear cropped image data
+        croppedImageData = null;
     }
     
-    // Reset modal when it's hidden
+    // Reset modal when it's hidden (Bootstrap event)
     profileImageModal.addEventListener('hidden.bs.modal', function() {
         resetCropper();
     });
@@ -666,12 +665,14 @@ function setupImageHandling() {
             // File size validation
             if (file.size > 5 * 1024 * 1024) {
                 showAlert('danger', 'File size must be less than 5MB.');
+                uploadImageInput.value = '';
                 return;
             }
             
             // File type validation
             if (!file.type.startsWith('image/')) {
                 showAlert('danger', 'Please select a valid image file.');
+                uploadImageInput.value = '';
                 return;
             }
             
@@ -779,27 +780,21 @@ function setupImageHandling() {
                         const container = placeholder.parentElement;
                         container.innerHTML = `
                             <img id="currentProfileImage" src="${croppedImageData}" alt="Profile Picture" class="profile-avatar">
-                            <div class="profile-image-overlay">
+                            <div class="profile-image-overlay" data-bs-toggle="modal" data-bs-target="#profileImageModal">
                                 <i class="fas fa-camera"></i>
                             </div>
                         `;
-                        
-                        // Re-attach click handler
-                        const newOverlay = container.querySelector('.profile-image-overlay');
-                        if (newOverlay) {
-                            newOverlay.addEventListener('click', function(e) {
-                                e.preventDefault();
-                                modalInstance.show();
-                            });
-                        }
                     }
                 }
                 
                 // Show success message
                 showAlert('success', 'Profile photo updated! Remember to save the form to apply changes.');
                 
-                // Close modal
-                modalInstance.hide();
+                // Close modal using Bootstrap's modal method
+                const modalInstance = bootstrap.Modal.getInstance(profileImageModal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
             } catch (err) {
                 console.error("Error preparing image:", err);
                 showAlert('danger', 'Error preparing image. Please try again.');
@@ -837,4 +832,4 @@ function setupImageHandling() {
     }
 }
 </script>
-{% endblock %}%
+{% endblock %}

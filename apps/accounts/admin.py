@@ -5,7 +5,6 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
 from .models import School, UserProfile, UserManagementSettings
-from image_cropping import ImageCroppingMixin
 
 
 # -----------------------------------------
@@ -137,7 +136,7 @@ class SchoolAdmin(admin.ModelAdmin):
 # -----------------------------------------
 # USER PROFILE INLINE
 # -----------------------------------------
-class UserProfileInline(ImageCroppingMixin, admin.StackedInline):
+class UserProfileInline(admin.StackedInline):
     model = UserProfile
     can_delete = False
     verbose_name_plural = 'Profile'
@@ -147,10 +146,8 @@ class UserProfileInline(ImageCroppingMixin, admin.StackedInline):
         ('Profile Information', {
             'fields': (
                 'school',
-                'name_of_person_in_charge',
                 'role',
                 'photo',
-                'cropping'
             )
         }),
         ('Theme Settings', {
@@ -206,7 +203,6 @@ class UserAdmin(BaseUserAdmin):
         'email',
         'first_name',
         'last_name',
-        'userprofile__name_of_person_in_charge'
     ]
     
     # Optimize database queries for list view

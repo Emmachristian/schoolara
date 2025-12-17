@@ -83,9 +83,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
-    # Add school database middleware AFTER authentication
+    # School database middleware - sets current_db based on user's school
     'schoolara.middleware.SchoolDatabaseMiddleware',
-    'utils.context.AuditContextMiddleware'
+    
+    # Audit context middleware - captures user info for audit logs
+    'utils.middleware.AuditContextMiddleware',  
 ]
 
 # Logging configuration for debugging
@@ -160,6 +162,9 @@ TEMPLATES = [
                 'core.context_processors.user_context',
                 'core.context_processors.theme_colors',
             ],
+            'libraries': {  # ← ADD THIS
+                'custom_filters': 'utils.templatetags.custom_filters',
+            },
         },
     },
 ]

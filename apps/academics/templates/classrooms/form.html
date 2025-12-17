@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+    }
+    
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #495057;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 0.5rem;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+    
+    .required-field::after {
+        content: ' *';
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .form-control:focus {
+        border-color: #556ee6;
+        box-shadow: 0 0 0 0.25rem rgba(85, 110, 230, 0.25);
+    }
+    
+    .form-check-input:checked {
+        background-color: #556ee6;
+        border-color: #556ee6;
+    }
+    
+    .feature-checkbox {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .feature-checkbox:hover {
+        background-color: #f8f9fa;
+        border-color: #556ee6;
+    }
+    
+    .feature-checkbox.checked {
+        background-color: #e8f0ff;
+        border-color: #556ee6;
+    }
+    
+    .btn-primary {
+        background-color: #556ee6;
+        border-color: #556ee6;
+    }
+    
+    .btn-primary:hover {
+        background-color: #4458ca;
+        border-color: #4458ca;
+    }
+    
+    .help-text {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .invalid-feedback {
+        display: block;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: '>';
+        color: #6c757d;
+    }
+    
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .back-button {
+        transition: all 0.3s ease;
+    }
+    
+    .back-button:hover {
+        transform: translateX(-3px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-home icon-gradient bg-arielle-smile"></i>
+            </div>
+            <div>
+                {{ title }}
+                <div class="page-title-subheading">
+                    {% if classroom %}
+                        Update classroom information and settings
+                    {% else %}
+                        Add a new classroom to your institution
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:classroom_list' %}" class="btn-shadow btn btn-secondary back-button">
+                <span class="btn-icon-wrapper pe-2 opacity-7">
+                    <i class="fa fa-arrow-left"></i>
+                </span>
+                Back to List
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="row mb-3">
+    <div class="col-md-12">
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                <i class="fa fa-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% else %}info-circle{% endif %} me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="main-card mb-3 card form-container">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="pe-7s-home me-2"></i>
+                    {% if classroom %}Update Classroom{% else %}Create New Classroom{% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    
+                    <!-- Basic Information Section -->
+                    <div class="section-title">
+                        <i class="fa fa-info-circle me-2"></i>Basic Information
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.room_number.id_for_label }}" class="form-label required-field">Room Number</label>
+                                {{ form.room_number }}
+                                {% if form.room_number.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.room_number.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Unique identifier for this classroom (e.g., A101, Lab-01)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label required-field">Classroom Name</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.name.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Descriptive name for the classroom</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Location Information Section -->
+                    <div class="section-title">
+                        <i class="fa fa-map-marker-alt me-2"></i>Location Details
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="{{ form.building.id_for_label }}" class="form-label">Building</label>
+                                {{ form.building }}
+                                {% if form.building.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.building.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Building name or identifier</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="{{ form.floor.id_for_label }}" class="form-label">Floor</label>
+                                {{ form.floor }}
+                                {% if form.floor.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.floor.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Floor level (e.g., Ground, 1st, 2nd)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="{{ form.capacity.id_for_label }}" class="form-label required-field">Capacity</label>
+                                {{ form.capacity }}
+                                {% if form.capacity.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.capacity.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Maximum number of students (1-500)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Classroom Type & Description Section -->
+                    <div class="section-title">
+                        <i class="fa fa-tags me-2"></i>Classification & Description
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                <label for="{{ form.room_type.id_for_label }}" class="form-label">Room Type</label>
+                                {{ form.room_type }}
+                                {% if form.room_type.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.room_type.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="help-text">Select the primary purpose of this classroom</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features & Amenities Section -->
+                    <div class="section-title">
+                        <i class="fa fa-cogs me-2"></i>Features & Amenities
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="projectorDiv">
+                                <div class="form-check">
+                                    {{ form.has_projector }}
+                                    <label class="form-check-label" for="{{ form.has_projector.id_for_label }}">
+                                        <i class="fa fa-video me-2 text-primary"></i>
+                                        <strong>Projector/Display</strong>
+                                        <div class="help-text">Equipped with projector or large display screen</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="computerDiv">
+                                <div class="form-check">
+                                    {{ form.has_computer }}
+                                    <label class="form-check-label" for="{{ form.has_computer.id_for_label }}">
+                                        <i class="fa fa-desktop me-2 text-info"></i>
+                                        <strong>Computer/Laptop</strong>
+                                        <div class="help-text">Has dedicated computer or laptop for teaching</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="acDiv">
+                                <div class="form-check">
+                                    {{ form.has_air_conditioning }}
+                                    <label class="form-check-label" for="{{ form.has_air_conditioning.id_for_label }}">
+                                        <i class="fa fa-snowflake me-2 text-primary"></i>
+                                        <strong>Air Conditioning</strong>
+                                        <div class="help-text">Climate controlled with air conditioning system</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="whiteboardDiv">
+                                <div class="form-check">
+                                    {{ form.has_whiteboard }}
+                                    <label class="form-check-label" for="{{ form.has_whiteboard.id_for_label }}">
+                                        <i class="fa fa-chalkboard me-2 text-success"></i>
+                                        <strong>Whiteboard/Blackboard</strong>
+                                        <div class="help-text">Equipped with writing board for instruction</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accessibility & Status Section -->
+                    <div class="section-title">
+                        <i class="fa fa-universal-access me-2"></i>Accessibility & Status
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="accessibleDiv">
+                                <div class="form-check">
+                                    {{ form.is_accessible }}
+                                    <label class="form-check-label" for="{{ form.is_accessible.id_for_label }}">
+                                        <i class="fa fa-wheelchair me-2 text-warning"></i>
+                                        <strong>Wheelchair Accessible</strong>
+                                        <div class="help-text">Compliant with accessibility standards</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-checkbox" id="activeDiv">
+                                <div class="form-check">
+                                    {{ form.is_active }}
+                                    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                        <i class="fa fa-check-circle me-2 text-success"></i>
+                                        <strong>Active Status</strong>
+                                        <div class="help-text">Classroom is available for use</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <a href="{% url 'academics:classroom_list' %}" class="btn btn-secondary">
+                            <i class="fa fa-times me-2"></i>Cancel
+                        </a>
+                        <div>
+                            {% if classroom %}
+                                <a href="{% url 'academics:classroom_detail' classroom.pk %}" class="btn btn-outline-primary me-2">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa fa-save me-2"></i>
+                                {% if classroom %}Update Classroom{% else %}Create Classroom{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Add Bootstrap validation classes to form elements
+    $('.form-control, .form-select').addClass('form-control');
+    $('.form-check-input').addClass('form-check-input');
+    
+    // Handle feature checkbox styling
+    $('.form-check-input').change(function() {
+        var checkbox = $(this);
+        var container = checkbox.closest('.feature-checkbox');
+        
+        if (checkbox.is(':checked')) {
+            container.addClass('checked');
+        } else {
+            container.removeClass('checked');
+        }
+    });
+    
+    // Initialize checkbox states on page load
+    $('.form-check-input').each(function() {
+        var checkbox = $(this);
+        var container = checkbox.closest('.feature-checkbox');
+        
+        if (checkbox.is(':checked')) {
+            container.addClass('checked');
+        }
+    });
+    
+    // Auto-suggest features based on room type
+    $('#{{ form.room_type.id_for_label }}').change(function() {
+        var roomType = $(this).val();
+        
+        // Reset all checkboxes first
+        $('.form-check-input').prop('checked', false).trigger('change');
+        
+        // Auto-check relevant features based on room type
+        switch(roomType) {
+            case 'COMPUTER_LAB':
+                $('#{{ form.has_computer.id_for_label }}, #{{ form.has_projector.id_for_label }}').prop('checked', true).trigger('change');
+                break;
+            case 'LABORATORY':
+                $('#{{ form.has_whiteboard.id_for_label }}').prop('checked', true).trigger('change');
+                break;
+            case 'AUDITORIUM':
+                $('#{{ form.has_projector.id_for_label }}, #{{ form.has_air_conditioning.id_for_label }}').prop('checked', true).trigger('change');
+                break;
+            case 'LIBRARY':
+                $('#{{ form.has_air_conditioning.id_for_label }}').prop('checked', true).trigger('change');
+                break;
+            default:
+                // Regular classroom - check basic features
+                $('#{{ form.has_whiteboard.id_for_label }}').prop('checked', true).trigger('change');
+                break;
+        }
+    });
+    
+    // Capacity suggestions based on room type
+    $('#{{ form.room_type.id_for_label }}').change(function() {
+        var roomType = $(this).val();
+        var capacityField = $('#{{ form.capacity.id_for_label }}');
+        var currentCapacity = parseInt(capacityField.val());
+        
+        // Only suggest if field is empty or has default value
+        if (!currentCapacity || currentCapacity === 30) {
+            var suggestedCapacity;
+            switch(roomType) {
+                case 'REGULAR':
+                    suggestedCapacity = 30;
+                    break;
+                case 'LABORATORY':
+                    suggestedCapacity = 20;
+                    break;
+                case 'COMPUTER_LAB':
+                    suggestedCapacity = 25;
+                    break;
+                case 'LIBRARY':
+                    suggestedCapacity = 50;
+                    break;
+                case 'AUDITORIUM':
+                    suggestedCapacity = 100;
+                    break;
+                case 'GYMNASIUM':
+                    suggestedCapacity = 200;
+                    break;
+                case 'WORKSHOP':
+                    suggestedCapacity = 15;
+                    break;
+                case 'CONFERENCE':
+                    suggestedCapacity = 20;
+                    break;
+                default:
+                    suggestedCapacity = 30;
+            }
+            capacityField.val(suggestedCapacity);
+        }
+    });
+    
+    // Form validation
+    $('.needs-validation').on('submit', function(e) {
+        var form = this;
+        
+        // Check required fields
+        var isValid = true;
+        $(form).find('[required]').each(function() {
+            if (!this.value.trim()) {
+                isValid = false;
+                $(this).addClass('is-invalid');
+            } else {
+                $(this).removeClass('is-invalid');
+            }
+        });
+        
+        // Validate capacity
+        var capacity = parseInt($('#{{ form.capacity.id_for_label }}').val());
+        if (!capacity || capacity < 1 || capacity > 500) {
+            $('#{{ form.capacity.id_for_label }}').addClass('is-invalid');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Scroll to first error
+            var firstError = $('.is-invalid').first();
+            if (firstError.length) {
+                $('html, body').animate({
+                    scrollTop: firstError.offset().top - 100
+                }, 500);
+            }
+        }
+        
+        form.classList.add('was-validated');
+    });
+    
+    // Real-time validation
+    $('[required]').on('blur', function() {
+        if (this.value.trim()) {
+            $(this).removeClass('is-invalid').addClass('is-valid');
+        } else {
+            $(this).removeClass('is-valid').addClass('is-invalid');
+        }
+    });
+    
+    // Capacity validation
+    $('#{{ form.capacity.id_for_label }}').on('blur', function() {
+        var capacity = parseInt(this.value);
+        if (capacity >= 1 && capacity <= 500) {
+            $(this).removeClass('is-invalid').addClass('is-valid');
+        } else {
+            $(this).removeClass('is-valid').addClass('is-invalid');
+        }
+    });
+    
+    // Auto-format room number
+    $('#{{ form.room_number.id_for_label }}').on('blur', function() {
+        var value = this.value.trim().toUpperCase();
+        if (value) {
+            this.value = value;
+        }
+    });
+    
+    // Building name suggestions (if you have existing buildings)
+    var existingBuildings = [];
+    {% if buildings %}
+        existingBuildings = [
+            {% for building in buildings %}
+                '{{ building|escapejs }}',
+            {% endfor %}
+        ];
+    {% endif %}
+    
+    if (existingBuildings.length > 0) {
+        $('#{{ form.building.id_for_label }}').attr('list', 'buildings-list');
+        
+        var datalist = $('<datalist id="buildings-list"></datalist>');
+        existingBuildings.forEach(function(building) {
+            datalist.append('<option value="' + building + '">');
+        });
+        $('body').append(datalist);
+    }
+    
+    // Show confirmation before leaving with unsaved changes
+    var formChanged = false;
+    $('form input, form select, form textarea').on('change', function() {
+        formChanged = true;
+    });
+    
+    window.addEventListener('beforeunload', function(e) {
+        if (formChanged) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    
+    // Don't show confirmation when form is submitted
+    $('form').on('submit', function() {
+        formChanged = false;
+    });
+});
+</script>
+{% endblock %}
