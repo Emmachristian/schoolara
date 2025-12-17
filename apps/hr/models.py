@@ -413,7 +413,6 @@ class Staff(BaseModel):
     GENDER_CHOICES = (
         ('M', 'Male'),
         ('F', 'Female'),
-        ('O', 'Other'),
     )
     
     EMPLOYMENT_STATUS_CHOICES = (
