@@ -1,41 +1,27 @@
 # hr/utils.py
 
+"""
+HR Utility Functions
+
+Pure utility functions for HR operations:
+- Century-safe year handling
+- Staff ID format generation (logic only, not creation)
+- Salary calculations
+- Date calculations
+- Staff information queries
+
+NO DATABASE WRITES - Only calculations, formatting, and simple queries.
+For complex workflows with DB writes, see hr/services.py
+"""
+
 from django.utils import timezone
-from django.db import transaction
-from django.db.models import Count, Q, F
+from django.db.models import F
 from datetime import date, timedelta
 from decimal import Decimal
 import logging
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# CORE UTILITY HELPER FUNCTIONS
-# =============================================================================
-
-def paginate_queryset(request, queryset, per_page=20):
-    paginator = Paginator(queryset, per_page)
-    page = request.GET.get('page', 1)
-    try:
-        page_obj = paginator.page(page)
-    except PageNotAnInteger:
-        page_obj = paginator.page(1)
-    except EmptyPage:
-        page_obj = paginator.page(paginator.num_pages)
-    return page_obj, paginator
-
-def parse_filters(request, filter_keys):
-    """
-    Extract filter values from request.GET.
-    filter_keys: list of filter names to extract
-    Returns dict: {key: value or None}
-    """
-    filters = {}
-    for key in filter_keys:
-        value = request.GET.get(key, '').strip()
-        filters[key] = value if value else None
-    return filters
 
 # =============================================================================
 # CENTURY-SAFE YEAR UTILITIES
@@ -43,7 +29,7 @@ def parse_filters(request, filter_keys):
 
 def get_century_safe_year_suffix(year):
     """
-    Convert year to century-safe format
+    Convert year to century-safe format.
     
     Args:
         year (int): Full year (e.g., 2024, 2125)
@@ -76,7 +62,7 @@ def get_century_safe_year_suffix(year):
 
 def parse_staff_year_from_id(staff_id):
     """
-    Parse the actual year from a century-safe staff ID
+    Parse the actual year from a century-safe staff ID.
     
     Args:
         staff_id (str): Staff ID (e.g., "24/SCH/TCH-001", "B25/SCH/ADM-001")
@@ -95,7 +81,7 @@ def parse_staff_year_from_id(staff_id):
         if year_part.isdigit():
             # Standard 2-digit format (21st century)
             year_suffix = int(year_part)
-            if year_suffix >= 0 and year_suffix <= 99:
+            if 0 <= year_suffix <= 99:
                 return 2000 + year_suffix
         else:
             # Century prefix format
@@ -115,12 +101,13 @@ def parse_staff_year_from_id(staff_id):
 
 
 # =============================================================================
-# STAFF ID GENERATION (CENTURY-SAFE)
+# STAFF TYPE CODE UTILITIES
 # =============================================================================
 
 def get_staff_type_code(employment_status, is_teaching=False):
     """
-    Get staff type code based on employment status and teaching status
+    Get staff type code based on employment status and teaching status.
+    Pure function - no DB access.
     
     Args:
         employment_status (str): Employment status code
@@ -151,181 +138,149 @@ def get_staff_type_code(employment_status, is_teaching=False):
         return status_codes.get(employment_status, 'STF')  # Default: Staff
 
 
-def generate_staff_id(
-    *,
-    school=None,
-    user=None,
-    joining_year=None,
-    department=None,
-    employment_status='FT',
-    is_teaching=False
-):
+def build_staff_id_prefix(year, school_abbrev, dept_code=None, staff_type='ADM'):
     """
-    Generate a unique century-safe staff ID.
-
-    Format:
-        YY/SCHOOL/TYPE-NNN
-        YY/SCHOOL/DEPT/TYPE-NNN (if department provided)
-        AYY/SCHOOL/TYPE-NNN (for years beyond 2099)
+    Build staff ID prefix WITHOUT touching database.
+    Pure function for prefix construction.
     
     Args:
-        school: School instance
-        user: User instance (alternative to school)
-        joining_year: Year of joining (defaults to current year)
-        department: Department instance (optional)
-        employment_status: Employment status code
-        is_teaching: Whether this is a teaching staff
+        year (int): Joining year
+        school_abbrev (str): School abbreviation
+        dept_code (str, optional): Department code
+        staff_type (str): Staff type code
         
     Returns:
-        str: Unique staff ID
+        str: Prefix like "24/ATEPI/TCH-" or "A25/SCH/MATH/ADM-"
         
     Examples:
-        generate_staff_id(school=sch, is_teaching=True) → "24/ATEPI/TCH-001"
-        generate_staff_id(school=sch, department=math) → "24/ATEPI/MATH/TCH-001"
-        generate_staff_id(school=sch, employment_status='CT') → "24/ATEPI/CNT-001"
+        build_staff_id_prefix(2024, 'SCH', None, 'TCH') → "24/SCH/TCH-"
+        build_staff_id_prefix(2024, 'SCH', 'MATH', 'TCH') → "24/SCH/MATH/TCH-"
+        build_staff_id_prefix(2125, 'SCH', None, 'ADM') → "A25/SCH/ADM-"
     """
-    from .models import Staff
-    from accounts.models import UserProfile
-
-    current_year = joining_year or timezone.now().year
-    year_suffix = get_century_safe_year_suffix(current_year)
-
-    # -----------------------------
-    # Resolve school abbreviation
-    # -----------------------------
-    school_abbrev = "SCH"
-
-    if school and school.abbreviation:
-        school_abbrev = school.abbreviation
-    elif user:
-        try:
-            profile = UserProfile.objects.select_related("school").get(user=user)
-            if profile.school and profile.school.abbreviation:
-                school_abbrev = profile.school.abbreviation
-        except UserProfile.DoesNotExist:
-            pass
-
-    # -----------------------------
-    # Build prefix
-    # -----------------------------
-    staff_type = get_staff_type_code(employment_status, is_teaching)
+    year_suffix = get_century_safe_year_suffix(year)
     
-    if department and department.code:
-        prefix = f"{year_suffix}/{school_abbrev}/{department.code}/{staff_type}-"
+    if dept_code:
+        return f"{year_suffix}/{school_abbrev}/{dept_code}/{staff_type}-"
     else:
-        prefix = f"{year_suffix}/{school_abbrev}/{staff_type}-"
+        return f"{year_suffix}/{school_abbrev}/{staff_type}-"
 
-    # -----------------------------
-    # Generate sequential number
-    # -----------------------------
-    while True:
-        with transaction.atomic():
-            last_staff = (
-                Staff.objects
-                .select_for_update()
-                .filter(staff_id__startswith=prefix)
-                .order_by("-staff_id")
-                .first()
-            )
 
-            if last_staff:
-                try:
-                    last_seq = int(last_staff.staff_id.split("-")[-1])
-                    next_seq = last_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = (
-                        Staff.objects
-                        .filter(staff_id__startswith=prefix)
-                        .count() + 1
-                    )
-            else:
-                next_seq = 1
-
-            staff_id = f"{prefix}{next_seq:03d}"
-
-            if not Staff.objects.filter(staff_id=staff_id).exists():
-                return staff_id
-            
-# =============================================================================
-# CONTRACT NUMBER GENERATION (CENTURY-SAFE)
-# =============================================================================
-
-def generate_contract_number(contract_type=None, year=None):
+def parse_staff_id_components(staff_id):
     """
-    Generate a unique century-safe contract number.
-    Format: CONT/YYYY/TYPE/NNNN or CONT/AYYYY/TYPE/NNNN (for years beyond 2099)
+    Parse staff ID into components.
+    Pure function - no DB access.
     
     Args:
-        contract_type: ContractType instance (optional)
-        year: Contract year (defaults to current year)
+        staff_id (str): Staff ID (e.g., "24/SCH/MATH/TCH-001")
         
     Returns:
-        str: Unique contract number
+        dict: Components or None if invalid
+        {
+            'year': int,
+            'school': str,
+            'department': str or None,
+            'type': str,
+            'sequence': int
+        }
         
     Examples:
-        generate_contract_number() → "CONT/2024/GEN/0001"
-        generate_contract_number(permanent_type) → "CONT/2024/PERM/0001"
-        generate_contract_number(temp_type, 2125) → "CONT/A125/TEMP/0001"
+        "24/SCH/TCH-001" → {year: 2024, school: 'SCH', type: 'TCH', seq: 1}
+        "24/SCH/MATH/TCH-001" → {year: 2024, school: 'SCH', dept: 'MATH', type: 'TCH', seq: 1}
     """
-    from .models import Contract
+    try:
+        parts = staff_id.split('/')
+        
+        if len(parts) == 3:
+            # Format: YY/SCHOOL/TYPE-NNN
+            year_part, school, type_seq = parts
+            type_code, sequence = type_seq.split('-')
+            
+            return {
+                'year': parse_staff_year_from_id(staff_id),
+                'school': school,
+                'department': None,
+                'type': type_code,
+                'sequence': int(sequence)
+            }
+        elif len(parts) == 4:
+            # Format: YY/SCHOOL/DEPT/TYPE-NNN
+            year_part, school, dept, type_seq = parts
+            type_code, sequence = type_seq.split('-')
+            
+            return {
+                'year': parse_staff_year_from_id(staff_id),
+                'school': school,
+                'department': dept,
+                'type': type_code,
+                'sequence': int(sequence)
+            }
+    except (ValueError, IndexError):
+        pass
     
-    current_year = year or timezone.now().year
+    return None
+
+
+# =============================================================================
+# CONTRACT NUMBER UTILITIES
+# =============================================================================
+
+def build_contract_number_prefix(year, type_code='GEN'):
+    """
+    Build contract number prefix WITHOUT touching database.
+    Pure function for prefix construction.
     
+    Args:
+        year (int): Contract year
+        type_code (str): Contract type code
+        
+    Returns:
+        str: Prefix like "CONT/2024/GEN/" or "CONT/A125/PERM/"
+        
+    Examples:
+        build_contract_number_prefix(2024, 'PERM') → "CONT/2024/PERM/"
+        build_contract_number_prefix(2125, 'TEMP') → "CONT/A125/TEMP/"
+    """
     # Get century-safe year format
-    if current_year < 2100:
-        year_str = str(current_year)
+    if year < 2100:
+        year_str = str(year)
     else:
         # For years beyond 2099, use letter prefix
-        century = current_year // 100
+        century = year // 100
         century_offset = century - 20  # 21st century = 0, 22nd = 1, etc.
         century_letter = chr(ord('A') + century_offset - 1)
-        year_suffix = current_year % 100
-        year_str = f"{century_letter}{current_year}"
+        year_str = f"{century_letter}{year}"
     
-    # Get type code
-    type_code = "GEN"
-    if contract_type:
-        # Get first 4 letters of contract type name
-        type_code = contract_type.name[:4].upper().replace(' ', '')
+    return f"CONT/{year_str}/{type_code}/"
+
+
+def get_contract_type_code(contract_type_name):
+    """
+    Get contract type code from contract type name.
+    Pure function - no DB access.
     
-    # Generate sequential number
-    prefix = f"CONT/{year_str}/{type_code}/"
-    
-    while True:
-        with transaction.atomic():
-            last_contract = (
-                Contract.objects
-                .select_for_update()
-                .filter(contract_number__startswith=prefix)
-                .order_by("-contract_number")
-                .first()
-            )
-            
-            if last_contract:
-                try:
-                    last_seq = int(last_contract.contract_number.split("/")[-1])
-                    next_seq = last_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = (
-                        Contract.objects
-                        .filter(contract_number__startswith=prefix)
-                        .count() + 1
-                    )
-            else:
-                next_seq = 1
-            
-            contract_number = f"{prefix}{next_seq:04d}"
-            
-            if not Contract.objects.filter(contract_number=contract_number).exists():
-                return contract_number
+    Args:
+        contract_type_name (str): Contract type name
+        
+    Returns:
+        str: 4-letter type code
+        
+    Examples:
+        "Permanent" → "PERM"
+        "Fixed Term" → "FIXE"
+        "Temporary Contract" → "TEMP"
+    """
+    # Get first 4 letters of contract type name
+    return contract_type_name[:4].upper().replace(' ', '')
+
 
 # =============================================================================
-# CONTRACT UTILITIES
+# SIMPLE QUERY HELPERS (Read-Only)
 # =============================================================================
 
 def get_expiring_contracts(days=30):
     """
-    Get contracts expiring within specified days
+    Get contracts expiring within specified days.
+    Simple query helper - read-only.
     
     Args:
         days (int): Number of days to look ahead (default: 30)
@@ -333,7 +288,7 @@ def get_expiring_contracts(days=30):
     Returns:
         QuerySet: Contracts expiring within specified period
     """
-    from .models import Contract
+    from hr.models import Contract
     
     today = date.today()
     end_date = today + timedelta(days=days)
@@ -342,42 +297,44 @@ def get_expiring_contracts(days=30):
         status='ACTIVE',
         end_date__gte=today,
         end_date__lte=end_date
-    ).select_related('staff', 'contract_type')
+    ).select_related('staff')
 
 
 def get_active_contracts():
     """
-    Get all active contracts
+    Get all active contracts.
+    Simple query helper - read-only.
     
     Returns:
         QuerySet: All active contracts
     """
-    from .models import Contract
+    from hr.models import Contract
     return Contract.objects.filter(status='ACTIVE')
 
 
 def get_probation_staff():
     """
-    Get all staff currently on probation
+    Get all staff currently on probation.
+    Simple query helper - read-only.
     
     Returns:
         QuerySet: Staff members on probation
     """
-    from .models import Staff
+    from hr.models import Staff
     return Staff.objects.filter(employment_status='PR', is_active=True)
 
 
 def get_staff_on_probation_ending_soon(days=30):
     """
-    Get staff whose probation period is ending soon
+    Get staff whose probation period is ending soon.
     
     Args:
         days (int): Number of days to look ahead
         
     Returns:
-        QuerySet: Staff with probation ending soon
+        list: Staff instances with probation ending soon
     """
-    from .models import Contract
+    from hr.models import Contract
     
     today = date.today()
     end_date = today + timedelta(days=days)
@@ -397,13 +354,50 @@ def get_staff_on_probation_ending_soon(days=30):
     return probation_ending
 
 
+def get_available_teachers():
+    """
+    Get teachers who have capacity for more classes.
+    Simple query helper - read-only.
+    
+    Returns:
+        QuerySet: Teachers with available capacity
+    """
+    from hr.models import Teacher
+    
+    return Teacher.objects.filter(
+        staff__is_active=True
+    ).exclude(
+        current_teaching_load__gte=F('max_hours_per_week')
+    )
+
+
+def get_staff_current_contract(staff):
+    """
+    Get staff member's current active contract.
+    Simple query helper - read-only.
+    
+    Args:
+        staff: Staff instance
+        
+    Returns:
+        Contract instance or None
+    """
+    from hr.models import Contract
+    
+    return Contract.objects.filter(
+        staff=staff,
+        status='ACTIVE'
+    ).first()
+
+
 # =============================================================================
-# STAFF INSTANCE UTILITIES
+# DATE & AGE CALCULATIONS
 # =============================================================================
 
 def get_days_until_birthday(staff):
     """
-    Calculate days until staff member's next birthday
+    Calculate days until staff member's next birthday.
+    Pure calculation - no DB writes.
     
     Args:
         staff: Staff instance
@@ -425,7 +419,8 @@ def get_days_until_birthday(staff):
 
 def is_birthday_today(staff):
     """
-    Check if today is staff member's birthday
+    Check if today is staff member's birthday.
+    Pure check - no DB writes.
     
     Args:
         staff: Staff instance
@@ -443,7 +438,8 @@ def is_birthday_today(staff):
 
 def get_employment_duration(staff):
     """
-    Get how long staff member has been employed (in days)
+    Get how long staff member has been employed (in days).
+    Pure calculation - no DB writes.
     
     Args:
         staff: Staff instance
@@ -464,7 +460,8 @@ def get_employment_duration(staff):
 
 def get_years_of_service(staff):
     """
-    Get how many years staff member has been employed
+    Get how many years staff member has been employed.
+    Pure calculation - no DB writes.
     
     Args:
         staff: Staff instance
@@ -478,27 +475,10 @@ def get_years_of_service(staff):
     return 0
 
 
-def get_staff_current_contract(staff):
-    """
-    Get staff member's current active contract
-    
-    Args:
-        staff: Staff instance
-        
-    Returns:
-        Contract instance or None
-    """
-    from .models import Contract
-    
-    return Contract.objects.filter(
-        staff=staff,
-        status='ACTIVE'
-    ).first()
-
-
 def get_staff_age(staff):
     """
-    Calculate staff member's current age
+    Calculate staff member's current age.
+    Pure calculation - no DB writes.
     
     Args:
         staff: Staff instance
@@ -518,7 +498,8 @@ def get_staff_age(staff):
 
 def is_staff_due_for_retirement(staff, retirement_age=60):
     """
-    Check if staff is approaching retirement age
+    Check if staff is approaching retirement age.
+    Pure calculation - no DB writes.
     
     Args:
         staff: Staff instance
@@ -555,18 +536,19 @@ def is_staff_due_for_retirement(staff, retirement_age=60):
 
 
 # =============================================================================
-# SALARY CALCULATION UTILITIES
+# SALARY CALCULATIONS
 # =============================================================================
 
 def calculate_monthly_salary(contract):
     """
-    Calculate monthly salary from contract based on salary frequency
+    Calculate monthly salary from contract based on salary frequency.
+    Pure calculation - no DB writes.
     
     Args:
         contract: Contract instance
         
     Returns:
-        Money: Monthly salary amount
+        Decimal: Monthly salary amount
     """
     basic_salary = contract.basic_salary
     frequency = contract.salary_frequency
@@ -585,16 +567,48 @@ def calculate_monthly_salary(contract):
 
 def calculate_annual_salary(contract):
     """
-    Calculate annual salary from contract
+    Calculate annual salary from contract.
+    Pure calculation - no DB writes.
     
     Args:
         contract: Contract instance
         
     Returns:
-        Money: Annual salary amount
+        Decimal: Annual salary amount
     """
     monthly = calculate_monthly_salary(contract)
     return monthly * 12
+
+
+def calculate_daily_rate(contract):
+    """
+    Calculate daily rate from contract.
+    Pure calculation - no DB writes.
+    
+    Args:
+        contract: Contract instance
+        
+    Returns:
+        Decimal: Daily rate
+    """
+    monthly = calculate_monthly_salary(contract)
+    return monthly / 22  # Assuming 22 working days per month
+
+
+def calculate_hourly_rate(contract):
+    """
+    Calculate hourly rate from contract.
+    Pure calculation - no DB writes.
+    
+    Args:
+        contract: Contract instance
+        
+    Returns:
+        Decimal: Hourly rate
+    """
+    monthly = calculate_monthly_salary(contract)
+    hours_per_month = contract.working_hours_per_week * 52 / 12
+    return monthly / Decimal(str(hours_per_month))
 
 
 # =============================================================================
@@ -603,7 +617,8 @@ def calculate_annual_salary(contract):
 
 def get_teacher_workload(teacher):
     """
-    Calculate teacher's current workload percentage
+    Calculate teacher's current workload percentage.
+    Pure calculation - no DB writes.
     
     Args:
         teacher: Teacher instance
@@ -619,7 +634,8 @@ def get_teacher_workload(teacher):
 
 def is_teacher_overloaded(teacher):
     """
-    Check if teacher is overloaded (working more than max hours)
+    Check if teacher is overloaded (working more than max hours).
+    Pure check - no DB writes.
     
     Args:
         teacher: Teacher instance
@@ -630,17 +646,114 @@ def is_teacher_overloaded(teacher):
     return teacher.current_teaching_load > teacher.max_hours_per_week
 
 
-def get_available_teachers():
+def calculate_available_teaching_hours(teacher):
     """
-    Get teachers who have capacity for more classes
+    Calculate how many hours teacher has available.
+    Pure calculation - no DB writes.
     
+    Args:
+        teacher: Teacher instance
+        
     Returns:
-        QuerySet: Teachers with available capacity
+        int: Available hours (can be negative if overloaded)
     """
-    from .models import Teacher
+    return teacher.max_hours_per_week - teacher.current_teaching_load
+
+
+# =============================================================================
+# VALIDATION HELPERS
+# =============================================================================
+
+def validate_staff_data(staff_data):
+    """
+    Validate staff data before creation.
+    Pure validation - no DB writes.
     
-    return Teacher.objects.filter(
-        staff__is_active=True
-    ).exclude(
-        current_teaching_load__gte=F('max_hours_per_week')
-    )
+    Args:
+        staff_data (dict): Staff data dictionary
+        
+    Returns:
+        dict: {
+            'valid': bool,
+            'errors': list of str,
+            'warnings': list of str
+        }
+    """
+    errors = []
+    warnings = []
+    
+    # Required fields
+    required = ['first_name', 'last_name', 'date_of_joining']
+    for field in required:
+        if field not in staff_data or not staff_data[field]:
+            errors.append(f"{field.replace('_', ' ').title()} is required")
+    
+    # Date validations
+    if 'date_of_birth' in staff_data and staff_data['date_of_birth']:
+        if staff_data['date_of_birth'] > date.today():
+            errors.append("Birth date cannot be in the future")
+        
+        # Check minimum age (18)
+        age = (date.today() - staff_data['date_of_birth']).days / 365.25
+        if age < 18:
+            warnings.append("Staff member is under 18 years old")
+    
+    if 'date_of_joining' in staff_data and staff_data['date_of_joining']:
+        if staff_data['date_of_joining'] > date.today():
+            errors.append("Joining date cannot be in the future")
+    
+    # Email validation
+    if 'personal_email' in staff_data and staff_data['personal_email']:
+        if '@' not in staff_data['personal_email']:
+            errors.append("Invalid email address")
+    
+    valid = len(errors) == 0
+    
+    return {
+        'valid': valid,
+        'errors': errors,
+        'warnings': warnings
+    }
+
+
+def validate_contract_data(contract_data):
+    """
+    Validate contract data before creation.
+    Pure validation - no DB writes.
+    
+    Args:
+        contract_data (dict): Contract data dictionary
+        
+    Returns:
+        dict: {
+            'valid': bool,
+            'errors': list of str,
+            'warnings': list of str
+        }
+    """
+    errors = []
+    warnings = []
+    
+    # Required fields
+    required = ['staff', 'contract_type', 'start_date', 'basic_salary']
+    for field in required:
+        if field not in contract_data or not contract_data[field]:
+            errors.append(f"{field.replace('_', ' ').title()} is required")
+    
+    # Date validations
+    if 'start_date' in contract_data and 'end_date' in contract_data:
+        if contract_data['end_date'] and contract_data['end_date'] < contract_data['start_date']:
+            errors.append("End date cannot be before start date")
+    
+    # Salary validation
+    if 'basic_salary' in contract_data:
+        if contract_data['basic_salary'] <= 0:
+            errors.append("Basic salary must be positive")
+    
+    valid = len(errors) == 0
+    
+    return {
+        'valid': valid,
+        'errors': errors,
+        'warnings': warnings
+    }

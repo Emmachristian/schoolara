@@ -23,6 +23,9 @@ class SchoolRouter:
     default_apps = {'admin', 'auth', 'contenttypes', 'sessions', 'accounts'}
     school_apps = {
         'students',
+        'boarding',
+        'discipline',
+        'documents',
         'academics',
         'exams',
         'hr',

@@ -82,12 +82,6 @@ class SchoolManager(models.Manager):
     def update_or_create(self, **kwargs):
         return self.get_queryset().update_or_create(**kwargs)
 
-
-# Note: Base model implementations are in utils/models.py
-# - BaseModel: For school-specific models (auto-routes to current DB)
-# - DefaultDatabaseModel: For system-wide models (always uses default DB)
-
-
 # ==============================================================================
 # STANDALONE MANAGERS (if you don't want to change base class)
 # ==============================================================================

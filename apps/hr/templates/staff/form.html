@@ -267,6 +267,62 @@
         margin-bottom: 5px;
     }
     
+    /* Horizontal Gender Radio Buttons */
+    .gender-radio-group {
+        display: flex;
+        gap: 2rem;
+        padding: 12px 15px;
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        align-items: center;
+    }
+    
+    .gender-radio-group .form-check {
+        margin-bottom: 0;
+        padding-left: 0;
+    }
+    
+    .gender-radio-group .form-check-input {
+        float: none;
+        margin-right: 0.5rem;
+        margin-left: 0;
+    }
+    
+    .gender-radio-group .form-check-label {
+        font-weight: 500;
+        color: #495057;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    .gender-radio-group .form-check-input:checked + .form-check-label {
+        color: #6f42c1;
+        font-weight: 600;
+    }
+    
+    .gender-radio-label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    /* Designation Highlight */
+    .designation-info {
+        background-color: #f8f6fc;
+        border: 1px solid #e9d5ff;
+        border-radius: 6px;
+        padding: 12px;
+        margin-top: 8px;
+    }
+    
+    .designation-info small {
+        color: #6f42c1;
+        font-weight: 500;
+    }
+    
     @media (max-width: 768px) {
         .section-body {
             padding: 15px;
@@ -274,6 +330,12 @@
         
         .btn-save-group {
             padding: 15px;
+        }
+        
+        .gender-radio-group {
+            flex-direction: column;
+            gap: 1rem;
+            align-items: flex-start;
         }
     }
 </style>
@@ -331,6 +393,7 @@
         <div class="col-md-6">
             <ul class="mb-0">
                 <li><strong>Required fields</strong> are marked with an asterisk (*)</li>
+                <li><strong>Designation</strong> must be selected to assign role/position</li>
                 {% if form.instance.pk %}
                     <li><strong>Staff ID</strong> cannot be changed after creation</li>
                     <li><strong>Employment status changes</strong> will be tracked</li>
@@ -403,8 +466,10 @@
                 {% if form.instance.primary_department %}
                     in {{ form.instance.primary_department.name }}
                 {% endif %}
-                {% if form.instance.get_years_of_service %}
-                    <small class="text-muted ms-2">{{ form.instance.get_years_of_service }} years of service</small>
+                {% if form.instance.date_of_joining %}
+                    <small class="text-muted ms-2">
+                        {{ form.instance.date_of_joining|timesince }} at the school
+                    </small>
                 {% endif %}
             </div>
         </div>
@@ -452,8 +517,52 @@
                     <div class="form-text">Leave blank to auto-generate</div>
                 {% endif %}
             </div>
+
+            <!-- Profile Photo -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-camera me-2"></i>Profile Photo
+                </div>
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="profile-image-container mb-3">
+                            {% if form.instance.photo %}
+                                <img id="currentProfileImage" src="{{ form.instance.photo.url }}" alt="{{ form.instance.full_name }}" class="profile-avatar">
+                            {% else %}
+                                <div class="avatar-placeholder">
+                                    <div class="avatar-title">
+                                        {% if form.instance.first_name %}{{ form.instance.first_name|first }}{% endif %}{% if form.instance.last_name %}{{ form.instance.last_name|first }}{% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="profile-image-overlay">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        </div>
+                        <div class="small text-muted">Click to change photo</div>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="mt-2">
+                            <strong>Profile Photo</strong>
+                            <div class="small text-muted mt-1">
+                                Click on the image to update the staff member's photo.<br>
+                                Supported formats: JPG, PNG, GIF (Max: 5MB)<br>
+                                Recommended: Professional headshot, minimum 200x200 pixels
+                            </div>
+                        </div>
+                        {{ form.photo|add_class:"d-none" }}
+                        {% if form.photo.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.photo.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
             
-            <!-- Salutation -->
+            <!-- Salutation and Names -->
             <div class="row">
                 <div class="col-md-2">
                     <div class="form-floating">
@@ -509,6 +618,7 @@
                 </div>
             </div>
             
+            <!-- Date of Birth, Gender, Marital Status -->
             <div class="row">
                 <div class="col-md-4">
                     <div class="form-floating">
@@ -524,9 +634,20 @@
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-floating">
-                        {{ form.gender|add_class:"form-select" }}
-                        <label for="{{ form.gender.id_for_label }}" class="{% if form.gender.field.required %}required-field{% endif %}">Gender</label>
+                    <div class="mb-3">
+                        <label class="gender-radio-label {% if form.gender.field.required %}required-field{% endif %}">
+                            Gender
+                        </label>
+                        <div class="gender-radio-group">
+                            {% for radio in form.gender %}
+                                <div class="form-check form-check-inline">
+                                    {{ radio.tag }}
+                                    <label class="form-check-label" for="{{ radio.id_for_label }}">
+                                        {{ radio.choice_label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
                         {% if form.gender.errors %}
                             <div class="invalid-feedback d-block">
                                 {% for error in form.gender.errors %}
@@ -551,6 +672,7 @@
                 </div>
             </div>
             
+            <!-- Nationality, National ID, Passport -->
             <div class="row">
                 <div class="col-md-4">
                     <div class="form-floating">
@@ -593,6 +715,7 @@
                 </div>
             </div>
             
+            <!-- Ethnicity and Religious Affiliation -->
             <div class="row">
                 <div class="col-md-6">
                     <div class="form-floating">
@@ -622,49 +745,6 @@
                 </div>
             </div>
             
-            <!-- Profile Photo -->
-            <div class="field-group">
-                <div class="field-group-header">
-                    <i class="fa fa-camera me-2"></i>Profile Photo
-                </div>
-                <div class="row">
-                    <div class="col-md-3 text-center">
-                        <div class="profile-image-container mb-3">
-                            {% if form.instance.photo %}
-                                <img id="currentProfileImage" src="{{ form.instance.photo.url }}" alt="{{ form.instance.full_name }}" class="profile-avatar">
-                            {% else %}
-                                <div class="avatar-placeholder">
-                                    <div class="avatar-title">
-                                        {% if form.instance.first_name %}{{ form.instance.first_name|first }}{% endif %}{% if form.instance.last_name %}{{ form.instance.last_name|first }}{% endif %}
-                                    </div>
-                                </div>
-                            {% endif %}
-                            <div class="profile-image-overlay">
-                                <i class="fas fa-camera"></i>
-                            </div>
-                        </div>
-                        <div class="small text-muted">Click to change photo</div>
-                    </div>
-                    <div class="col-md-9">
-                        <div class="mt-2">
-                            <strong>Profile Photo</strong>
-                            <div class="small text-muted mt-1">
-                                Click on the image to update the staff member's photo.<br>
-                                Supported formats: JPG, PNG, GIF (Max: 5MB)<br>
-                                Recommended: Professional headshot, minimum 200x200 pixels
-                            </div>
-                        </div>
-                        {{ form.photo|add_class:"d-none" }}
-                        {% if form.photo.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.photo.errors %}
-                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
     
@@ -787,7 +867,7 @@
     <div class="form-section">
         <div class="section-header">
             <h6><i class="fa fa-briefcase me-2"></i>Employment Information</h6>
-            <p>Job details, department assignment, and employment dates</p>
+            <p>Job details, department assignment, designation, and employment dates</p>
         </div>
         <div class="section-body">
             <div class="row">
@@ -846,6 +926,54 @@
                             </div>
                         {% endif %}
                     </div>
+                </div>
+            </div>
+            
+            <!-- Designation Field -->
+            <div class="field-group">
+                <div class="field-group-header">
+                    <i class="fa fa-award me-2"></i>Designation & Role
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="form-floating">
+                            {{ form.designation|add_class:"form-select" }}
+                            <label for="{{ form.designation.id_for_label }}" class="{% if form.designation.field.required %}required-field{% endif %}">Primary Designation</label>
+                            {% if form.designation.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.designation.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">Select the staff member's primary role/position</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch" style="padding-top: 20px;">
+                            {{ form.is_primary_designation|add_class:"form-check-input" }}
+                            <label class="form-check-label" for="{{ form.is_primary_designation.id_for_label }}">
+                                <strong>Set as Primary</strong>
+                                <small class="d-block text-muted">Main role for this staff member</small>
+                            </label>
+                            {% if form.is_primary_designation.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.is_primary_designation.errors %}
+                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="designation-info">
+                    <small>
+                        <i class="fa fa-info-circle me-1"></i>
+                        <strong>Note:</strong> The designation defines the staff member's role, responsibilities, and salary range. 
+                        You can assign additional designations later from the staff profile page.
+                    </small>
                 </div>
             </div>
         </div>
@@ -1105,7 +1233,7 @@
     </div>
 </form>
 
-<!-- Profile Image Modal (same as student form) -->
+<!-- Profile Image Modal -->
 <div class="modal fade" id="profileImageModal" tabindex="-1" role="dialog" aria-labelledby="profileImageModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
@@ -1150,7 +1278,6 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
 <script>
-// Use the same JavaScript from the student form, just change references from "student" to "staff"
 document.addEventListener('DOMContentLoaded', function() {
     initializeFormValidation();
     setupImageHandling();
@@ -1241,7 +1368,7 @@ function trackFormChanges() {
     formFields.forEach(field => {
         field.addEventListener('change', function() {
             hasUnsavedChanges = true;
-            if (this.type === 'checkbox') {
+            if (this.type === 'checkbox' || this.type === 'radio') {
                 this.parentElement.classList.add('border-warning');
             } else {
                 this.classList.add('border-warning');

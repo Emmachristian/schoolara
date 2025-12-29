@@ -461,6 +461,30 @@ class StaffForm(forms.ModelForm):
         widget=forms.RadioSelect(),
         required=False
     )
+
+    # Add designation field with special handling
+    designation = forms.ModelChoiceField(
+        queryset=None,
+        label="Primary Designation",
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'id': 'id_designation'
+        }),
+        required=True,
+        help_text="Select the primary role/position for this staff member"
+    )
+    
+    # Add option to mark as primary designation
+    is_primary_designation = forms.BooleanField(
+        label="Set as Primary Designation",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'form-check-input',
+            'checked': 'checked'
+        }),
+        help_text="Check if this is the main role for this staff member"
+    )
     
     class Meta:
         model = Staff
@@ -562,6 +586,31 @@ class StaffForm(forms.ModelForm):
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
         self.fields['date_of_joining'].required = True
+        self.fields['designation'].required = True
+        
+        # Set up designation queryset with grouping by department
+        try:
+            self.fields['designation'].queryset = Designation.objects.filter(
+                is_active=True
+            ).select_related('department').order_by('department__name', 'rank_order', 'name')
+            
+            # If editing existing staff, show current designation
+            if self.instance.pk:
+                try:
+                    current_designation = StaffDesignation.objects.filter(
+                        staff=self.instance,
+                        is_primary=True,
+                        is_active=True
+                    ).first()
+                    
+                    if current_designation:
+                        self.fields['designation'].initial = current_designation.designation
+                except Exception as e:
+                    logger.error(f"Error getting current designation: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error setting designation queryset: {e}")
+            self.fields['designation'].queryset = Designation.objects.none()
         
         # Filter departments
         self.fields['primary_department'].queryset = Department.objects.filter(is_active=True)
@@ -620,7 +669,50 @@ class StaffForm(forms.ModelForm):
         
         return date_of_leaving
     
-# hr/forms.py (add these after your existing forms)
+    def save(self, commit=True):
+        """Override save to handle designation assignment"""
+        staff = super().save(commit=commit)
+        
+        if commit:
+            designation = self.cleaned_data.get('designation')
+            is_primary = self.cleaned_data.get('is_primary_designation', True)
+            
+            if designation:
+                # Check if staff already has this designation
+                existing_designation = StaffDesignation.objects.filter(
+                    staff=staff,
+                    designation=designation,
+                    is_active=True
+                ).first()
+                
+                if not existing_designation:
+                    # If marking as primary, unset other primary designations
+                    if is_primary:
+                        StaffDesignation.objects.filter(
+                            staff=staff,
+                            is_primary=True
+                        ).update(is_primary=False)
+                    
+                    # Create new designation assignment
+                    StaffDesignation.objects.create(
+                        staff=staff,
+                        designation=designation,
+                        is_primary=is_primary,
+                        start_date=timezone.now().date(),
+                        is_active=True,
+                        assignment_type='PERMANENT'
+                    )
+                elif is_primary:
+                    # Update existing to be primary
+                    StaffDesignation.objects.filter(
+                        staff=staff,
+                        is_primary=True
+                    ).exclude(id=existing_designation.id).update(is_primary=False)
+                    
+                    existing_designation.is_primary = True
+                    existing_designation.save()
+        
+        return staff
 
 # =============================================================================
 # STAFF WIZARD FORMS
@@ -640,6 +732,18 @@ class StaffBasicInfoForm(forms.ModelForm):
         widget=forms.RadioSelect(),
         required=True
     )
+
+    # Add designation field
+    designation = forms.ModelChoiceField(
+        queryset=None,  # Will be set in __init__
+        label="Designation/Position",
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'required': 'required'
+        }),
+        required=False,  # Optional in basic info, will be required in employment step
+        help_text="Select the staff member's primary role/position"
+    )
     
     class Meta:
         model = Staff
@@ -647,7 +751,7 @@ class StaffBasicInfoForm(forms.ModelForm):
             'salutation', 'first_name', 'middle_name', 'last_name',
             'date_of_birth', 'gender', 'marital_status',
             'nationality', 'ethnicity', 'religious_affiliation',
-            'national_id', 'passport_number', 'photo'
+            'national_id', 'passport_number'
         ]
         
         widgets = {
@@ -683,10 +787,6 @@ class StaffBasicInfoForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'Passport Number (optional)'
             }),
-            'photo': forms.FileInput(attrs={
-                'class': 'form-control',
-                'accept': 'image/*'
-            }),
         }
     
     def __init__(self, *args, **kwargs):
@@ -697,6 +797,39 @@ class StaffBasicInfoForm(forms.ModelForm):
         for field_name in required_fields:
             if field_name in self.fields:
                 self.fields[field_name].required = True
+        
+        # Set up designation choices - group by department
+        try:
+            designations = Designation.objects.filter(
+                is_active=True
+            ).select_related('department').order_by('department__name', 'name')
+            
+            # Create grouped choices
+            designation_choices = [('', 'Select Designation')]
+            current_dept = None
+            dept_choices = []
+            
+            for designation in designations:
+                if current_dept != designation.department:
+                    if dept_choices:
+                        designation_choices.append((current_dept.name, dept_choices))
+                        dept_choices = []
+                    current_dept = designation.department
+                
+                dept_choices.append((
+                    designation.id, 
+                    f"{designation.name} ({designation.get_department_type_display() if hasattr(designation.department, 'get_department_type_display') else ''})"
+                ))
+            
+            # Add last group
+            if dept_choices:
+                designation_choices.append((current_dept.name, dept_choices))
+            
+            self.fields['designation'].queryset = designations
+            
+        except Exception as e:
+            logger.error(f"Error setting designation queryset: {e}")
+            self.fields['designation'].queryset = Designation.objects.none()
         
         # Set up nationality choices with Uganda as default
         from django_countries import countries

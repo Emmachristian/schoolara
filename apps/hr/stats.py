@@ -59,12 +59,6 @@ def get_staff_statistics(filters=None):
         if filters.get('date_range'):
             start_date, end_date = filters['date_range']
             staff = staff.filter(date_of_joining__gte=start_date, date_of_joining__lte=end_date)
-        if filters.get('min_age'):
-            from .utils import get_staff_age
-            # This would need custom filtering - simplified here
-            pass
-        if filters.get('max_age'):
-            pass
     
     total_staff = staff.count()
     
@@ -79,8 +73,8 @@ def get_staff_statistics(filters=None):
             'male': staff.filter(gender='M').count(),
             'female': staff.filter(gender='F').count(),
             'other': staff.filter(gender='O').count(),
-            'male_percentage': (staff.filter(gender='M').count() / total_staff * 100) if total_staff > 0 else 0,
-            'female_percentage': (staff.filter(gender='F').count() / total_staff * 100) if total_staff > 0 else 0,
+            'male_percentage': round((staff.filter(gender='M').count() / total_staff * 100), 1) if total_staff > 0 else 0,
+            'female_percentage': round((staff.filter(gender='F').count() / total_staff * 100), 1) if total_staff > 0 else 0,
         },
         
         # Employment status distribution
@@ -137,7 +131,7 @@ def get_staff_statistics(filters=None):
         
         if ages:
             stats['age_analysis'] = {
-                'average_age': sum(ages) / len(ages),
+                'average_age': round(sum(ages) / len(ages), 1),
                 'youngest_age': min(ages),
                 'oldest_age': max(ages),
                 'median_age': sorted(ages)[len(ages) // 2],
@@ -163,9 +157,10 @@ def get_staff_statistics(filters=None):
                 service_durations.append(duration)
         
         if service_durations:
+            avg_service_days = sum(service_durations) / len(service_durations)
             stats['service_analysis'] = {
-                'average_service_days': sum(service_durations) / len(service_durations),
-                'average_service_years': (sum(service_durations) / len(service_durations)) / 365.25,
+                'average_service_days': round(avg_service_days, 1),
+                'average_service_years': round(avg_service_days / 365.25, 1),
                 'shortest_service_days': min(service_durations),
                 'longest_service_days': max(service_durations),
                 'service_groups': {
@@ -189,31 +184,40 @@ def get_staff_statistics(filters=None):
     }
     
     # Recent activity
-    current_date = today
     stats['recent_activity'] = {
         'joined_last_30_days': staff.filter(
-            date_of_joining__gte=current_date - timedelta(days=30)
+            date_of_joining__gte=today - timedelta(days=30)
         ).count(),
         'joined_last_90_days': staff.filter(
-            date_of_joining__gte=current_date - timedelta(days=90)
+            date_of_joining__gte=today - timedelta(days=90)
         ).count(),
         'left_last_30_days': staff.filter(
-            date_of_leaving__gte=current_date - timedelta(days=30)
+            date_of_leaving__gte=today - timedelta(days=30)
         ).count(),
         'birthdays_this_month': staff.filter(
-            date_of_birth__month=current_date.month,
+            date_of_birth__month=today.month,
             is_active=True
         ).count(),
     }
     
-    # Joining trends by year
-    stats['joining_trends'] = dict(
+    # Joining trends by year - Convert dates to strings for JSON serialization
+    joining_trends_raw = (
         staff.annotate(year=TruncYear('date_of_joining'))
         .values('year')
         .annotate(count=Count('id'))
         .order_by('-year')
         .values_list('year', 'count')[:10]
     )
+    
+    # Convert date keys to ISO format strings (YYYY-MM-DD) or year strings
+    stats['joining_trends'] = {}
+    for year_date, count in joining_trends_raw:
+        if year_date:
+            # Extract just the year for cleaner display
+            year_str = str(year_date.year)
+            stats['joining_trends'][year_str] = count
+        else:
+            stats['joining_trends']['Unknown'] = count
     
     # Retirement analysis (assuming retirement age is 60)
     approaching_retirement = []
@@ -225,13 +229,20 @@ def get_staff_statistics(filters=None):
             if 55 <= age < 60:
                 approaching_retirement.append(staff_member)
     
+    # Calculate retirement date safely
+    retirement_cutoff_date = date(today.year - 60, today.month, today.day)
+    
     stats['retirement_analysis'] = {
         'approaching_retirement_5_years': len(approaching_retirement),
         'eligible_for_retirement': staff.filter(
             is_active=True,
-            date_of_birth__lte=date(today.year - 60, today.month, today.day)
+            date_of_birth__lte=retirement_cutoff_date
         ).count(),
     }
+    
+    # Add total departments for consistency with template
+    from .models import Department
+    stats['total_departments'] = Department.objects.filter(is_active=True).count()
     
     return stats
 

@@ -1,12 +1,9 @@
 # utils/models.py
 
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.core.exceptions import ValidationError
 from schoolara.managers import get_current_db, SchoolManager
 from datetime import date
 import uuid
-from djmoney.models.fields import MoneyField, CurrencyField
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 import logging
@@ -40,7 +37,7 @@ class BaseModel(models.Model):
     created_at = models.DateTimeField("Created At", auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField("Updated At", auto_now=True, db_index=True)
     
-    # User tracking - REDUCED from 100 to 50
+    # User tracking - CharField to avoid cross-database FK constraints
     created_by_id = models.CharField("Created By ID", max_length=50, null=True, blank=True, db_index=True)
     updated_by_id = models.CharField("Updated By ID", max_length=50, null=True, blank=True, db_index=True)
     
@@ -66,19 +63,57 @@ class BaseModel(models.Model):
     def save(self, *args, **kwargs):
         """
         Override save to:
-        1. Automatically route to correct database
-        2. Capture audit trail information
-        3. Create audit log entry
+        1. Populate audit trail fields (created_by, updated_by, IPs)
+        2. Automatically route to correct database
+        3. Track field changes
+        4. Create audit log entry
         """
+        from utils.context import get_request_context
+        
         # Determine if this is a new object
         is_new = self._state.adding
         
-        # Track changes for existing objects
+        # =========================================================================
+        # STEP 1: POPULATE AUDIT FIELDS FROM REQUEST CONTEXT
+        # =========================================================================
+        context = get_request_context()
+        
+        if context:
+            user = context.get('user')
+            ip_address = context.get('ip_address')
+            
+            # Set created_by and created_from_ip for new objects
+            if is_new:
+                if user and not self.created_by_id:
+                    self.created_by_id = str(user.id)
+                if ip_address and not self.created_from_ip:
+                    self.created_from_ip = ip_address
+            
+            # Always update updated_by and updated_from_ip
+            if user:
+                self.updated_by_id = str(user.id)
+            if ip_address:
+                self.updated_from_ip = ip_address
+        else:
+            # Log when no context is available (e.g., management commands, shell)
+            if is_new:
+                logger.debug(
+                    f"No request context available when creating {self.__class__.__name__}. "
+                    f"Audit fields will not be populated."
+                )
+        
+        # =========================================================================
+        # STEP 2: TRACK CHANGES FOR EXISTING OBJECTS
+        # =========================================================================
         changes = {}
         if not is_new and self.pk:
             try:
-                # Get old instance from database
-                old_instance = self.__class__.objects.get(pk=self.pk)
+                # Get old instance from database with proper routing
+                current_db = get_current_db()
+                if current_db:
+                    old_instance = self.__class__.objects.using(current_db).get(pk=self.pk)
+                else:
+                    old_instance = self.__class__.objects.get(pk=self.pk)
                 
                 # Compare fields to detect changes
                 for field in self._meta.fields:
@@ -99,9 +134,14 @@ class BaseModel(models.Model):
                             'new': str(new_value) if new_value is not None else None
                         }
             except self.__class__.DoesNotExist:
+                logger.debug(f"Old instance not found for {self.__class__.__name__} {self.pk}")
                 pass  # Object doesn't exist yet, treat as new
+            except Exception as e:
+                logger.error(f"Error tracking changes for {self.__class__.__name__}: {e}")
         
-        # Get current database context
+        # =========================================================================
+        # STEP 3: AUTOMATIC DATABASE ROUTING
+        # =========================================================================
         current_db = get_current_db()
         
         # Only set 'using' if not already specified and we have a database context
@@ -109,11 +149,17 @@ class BaseModel(models.Model):
             kwargs['using'] = current_db
             logger.debug(f"Saving {self.__class__.__name__} to {current_db}")
         
-        # Save the object
+        # =========================================================================
+        # STEP 4: SAVE THE OBJECT
+        # =========================================================================
         result = super().save(*args, **kwargs)
         
-        # Create audit log entry (only if we have a database context)
-        if current_db and current_db != 'default':
+        # =========================================================================
+        # STEP 5: CREATE AUDIT LOG ENTRY
+        # =========================================================================
+        # Only create audit log for school databases (not default)
+        # ALSO skip if this IS an AuditLog to prevent infinite recursion
+        if current_db and current_db != 'default' and self.__class__.__name__ != 'AuditLog':
             self._create_audit_log(
                 action='CREATE' if is_new else 'UPDATE',
                 changes=changes if not is_new else {}
@@ -130,7 +176,8 @@ class BaseModel(models.Model):
             logger.debug(f"Deleting {self.__class__.__name__} from {current_db}")
         
         # Create audit log before deletion (only for school databases)
-        if current_db and current_db != 'default':
+        # ALSO skip if this IS an AuditLog to prevent infinite recursion
+        if current_db and current_db != 'default' and self.__class__.__name__ != 'AuditLog':
             self._create_audit_log(action='DELETE', changes={})
         
         return super().delete(*args, **kwargs)
@@ -184,6 +231,22 @@ class BaseModel(models.Model):
             'updated_from_ip': self.updated_from_ip,
             'last_change_reason': self.change_reason,
         }
+    
+    @property
+    def created_by_name(self):
+        """Get the name of the user who created this record"""
+        user = self.get_created_by()
+        if user:
+            return user.get_full_name() or user.username
+        return "System"
+    
+    @property
+    def updated_by_name(self):
+        """Get the name of the user who last updated this record"""
+        user = self.get_updated_by()
+        if user:
+            return user.get_full_name() or user.username
+        return "System"
     
     def _create_audit_log(self, action, changes):
         """Create an audit log entry for this change"""
@@ -250,15 +313,38 @@ class BaseModel(models.Model):
         """
         try:
             from utils.models import AuditLog
+            current_db = get_current_db()
             
-            return AuditLog.objects.filter(
+            queryset = AuditLog.objects.filter(
                 content_type=f"{self._meta.app_label}.{self._meta.model_name}",
                 object_id=str(self.pk)
-            ).order_by('-timestamp')[:limit]
+            )
+            
+            # Use correct database if available
+            if current_db:
+                queryset = queryset.using(current_db)
+            
+            return queryset.order_by('-timestamp')[:limit]
         except Exception as e:
             logger.error(f"Error fetching history: {e}")
             return []
+    
+    def set_change_reason(self, reason):
+        """
+        Set the reason for the next change to this object.
         
+        Usage:
+            student = Student.objects.get(id=some_id)
+            student.status = "GRADUATED"
+            student.set_change_reason("Student completed all requirements")
+            student.save()
+        
+        Args:
+            reason: String explaining why the change was made
+        """
+        self.change_reason = reason
+
+
 # =============================================================================
 # DEFAULT DATABASE MODEL - SYSTEM-WIDE DATA
 # =============================================================================
@@ -346,7 +432,7 @@ class AuditLog(models.Model):
         blank=True
     )
     
-    # Who made the change - REDUCED from 100 to 50
+    # Who made the change
     user_id = models.CharField("User ID", max_length=50, db_index=True, null=True, blank=True)
     user_email = models.EmailField("User Email", max_length=255, blank=True)
     user_name = models.CharField("User Name", max_length=255, blank=True)
@@ -424,13 +510,46 @@ class AuditLog(models.Model):
             lines.append(f"{field}: '{old_val}' → '{new_val}'")
         
         return "\n".join(lines)
+    
+    def get_summary(self):
+        """Get a brief summary of this audit entry"""
+        user_display = self.user_name or self.user_email or self.user_id or "Unknown User"
+        return f"{user_display} {self.get_action_display().lower()} {self.content_type}"
+    
+    @classmethod
+    def get_recent_activity(cls, limit=50):
+        """Get recent audit activity across all models"""
+        return cls.objects.all().order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_user_activity(cls, user_id, limit=50):
+        """Get recent activity for a specific user"""
+        return cls.objects.filter(user_id=str(user_id)).order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_model_history(cls, model_label, limit=50):
+        """Get history for a specific model type"""
+        return cls.objects.filter(content_type=model_label).order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_object_history(cls, obj):
+        """Get complete history for a specific object"""
+        content_type = f"{obj._meta.app_label}.{obj._meta.model_name}"
+        return cls.objects.filter(
+            content_type=content_type,
+            object_id=str(obj.pk)
+        ).order_by('-timestamp')
+
 
 # =============================================================================
 # FINANCIAL AUDIT LOG
 # =============================================================================
 
 class FinancialAuditLog(models.Model):
-    """Specialized audit log for financial transactions and sensitive operations"""
+    """
+    Specialized audit log for financial transactions and sensitive operations.
+    Provides enhanced tracking for compliance and security purposes.
+    """
     
     # Financial-specific action types
     FINANCIAL_ACTIONS = [
@@ -465,7 +584,7 @@ class FinancialAuditLog(models.Model):
         ('JOURNAL_POST', 'Journal Entry Posted'),
         ('RECONCILIATION', 'Account Reconciliation'),
         
-        # Enhanced actions from utils integration
+        # Enhanced actions
         ('EXPENSE_CREATE', 'Expense Created'),
         ('EXPENSE_APPROVE', 'Expense Approved'),
         ('BUDGET_CREATE', 'Budget Created'),
@@ -506,7 +625,7 @@ class FinancialAuditLog(models.Model):
         blank=True,
         help_text="Monetary amount involved in the action"
     )
-    currency = models.CharField(max_length=3, null=True, blank=True)
+    currency = models.CharField(max_length=3, null=True, blank=True, default='UGX')
     
     # Student context (for student-related financial actions)
     student_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
@@ -560,6 +679,9 @@ class FinancialAuditLog(models.Model):
         help_text="For grouping related bulk operations"
     )
     
+    # Use SchoolManager for automatic database routing
+    objects = SchoolManager()
+    
     class Meta:
         verbose_name = "Financial Audit Log"
         verbose_name_plural = "Financial Audit Logs"
@@ -576,6 +698,17 @@ class FinancialAuditLog(models.Model):
     def __str__(self):
         return f"{self.get_action_display()} at {self.timestamp}"
     
+    def save(self, *args, **kwargs):
+        """Route to current database"""
+        current_db = get_current_db()
+        if current_db and 'using' not in kwargs:
+            kwargs['using'] = current_db
+        return super().save(*args, **kwargs)
+    
+    # -------------------------------------------------------------------------
+    # CLASS METHODS - Creating Financial Audit Logs
+    # -------------------------------------------------------------------------
+    
     @classmethod
     def log_financial_action(
         cls,
@@ -591,7 +724,7 @@ class FinancialAuditLog(models.Model):
         risk_level='LOW',
         additional_data=None,
         notes=None,
-        currency=None,             
+        currency=None,
         **kwargs
     ):
         """
@@ -600,13 +733,28 @@ class FinancialAuditLog(models.Model):
         Handles:
         - academic_session as object or string/UUID
         - currency as object or string (or None → default 'UGX')
+        
+        Args:
+            action: Action type from FINANCIAL_ACTIONS
+            user: User performing the action
+            request: Django request object
+            target_object: Object being acted upon
+            amount: Monetary amount involved
+            student: Student object (for student-related actions)
+            academic_session: Academic session/period
+            old_values: Values before change
+            new_values: Values after change
+            risk_level: Risk level of the action
+            additional_data: Additional contextual data
+            notes: Optional notes
+            currency: Currency code or object
+            **kwargs: Additional parameters
+            
+        Returns:
+            FinancialAuditLog: Created audit log entry or None if failed
         """
-        from decimal import Decimal, InvalidOperation
         from django.utils import timezone
         from django.contrib.contenttypes.models import ContentType
-        import logging
-
-        logger = logging.getLogger(__name__)
 
         try:
             # Prepare base log payload
@@ -614,22 +762,38 @@ class FinancialAuditLog(models.Model):
                 'action': action,
                 'risk_level': risk_level,
                 'timestamp': timezone.now(),
-                'notes': (notes or '')[:2000],  # keep it bounded
+                'notes': (notes or '')[:2000],  # Limit length
                 'old_values': old_values,
                 'new_values': new_values,
                 'additional_data': (additional_data or {}),
                 'is_automated': bool(kwargs.get('is_automated', False)),
                 'batch_id': kwargs.get('batch_id'),
             }
+            
+            # Handle currency
+            if currency:
+                if hasattr(currency, 'code'):
+                    log_data['currency'] = currency.code
+                else:
+                    log_data['currency'] = str(currency)[:3].upper()
+            else:
+                log_data['currency'] = 'UGX'
+            
+            # Handle amount
+            if amount is not None:
+                try:
+                    log_data['amount_involved'] = Decimal(str(amount))
+                except (ValueError, InvalidOperation, TypeError):
+                    logger.warning(f"Invalid amount for financial audit log: {amount}")
+                    log_data['amount_involved'] = None
 
             # User info
             if user:
-                # get_full_name() may exist but return ''
                 full_name = getattr(user, 'get_full_name', lambda: '')() or getattr(user, 'username', '') or str(user)
                 role = getattr(user, 'role', '') or getattr(user, 'user_type', '') or ''
                 log_data.update({
                     'user_id': str(getattr(user, 'pk', '')),
-                    'user_name': full_name[:255],
+                    'user_name': full_name[:200],
                     'user_role': role[:100],
                 })
 
@@ -663,8 +827,8 @@ class FinancialAuditLog(models.Model):
                 student_name = getattr(student, 'get_full_name', lambda: str(student))()
                 log_data.update({
                     'student_id': str(getattr(student, 'pk', '')),
-                    'student_name': student_name[:255],
-                    'student_admission_number': str(getattr(student, 'admission_number', ''))[:64],
+                    'student_name': student_name[:200],
+                    'student_admission_number': str(getattr(student, 'admission_number', ''))[:50],
                 })
 
             # Academic session
@@ -673,36 +837,36 @@ class FinancialAuditLog(models.Model):
                     if hasattr(academic_session, 'pk'):
                         log_data.update({
                             'academic_session_id': str(academic_session.pk),
-                            'academic_session_name': str(academic_session)[:255],
+                            'academic_session_name': str(academic_session)[:100],
                         })
                     else:
-                        # string or unknown type
+                        # String or unknown type
                         session_str = str(academic_session)
                         # Try resolve UUID → object
                         try:
-                            import uuid
-                            from academics.models import AcademicSession
-                            uuid.UUID(session_str)
-                            session_obj = AcademicSession.objects.filter(id=session_str).first()
+                            import uuid as uuid_lib
+                            from core.models import Period
+                            uuid_lib.UUID(session_str)
+                            session_obj = Period.objects.filter(id=session_str).first()
                         except Exception:
                             session_obj = None
 
                         if session_obj:
                             log_data.update({
                                 'academic_session_id': str(session_obj.pk),
-                                'academic_session_name': str(session_obj)[:255],
+                                'academic_session_name': str(session_obj)[:100],
                             })
                         else:
                             log_data.update({
-                                'academic_session_id': session_str[:64],
-                                'academic_session_name': session_str[:255],
+                                'academic_session_id': session_str[:100],
+                                'academic_session_name': session_str[:100],
                             })
                 except Exception as session_error:
                     logger.warning(f"Error processing academic_session for audit log: {session_error}")
                     ss = str(academic_session)
                     log_data.update({
-                        'academic_session_id': ss[:64],
-                        'academic_session_name': ss[:255],
+                        'academic_session_id': ss[:100],
+                        'academic_session_name': ss[:100],
                     })
 
             return cls.objects.create(**log_data)
@@ -710,746 +874,133 @@ class FinancialAuditLog(models.Model):
         except Exception as e:
             logger.error(f"Error creating financial audit log: {e}", exc_info=True)
             return None
-
-    @staticmethod
-    def _get_client_ip(request):
-        """Get client IP from request"""
+    
+    # -------------------------------------------------------------------------
+    # INSTANCE METHODS
+    # -------------------------------------------------------------------------
+    
+    def get_user(self):
+        """Get the user who performed this action"""
+        if not self.user_id:
+            return None
         try:
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip = x_forwarded_for.split(',')[0]
-            else:
-                ip = request.META.get('REMOTE_ADDR')
-            return ip
-        except:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.using('default').get(id=self.user_id)
+        except Exception as e:
+            logger.error(f"Error fetching financial audit user: {e}")
             return None
     
-    @staticmethod
-    def _get_client_ip(request):
-        """Get client IP from request"""
-        try:
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip = x_forwarded_for.split(',')[0]
-            else:
-                ip = request.META.get('REMOTE_ADDR')
-            return ip
-        except:
+    def get_student(self):
+        """Get the student associated with this action"""
+        if not self.student_id:
             return None
-        
-# =============================================================================
-# SCHOOL ACADEMIC & CONFIGURATION MODEL
-# =============================================================================
-
-class FinancialSettings(BaseModel):
-    """Model for managing core financial settings for the school"""
-
-    # -------------------------------------------------------------------------
-    # CHOICE FIELDS
-    # -------------------------------------------------------------------------
-
-    CURRENCY_POSITION_CHOICES = [
-        ('BEFORE', 'Before amount (UGX 100.00)'),
-        ('AFTER', 'After amount (100.00 UGX)'),
-        ('BEFORE_NO_SPACE', 'Before, no space (UGX100.00)'),
-        ('AFTER_NO_SPACE', 'After, no space (100.00UGX)'),
-    ]
-
-    # -------------------------------------------------------------------------
-    # CORE CONFIGURATION
-    # -------------------------------------------------------------------------
-
-    school_currency = CurrencyField(
-        "School Primary Currency",
-        default='UGX',
-        help_text="Primary currency for this school"
-    )
-
-    currency_position = models.CharField(
-        "Currency Position",
-        max_length=20,
-        choices=CURRENCY_POSITION_CHOICES,
-        default='BEFORE'
-    )
-
-    decimal_places = models.PositiveIntegerField(
-        "Decimal Places",
-        default=2,
-        validators=[MinValueValidator(0), MaxValueValidator(4)],
-        help_text="Number of decimal places for currency display"
-    )
-
-    use_thousand_separator = models.BooleanField(
-        "Use Thousand Separator",
-        default=True
-    )
-
-    # -------------------------------------------------------------------------
-    # PAYMENT SETTINGS
-    # -------------------------------------------------------------------------
-
-    default_payment_terms_days = models.PositiveIntegerField(
-        "Default Payment Terms (Days)",
-        default=30
-    )
-
-    late_fee_enabled = models.BooleanField(
-        "Enable Late Fees",
-        default=True
-    )
-
-    late_fee_percentage = models.DecimalField(
-        "Default Late Fee Percentage",
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal('5.00'),
-        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))]
-    )
-
-    grace_period_days = models.PositiveIntegerField(
-        "Default Grace Period (Days)",
-        default=7
-    )
-
-    minimum_payment_amount = models.DecimalField(
-        "Minimum Payment Amount",
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('1000.00'),
-        help_text="Minimum amount for any payment transaction in school currency"
-    )
-
-    # -------------------------------------------------------------------------
-    # WORKFLOW SETTINGS
-    # -------------------------------------------------------------------------
-
-    auto_apply_scholarships = models.BooleanField(
-        "Auto Apply Scholarships",
-        default=True
-    )
-
-    scholarship_approval_required = models.BooleanField(
-        "Scholarship Approval Required",
-        default=False
-    )
-
-    auto_apply_discounts = models.BooleanField(
-        "Auto Apply Discounts",
-        default=True
-    )
-
-    discount_approval_required = models.BooleanField(
-        "Discount Approval Required",
-        default=True
-    )
-
-    expense_approval_required = models.BooleanField(
-        "Expense Approval Required",
-        default=True
-    )
-
-    expense_approval_limit = models.DecimalField(
-        "Expense Approval Limit",
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('100000.00')
-    )
-
-    # -------------------------------------------------------------------------
-    # COMMUNICATION SETTINGS
-    # -------------------------------------------------------------------------
-
-    send_invoice_emails = models.BooleanField(
-        "Send Invoice Emails",
-        default=True
-    )
-
-    send_payment_confirmations = models.BooleanField(
-        "Send Payment Confirmations",
-        default=True
-    )
-
-    send_overdue_reminders = models.BooleanField(
-        "Send Overdue Reminders",
-        default=True
-    )
-
-    # -------------------------------------------------------------------------
-    # CORE METHODS
-    # -------------------------------------------------------------------------
-
-    @classmethod
-    def get_settings(cls):
-        """Return the first financial settings instance"""
-        return cls.objects.first()
-
-    @classmethod
-    def get_school_currency(cls):
-        """Return school currency code"""
-        settings = cls.get_settings()
-        return settings.school_currency.code if settings else 'UGX'
-
-    @classmethod
-    def get_currency_info(cls):
-        """Return full currency configuration"""
-        settings = cls.get_settings()
-        if settings:
-            return {
-                'code': settings.school_currency.code,
-                'decimal_places': settings.decimal_places,
-                'position': settings.currency_position,
-                'use_separator': settings.use_thousand_separator,
-            }
-        return {
-            'code': 'UGX',
-            'decimal_places': 2,
-            'position': 'BEFORE',
-            'use_separator': True,
-        }
-
-    def format_currency(self, amount, include_symbol=True):
-        """Format amount based on school settings"""
         try:
-            amount = Decimal(str(amount or 0))
-            formatted = f"{amount:,.{self.decimal_places}f}"
-
-            if not self.use_thousand_separator:
-                formatted = formatted.replace(',', '')
-
-            if include_symbol:
-                symbol = self.school_currency.code
-                if self.currency_position == 'BEFORE':
-                    return f"{symbol} {formatted}"
-                elif self.currency_position == 'AFTER':
-                    return f"{formatted} {symbol}"
-                elif self.currency_position == 'BEFORE_NO_SPACE':
-                    return f"{symbol}{formatted}"
-                elif self.currency_position == 'AFTER_NO_SPACE':
-                    return f"{formatted}{symbol}"
-            return formatted
-
-        except (ValueError, TypeError, InvalidOperation):
-            return f"{self.school_currency.code} 0.{'0' * self.decimal_places}"
-
-    @classmethod
-    def format_amount(cls, amount, include_symbol=True):
-        settings = cls.get_settings()
-        return settings.format_currency(amount, include_symbol) if settings else f"UGX {amount:,.2f}"
-
-    # -------------------------------------------------------------------------
-    # VALIDATION METHODS
-    # -------------------------------------------------------------------------
-
-    def clean(self):
-        """Validate financial settings"""
-        super().clean()
-        errors = {}
-
-        if not (0 <= self.decimal_places <= 4):
-            errors['decimal_places'] = "Decimal places must be between 0 and 4"
-
-        if not (0 <= self.late_fee_percentage <= 100):
-            errors['late_fee_percentage'] = "Late fee percentage must be between 0 and 100"
-
-        if self.minimum_payment_amount <= 0:
-            errors['minimum_payment_amount'] = "Minimum payment amount must be positive"
-
-        if errors:
-            raise ValidationError(errors)
-
-    def save(self, *args, **kwargs):
-        """Save with validation"""
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-    # -------------------------------------------------------------------------
-    # STRING REPRESENTATION
-    # -------------------------------------------------------------------------
-
-    def __str__(self):
-        return f"Financial Settings - {self.school_currency.code}"
-
-class SchoolConfiguration(BaseModel):
-    """Enhanced configuration model for maximum flexibility across all school term systems"""
-    
-    # -------------------------------------------------------------------------
-    # TERM SYSTEM CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    TERM_SYSTEM_CHOICES = [
-        ('term', 'Terms (3 per year)'),
-        ('semester', 'Semesters (2 per year)'),
-        ('quarter', 'Quarters (4 per year)'),
-        ('trimester', 'Trimesters (3 per year)'),
-        ('module', 'Modules (6-8 per year)'),
-        ('block', 'Block Schedule (4-6 per year)'),
-        ('yearlong', 'Year-long Program (1 per year)'),
-        ('intensive', 'Intensive Programs (8-12 per year)'),
-        ('custom', 'Custom System'),
-    ]
-    
-    term_system = models.CharField(
-        "Academic Period System",
-        max_length=15,
-        choices=TERM_SYSTEM_CHOICES,
-        default='term',
-        help_text="The academic period system used by the school"
-    )
-    
-    periods_per_year = models.PositiveIntegerField(
-        "Periods Per Year",
-        default=3,
-        validators=[MinValueValidator(1), MaxValueValidator(20)],
-        help_text="Number of academic periods in one academic year (1-20)"
-    )
-    
-    # -------------------------------------------------------------------------
-    # PERIOD NAMING CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    period_naming_convention = models.CharField(
-        "Period Naming Convention",
-        max_length=20,
-        choices=[
-            ('numeric', 'Numeric (Term 1, Term 2, etc.)'),
-            ('ordinal', 'Ordinal (First Term, Second Term, etc.)'),
-            ('seasonal', 'Seasonal (Fall, Spring, Summer)'),
-            ('monthly', 'Monthly (January, February, etc.)'),
-            ('alpha', 'Alphabetical (Term A, Term B, etc.)'),
-            ('roman', 'Roman Numerals (Term I, Term II, etc.)'),
-            ('custom', 'Custom Names'),
-        ],
-        default='numeric'
-    )
-    
-    custom_period_names = models.JSONField(
-        "Custom Period Names",
-        default=dict,
-        blank=True,
-        help_text='Custom names for each period position. E.g., {"1": "Fall Semester", "2": "Spring Semester"}'
-    )
-    
-    # -------------------------------------------------------------------------
-    # ACADEMIC YEAR CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    MONTH_CHOICES = [
-        (1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'),
-        (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'),
-        (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December')
-    ]
-    
-    ACADEMIC_YEAR_TYPE_CHOICES = [
-        ('calendar', 'Calendar Year (Jan-Dec)'),
-        ('northern', 'Northern Hemisphere (Sep-Jun)'),
-        ('southern', 'Southern Hemisphere (Feb-Nov)'),
-        ('tropical', 'Tropical Regions (Jan-Nov)'),
-        ('east_africa', 'East African Calendar (Jan-Nov)'),
-        ('west_africa', 'West African Calendar (Sep-Jul)'),
-        ('sahel', 'Sahel Region (Oct-Jun)'),
-        ('financial', 'Financial Year (Apr-Mar)'),
-        ('custom', 'Custom Year Dates'),
-    ]
-    
-    academic_year_type = models.CharField(
-        "Academic Year Type",
-        max_length=15,
-        choices=ACADEMIC_YEAR_TYPE_CHOICES,
-        default='northern',
-        help_text="When your academic year typically runs"
-    )
-    
-    academic_year_start_month = models.PositiveIntegerField(
-        "Academic Year Start Month",
-        choices=MONTH_CHOICES,
-        default=9,  # September
-        validators=[MinValueValidator(1), MaxValueValidator(12)],
-        help_text="Month when academic year typically starts (1-12)"
-    )
-    
-    academic_year_start_day = models.PositiveIntegerField(
-        "Academic Year Start Day",
-        default=1,
-        validators=[MinValueValidator(1), MaxValueValidator(31)],
-        help_text="Day when academic year typically starts"
-    )
-    
-    # -------------------------------------------------------------------------
-    # REGIONAL SEASON CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    REGIONAL_SEASON_CHOICES = [
-        ('temperate', 'Temperate (Spring/Summer/Fall/Winter)'),
-        ('tropical_wet_dry', 'Tropical (Wet/Dry Seasons)'),
-        ('desert', 'Desert (Hot/Cool Seasons)'),
-        ('equatorial', 'Equatorial (Year-round)'),
-        ('monsoon', 'Monsoon (Pre/Monsoon/Post)'),
-        ('custom_regional', 'Custom Regional Seasons'),
-    ]
-    
-    regional_season_type = models.CharField(
-        "Regional Season Type",
-        max_length=20,
-        choices=REGIONAL_SEASON_CHOICES,
-        default='temperate',
-        help_text="Climate-based season naming for your region"
-    )
-    
-    custom_season_names = models.JSONField(
-        "Custom Season Names",
-        default=dict,
-        blank=True,
-        help_text="Regional season names. E.g., {'1': 'Harmattan', '2': 'Rainy Season'}"
-    )
-    
-    # -------------------------------------------------------------------------
-    # BREAK CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    auto_create_breaks = models.BooleanField(
-        "Auto-Create Term Breaks",
-        default=True,
-        help_text="Automatically create holiday records for breaks between terms"
-    )
-    
-    minimum_break_days = models.PositiveIntegerField(
-        "Minimum Break Days",
-        default=1,
-        help_text="Minimum number of days for a break to be considered significant"
-    )
-    
-    default_period_duration_weeks = models.PositiveIntegerField(
-        "Default Period Duration (weeks)",
-        default=12,
-        validators=[MinValueValidator(1), MaxValueValidator(52)],
-        help_text="Typical duration of each academic period in weeks"
-    )
-    
-    # -------------------------------------------------------------------------
-    # COMMUNICATION CONFIGURATION
-    # -------------------------------------------------------------------------
-    
-    enable_automatic_reminders = models.BooleanField(
-        "Enable Automatic Reminders",
-        default=True,
-        help_text="Send automatic payment and deadline reminders"
-    )
-
-    enable_sms = models.BooleanField(
-        "Enable SMS Notifications",
-        default=False,
-        help_text="Send SMS notifications to parents and students"
-    )
-
-    enable_email_notifications = models.BooleanField(
-        "Enable Email Notifications",
-        default=True,
-        help_text="Send email notifications"
-    )
-    
-    # -------------------------------------------------------------------------
-    # VALIDATION METHODS
-    # -------------------------------------------------------------------------
-    
-    def clean(self):
-        """Enhanced validation for the configuration"""
-        super().clean()
-        errors = {}
-        
-        # Validate periods_per_year matches term_system for non-custom systems
-        if self.term_system != 'custom':
-            expected_periods = self._get_system_period_count(self.term_system)
-            if self.periods_per_year != expected_periods:
-                # Auto-correct instead of raising error
-                self.periods_per_year = expected_periods
-        
-        # Validate custom period names if using custom naming
-        if self.period_naming_convention == 'custom':
-            if not self.custom_period_names:
-                errors['custom_period_names'] = 'Custom period names are required when using custom naming convention'
-            else:
-                # Ensure we have names for all periods
-                missing_periods = []
-                for i in range(1, self.periods_per_year + 1):
-                    if str(i) not in self.custom_period_names:
-                        missing_periods.append(str(i))
-                
-                if missing_periods:
-                    errors['custom_period_names'] = f'Missing custom names for periods: {", ".join(missing_periods)}'
-        
-        # Validate academic year dates
-        if self.academic_year_type == 'custom':
-            try:
-                # Test if the date is valid
-                test_date = date(2024, self.academic_year_start_month, self.academic_year_start_day)
-            except ValueError:
-                errors['academic_year_start_day'] = 'Invalid academic year start date'
-        
-        if errors:
-            raise ValidationError(errors)
-    
-    # -------------------------------------------------------------------------
-    # HELPER METHODS - PERIOD SYSTEM
-    # -------------------------------------------------------------------------
-    
-    def _get_system_period_count(self, system):
-        """Get the standard period count for each system"""
-        return {
-            'term': 3,
-            'semester': 2,
-            'quarter': 4,
-            'trimester': 3,
-            'module': 6,
-            'block': 4,
-            'yearlong': 1,
-            'intensive': 10,  # Average for intensive programs
-            'custom': self.periods_per_year
-        }.get(system, 3)
-    
-    def get_period_count(self):
-        """Returns the number of periods per year"""
-        if self.term_system == 'custom':
-            return self.periods_per_year
-        return self._get_system_period_count(self.term_system)
-    
-    # -------------------------------------------------------------------------
-    # PERIOD NAMING METHODS
-    # -------------------------------------------------------------------------
-    
-    def get_period_name(self, position, include_year=False, academic_year=None):
-        """Enhanced period naming with more options"""
-        max_periods = self.get_period_count()
-        
-        if position > max_periods or position < 1:
+            from students.models import Student
+            return Student.objects.get(id=self.student_id)
+        except Exception as e:
+            logger.error(f"Error fetching student: {e}")
             return None
-        
-        # Handle custom names first
-        if self.period_naming_convention == 'custom' and self.custom_period_names:
-            base_name = self.custom_period_names.get(str(position))
-            if base_name:
-                return self._format_period_name(base_name, include_year, academic_year)
-        
-        # Handle different naming conventions
-        if self.period_naming_convention == 'seasonal':
-            base_name = self._get_seasonal_name(position)
-        elif self.period_naming_convention == 'ordinal':
-            base_name = self._get_ordinal_name(position)
-        elif self.period_naming_convention == 'monthly':
-            base_name = self._get_monthly_name(position)
-        elif self.period_naming_convention == 'alpha':
-            base_name = self._get_alpha_name(position)
-        elif self.period_naming_convention == 'roman':
-            base_name = self._get_roman_name(position)
-        else:  # numeric
-            base_name = self._get_numeric_name(position)
-        
-        return self._format_period_name(base_name, include_year, academic_year)
     
-    def _format_period_name(self, base_name, include_year=False, academic_year=None):
-        """Format the period name with optional year"""
-        if include_year and academic_year:
-            return f"{base_name} {academic_year}"
-        return base_name
-    
-    def _get_seasonal_name(self, position):
-        """Enhanced seasonal naming based on academic year type and period count"""
-        period_count = self.get_period_count()
-        period_type = self._get_period_type_name()
+    def get_summary(self):
+        """Get a brief summary of this financial audit entry"""
+        parts = []
         
-        # Use regional seasonal patterns
-        if self.regional_season_type == 'tropical_wet_dry':
-            if period_count == 2:
-                seasons = {1: 'Dry Season', 2: 'Rainy Season'}
-            elif period_count == 3:
-                seasons = {1: 'Cool Dry', 2: 'Hot Dry', 3: 'Rainy Season'}
-            else:
-                seasons = {i+1: f"Period {i+1}" for i in range(period_count)}
-        elif self.regional_season_type == 'desert':
-            if period_count == 2:
-                seasons = {1: 'Cool Season', 2: 'Hot Season'}
-            elif period_count == 3:
-                seasons = {1: 'Cool', 2: 'Hot', 3: 'Harmattan'}
-            else:
-                seasons = {i+1: f"Period {i+1}" for i in range(period_count)}
-        elif self.regional_season_type == 'equatorial':
-            return f"Period {position} {period_type}"
-        elif self.regional_season_type == 'custom_regional' and self.custom_season_names:
-            season = self.custom_season_names.get(str(position), f"Period {position}")
-            return f"{season} {period_type}"
+        # User
+        if self.user_name:
+            parts.append(self.user_name)
+        elif self.user_id:
+            parts.append(f"User {self.user_id}")
         else:
-            # Temperate/Northern hemisphere seasons
-            if period_count == 2:
-                seasons = {1: 'Fall', 2: 'Spring'}
-            elif period_count == 3:
-                seasons = {1: 'Fall', 2: 'Spring', 3: 'Summer'}
-            elif period_count == 4:
-                seasons = {1: 'Fall', 2: 'Winter', 3: 'Spring', 4: 'Summer'}
-            else:
-                seasons = {i+1: f"Period {i+1}" for i in range(period_count)}
+            parts.append("System")
         
-        season = seasons.get(position, f"Period {position}")
-        return f"{season} {period_type}"
-    
-    def _get_ordinal_name(self, position):
-        """Get ordinal names (First, Second, etc.)"""
-        ordinals = [
-            '', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 
-            'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth',
-            'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth', 'Fifteenth',
-            'Sixteenth', 'Seventeenth', 'Eighteenth', 'Nineteenth', 'Twentieth'
-        ]
-        period_type = self._get_period_type_name()
+        # Action
+        parts.append(self.get_action_display().lower())
         
-        if position < len(ordinals):
-            return f"{ordinals[position]} {period_type}"
-        else:
-            return f"{position}th {period_type}"
-    
-    def _get_monthly_name(self, position):
-        """Get monthly names for systems that align with months"""
-        months = [
-            '', 'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ]
+        # Student (if applicable)
+        if self.student_name:
+            parts.append(f"for {self.student_name}")
         
-        # Start from academic year start month
-        start_month = self.academic_year_start_month
-        month_index = ((start_month - 1 + position - 1) % 12) + 1
+        # Amount (if applicable)
+        if self.amount_involved:
+            parts.append(f"({self.currency} {self.amount_involved:,.2f})")
         
-        if month_index < len(months):
-            period_type = self._get_period_type_name()
-            return f"{months[month_index]} {period_type}"
-        else:
-            return self._get_numeric_name(position)
+        return " ".join(parts)
     
-    def _get_alpha_name(self, position):
-        """Get alphabetical names (A, B, C, etc.)"""
-        import string
-        period_type = self._get_period_type_name()
-        
-        if position <= 26:
-            letter = string.ascii_uppercase[position - 1]
-            return f"{period_type} {letter}"
-        else:
-            # For more than 26 periods, use AA, AB, etc.
-            first_letter = string.ascii_uppercase[(position - 1) // 26]
-            second_letter = string.ascii_uppercase[(position - 1) % 26]
-            return f"{period_type} {first_letter}{second_letter}"
-    
-    def _get_roman_name(self, position):
-        """Get Roman numeral names"""
-        def int_to_roman(num):
-            values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
-            symbols = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I']
-            result = ''
-            for i, value in enumerate(values):
-                count = num // value
-                result += symbols[i] * count
-                num -= value * count
-            return result
-        
-        period_type = self._get_period_type_name()
-        roman = int_to_roman(position)
-        return f"{period_type} {roman}"
-    
-    def _get_numeric_name(self, position):
-        """Get numeric names (Term 1, Term 2, etc.)"""
-        period_type = self._get_period_type_name()
-        return f"{period_type} {position}"
-    
-    def _get_period_type_name(self):
-        """Enhanced period type name getter"""
-        type_names = {
-            'term': 'Term',
-            'semester': 'Semester',
-            'quarter': 'Quarter',
-            'trimester': 'Trimester',
-            'module': 'Module',
-            'block': 'Block',
-            'yearlong': 'Year',
-            'intensive': 'Session',
-            'custom': 'Period'
+    def get_risk_badge_class(self):
+        """Get CSS class for risk level badge"""
+        risk_classes = {
+            'LOW': 'badge-success',
+            'MEDIUM': 'badge-warning',
+            'HIGH': 'badge-danger',
+            'CRITICAL': 'badge-dark',
         }
-        return type_names.get(self.term_system, 'Term')
-    
-    def get_period_type_name(self):
-        """Get the singular name for the period type"""
-        return self._get_period_type_name()
-
-    def get_period_type_name_plural(self):
-        """Enhanced plural name getter"""
-        singular = self.get_period_type_name()
-        
-        # Handle special cases
-        irregular_plurals = {
-            'Module': 'Modules',
-            'Year': 'Years',
-        }
-        
-        if singular in irregular_plurals:
-            return irregular_plurals[singular]
-        elif singular.endswith('y'):
-            return singular[:-1] + 'ies'
-        else:
-            return singular + 's'
+        return risk_classes.get(self.risk_level, 'badge-secondary')
     
     # -------------------------------------------------------------------------
-    # UTILITY METHODS
+    # QUERY METHODS
     # -------------------------------------------------------------------------
     
-    def is_last_period(self, position):
-        """Check if the period position is the last in the academic year"""
-        return position == self.get_period_count()
+    @classmethod
+    def get_recent_activity(cls, limit=50):
+        """Get recent financial activity"""
+        return cls.objects.all().order_by('-timestamp')[:limit]
     
-    def validate_period_number(self, period_number):
-        """Validate if a period number is valid for the current system"""
-        return 1 <= period_number <= self.get_period_count()
-    
-    def get_all_period_names(self, include_year=False, academic_year=None):
-        """Get all period names for the current system"""
-        return [
-            self.get_period_name(i, include_year, academic_year) 
-            for i in range(1, self.get_period_count() + 1)
-        ]
-    
-    @classmethod 
-    def get_instance(cls):
-        """Get school configuration instance"""
-        return cls.objects.first()
-    
-    def save(self, *args, **kwargs):
-        """Simplified save method without problematic singleton logic"""
-        super().save(*args, **kwargs)
-        logger.debug(f"SchoolConfiguration saved with UUID: {self.pk}")
-
-    @classmethod 
-    def get_cached_instance(cls):
-        """
-        Get school configuration instance with simple in-memory caching
+    @classmethod
+    def get_high_risk_actions(cls, days=30):
+        """Get high-risk actions from recent days"""
+        from django.utils import timezone
+        from datetime import timedelta
         
-        This method provides a cached version of the singleton configuration
-        to avoid repeated database queries within the same request.
-        """
-        # Try to get from thread-local storage first (per-request cache)
-        import threading
-        if not hasattr(threading.current_thread(), '_school_config_cache'):
-            threading.current_thread()._school_config_cache = None
-        
-        cached = threading.current_thread()._school_config_cache
-        
-        if cached is None:
-            try:
-                cached = cls.objects.first()
-                threading.current_thread()._school_config_cache = cached
-            except Exception:
-                return None
-        
-        return cached
-
-    @classmethod 
-    def clear_cache(cls):
-        """Clear the cached configuration instance"""
-        import threading
-        if hasattr(threading.current_thread(), '_school_config_cache'):
-            threading.current_thread()._school_config_cache = None
+        cutoff_date = timezone.now() - timedelta(days=days)
+        return cls.objects.filter(
+            timestamp__gte=cutoff_date,
+            risk_level__in=['HIGH', 'CRITICAL']
+        ).order_by('-timestamp')
     
+    @classmethod
+    def get_student_financial_history(cls, student_id, limit=50):
+        """Get financial history for a specific student"""
+        return cls.objects.filter(
+            student_id=str(student_id)
+        ).order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_user_financial_actions(cls, user_id, limit=50):
+        """Get financial actions performed by a specific user"""
+        return cls.objects.filter(
+            user_id=str(user_id)
+        ).order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_actions_by_type(cls, action_type, limit=50):
+        """Get actions of a specific type"""
+        return cls.objects.filter(
+            action=action_type
+        ).order_by('-timestamp')[:limit]
+    
+    @classmethod
+    def get_session_financial_activity(cls, session_id):
+        """Get all financial activity for an academic session"""
+        return cls.objects.filter(
+            academic_session_id=str(session_id)
+        ).order_by('-timestamp')
+    
+    @classmethod
+    def get_amount_summary(cls, action_type=None, days=30):
+        """Get summary of amounts involved in financial actions"""
+        from django.utils import timezone
+        from datetime import timedelta
+        from django.db.models import Sum, Count, Avg
+        
+        cutoff_date = timezone.now() - timedelta(days=days)
+        queryset = cls.objects.filter(timestamp__gte=cutoff_date)
+        
+        if action_type:
+            queryset = queryset.filter(action=action_type)
+        
+        return queryset.aggregate(
+            total_amount=Sum('amount_involved'),
+            count=Count('id'),
+            average_amount=Avg('amount_involved')
+        )

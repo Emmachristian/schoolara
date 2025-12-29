@@ -2,7 +2,7 @@
 
 from django.urls import path
 from . import views
-from . import ajax_views
+from . import htmx_views
 
 app_name = 'academics'
 
@@ -70,25 +70,65 @@ urlpatterns = [
     path('class-subjects/<uuid:pk>/delete/', views.class_subject_delete, name='class_subject_delete'),
     
     # =============================================================================
-    # AJAX SEARCH ENDPOINTS
+    # STUDENT ENROLLMENT URLS
     # =============================================================================
-    path('ajax/sessions/search/', ajax_views.academic_session_search, name='academic_session_search'),
-    path('ajax/holidays/search/', ajax_views.holiday_search, name='holiday_search'),
-    path('ajax/levels/search/', ajax_views.academic_level_search, name='academic_level_search'),
-    path('ajax/subjects/search/', ajax_views.subject_search, name='subject_search'),
-    path('ajax/classrooms/search/', ajax_views.classroom_search, name='classroom_search'),
-    path('ajax/classes/search/', ajax_views.class_search, name='class_search'),
-    path('ajax/class-subjects/search/', ajax_views.class_subject_search, name='class_subject_search'),
+    path('enrollments/', views.enrollment_list, name='enrollment_list'),
+    path('enrollments/create/', views.enrollment_create, name='enrollment_create'),
+    path('enrollments/<uuid:pk>/', views.enrollment_detail, name='enrollment_detail'),
+    path('enrollments/<uuid:pk>/update/', views.enrollment_update, name='enrollment_update'),
+    path('enrollments/<uuid:pk>/delete/', views.enrollment_delete, name='enrollment_delete'),
     
+    # =============================================================================
+    # ACADEMIC PROGRESS URLS
+    # =============================================================================
+    path('progress/', views.progress_list, name='progress_list'),
+    path('progress/<uuid:pk>/', views.progress_detail, name='progress_detail'),
+    path('progress/<uuid:pk>/update/', views.progress_update, name='progress_update'),
+    path('progress/<uuid:pk>/finalize/', views.progress_finalize, name='progress_finalize'),
+    
+    # =============================================================================
+    # HTMX SEARCH ENDPOINTS
+    # =============================================================================
+    # =============================================================================
+    # HTMX SEARCH ENDPOINTS
+    # =============================================================================
+
+    # Academic Sessions
+    path('htmx/sessions/search/', htmx_views.session_search, name='session_search'),
+    path('htmx/sessions/quick-stats/', htmx_views.session_quick_stats, name='session_quick_stats'),
+
+    # Holidays
+    path('htmx/holidays/search/', htmx_views.holiday_search, name='holiday_search'),
+
+    # Subjects
+    path('htmx/subjects/search/', htmx_views.subject_search, name='subject_search'),
+
+    # Academic Levels
+    path('htmx/levels/search/', htmx_views.academic_level_search, name='level_search'),
+
+    # Classrooms
+    path('htmx/classrooms/search/', htmx_views.classroom_search, name='classroom_search'),
+
+    # Classes
+    path('htmx/classes/search/', htmx_views.class_search, name='class_search'),
+    path('htmx/classes/quick-stats/', htmx_views.class_quick_stats, name='class_quick_stats'),
+
+    # Class Subjects
+    path('htmx/class-subjects/search/', htmx_views.class_subject_search, name='class_subject_search'),
+
+    # Student Enrollments
+    path('htmx/enrollments/search/', htmx_views.enrollment_search, name='enrollment_search'),
+    path('htmx/enrollments/quick-stats/', htmx_views.enrollment_quick_stats, name='enrollment_quick_stats'),
+
+    # Academic Progress
+    path('htmx/progress/search/', htmx_views.progress_search, name='progress_search'),
+
     # =============================================================================
     # EXPORT ENDPOINTS
     # =============================================================================
+
     # Academic Levels
     path('levels/export/excel/', views.export_levels_excel, name='export_levels_excel'),
     path('levels/export/pdf/', views.export_levels_pdf, name='export_levels_pdf'),
-    
-    # You can add more export endpoints for other models as needed:
-    # path('sessions/export/excel/', views.export_sessions_excel, name='export_sessions_excel'),
-    # path('subjects/export/excel/', views.export_subjects_excel, name='export_subjects_excel'),
-    # path('classes/export/excel/', views.export_classes_excel, name='export_classes_excel'),
+
 ]

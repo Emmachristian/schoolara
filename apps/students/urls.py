@@ -1,7 +1,6 @@
 # students/urls.py
 
-from . import views
-from . import ajax_views
+from . import views, htmx_views
 from django.urls import path
 
 app_name = 'students'
@@ -17,7 +16,29 @@ urlpatterns = [
      path('export/excel/', views.export_students_excel, name='export_excel'),
      path('export/pdf/', views.export_students_pdf, name='export_pdf'),
 
-     # Ajax End points
-     path("ajax/update-profile-picture/", ajax_views.update_student_profile_picture, name="ajax_update_student_profile_picture"),
-     path("ajax/students/search/", ajax_views.student_search, name='student_search'),
+     # =============================================================================
+     # HTMX SEARCH ENDPOINTS
+     # =============================================================================
+
+     # Students
+     path('htmx/students/search/', htmx_views.student_search, name='student_search'),
+     path('htmx/students/quick-stats/', htmx_views.student_quick_stats, name='student_quick_stats'),
+
+     # Guardians
+     path('htmx/guardians/search/', htmx_views.guardian_search, name='guardian_search'),
+     path('htmx/guardians/quick-stats/', htmx_views.guardian_quick_stats, name='guardian_quick_stats'),
+
+     # Student-Guardian Relationships
+     path('htmx/relationships/search/', htmx_views.student_guardian_search, name='relationship_search'),
+
+     # Sibling Relationships
+     path('htmx/siblings/search/', htmx_views.sibling_search, name='sibling_search'),
+
+     # Enrollment Status History
+     path('htmx/enrollment-history/search/', htmx_views.enrollment_status_history_search, name='enrollment_history_search'),
+     path('htmx/enrollment-history/quick-stats/', htmx_views.enrollment_status_quick_stats, name='enrollment_status_quick_stats'),
+
+     # Medical Alerts
+     path('htmx/medical-alerts/quick-stats/', htmx_views.medical_alerts_quick_stats, name='medical_alerts_quick_stats'),
+
 ]

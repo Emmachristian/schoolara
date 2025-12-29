@@ -46,6 +46,9 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'students',
+    'boarding',
+    'discipline',
+    'documents',
     'academics',
     'exams',
     'hr',
@@ -231,6 +234,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Authentication Backends - Custom email authentication
+AUTHENTICATION_BACKENDS = [
+    'accounts.backends.SchoolAuthBackend',        # School-specific authentication
+    'accounts.backends.PermissionBackend',        # Role-based permissions
+    'django.contrib.auth.backends.ModelBackend',  # Fallback
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

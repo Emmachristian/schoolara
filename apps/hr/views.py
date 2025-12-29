@@ -93,29 +93,6 @@ def staff_list(request):
     
     return render(request, 'staff/list.html', context)
 
-
-@login_required
-def staff_create(request):
-    """Create a new staff member"""
-    
-    if request.method == 'POST':
-        form = StaffForm(request.POST, request.FILES)
-        if form.is_valid():
-            staff = form.save()
-            messages.success(request, f'Staff member "{staff.full_name()}" created successfully.')
-            return redirect('hr:staff_profile', pk=staff.pk)
-    else:
-        form = StaffForm()
-    
-    context = {
-        'form': form,
-        'form_action': 'Create',
-        'title': 'Add New Staff Member'
-    }
-    
-    return render(request, 'staff/form.html', context)
-
-
 class StaffWizardFileStorage(FileSystemStorage):
     """Custom storage for handling file uploads in wizard"""
     def __init__(self, *args, **kwargs):

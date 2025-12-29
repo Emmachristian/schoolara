@@ -289,24 +289,26 @@ def get_holiday_statistics(filters=None):
             .values_list('break_type', 'count')
         ),
         
-        # Year distribution
-        'by_year': dict(
-            holidays.annotate(year=TruncYear('start_date'))
-            .values('year')
-            .annotate(count=Count('id'))
-            .order_by('-year')
-            .values_list('year', 'count')
-        ),
+        # Year distribution - CONVERT DATES TO STRINGS
+        'by_year': {},
         
-        # Monthly distribution
-        'by_month': dict(
-            holidays.annotate(month=TruncMonth('start_date'))
-            .values('month')
-            .annotate(count=Count('id'))
-            .order_by('month')
-            .values_list('month', 'count')
-        ),
+        # Monthly distribution - CONVERT DATES TO STRINGS
+        'by_month': {},
     }
+    
+    # Fix year distribution - convert dates to strings
+    year_data = holidays.annotate(year=TruncYear('start_date')).values('year').annotate(count=Count('id')).order_by('-year')
+    for item in year_data:
+        if item['year']:
+            year_str = item['year'].strftime('%Y')  # Convert to string
+            stats['by_year'][year_str] = item['count']
+    
+    # Fix monthly distribution - convert dates to strings
+    month_data = holidays.annotate(month=TruncMonth('start_date')).values('month').annotate(count=Count('id')).order_by('month')
+    for item in month_data:
+        if item['month']:
+            month_str = item['month'].strftime('%Y-%m')  # Convert to string
+            stats['by_month'][month_str] = item['count']
     
     # Duration analysis
     if total_holidays > 0:
@@ -350,8 +352,12 @@ def get_holiday_statistics(filters=None):
         ).count(),
     }
     
+    # Add these specific stats for the frontend
+    stats['upcoming_holidays'] = stats['upcoming']['next_30_days']
+    stats['total_breaks'] = holidays.filter(holiday_type='BREAK').count()
+    stats['total_days'] = stats.get('duration_analysis', {}).get('total_holiday_days', 0)
+    
     return stats
-
 
 # =============================================================================
 # SUBJECT STATISTICS

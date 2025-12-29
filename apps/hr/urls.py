@@ -1,6 +1,6 @@
 # hr/urls.py
 from django.urls import path
-from . import views, ajax_views
+from . import views, htmx_views
 
 app_name = 'hr'
 
@@ -14,7 +14,6 @@ urlpatterns = [
     # STAFF URLS
     # =============================================================================
     path('staff/', views.staff_list, name='staff_list'),
-    path('staff/create/', views.staff_create, name='staff_create'),
     path('staff/create-wizard/', views.staff_create_wizard, name='staff_create_wizard'),
     path('staff/<uuid:pk>/', views.staff_profile, name='staff_profile'),
     path('staff/<uuid:pk>/update/', views.staff_update, name='staff_update'),
@@ -65,27 +64,45 @@ urlpatterns = [
     path('teachers/<uuid:pk>/delete/', views.teacher_delete, name='teacher_delete'),
     
     # =============================================================================
-    # AJAX SEARCH ENDPOINTS
-    # =============================================================================
-    path('ajax/staff/search/', ajax_views.staff_search, name='staff_search'),
-    path('ajax/staff/<uuid:staff_id>/quick-info/', ajax_views.get_staff_quick_info, name='get_staff_quick_info'),
-    path('ajax/staff/update-profile-picture/', ajax_views.update_staff_profile_picture, name='update_staff_profile_picture'),
-    
-    path('ajax/teachers/search/', ajax_views.teacher_search, name='teacher_search'),
-    path('ajax/contracts/search/', ajax_views.contract_search, name='contract_search'),
-    path('ajax/contract-types/search/', ajax_views.contract_type_search, name='contract_type_search'),
-    path('ajax/departments/search/', ajax_views.department_search, name='department_search'),
-    path('ajax/designations/search/', ajax_views.designation_search, name='designation_search'),
-    
-    # =============================================================================
     # EXPORT ENDPOINTS
     # =============================================================================
     # Staff
     path('staff/export/excel/', views.export_staff_excel, name='export_staff_excel'),
     path('staff/export/pdf/', views.export_staff_pdf, name='export_staff_pdf'),
-    
-    # Additional export endpoints can be added as needed:
-    # path('departments/export/excel/', views.export_departments_excel, name='export_departments_excel'),
-    # path('contracts/export/excel/', views.export_contracts_excel, name='export_contracts_excel'),
-    # path('teachers/export/excel/', views.export_teachers_excel, name='export_teachers_excel'),
+        
+    # =============================================================================
+    # HTMX SEARCH ENDPOINTS
+    # =============================================================================
+
+    # Departments
+    path('htmx/departments/search/', htmx_views.department_search, name='department_search'),
+
+    # Designations
+    path('htmx/designations/search/', htmx_views.designation_search, name='designation_search'),
+
+    # Contracts
+    path('htmx/contracts/search/', htmx_views.contract_search, name='contract_search'),
+    path('htmx/contracts/quick-stats/', htmx_views.contract_quick_stats, name='contract_quick_stats'),
+
+    # Staff
+    path('htmx/staff/search/', htmx_views.staff_search, name='staff_search'),
+    path('htmx/staff/quick-stats/', htmx_views.staff_quick_stats, name='staff_quick_stats'),
+
+    # Teachers
+    path('htmx/teachers/search/', htmx_views.teacher_search, name='teacher_search'),
+
+    # Salary History
+    path('htmx/salary-history/search/', htmx_views.salary_history_search, name='salary_history_search'),
+
+    # Attendance
+    path('htmx/attendance/search/', htmx_views.attendance_search, name='attendance_search'),
+    path('htmx/attendance/quick-stats/', htmx_views.attendance_quick_stats, name='attendance_quick_stats'),
+
+    # Payroll
+    path('htmx/payroll/search/', htmx_views.payroll_search, name='payroll_search'),
+    path('htmx/payroll/quick-stats/', htmx_views.payroll_quick_stats, name='payroll_quick_stats'),
+
+    # Contract Benefits
+    path('htmx/benefits/search/', htmx_views.contract_benefit_search, name='benefit_search'),
+
 ]
