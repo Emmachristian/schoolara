@@ -1,50 +1,58 @@
 # utils/middleware.py
 
-"""
-Middleware for setting request context for audit logging.
-"""
-
 import logging
-from utils.context import set_request_context, clear_request_context
+from utils.context import set_request_context, clear_request_context, get_request_context
 
 logger = logging.getLogger(__name__)
 
 
 class AuditContextMiddleware:
     """
-    Middleware that captures request information and stores it in thread-local
-    storage for use by audit logging throughout the request lifecycle.
-    
-    This middleware should be placed early in the MIDDLEWARE list, but after
-    authentication middleware so that request.user is available.
+    Middleware to capture request context for audit logging.
+    Now also captures school timezone to prevent recursion.
     """
     
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
-        # Set the request context at the start of the request
-        try:
-            set_request_context(request=request)
-            logger.debug(f"Set audit context for {request.path}")
-        except Exception as e:
-            logger.error(f"Error setting audit context: {e}", exc_info=True)
+        # Set context with individual parameters (not a dict!)
+        set_request_context(
+            user=request.user if request.user.is_authenticated else None,
+            ip_address=self._get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            session_key=request.session.session_key if hasattr(request, 'session') else '',
+            request_path=request.path,
+        )
         
-        # Process the request
-        response = self.get_response(request)
+        # Add school timezone to context if available
+        context = get_request_context()
+        if context and hasattr(request, 'school_timezone'):
+            context['school_timezone'] = request.school_timezone
         
-        # Clear the request context after the request is complete
         try:
+            response = self.get_response(request)
+        finally:
+            # Always clear context after request
             clear_request_context()
-        except Exception as e:
-            logger.error(f"Error clearing audit context: {e}", exc_info=True)
         
         return response
     
     def process_exception(self, request, exception):
-        """Clear context even if an exception occurs"""
-        try:
-            clear_request_context()
-        except Exception as e:
-            logger.error(f"Error clearing audit context on exception: {e}", exc_info=True)
-        return None  # Let Django handle the exception normally
+        """Clean up context on exception"""
+        clear_request_context()
+        return None
+    
+    def _get_client_ip(self, request):
+        """
+        Get the real client IP address, accounting for proxies.
+        """
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        
+        if x_forwarded_for:
+            # X-Forwarded-For can contain multiple IPs, take the first one
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        
+        return ip

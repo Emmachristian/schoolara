@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* Classroom Status Badges */
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* Classroom Filters */
+.classroom-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Stats Cards */
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Room Type Badges */
+.badge-regular {
+    background-color: #007bff;
+    color: white;
+}
+
+.badge-lab {
+    background-color: #6f42c1;
+    color: white;
+}
+
+.badge-library {
+    background-color: #28a745;
+    color: white;
+}
+
+.badge-auditorium {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-sports {
+    background-color: #fd7e14;
+    color: white;
+}
+
+/* Facility Icons */
+.facility-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    margin-right: 4px;
+    font-size: 12px;
+}
+
+.facility-icon.has-facility {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.facility-icon.no-facility {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-home icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Classrooms
+                <div class="page-title-subheading">
+                    Manage classroom facilities, equipment, and assignments
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:classroom_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Add New Classroom
+                </a>
+                <a href="{% url 'academics:classroom_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-home"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Classrooms</div>
+                <h3>{{ stats.total_classrooms|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Rooms</div>
+                <h3>{{ stats.active_classrooms|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Capacity</div>
+                <h3>{{ stats.capacity_analysis.total_capacity|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-science"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Avg Capacity</div>
+                <h3>{{ stats.capacity_analysis.average_capacity|default:0|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-home me-2 text-primary"></i>
+                                Classroom Directory
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                <i class="fa fa-times me-1"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="classroom-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'academics:classroom_search' %}"
+                              hx-target="#classroom-results"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <!-- Search -->
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.q.label }}</label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <!-- Room Type -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.room_type.label }}</label>
+                                {{ filter_form.room_type }}
+                            </div>
+
+                            <!-- Building -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.building.label }}</label>
+                                {{ filter_form.building }}
+                            </div>
+                            
+                            <!-- Floor -->
+                            <div class="col-md-1">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.floor.label }}</label>
+                                {{ filter_form.floor }}
+                            </div>
+
+                            <!-- Active Status -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.is_active.label }}</label>
+                                {{ filter_form.is_active }}
+                            </div>
+
+                            <!-- Bookable -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.is_bookable.label }}</label>
+                                {{ filter_form.is_bookable }}
+                            </div>
+
+                            <!-- Min Capacity -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.min_capacity.label }}</label>
+                                {{ filter_form.min_capacity }}
+                            </div>
+
+                            <!-- Projector -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.has_projector.label }}</label>
+                                {{ filter_form.has_projector }}
+                            </div>
+
+                            <!-- Computer -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.has_computer.label }}</label>
+                                {{ filter_form.has_computer }}
+                            </div>
+
+                            <!-- Smart Board -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.has_smart_board.label }}</label>
+                                {{ filter_form.has_smart_board }}
+                            </div>
+
+                            <!-- Accessible -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.is_accessible.label }}</label>
+                                {{ filter_form.is_accessible }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results -->
+                    <div id="classroom-results"
+                         hx-get="{% url 'academics:classroom_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading classrooms...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function resetFilters() {
+    window.location.href = "{% url 'academics:classroom_list' %}";
+}
+</script>
+{% endblock %}

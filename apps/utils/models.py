@@ -1,5 +1,20 @@
 # utils/models.py
 
+"""
+Base models for School Management System with comprehensive audit trail
+and timezone-aware timestamp handling.
+
+Key Features:
+- Automatic school timezone handling for all timestamps
+- Comprehensive audit trail tracking
+- Multi-database routing support
+- User and IP tracking
+- Change reason tracking
+- Financial audit logging with compliance features
+
+Updated to use school timezone for all timestamp operations.
+"""
+
 from django.db import models
 from schoolara.managers import get_current_db, SchoolManager
 from datetime import date
@@ -18,35 +33,85 @@ logger = logging.getLogger(__name__)
 
 class BaseModel(models.Model):
     """
-    Enhanced base model with comprehensive audit trail capabilities
-    and automatic multi-database routing.
+    Enhanced base model with comprehensive audit trail capabilities,
+    automatic multi-database routing, and school timezone support.
     
     Features:
     - Automatic user tracking (who created/updated)
     - Real IP address tracking (where operations came from)
     - Change reason tracking (why changes were made)
+    - School timezone-aware timestamps (when operations happened)
     - Automatic database routing for multi-tenant setup
     - Comprehensive audit trail methods
     - Thread-local context integration
+    
+    Timezone Behavior:
+    - All timestamps (created_at, updated_at) use the school's operational timezone
+    - This ensures consistency for schools operating across different time zones
+    - Parents/staff see timestamps in their school's local time
+    - Fee deadlines, attendance records, and reports use consistent school time
+    
+    Example:
+        If a payment is made at 11:30 PM East Africa Time (EAT):
+        - Without timezone support: Stored as next day in UTC
+        - With timezone support: Correctly stored as 11:30 PM in school time
     """
     
     # Core identification
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # Timestamp fields
-    created_at = models.DateTimeField("Created At", auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField("Updated At", auto_now=True, db_index=True)
+    # Timestamp fields - Use school timezone via custom save logic
+    created_at = models.DateTimeField(
+        "Created At", 
+        db_index=True,
+        help_text="When this record was created (in school's operational timezone)"
+    )
+    updated_at = models.DateTimeField(
+        "Updated At", 
+        db_index=True,
+        help_text="When this record was last updated (in school's operational timezone)"
+    )
     
     # User tracking - CharField to avoid cross-database FK constraints
-    created_by_id = models.CharField("Created By ID", max_length=50, null=True, blank=True, db_index=True)
-    updated_by_id = models.CharField("Updated By ID", max_length=50, null=True, blank=True, db_index=True)
+    created_by_id = models.CharField(
+        "Created By ID", 
+        max_length=50, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="ID of user who created this record"
+    )
+    updated_by_id = models.CharField(
+        "Updated By ID", 
+        max_length=50, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="ID of user who last updated this record"
+    )
     
     # Enhanced IP tracking - captures real client IP
-    created_from_ip = models.GenericIPAddressField("Created From IP", null=True, blank=True)
-    updated_from_ip = models.GenericIPAddressField("Updated From IP", null=True, blank=True)
+    created_from_ip = models.GenericIPAddressField(
+        "Created From IP", 
+        null=True, 
+        blank=True,
+        help_text="IP address from which this record was created"
+    )
+    updated_from_ip = models.GenericIPAddressField(
+        "Updated From IP", 
+        null=True, 
+        blank=True,
+        help_text="IP address from which this record was last updated"
+    )
     
     # Change reason tracking
-    change_reason = models.CharField("Change Reason", max_length=255, blank=True, null=True)
+    change_reason = models.CharField(
+        "Change Reason", 
+        max_length=255, 
+        blank=True, 
+        null=True,
+        help_text="Explanation for why this change was made"
+    )
     
     # Use SchoolManager for automatic database routing
     objects = SchoolManager()
@@ -63,18 +128,41 @@ class BaseModel(models.Model):
     def save(self, *args, **kwargs):
         """
         Override save to:
-        1. Populate audit trail fields (created_by, updated_by, IPs)
-        2. Automatically route to correct database
-        3. Track field changes
-        4. Create audit log entry
+        1. Set timestamps in school timezone (not UTC!)
+        2. Populate audit trail fields (created_by, updated_by, IPs)
+        3. Automatically route to correct database
+        4. Track field changes
+        5. Create audit log entry
+        
+        The key improvement: Uses school timezone for all timestamps
+        instead of Django's default UTC behavior.
         """
         from utils.context import get_request_context
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         
         # Determine if this is a new object
         is_new = self._state.adding
         
         # =========================================================================
-        # STEP 1: POPULATE AUDIT FIELDS FROM REQUEST CONTEXT
+        # STEP 1: SET TIMESTAMPS IN SCHOOL TIMEZONE ⭐ CRITICAL
+        # =========================================================================
+        # Django's auto_now/auto_now_add uses server timezone (usually UTC)
+        # We override this to use the school's operational timezone
+        
+        if is_new:
+            # For new objects, set created_at in school timezone
+            # Only set if not already provided (respects manual override)
+            if not self.created_at:
+                self.created_at = get_school_current_time()
+            # New objects also need updated_at
+            if not self.updated_at:
+                self.updated_at = get_school_current_time()
+        else:
+            # For updates, always refresh updated_at to current school time
+            self.updated_at = get_school_current_time()
+        
+        # =========================================================================
+        # STEP 2: POPULATE AUDIT FIELDS FROM REQUEST CONTEXT
         # =========================================================================
         context = get_request_context()
         
@@ -103,7 +191,7 @@ class BaseModel(models.Model):
                 )
         
         # =========================================================================
-        # STEP 2: TRACK CHANGES FOR EXISTING OBJECTS
+        # STEP 3: TRACK CHANGES FOR EXISTING OBJECTS
         # =========================================================================
         changes = {}
         if not is_new and self.pk:
@@ -140,7 +228,7 @@ class BaseModel(models.Model):
                 logger.error(f"Error tracking changes for {self.__class__.__name__}: {e}")
         
         # =========================================================================
-        # STEP 3: AUTOMATIC DATABASE ROUTING
+        # STEP 4: AUTOMATIC DATABASE ROUTING
         # =========================================================================
         current_db = get_current_db()
         
@@ -150,12 +238,12 @@ class BaseModel(models.Model):
             logger.debug(f"Saving {self.__class__.__name__} to {current_db}")
         
         # =========================================================================
-        # STEP 4: SAVE THE OBJECT
+        # STEP 5: SAVE THE OBJECT
         # =========================================================================
         result = super().save(*args, **kwargs)
         
         # =========================================================================
-        # STEP 5: CREATE AUDIT LOG ENTRY
+        # STEP 6: CREATE AUDIT LOG ENTRY
         # =========================================================================
         # Only create audit log for school databases (not default)
         # ALSO skip if this IS an AuditLog to prevent infinite recursion
@@ -168,7 +256,10 @@ class BaseModel(models.Model):
         return result
     
     def delete(self, *args, **kwargs):
-        """Override delete to automatically route to correct database and log deletion"""
+        """
+        Override delete to automatically route to correct database and log deletion.
+        Deletion timestamp in audit log will use school timezone.
+        """
         current_db = get_current_db()
         
         if current_db and 'using' not in kwargs:
@@ -196,7 +287,12 @@ class BaseModel(models.Model):
     # -------------------------------------------------------------------------
     
     def get_created_by(self):
-        """Get the user who created this record"""
+        """
+        Get the user who created this record.
+        
+        Returns:
+            User object or None
+        """
         if not self.created_by_id:
             return None
         try:
@@ -208,7 +304,12 @@ class BaseModel(models.Model):
             return None
     
     def get_updated_by(self):
-        """Get the user who last updated this record"""
+        """
+        Get the user who last updated this record.
+        
+        Returns:
+            User object or None
+        """
         if not self.updated_by_id:
             return None
         try:
@@ -220,13 +321,19 @@ class BaseModel(models.Model):
             return None
     
     def get_audit_trail(self):
-        """Get comprehensive audit information for this record"""
+        """
+        Get comprehensive audit information for this record.
+        All timestamps are in school timezone.
+        
+        Returns:
+            dict: Audit trail information
+        """
         return {
             'id': str(self.id),
-            'created_at': self.created_at,
+            'created_at': self.created_at,  # Already in school timezone
             'created_by_id': self.created_by_id,
             'created_from_ip': self.created_from_ip,
-            'updated_at': self.updated_at,
+            'updated_at': self.updated_at,  # Already in school timezone
             'updated_by_id': self.updated_by_id,
             'updated_from_ip': self.updated_from_ip,
             'last_change_reason': self.change_reason,
@@ -234,7 +341,12 @@ class BaseModel(models.Model):
     
     @property
     def created_by_name(self):
-        """Get the name of the user who created this record"""
+        """
+        Get the name of the user who created this record.
+        
+        Returns:
+            str: User's full name or "System"
+        """
         user = self.get_created_by()
         if user:
             return user.get_full_name() or user.username
@@ -242,14 +354,52 @@ class BaseModel(models.Model):
     
     @property
     def updated_by_name(self):
-        """Get the name of the user who last updated this record"""
+        """
+        Get the name of the user who last updated this record.
+        
+        Returns:
+            str: User's full name or "System"
+        """
         user = self.get_updated_by()
         if user:
             return user.get_full_name() or user.username
         return "System"
     
+    def get_created_at_local(self):
+        """
+        Get created_at timestamp in school timezone (for display).
+        
+        Since we now store in school timezone, this is just an alias,
+        but kept for backward compatibility and explicit intent.
+        
+        Returns:
+            datetime: Created timestamp in school timezone
+        """
+        from core.utils import localize_datetime
+        return localize_datetime(self.created_at)
+    
+    def get_updated_at_local(self):
+        """
+        Get updated_at timestamp in school timezone (for display).
+        
+        Since we now store in school timezone, this is just an alias,
+        but kept for backward compatibility and explicit intent.
+        
+        Returns:
+            datetime: Updated timestamp in school timezone
+        """
+        from core.utils import localize_datetime
+        return localize_datetime(self.updated_at)
+    
     def _create_audit_log(self, action, changes):
-        """Create an audit log entry for this change"""
+        """
+        Create an audit log entry for this change.
+        Audit log timestamp will automatically use school timezone.
+        
+        Args:
+            action: 'CREATE', 'UPDATE', or 'DELETE'
+            changes: Dict of field changes
+        """
         try:
             # Import here to avoid circular imports
             from utils.models import AuditLog
@@ -273,6 +423,7 @@ class BaseModel(models.Model):
                 user_name = getattr(user, 'get_full_name', lambda: str(user))()
             
             # Create audit log entry
+            # Note: AuditLog.save() will set timestamp in school timezone
             audit_log = AuditLog(
                 content_type=f"{self._meta.app_label}.{self._meta.model_name}",
                 object_id=str(self.pk),
@@ -304,6 +455,7 @@ class BaseModel(models.Model):
     def get_history(self, limit=10):
         """
         Get audit history for this object.
+        All timestamps in history will be in school timezone.
         
         Args:
             limit: Maximum number of history entries to return
@@ -354,21 +506,34 @@ class DefaultDatabaseModel(models.Model):
     Base model for entities that ALWAYS use the default database.
     
     Use this for:
-    - User accounts
-    - School registry
+    - User accounts (stored centrally)
+    - School registry (list of all schools)
     - System-wide configuration
     - Any cross-tenant data
     
     This model includes basic audit fields but forces all operations
     to the default database regardless of thread-local context.
+    
+    Note: Timestamps for default database models use Django's TIME_ZONE setting
+    (typically UTC), not individual school timezones.
     """
     
     # Core identification
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # Timestamp fields
-    created_at = models.DateTimeField("Created At", auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField("Updated At", auto_now=True, db_index=True)
+    # Timestamp fields - Use Django's default timezone (UTC)
+    created_at = models.DateTimeField(
+        "Created At", 
+        auto_now_add=True, 
+        db_index=True,
+        help_text="When this record was created (UTC)"
+    )
+    updated_at = models.DateTimeField(
+        "Updated At", 
+        auto_now=True, 
+        db_index=True,
+        help_text="When this record was last updated (UTC)"
+    )
     
     class Meta:
         abstract = True
@@ -392,6 +557,7 @@ class DefaultDatabaseModel(models.Model):
         kwargs['using'] = 'default'
         return super().refresh_from_db(*args, **kwargs)
 
+
 # =============================================================================
 # AUDIT LOG MODEL
 # =============================================================================
@@ -403,12 +569,17 @@ class AuditLog(models.Model):
     Tracks:
     - What changed (model, object_id, field changes)
     - Who made the change (user)
-    - When it happened (timestamp)
+    - When it happened (timestamp in school timezone) ⭐
     - Where it came from (IP address)
     - Why it was changed (reason)
     
     This model is stored in the SAME database as the model being tracked,
     so each school database has its own audit trail.
+    
+    Timezone Behavior:
+    - Timestamps use school timezone (not UTC)
+    - Ensures audit logs match school's operational context
+    - Reports and analytics use consistent school time
     """
     
     ACTION_CHOICES = (
@@ -432,13 +603,24 @@ class AuditLog(models.Model):
         blank=True
     )
     
-    # Who made the change
-    user_id = models.CharField("User ID", max_length=50, db_index=True, null=True, blank=True)
+    # Who made the change - CharField to avoid cross-database FK
+    user_id = models.CharField(
+        "User ID", 
+        max_length=50, 
+        db_index=True, 
+        null=True, 
+        blank=True,
+        help_text="ID of user who performed this action"
+    )
     user_email = models.EmailField("User Email", max_length=255, blank=True)
     user_name = models.CharField("User Name", max_length=255, blank=True)
     
-    # When it happened
-    timestamp = models.DateTimeField("Timestamp", auto_now_add=True, db_index=True)
+    # When it happened - Stored in school timezone ⭐
+    timestamp = models.DateTimeField(
+        "Timestamp", 
+        db_index=True,
+        help_text="When this action occurred (in school's operational timezone)"
+    )
     
     # Where it came from
     ip_address = models.GenericIPAddressField("IP Address", null=True, blank=True)
@@ -469,10 +651,22 @@ class AuditLog(models.Model):
         return f"{self.action} {self.content_type} {self.object_id} at {self.timestamp}"
     
     def save(self, *args, **kwargs):
-        """Route to current database"""
+        """
+        Override save to:
+        1. Set timestamp in school timezone ⭐
+        2. Route to current database
+        """
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
+        
+        # Set timestamp in school timezone if not provided
+        if not self.timestamp:
+            self.timestamp = get_school_current_time()
+        
+        # Route to current database
         current_db = get_current_db()
         if current_db and 'using' not in kwargs:
             kwargs['using'] = current_db
+        
         return super().save(*args, **kwargs)
     
     def delete(self, *args, **kwargs):
@@ -516,6 +710,23 @@ class AuditLog(models.Model):
         user_display = self.user_name or self.user_email or self.user_id or "Unknown User"
         return f"{user_display} {self.get_action_display().lower()} {self.content_type}"
     
+    def get_timestamp_local(self):
+        """
+        Get timestamp in school timezone (for display).
+        
+        Since we now store in school timezone, this is just an alias,
+        but kept for clarity and backward compatibility.
+        
+        Returns:
+            datetime: Timestamp in school timezone
+        """
+        from core.utils import localize_datetime
+        return localize_datetime(self.timestamp)
+    
+    # -------------------------------------------------------------------------
+    # CLASS METHODS - QUERYING AUDIT LOGS
+    # -------------------------------------------------------------------------
+    
     @classmethod
     def get_recent_activity(cls, limit=50):
         """Get recent audit activity across all models"""
@@ -539,6 +750,32 @@ class AuditLog(models.Model):
             content_type=content_type,
             object_id=str(obj.pk)
         ).order_by('-timestamp')
+    
+    @classmethod
+    def get_activity_by_date_range(cls, start_date, end_date):
+        """
+        Get activity within a date range (uses school timezone).
+        
+        Args:
+            start_date: Start date (will be converted to school timezone)
+            end_date: End date (will be converted to school timezone)
+            
+        Returns:
+            QuerySet: Audit logs within date range
+        """
+        from core.utils import get_school_timezone
+        from datetime import datetime
+        from django.utils import timezone as django_tz
+        
+        # Convert dates to school timezone datetimes
+        tz = get_school_timezone()
+        start_dt = django_tz.make_aware(datetime.combine(start_date, datetime.min.time()), tz)
+        end_dt = django_tz.make_aware(datetime.combine(end_date, datetime.max.time()), tz)
+        
+        return cls.objects.filter(
+            timestamp__gte=start_dt,
+            timestamp__lte=end_dt
+        ).order_by('-timestamp')
 
 
 # =============================================================================
@@ -549,6 +786,12 @@ class FinancialAuditLog(models.Model):
     """
     Specialized audit log for financial transactions and sensitive operations.
     Provides enhanced tracking for compliance and security purposes.
+    
+    Timezone Behavior:
+    - All timestamps use school timezone ⭐
+    - Financial reports show transactions in school's operational time
+    - Compliance audits use consistent school time
+    - Parent portals show transaction times in school timezone
     """
     
     # Financial-specific action types
@@ -593,11 +836,23 @@ class FinancialAuditLog(models.Model):
     
     # Core audit fields
     id = models.AutoField(primary_key=True)
-    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    
+    # When it happened - Stored in school timezone ⭐
+    timestamp = models.DateTimeField(
+        db_index=True,
+        help_text="When this financial action occurred (in school's operational timezone)"
+    )
+    
     action = models.CharField(max_length=30, choices=FINANCIAL_ACTIONS, db_index=True)
     
-    # User information
-    user_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    # User information - CharField to avoid cross-database FK
+    user_id = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="ID of user who performed this action"
+    )
     user_name = models.CharField(max_length=200, null=True, blank=True)
     user_role = models.CharField(max_length=100, null=True, blank=True)
     
@@ -699,10 +954,22 @@ class FinancialAuditLog(models.Model):
         return f"{self.get_action_display()} at {self.timestamp}"
     
     def save(self, *args, **kwargs):
-        """Route to current database"""
+        """
+        Override save to:
+        1. Set timestamp in school timezone ⭐
+        2. Route to current database
+        """
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
+        
+        # Set timestamp in school timezone if not provided
+        if not self.timestamp:
+            self.timestamp = get_school_current_time()
+        
+        # Route to current database
         current_db = get_current_db()
         if current_db and 'using' not in kwargs:
             kwargs['using'] = current_db
+        
         return super().save(*args, **kwargs)
     
     # -------------------------------------------------------------------------
@@ -728,11 +995,12 @@ class FinancialAuditLog(models.Model):
         **kwargs
     ):
         """
-        Class method to log financial actions.
+        Class method to log financial actions with school timezone support.
 
         Handles:
+        - Automatic school timezone for timestamps ⭐
         - academic_session as object or string/UUID
-        - currency as object or string (or None → default 'UGX')
+        - currency as object or string (or None → default from settings)
         
         Args:
             action: Action type from FINANCIAL_ACTIONS
@@ -752,16 +1020,29 @@ class FinancialAuditLog(models.Model):
             
         Returns:
             FinancialAuditLog: Created audit log entry or None if failed
+        
+        Example:
+            FinancialAuditLog.log_financial_action(
+                action='PAYMENT_RECEIVE',
+                user=request.user,
+                request=request,
+                target_object=payment,
+                amount=payment.amount,
+                student=payment.student,
+                academic_session=payment.academic_session,
+                risk_level='LOW',
+                notes='Payment received via mobile money'
+            )
         """
-        from django.utils import timezone
         from django.contrib.contenttypes.models import ContentType
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
 
         try:
-            # Prepare base log payload
+            # Prepare base log payload with school timezone ⭐
             log_data = {
                 'action': action,
                 'risk_level': risk_level,
-                'timestamp': timezone.now(),
+                'timestamp': get_school_current_time(),  # ⭐ SCHOOL TIMEZONE
                 'notes': (notes or '')[:2000],  # Limit length
                 'old_values': old_values,
                 'new_values': new_values,
@@ -777,7 +1058,16 @@ class FinancialAuditLog(models.Model):
                 else:
                     log_data['currency'] = str(currency)[:3].upper()
             else:
-                log_data['currency'] = 'UGX'
+                # Get from FinancialSettings
+                try:
+                    from core.models import FinancialSettings
+                    settings = FinancialSettings.get_instance()
+                    if settings and settings.school_currency:
+                        log_data['currency'] = settings.school_currency[:3].upper()
+                    else:
+                        log_data['currency'] = 'UGX'
+                except Exception:
+                    log_data['currency'] = 'UGX'
             
             # Handle amount
             if amount is not None:
@@ -845,9 +1135,9 @@ class FinancialAuditLog(models.Model):
                         # Try resolve UUID → object
                         try:
                             import uuid as uuid_lib
-                            from core.models import Period
+                            from academics.models import AcademicSession
                             uuid_lib.UUID(session_str)
-                            session_obj = Period.objects.filter(id=session_str).first()
+                            session_obj = AcademicSession.objects.filter(id=session_str).first()
                         except Exception:
                             session_obj = None
 
@@ -937,6 +1227,19 @@ class FinancialAuditLog(models.Model):
         }
         return risk_classes.get(self.risk_level, 'badge-secondary')
     
+    def get_timestamp_local(self):
+        """
+        Get timestamp in school timezone (for display).
+        
+        Since we now store in school timezone, this is just an alias,
+        but kept for clarity and backward compatibility.
+        
+        Returns:
+            datetime: Timestamp in school timezone
+        """
+        from core.utils import localize_datetime
+        return localize_datetime(self.timestamp)
+    
     # -------------------------------------------------------------------------
     # QUERY METHODS
     # -------------------------------------------------------------------------
@@ -948,11 +1251,11 @@ class FinancialAuditLog(models.Model):
     
     @classmethod
     def get_high_risk_actions(cls, days=30):
-        """Get high-risk actions from recent days"""
-        from django.utils import timezone
+        """Get high-risk actions from recent days (uses school timezone)"""
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         from datetime import timedelta
         
-        cutoff_date = timezone.now() - timedelta(days=days)
+        cutoff_date = get_school_current_time() - timedelta(days=days)
         return cls.objects.filter(
             timestamp__gte=cutoff_date,
             risk_level__in=['HIGH', 'CRITICAL']
@@ -988,12 +1291,12 @@ class FinancialAuditLog(models.Model):
     
     @classmethod
     def get_amount_summary(cls, action_type=None, days=30):
-        """Get summary of amounts involved in financial actions"""
-        from django.utils import timezone
+        """Get summary of amounts involved in financial actions (uses school timezone)"""
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         from datetime import timedelta
         from django.db.models import Sum, Count, Avg
         
-        cutoff_date = timezone.now() - timedelta(days=days)
+        cutoff_date = get_school_current_time() - timedelta(days=days)
         queryset = cls.objects.filter(timestamp__gte=cutoff_date)
         
         if action_type:
@@ -1004,3 +1307,29 @@ class FinancialAuditLog(models.Model):
             count=Count('id'),
             average_amount=Avg('amount_involved')
         )
+    
+    @classmethod
+    def get_activity_by_date_range(cls, start_date, end_date):
+        """
+        Get financial activity within a date range (uses school timezone).
+        
+        Args:
+            start_date: Start date (will be converted to school timezone)
+            end_date: End date (will be converted to school timezone)
+            
+        Returns:
+            QuerySet: Financial audit logs within date range
+        """
+        from core.utils import get_school_timezone
+        from datetime import datetime
+        from django.utils import timezone as django_tz
+        
+        # Convert dates to school timezone datetimes
+        tz = get_school_timezone()
+        start_dt = django_tz.make_aware(datetime.combine(start_date, datetime.min.time()), tz)
+        end_dt = django_tz.make_aware(datetime.combine(end_date, datetime.max.time()), tz)
+        
+        return cls.objects.filter(
+            timestamp__gte=start_dt,
+            timestamp__lte=end_dt
+        ).order_by('-timestamp')

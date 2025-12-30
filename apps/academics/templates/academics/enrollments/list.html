@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* Enrollment Status Badges */
+.status-badge.ongoing {
+    background-color: #cce5ff;
+    color: #004085;
+    border-color: #b8daff;
+}
+
+.status-badge.completed {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+/* Enrollment Filters */
+.enrollment-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Stats Cards */
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Student Enrollments
+                <div class="page-title-subheading">
+                    Manage student class enrollments and academic progression
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:enrollment_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> New Enrollment
+                </a>
+                <a href="{% url 'academics:enrollment_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Enrollments</div>
+                <h3>{{ stats.overview.total_enrollments|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Ongoing</div>
+                <h3>{{ stats.overview.ongoing_enrollments|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-graph2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Completion Rate</div>
+                <h3>{{ stats.overview.completion_rate|default:0 }}%</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-science"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Capacity Used</div>
+                <h3>{{ stats.capacity_analysis.utilization_percentage|default:0 }}%</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-users me-2 text-primary"></i>
+                                Enrollment Records
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                <i class="fa fa-times me-1"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="enrollment-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'academics:enrollment_search' %}"
+                              hx-target="#enrollment-results"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.q.label }}</label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.class_instance.label }}</label>
+                                {{ filter_form.class_instance }}
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.academic_session.label }}</label>
+                                {{ filter_form.academic_session }}
+                            </div>
+                            
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.enrollment_type.label }}</label>
+                                {{ filter_form.enrollment_type }}
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.completion_status.label }}</label>
+                                {{ filter_form.completion_status }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results -->
+                    <div id="enrollment-results"
+                         hx-get="{% url 'academics:enrollment_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading enrollments...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function resetFilters() {
+    window.location.href = "{% url 'academics:enrollment_list' %}";
+}
+</script>
+{% endblock %}

@@ -1,0 +1,590 @@
+{# students/templates/students/_student_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+
+<!-- Students Table -->
+<div class="table-responsive" style="overflow: visible;">  {# ✅ CHANGED: Added overflow: visible #}
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Student</th>
+                <th>Admission Number</th>
+                <th>Gender</th>
+                <th>Age</th>
+                <th>Current Grade/Class</th>
+                <th>Status</th>
+                <th>Alerts</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="studentTableBody">
+            {% if students_page %}
+                {% for student in students_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:students_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Student Info with Photo -->
+                    <td>
+                        <div class="d-flex align-items-center position-relative">
+                            {% if student.photo %}
+                                <div class="position-relative me-2">
+                                    <img src="{{ student.photo.url }}" 
+                                         class="profile-avatar" 
+                                         alt="{{ student.get_full_name }}"
+                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}" 
+                                          title="Status: {{ student.get_enrollment_status_display }}"></span>
+                                </div>
+                            {% else %}
+                                <div class="position-relative me-2">
+                                    <div class="avatar-placeholder" 
+                                         style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                                        <div class="avatar-title">
+                                            {% if student.first_name and student.last_name %}
+                                                {{ student.first_name.0|upper }}{{ student.last_name.0|upper }}
+                                            {% else %}
+                                                {{ student.first_name.0|upper|default:"?" }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}" 
+                                          title="Status: {{ student.get_enrollment_status_display }}"></span>
+                                </div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0">{{ student.get_full_name }}</h6>
+                                <small class="text-muted">{{ student.phone_number|default:"" }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Admission Number -->
+                    <td><strong>{{ student.admission_number }}</strong></td>
+                    
+                    <!-- Gender Badge -->
+                    <td>
+                        {% if student.gender == 'M' %}
+                            <span class="gender-badge male">
+                                <i class="fa fa-mars me-1"></i>Male
+                            </span>
+                        {% elif student.gender == 'F' %}
+                            <span class="gender-badge female">
+                                <i class="fa fa-venus me-1"></i>Female
+                            </span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Age -->
+                    <td>
+                        <strong>{{ student.age }}</strong> 
+                        <small class="text-muted">yrs</small>
+                    </td>
+                    
+                    <!-- Current Academic Level -->
+                    <td>
+                        {% if student.current_academic_level %}
+                            <span class="badge bg-info">
+                                {{ student.current_academic_level.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">Not Assigned</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Enrollment Status Badge -->
+                    <td>
+                        {% if student.enrollment_status == 'ACTIVE' %}
+                            <span class="badge bg-success status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'SUSPENDED' %}
+                            <span class="badge bg-danger status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'GRADUATED' %}
+                            <span class="badge bg-info status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'TRANSFERRED' %}
+                            <span class="badge bg-primary status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'WITHDRAWN' %}
+                            <span class="badge bg-secondary status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'DISMISSED' %}
+                            <span class="badge bg-dark status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% elif student.enrollment_status == 'DEFERRED' %}
+                            <span class="badge bg-warning status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary status-badge">{{ student.get_enrollment_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Medical/Special Alerts -->
+                    <td>
+                        <div class="d-flex flex-column gap-1">
+                            {% if student.has_medical_alert %}
+                                <span class="medical-alert-badge" 
+                                      title="Medical Alert: {{ student.medical_conditions|default:'See profile' }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-heartbeat me-1"></i>Medical
+                                </span>
+                            {% endif %}
+                            
+                            {% if student.has_special_needs %}
+                                <span class="badge bg-warning" 
+                                      title="Special Needs: {{ student.special_needs_description|default:'See profile' }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-wheelchair me-1"></i>Special
+                                </span>
+                            {% endif %}
+                            
+                            {% if student.transportation_required %}
+                                <span class="badge bg-primary" 
+                                      title="Transport: {{ student.transport_route|default:'Required' }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-bus me-1"></i>Transport
+                                </span>
+                            {% endif %}
+                            
+                            {% if not student.has_medical_alert and not student.has_special_needs and not student.transportation_required %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Profile -->
+                                <a class="dropdown-item text-success" href="{% url 'students:student_profile' student.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Profile
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'students:student_edit' student.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- Add Guardian -->
+                                <a class="dropdown-item" 
+                                   href="{% url 'students:add_guardian_modal' student.pk %}"
+                                   hx-get="{% url 'students:add_guardian_modal' student.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-user-plus me-2"></i> Add Guardian
+                                </a>
+                                
+                                <!-- Add Sibling -->
+                                <a class="dropdown-item" 
+                                   href="{% url 'students:add_sibling_modal' student.pk %}"
+                                   hx-get="{% url 'students:add_sibling_modal' student.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-users me-2"></i> Add Sibling
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                <!-- Change Status -->
+                                <a class="dropdown-item" 
+                                   href="{% url 'students:student_status_change_modal' student.pk %}"
+                                   hx-get="{% url 'students:student_status_change_modal' student.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-exchange-alt me-2"></i> Change Status
+                                </a>
+                                
+                                {% if student.enrollment_status != 'ACTIVE' %}
+                                    <form action="{% url 'students:student_activate' student.pk %}" method="post" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="dropdown-item text-success">
+                                            <i class="fa fa-check-circle me-2"></i> Activate
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                
+                                {% if student.enrollment_status == 'ACTIVE' %}
+                                    <form action="{% url 'students:student_suspend' student.pk %}" method="post" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="dropdown-item text-warning">
+                                            <i class="fa fa-ban me-2"></i> Suspend
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <a class="dropdown-item text-danger" 
+                                   href="{% url 'students:student_delete_modal' student.pk %}"
+                                   hx-get="{% url 'students:student_delete_modal' student.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <i class="pe-7s-search" style="font-size: 48px; opacity: 0.3;"></i>
+                        <p class="mt-2">No students found.</p>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if students_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ students_page.start_index }} - {{ students_page.end_index }} of {{ students_page.paginator.count }} students
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Student pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if students_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'students:student_search' %}" 
+                           hx-target="#student-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ students_page.previous_page_number }}"}'
+                           aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in students_page.paginator.page_range %}
+                    {% if page_num == students_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > students_page.number|add:"-3" and page_num < students_page.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'students:student_search' %}"
+                               hx-target="#student-results"
+                               hx-include="#searchForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if students_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'students:student_search' %}"
+                           hx-target="#student-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ students_page.next_page_number }}"}'
+                           aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Student Status Indicator */
+.student-status-indicator {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+.student-status-indicator.active {
+    background-color: #28a745;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+.student-status-indicator.suspended {
+    background-color: #dc3545;
+}
+
+.student-status-indicator.graduated {
+    background-color: #17a2b8;
+}
+
+.student-status-indicator.transferred {
+    background-color: #007bff;
+}
+
+.student-status-indicator.withdrawn,
+.student-status-indicator.dismissed {
+    background-color: #6c757d;
+}
+
+.student-status-indicator.deferred {
+    background-color: #ffc107;
+}
+
+/* Gender Badge */
+.gender-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.gender-badge.male {
+    background-color: #cfe2ff;
+    color: #084298;
+}
+
+.gender-badge.female {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+/* Medical Alert Badge */
+.medical-alert-badge {
+    display: inline-block;
+    background-color: #dc3545;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* ✅ ADDED: Fix for table responsive overflow with dropdowns */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;  /* Allow dropdowns to overflow vertically */
+}
+
+/* ✅ ADDED: Ensure table cells don't clip dropdown menus */
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+/* ✅ ADDED: Ensure dropdown menus have proper z-index */
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* Stats Cards */
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Profile Avatar */
+.profile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Badges */
+.status-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+/* Table Improvements */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Alert Badge Gap */
+.d-flex.flex-column.gap-1 > * {
+    margin-bottom: 3px;
+}
+
+.d-flex.flex-column.gap-1 > *:last-child {
+    margin-bottom: 0;
+}
+
+/* ✅ ADDED: Responsive handling for mobile devices */
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    /* Make dropdown menu full width on mobile */
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (at the very end) -->
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Students</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Students</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Male / Female</div>
+                <h3>{{ stats.male|default:0 }} / {{ stats.female|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Special Needs</div>
+                <h3>{{ stats.special_needs|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize tooltips after HTMX swap
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+});
+
+// Re-initialize tooltips after HTMX updates
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'student-results') {
+        initializeTooltips();
+    }
+});
+
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+</script>

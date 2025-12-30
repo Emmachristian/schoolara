@@ -109,7 +109,7 @@ class DisciplinaryRecord(BaseModel):
     )
     
     academic_session = models.ForeignKey(
-        'core.Period',
+        'core.FiscalPeriod',
         verbose_name="Academic Session",
         on_delete=models.CASCADE,
         related_name='disciplinary_records',

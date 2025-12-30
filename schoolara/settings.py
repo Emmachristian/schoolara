@@ -131,7 +131,7 @@ LOGGING = {
         },
         'django.db.backends': {
             'handlers': ['console'],
-            'level': 'DEBUG',  # Changed to DEBUG to see SQL queries
+            'level': 'INFO',  # Changed to DEBUG to see SQL queries
             'propagate': False,
         },
     },

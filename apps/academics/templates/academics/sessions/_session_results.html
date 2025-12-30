@@ -1,0 +1,388 @@
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+<!-- Sessions Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="150">Session Details</th>
+                <th width="150">Date Range</th>
+                <th width="100" class="text-center">Duration</th>
+                <th width="100">Type</th>
+                <th width="120">Status</th>
+                <th width="100" class="text-center">Progress</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if sessions_page %}
+                {% for session in sessions_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:sessions_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Session Details -->
+                    <td>
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <strong>{{ session.name }}</strong>
+                                    {% if session.is_current %}
+                                        <span class="badge bg-success ms-2 animate-pulse">
+                                            <i class="fa fa-star me-1"></i>CURRENT
+                                        </span>
+                                    {% endif %}
+                                    {% if session.is_special_session %}
+                                        <span class="badge bg-purple ms-1">
+                                            <i class="fa fa-bolt me-1"></i>Special
+                                        </span>
+                                    {% endif %}
+                                </h6>
+                                <div class="small text-muted">
+                                    <span><strong>Year:</strong> {{ session.year_name }}</span>
+                                    <span class="ms-2"><strong>Term:</strong> #{{ session.term_number }}</span>
+                                </div>
+                                {% if session.description %}
+                                    <small class="text-muted d-block mt-1">
+                                        <i class="fa fa-info-circle me-1"></i>{{ session.description|truncatewords:15 }}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Date Range -->
+                    <td>
+                        <div class="small">
+                            <div><strong>Start:</strong> {{ session.start_date|date:"M d, Y" }}</div>
+                            <div><strong>End:</strong> {{ session.end_date|date:"M d, Y" }}</div>
+                        </div>
+                        {% if session.enrollment_deadline %}
+                            <div class="mt-1">
+                                <span class="badge bg-info">
+                                    <i class="fa fa-calendar me-1"></i>Deadline: {{ session.enrollment_deadline|date:"M d" }}
+                                </span>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Duration -->
+                    <td class="text-center">
+                        <strong class="text-primary">{{ session.total_days }}</strong>
+                        <br><small class="text-muted">days</small>
+                        <br><small class="text-muted">({{ session.get_duration_weeks }} weeks)</small>
+                    </td>
+                    
+                    <!-- Type -->
+                    <td>
+                        {% if session.period_type == 'term' %}
+                            <span class="badge bg-primary">Term</span>
+                        {% elif session.period_type == 'semester' %}
+                            <span class="badge bg-success">Semester</span>
+                        {% elif session.period_type == 'quarter' %}
+                            <span class="badge bg-info">Quarter</span>
+                        {% elif session.period_type == 'holiday_program' %}
+                            <span class="badge bg-warning text-dark">Holiday</span>
+                        {% elif session.period_type == 'summer_school' %}
+                            <span class="badge" style="background-color: #fd7e14; color: white;">Summer</span>
+                        {% elif session.period_type == 'remedial' %}
+                            <span class="badge bg-danger">Remedial</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ session.get_period_type_display }}</span>
+                        {% endif %}
+                        
+                        {% if session.allows_promotion %}
+                            <br><span class="badge bg-success mt-1">
+                                <i class="fa fa-arrow-up me-1"></i>Promotes
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status -->
+                    <td class="text-center">
+                        {% if session.is_academically_closed %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-lock me-1"></i>Closed
+                            </span>
+                            {% if session.academic_closure_date %}
+                                <br><small class="text-muted">{{ session.academic_closure_date|date:"M d, Y" }}</small>
+                            {% endif %}
+                        {% elif session.is_current %}
+                            <span class="badge bg-success status-badge animate-pulse">
+                                <i class="fa fa-star me-1"></i>Current
+                            </span>
+                        {% elif session.is_active %}
+                            {% if session.is_upcoming %}
+                                <span class="badge bg-warning status-badge text-dark">
+                                    <i class="fa fa-clock me-1"></i>Upcoming
+                                </span>
+                            {% elif session.is_past %}
+                                <span class="badge bg-secondary status-badge">
+                                    <i class="fa fa-check me-1"></i>Completed
+                                </span>
+                            {% else %}
+                                <span class="badge bg-primary status-badge">
+                                    <i class="fa fa-play me-1"></i>Active
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="fa fa-pause me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Progress -->
+                    <td class="text-center">
+                        {% if not session.is_academically_closed and session.is_active %}
+                            <div class="small mb-1">
+                                <strong>{{ session.progress_percentage }}%</strong>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-primary" 
+                                     role="progressbar" 
+                                     style="width: {{ session.progress_percentage }}%"
+                                     aria-valuenow="{{ session.progress_percentage }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div class="mt-1 small text-muted">
+                                {{ session.days_remaining }} days left
+                            </div>
+                        {% elif session.is_academically_closed %}
+                            <div class="text-danger">
+                                <i class="fa fa-lock"></i>
+                                <br><small>Locked</small>
+                            </div>
+                        {% elif session.is_upcoming %}
+                            <div class="text-warning">
+                                <i class="fa fa-clock"></i>
+                                <br><small>Not started</small>
+                            </div>
+                        {% else %}
+                            <div class="text-secondary">
+                                <i class="fa fa-check"></i>
+                                <br><small>Completed</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View -->
+                                <a class="dropdown-item text-success" href="{% url 'academics:session_detail' session.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                {% if not session.is_academically_closed %}
+                                    <a class="dropdown-item text-warning" href="{% url 'academics:session_edit' session.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                {% if session.can_be_made_current and not session.is_current %}
+                                    <a class="dropdown-item" 
+                                       href="{% url 'academics:session_set_current_modal' session.pk %}"
+                                       hx-get="{% url 'academics:session_set_current_modal' session.pk %}"
+                                       hx-target="#modal-content"
+                                       hx-swap="innerHTML">
+                                        <i class="fa fa-star me-2"></i> Set as Current
+                                    </a>
+                                {% endif %}
+                                
+                                {% if session.can_be_closed %}
+                                    <a class="dropdown-item text-danger" 
+                                       href="{% url 'academics:session_close' session.pk %}">
+                                        <i class="fa fa-lock me-2"></i> Close Session
+                                    </a>
+                                {% endif %}
+                                
+                                {% if session.is_academically_closed %}
+                                    <a class="dropdown-item text-warning" 
+                                       href="{% url 'academics:session_reopen' session.pk %}">
+                                        <i class="fa fa-unlock me-2"></i> Reopen Session
+                                    </a>
+                                {% endif %}
+                                
+                                <a class="dropdown-item" href="{% url 'academics:enrollment_list' %}?session={{ session.id }}">
+                                    <i class="fa fa-users me-2"></i> View Enrollments
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete -->
+                                {% if not session.is_academically_closed %}
+                                    <a class="dropdown-item text-danger" 
+                                       href="{% url 'academics:session_delete_modal' session.pk %}"
+                                       hx-get="{% url 'academics:session_delete_modal' session.pk %}"
+                                       hx-target="#modal-content"
+                                       hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i> Delete
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">
+                        <div class="py-5">
+                            <i class="pe-7s-date" style="font-size: 4rem; opacity: 0.3;"></i>
+                            <h5 class="mt-3">No Academic Sessions Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new session.</p>
+                            <a href="{% url 'academics:session_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Session
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if sessions_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted">
+            Showing {{ sessions_page.start_index }} - {{ sessions_page.end_index }} of {{ sessions_page.paginator.count }} sessions
+        </div>
+        
+        <nav>
+            <ul class="pagination mb-0">
+                {% if sessions_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'academics:session_search' %}" 
+                           hx-target="#session-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ sessions_page.previous_page_number }}"}'>
+                            «
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for page_num in sessions_page.paginator.page_range %}
+                    {% if page_num == sessions_page.number %}
+                        <li class="page-item active">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > sessions_page.number|add:"-3" and page_num < sessions_page.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'academics:session_search' %}"
+                               hx-target="#session-results"
+                               hx-include="#searchForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if sessions_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'academics:session_search' %}"
+                           hx-target="#session-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ sessions_page.next_page_number }}"}'>
+                            »
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .7;
+    }
+}
+
+.bg-purple {
+    background-color: #6f42c1 !important;
+    color: white;
+}
+</style>
+
+<!-- OUT OF BAND STATS UPDATE -->
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-date"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Sessions</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Sessions</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Current</div>
+                <h3>{{ stats.current|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-danger">
+                <i class="pe-7s-lock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Closed</div>
+                <h3>{{ stats.closed|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>

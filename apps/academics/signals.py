@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.dispatch import receiver
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from academics.models import Subject
 import logging
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ def holiday_post_save(sender, instance, created, **kwargs):
 # SUBJECT SIGNALS
 # =============================================================================
 
-@receiver(m2m_changed, sender='academics.Subject.prerequisites.through')
+@receiver(m2m_changed, sender=Subject.prerequisites.through)
 def subject_prerequisites_changed(sender, instance, action, **kwargs):
     """
     Handle changes to subject prerequisites.

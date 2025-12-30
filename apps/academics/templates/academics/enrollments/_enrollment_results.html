@@ -1,0 +1,418 @@
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+<!-- Enrollments Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="120">Student</th>
+                <th width="150">Class</th>
+                <th width="120">Session</th>
+                <th width="100">Roll No</th>
+                <th width="120">Enrollment Type</th>
+                <th width="100">Progression</th>
+                <th width="120">Status</th>
+                <th width="100" class="text-center">Invoice</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if enrollments_page %}
+                {% for enrollment in enrollments_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:enrollments_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Student -->
+                    <td>
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <strong>{{ enrollment.student.get_full_name }}</strong>
+                                </h6>
+                                <div class="small text-muted">
+                                    <i class="fa fa-id-card me-1"></i>{{ enrollment.student.admission_number }}
+                                </div>
+                                {% if enrollment.student.gender %}
+                                    <small class="text-muted">
+                                        {% if enrollment.student.gender == 'MALE' %}
+                                            <i class="fa fa-mars text-primary me-1"></i>Male
+                                        {% elif enrollment.student.gender == 'FEMALE' %}
+                                            <i class="fa fa-venus text-danger me-1"></i>Female
+                                        {% endif %}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Class -->
+                    <td>
+                        <div class="small">
+                            <strong>{{ enrollment.class_instance.get_display_name }}</strong>
+                            <br><span class="text-muted">
+                                <i class="fa fa-layer-group me-1"></i>{{ enrollment.class_instance.academic_level.name }}
+                            </span>
+                        </div>
+                    </td>
+                    
+                    <!-- Session -->
+                    <td>
+                        <div class="small">
+                            <strong>{{ enrollment.academic_session.term_name }}</strong>
+                            <br><span class="text-muted">{{ enrollment.academic_session.year_name }}</span>
+                        </div>
+                        {% if enrollment.academic_session.is_current %}
+                            <br><span class="badge bg-success mt-1">
+                                <i class="fa fa-star me-1"></i>Current
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Roll Number -->
+                    <td class="text-center">
+                        {% if enrollment.roll_number %}
+                            <span class="badge bg-secondary">{{ enrollment.roll_number }}</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                        <br><small class="text-muted">
+                            <i class="fa fa-calendar me-1"></i>{{ enrollment.enrollment_date|date:"M d, Y" }}
+                        </small>
+                    </td>
+                    
+                    <!-- Enrollment Type -->
+                    <td>
+                        {% if enrollment.enrollment_type == 'NEW' %}
+                            <span class="badge bg-primary">
+                                <i class="fa fa-star me-1"></i>New
+                            </span>
+                        {% elif enrollment.enrollment_type == 'CONTINUING' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-arrow-right me-1"></i>Continuing
+                            </span>
+                        {% elif enrollment.enrollment_type == 'TRANSFER_IN' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-exchange-alt me-1"></i>Transfer In
+                            </span>
+                        {% elif enrollment.enrollment_type == 'REPEATER' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-redo me-1"></i>Repeater
+                            </span>
+                        {% elif enrollment.enrollment_type == 'READMISSION' %}
+                            <span class="badge bg-secondary">
+                                <i class="fa fa-user-plus me-1"></i>Readmission
+                            </span>
+                        {% elif enrollment.enrollment_type == 'PROMOTED' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-arrow-up me-1"></i>Promoted
+                            </span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">{{ enrollment.get_enrollment_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Progression Type -->
+                    <td>
+                        {% if enrollment.progression_type == 'NORMAL' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-check me-1"></i>Normal
+                            </span>
+                        {% elif enrollment.progression_type == 'SKIP' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-fast-forward me-1"></i>Skipped
+                            </span>
+                        {% elif enrollment.progression_type == 'REPEAT' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-redo me-1"></i>Repeated
+                            </span>
+                        {% elif enrollment.progression_type == 'LATERAL' %}
+                            <span class="badge bg-secondary">
+                                <i class="fa fa-arrows-alt-h me-1"></i>Lateral
+                            </span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">{{ enrollment.get_progression_type_display }}</span>
+                        {% endif %}
+                        
+                        {% if enrollment.previous_enrollment %}
+                            <br><small class="text-muted mt-1 d-block">
+                                <i class="fa fa-history me-1"></i>From: {{ enrollment.previous_enrollment.class_instance.get_display_name|truncatewords:2 }}
+                            </small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status -->
+                    <td class="text-center">
+                        {% if enrollment.completion_status == 'ONGOING' %}
+                            <span class="badge bg-primary status-badge">
+                                <i class="fa fa-play-circle me-1"></i>Ongoing
+                            </span>
+                        {% elif enrollment.completion_status == 'COMPLETED' %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Completed
+                            </span>
+                            {% if enrollment.completion_date %}
+                                <br><small class="text-muted">{{ enrollment.completion_date|date:"M d, Y" }}</small>
+                            {% endif %}
+                        {% elif enrollment.completion_status == 'DROPPED' %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Dropped
+                            </span>
+                        {% elif enrollment.completion_status == 'TRANSFERRED' %}
+                            <span class="badge bg-info status-badge">
+                                <i class="fa fa-exchange-alt me-1"></i>Transferred
+                            </span>
+                        {% elif enrollment.completion_status == 'SUSPENDED' %}
+                            <span class="badge bg-warning text-dark status-badge">
+                                <i class="fa fa-pause-circle me-1"></i>Suspended
+                            </span>
+                        {% elif enrollment.completion_status == 'WITHDRAWN' %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="fa fa-user-times me-1"></i>Withdrawn
+                            </span>
+                        {% else %}
+                            <span class="badge bg-light text-dark status-badge">{{ enrollment.get_completion_status_display }}</span>
+                        {% endif %}
+                        
+                        {% if not enrollment.is_active %}
+                            <br><span class="badge bg-secondary mt-1">Inactive</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Invoice Status -->
+                    <td class="text-center">
+                        {% if enrollment.academic_invoice %}
+                            <div class="mb-1">
+                                <span class="badge bg-success">
+                                    <i class="fa fa-file-invoice me-1"></i>Has Invoice
+                                </span>
+                            </div>
+                            <a href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fa fa-eye"></i> View
+                            </a>
+                        {% else %}
+                            <div class="mb-1">
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa fa-exclamation-triangle me-1"></i>No Invoice
+                                </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View -->
+                                <a class="dropdown-item text-success" href="{% url 'academics:enrollment_detail' enrollment.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                {% if enrollment.completion_status == 'ONGOING' %}
+                                    <a class="dropdown-item text-warning" href="{% url 'academics:enrollment_edit' enrollment.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-user me-2"></i> View Student Profile
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'academics:class_detail' enrollment.class_instance.pk %}">
+                                    <i class="fa fa-chalkboard-teacher me-2"></i> View Class
+                                </a>
+                                
+                                {% if enrollment.academic_invoice %}
+                                    <a class="dropdown-item" href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}">
+                                        <i class="fa fa-file-invoice me-2"></i> View Invoice
+                                    </a>
+                                {% else %}
+                                    {% if enrollment.completion_status == 'ONGOING' %}
+                                        <a class="dropdown-item text-success" href="#">
+                                            <i class="fa fa-plus me-2"></i> Create Invoice
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                {% if enrollment.completion_status == 'ONGOING' %}
+                                    <h6 class="dropdown-header">Change Status</h6>
+                                    
+                                    <a class="dropdown-item text-success" 
+                                       href="#">
+                                        <i class="fa fa-check me-2"></i> Mark as Completed
+                                    </a>
+                                    
+                                    <a class="dropdown-item text-warning" 
+                                       href="{% url 'academics:enrollment_transfer' enrollment.pk %}">
+                                        <i class="fa fa-exchange-alt me-2"></i> Transfer Student
+                                    </a>
+                                    
+                                    <a class="dropdown-item text-danger" 
+                                       href="{% url 'academics:enrollment_withdraw' enrollment.pk %}">
+                                        <i class="fa fa-user-times me-2"></i> Withdraw Student
+                                    </a>
+                                    
+                                    <hr class="dropdown-divider">
+                                {% endif %}
+                                
+                                <!-- Delete -->
+                                <a class="dropdown-item text-danger" 
+                                   href="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
+                                   hx-get="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted">
+                        <div class="py-5">
+                            <i class="pe-7s-users" style="font-size: 4rem; opacity: 0.3;"></i>
+                            <h5 class="mt-3">No Enrollments Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new enrollment.</p>
+                            <a href="{% url 'academics:enrollment_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> New Enrollment
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if enrollments_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted">
+            Showing {{ enrollments_page.start_index }} - {{ enrollments_page.end_index }} of {{ enrollments_page.paginator.count }} enrollments
+        </div>
+        
+        <nav>
+            <ul class="pagination mb-0">
+                {% if enrollments_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'academics:enrollment_search' %}" 
+                           hx-target="#enrollment-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ enrollments_page.previous_page_number }}"}'>
+                            «
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for page_num in enrollments_page.paginator.page_range %}
+                    {% if page_num == enrollments_page.number %}
+                        <li class="page-item active">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > enrollments_page.number|add:"-3" and page_num < enrollments_page.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'academics:enrollment_search' %}"
+                               hx-target="#enrollment-results"
+                               hx-include="#searchForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if enrollments_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'academics:enrollment_search' %}"
+                           hx-target="#enrollment-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ enrollments_page.next_page_number }}"}'>
+                            »
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.status-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+</style>
+
+<!-- OUT OF BAND STATS UPDATE -->
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Enrollments</div>
+                <h3>{{ stats.total|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Ongoing</div>
+                <h3>{{ stats.ongoing|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-graph2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Completed</div>
+                <h3>{{ stats.completed|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">With Invoice</div>
+                <h3>{{ stats.with_invoice|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+</div>

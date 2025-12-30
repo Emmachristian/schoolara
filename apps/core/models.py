@@ -1,5 +1,10 @@
 # core/models.py
 
+"""
+Core models for School Management System
+Updated with timezone support and SACCO best practices
+"""
+
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
@@ -7,6 +12,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from utils.models import BaseModel
 from django.utils import timezone
+from zoneinfo import ZoneInfo, available_timezones
 import pycountry
 import logging
 
@@ -21,6 +27,12 @@ class SchoolConfiguration(BaseModel):
     """
     Enhanced configuration model for maximum flexibility across all school term systems.
     Singleton model - only one instance allowed per school.
+    
+    Changes from original:
+    - Added timezone configuration
+    - Simplified singleton pattern (pk=1)
+    - Added timezone helper methods
+    - Improved documentation
     """
     
     # -------------------------------------------------------------------------
@@ -111,7 +123,7 @@ class SchoolConfiguration(BaseModel):
         "Academic Year Type",
         max_length=15,
         choices=ACADEMIC_YEAR_TYPE_CHOICES,
-        default='east_africa',  # Changed default for Ugandan context
+        default='east_africa',  # Default for Ugandan context
         help_text="When your academic year typically runs"
     )
     
@@ -131,6 +143,19 @@ class SchoolConfiguration(BaseModel):
     )
     
     # -------------------------------------------------------------------------
+    # TIMEZONE CONFIGURATION ⭐ NEW
+    # -------------------------------------------------------------------------
+    
+    operational_timezone = models.CharField(
+        "Operational Timezone",
+        max_length=63,  # Max length of IANA timezone identifiers
+        default='Africa/Kampala',
+        help_text="Timezone for academic schedules, deadlines, and automated processes. "
+                  "Critical for: fee due dates, exam schedules, attendance marking, "
+                  "report generation, and all date-based business logic."
+    )
+    
+    # -------------------------------------------------------------------------
     # REGIONAL SEASON CONFIGURATION
     # -------------------------------------------------------------------------
     
@@ -147,7 +172,7 @@ class SchoolConfiguration(BaseModel):
         "Regional Season Type",
         max_length=20,
         choices=REGIONAL_SEASON_CHOICES,
-        default='equatorial',  # Changed default for Ugandan context
+        default='equatorial',  # Default for Ugandan context
         help_text="Climate-based season naming for your region"
     )
     
@@ -158,6 +183,7 @@ class SchoolConfiguration(BaseModel):
         help_text="Regional season names. E.g., {'1': 'Harmattan', '2': 'Rainy Season'}"
     )
     
+    # -------------------------------------------------------------------------
     # ACADEMIC PERIOD SETTINGS
     # -------------------------------------------------------------------------
     
@@ -224,10 +250,16 @@ class SchoolConfiguration(BaseModel):
         if self.academic_year_type == 'custom':
             try:
                 # Test if the date is valid
-                from datetime import date
                 test_date = date(2024, self.academic_year_start_month, self.academic_year_start_day)
             except ValueError:
                 errors['academic_year_start_day'] = 'Invalid academic year start date'
+        
+        # Validate timezone ⭐ NEW
+        if self.operational_timezone:
+            try:
+                ZoneInfo(self.operational_timezone)
+            except Exception as e:
+                errors['operational_timezone'] = f"Invalid timezone: {self.operational_timezone}"
         
         if errors:
             raise ValidationError(errors)
@@ -262,6 +294,100 @@ class SchoolConfiguration(BaseModel):
         if self.term_system == 'trimester':
             return "Trimesters (3 per year, same as Terms)"
         return self.get_term_system_display()
+    
+    # -------------------------------------------------------------------------
+    # TIMEZONE HELPER METHODS ⭐ NEW
+    # -------------------------------------------------------------------------
+    
+    @staticmethod
+    def get_timezone_choices():
+        """
+        Get ALL available timezone choices from the system.
+        Returns sorted list of all IANA timezones.
+        
+        Returns:
+            list: List of tuples (timezone_name, timezone_name)
+        """
+        all_zones = sorted(available_timezones())
+        return [(tz, tz) for tz in all_zones]
+    
+    def get_timezone(self):
+        """
+        Get the operational timezone as a ZoneInfo object.
+        
+        Returns:
+            ZoneInfo: Timezone object for the configured operational timezone
+        
+        Example:
+            >>> config = SchoolConfiguration.get_instance()
+            >>> tz = config.get_timezone()
+            >>> current_time = datetime.now(tz=tz)
+        """
+        try:
+            return ZoneInfo(self.operational_timezone)
+        except Exception as e:
+            logger.warning(f"Invalid timezone '{self.operational_timezone}': {e}. Falling back to Africa/Kampala")
+            return ZoneInfo('Africa/Kampala')
+    
+    def get_current_time(self):
+        """
+        Get current time in school's operational timezone.
+        
+        Returns:
+            datetime: Current datetime in operational timezone
+        
+        Example:
+            >>> config = SchoolConfiguration.get_instance()
+            >>> now = config.get_current_time()
+            >>> print(f"Current school time: {now}")
+        """
+        return timezone.now().astimezone(self.get_timezone())
+    
+    def get_today(self):
+        """
+        Get today's date in school's operational timezone.
+        
+        Returns:
+            date: Today's date in operational timezone
+        
+        Example:
+            >>> config = SchoolConfiguration.get_instance()
+            >>> today = config.get_today()
+            >>> # Check if term is active today
+            >>> if term.start_date <= today <= term.end_date:
+            >>>     print("Term is active")
+        """
+        return self.get_current_time().date()
+    
+    def localize_datetime(self, dt):
+        """
+        Convert a datetime to school's operational timezone.
+        
+        Args:
+            dt: datetime object (naive or aware)
+            
+        Returns:
+            datetime: Timezone-aware datetime in operational timezone
+        
+        Example:
+            >>> config = SchoolConfiguration.get_instance()
+            >>> utc_time = timezone.now()
+            >>> local_time = config.localize_datetime(utc_time)
+        """
+        if timezone.is_naive(dt):
+            dt = timezone.make_aware(dt)
+        return dt.astimezone(self.get_timezone())
+    
+    @classmethod
+    def get_operational_timezone(cls):
+        """
+        Class method to get operational timezone.
+        
+        Returns:
+            ZoneInfo: Timezone object for operational timezone
+        """
+        config = cls.get_instance()
+        return config.get_timezone() if config else ZoneInfo('Africa/Kampala')
     
     # -------------------------------------------------------------------------
     # PERIOD NAMING METHODS
@@ -414,7 +540,7 @@ class SchoolConfiguration(BaseModel):
             'term': 'Term',
             'semester': 'Semester',
             'quarter': 'Quarter',
-            'trimester': 'Trimester',  # Same as Term, different cultural naming
+            'trimester': 'Trimester',
             'module': 'Module',
             'block': 'Block',
             'yearlong': 'Year',
@@ -464,25 +590,26 @@ class SchoolConfiguration(BaseModel):
         ]
     
     # -------------------------------------------------------------------------
-    # SINGLETON PATTERN IMPLEMENTATION
+    # SINGLETON PATTERN IMPLEMENTATION ⭐ IMPROVED
     # -------------------------------------------------------------------------
     
     @classmethod 
     def get_instance(cls):
         """
         Get or create the singleton instance of SchoolConfiguration.
-        There should only be one SchoolConfiguration instance per school database.
+        Improved singleton pattern using pk=1.
         """
         instance, created = cls.objects.get_or_create(
-            pk=cls.objects.first().pk if cls.objects.exists() else None,
+            pk=1,  # ⭐ Always use pk=1 for singleton
             defaults={
                 'term_system': 'term',
                 'periods_per_year': 3,
                 'period_naming_convention': 'numeric',
                 'custom_period_names': {},
                 'academic_year_type': 'east_africa',
-                'academic_year_start_month': 2,  # February
+                'academic_year_start_month': 2,
                 'academic_year_start_day': 1,
+                'operational_timezone': 'Africa/Kampala',  # ⭐ NEW
                 'regional_season_type': 'equatorial',
                 'custom_season_names': {},
                 'default_period_duration_weeks': 13,
@@ -495,12 +622,14 @@ class SchoolConfiguration(BaseModel):
 
     def save(self, *args, **kwargs):
         """Ensure only one instance exists (singleton pattern)"""
-        if not self.pk and SchoolConfiguration.objects.exists():
-            # If trying to create a new instance when one exists, update the existing one
-            existing = SchoolConfiguration.objects.first()
-            self.pk = existing.pk
+        self.pk = 1  # ⭐ Force pk=1
         super().save(*args, **kwargs)
-        logger.debug(f"SchoolConfiguration saved with UUID: {self.pk}")
+        logger.debug(f"SchoolConfiguration saved with pk: {self.pk}")
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of the singleton instance"""
+        logger.warning("Attempted to delete SchoolConfiguration singleton instance - operation blocked")
+        pass
 
     @classmethod 
     def get_cached_instance(cls):
@@ -541,13 +670,6 @@ class SchoolConfiguration(BaseModel):
         verbose_name = "School Configuration"
         verbose_name_plural = "School Configuration"
 
-
-# =============================================================================
-# FINANCIAL SETTINGS MODEL
-# =============================================================================
-
-# core/models.py - FinancialSettings (COMPLETE VERSION)
-
 # =============================================================================
 # FINANCIAL SETTINGS MODEL
 # =============================================================================
@@ -555,7 +677,7 @@ class SchoolConfiguration(BaseModel):
 class FinancialSettings(BaseModel):
     """
     Core financial settings for the school.
-    Manages currency, formatting, payment terms, financial policies, and default GL accounts.
+    Manages currency, formatting, payment terms, and financial policies.
     Singleton pattern - only one instance per school database.
     """
 
@@ -893,642 +1015,101 @@ class FinancialSettings(BaseModel):
         help_text="Days overdue before invoice can be written off"
     )
 
-    # =========================================================================
-    # DEFAULT ACCOUNT MAPPINGS - CORE ACCOUNTS
-    # =========================================================================
-    
-    # Revenue & Receivables
-    default_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for fee revenue (credit when invoice created)'
-    )
-    
-    default_receivables_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for student receivables (debit when invoice created)'
-    )
-    
-    # Service Revenue (for other school services)
-    default_service_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for other service revenue (e.g., transport, meals)'
-    )
-    
-    # Cash & Bank
-    default_cash_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default cash account for cash payments'
-    )
-    
-    default_bank_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default bank account for bank payments'
-    )
-    
-    # Inventory & COGS (for uniforms, books, etc.)
-    default_inventory_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for inventory asset (uniforms, books, supplies)'
-    )
-    
-    default_cogs_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for cost of goods sold'
-    )
-    
-    # Expenses & Payables
-    default_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for general expenses'
-    )
-    
-    default_payables_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for accounts payable'
-    )
-    
-    # Tax Accounts
-    default_tax_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for tax payable (VAT, WHT)'
-    )
-    
-    default_tax_receivable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for tax receivable (input VAT)'
-    )
-    
-    # Scholarships & Discounts
-    default_scholarship_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for scholarship expenses'
-    )
-    
-    default_discount_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default account for fee discounts'
-    )
-    
-    # Deposits & Prepayments
-    default_student_deposit_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Default liability account for student deposits'
-    )
-    
-    # Rounding & Currency
-    default_rounding_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Account for currency rounding differences'
-    )
-    
-    default_currency_gain_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Account for foreign currency gains'
-    )
-    
-    default_currency_loss_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Account for foreign currency losses'
-    )
+    # -------------------------------------------------------------------------
+    # HELPER METHODS FOR ACCESSING RELATED MODELS
+    # -------------------------------------------------------------------------
 
-    # =========================================================================
-    # MOBILE MONEY & PAYMENT PROCESSING
-    # =========================================================================
-    
-    mobile_money_clearing_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Clearing account for mobile money transactions (Airtel, MTN)'
-    )
-    
-    payment_processing_fee_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for payment processing fees (mobile money charges, bank fees)'
-    )
+    def get_account_mappings(self):
+        """Get or create core account mappings"""
+        mappings, created = CoreAccountMappings.objects.get_or_create(
+            financial_settings=self
+        )
+        return mappings
 
-    # =========================================================================
-    # REFUNDS & BAD DEBT
-    # =========================================================================
-    
-    default_refund_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Contra-revenue account for student refunds'
-    )
-    
-    bad_debt_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for bad debt write-offs'
-    )
-    
-    allowance_for_doubtful_accounts = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Contra-asset account for allowance for doubtful accounts'
-    )
+    def get_revenue_mappings(self):
+        """Get or create revenue account mappings"""
+        mappings, created = RevenueAccountMappings.objects.get_or_create(
+            financial_settings=self
+        )
+        return mappings
 
-    # =========================================================================
-    # OVERPAYMENTS & CREDIT BALANCES
-    # =========================================================================
-    
-    student_credit_balance_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for student overpayments/credit balances'
-    )
-    
-    unearned_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for payments received in advance (future terms)'
-    )
+    def get_payroll_mappings(self):
+        """Get or create payroll account mappings"""
+        mappings, created = PayrollAccountMappings.objects.get_or_create(
+            financial_settings=self
+        )
+        return mappings
 
-    # =========================================================================
-    # WITHHOLDING TAX
-    # =========================================================================
-    
-    withholding_tax_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for withholding tax deducted from payments'
-    )
+    def get_expense_mappings(self):
+        """Get or create expense account mappings"""
+        mappings, created = ExpenseAccountMappings.objects.get_or_create(
+            financial_settings=self
+        )
+        return mappings
 
-    # =========================================================================
-    # PETTY CASH & SUSPENSE
-    # =========================================================================
-    
-    petty_cash_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Cash account for petty cash fund'
-    )
-    
-    suspense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Temporary holding account for unallocated transactions'
-    )
-    
-    bank_reconciliation_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Temporary account for bank reconciliation differences'
-    )
+    def get_special_mappings(self):
+        """Get or create special account mappings"""
+        mappings, created = SpecialAccountMappings.objects.get_or_create(
+            financial_settings=self
+        )
+        return mappings
 
-    # =========================================================================
-    # SPECIFIC REVENUE ACCOUNTS
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # CLASS METHODS - ACCOUNT HELPERS
+    # -------------------------------------------------------------------------
     
-    uniform_sales_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account specifically for uniform sales'
-    )
+    @classmethod
+    def get_revenue_account(cls, invoice_type='TUITION'):
+        """Get appropriate revenue account based on invoice type."""
+        settings = cls.get_instance()
+        if not settings:
+            return None
+        
+        revenue_mappings = settings.get_revenue_mappings()
+        core_mappings = settings.get_account_mappings()
+        
+        revenue_mapping = {
+            'UNIFORM': revenue_mappings.uniform_sales_revenue_account,
+            'TEXTBOOK': revenue_mappings.textbook_sales_revenue_account,
+            'TRANSPORT': revenue_mappings.transport_revenue_account,
+            'BOARDING': revenue_mappings.boarding_revenue_account,
+            'MEALS': revenue_mappings.meals_revenue_account,
+            'LATE_FEE': revenue_mappings.late_fee_revenue_account,
+            'PENALTY': revenue_mappings.penalty_revenue_account,
+            'SERVICE': core_mappings.default_service_revenue_account,
+        }
+        
+        # Return specific account or fallback to default
+        return revenue_mapping.get(invoice_type) or core_mappings.default_revenue_account
     
-    textbook_sales_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for textbook and book sales'
-    )
+    @classmethod
+    def get_cash_or_bank_account(cls, payment_method):
+        """Get appropriate account based on payment method."""
+        settings = cls.get_instance()
+        if not settings:
+            return None
+        
+        core_mappings = settings.get_account_mappings()
+        special_mappings = settings.get_special_mappings()
+        
+        if hasattr(payment_method, 'code'):
+            if payment_method.code in ['CASH', 'PETTY_CASH']:
+                return special_mappings.petty_cash_account or core_mappings.default_cash_account
+            elif payment_method.code == 'MOBILE_MONEY':
+                return special_mappings.mobile_money_clearing_account or core_mappings.default_bank_account
+        
+        return core_mappings.default_bank_account
     
-    transport_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for transportation fees'
-    )
-    
-    boarding_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for boarding/accommodation fees'
-    )
-    
-    meals_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for meal fees'
-    )
-    
-    late_fee_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for late payment fees'
-    )
-    
-    penalty_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for penalties and fines'
-    )
-
-    # =========================================================================
-    # OPERATIONAL EXPENSE ACCOUNTS
-    # =========================================================================
-    
-    supplies_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for school supplies and consumables'
-    )
-    
-    utilities_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for utilities (electricity, water, internet)'
-    )
-    
-    maintenance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for repairs and maintenance'
-    )
-
-    # =========================================================================
-    # DONATIONS & GRANTS
-    # =========================================================================
-    
-    donation_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for donations received'
-    )
-    
-    grant_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Revenue account for grants received'
-    )
-
-    # =========================================================================
-    # FIXED ASSETS & DEPRECIATION
-    # =========================================================================
-    
-    fixed_assets_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Asset account for property, plant, and equipment'
-    )
-    
-    accumulated_depreciation_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Contra-asset account for accumulated depreciation'
-    )
-    
-    depreciation_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for depreciation charges'
-    )
-
-    # =========================================================================
-    # PAYROLL & HR ACCOUNTS
-    # =========================================================================
-    
-    # Salary & Wages
-    salaries_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for staff salaries and basic wages'
-    )
-    
-    wages_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for accrued but unpaid salaries'
-    )
-    
-    # Payroll Tax & Statutory Deductions
-    payroll_tax_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for payroll taxes withheld (PAYE, etc.)'
-    )
-    
-    social_security_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for social security/NSSF contributions'
-    )
-    
-    pension_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for pension contributions withheld'
-    )
-    
-    # Staff Allowances (Expense Accounts)
-    housing_allowance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for housing allowances paid to staff'
-    )
-    
-    transport_allowance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for transport allowances paid to staff'
-    )
-    
-    medical_allowance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for medical allowances paid to staff'
-    )
-    
-    general_allowance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for other allowances (meal, phone, etc.)'
-    )
-    
-    # Bonuses & Overtime
-    overtime_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for overtime payments'
-    )
-    
-    bonus_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for bonuses and incentives'
-    )
-    
-    commission_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for sales commissions'
-    )
-    
-    # Staff Benefits
-    staff_benefits_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for employee benefits (insurance, etc.)'
-    )
-    
-    staff_insurance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for staff insurance premiums paid by employer'
-    )
-    
-    staff_pension_contribution_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for employer pension contributions'
-    )
-    
-    # Staff Loans & Advances
-    staff_loan_receivable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Asset account for loans advanced to staff'
-    )
-    
-    staff_advance_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Asset account for salary advances given to staff'
-    )
-    
-    # Recruitment & Training
-    recruitment_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for recruitment and hiring costs'
-    )
-    
-    staff_training_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for staff training and development'
-    )
-    
-    # Severance & Gratuity
-    severance_expense_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Expense account for severance/termination payments'
-    )
-    
-    gratuity_payable_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='+',
-        null=True,
-        blank=True,
-        help_text='Liability account for gratuity/end-of-service benefits accrued'
-    )
+    @classmethod
+    def get_default_account(cls, account_type):
+        """Get a default account by type name."""
+        settings = cls.get_instance()
+        if not settings:
+            return None
+        
+        core_mappings = settings.get_account_mappings()
+        field_name = f'default_{account_type}_account'
+        return getattr(core_mappings, field_name, None)
 
     # -------------------------------------------------------------------------
     # CLASS METHODS - Currency & Formatting
@@ -1536,34 +1117,33 @@ class FinancialSettings(BaseModel):
 
     @staticmethod
     def get_currency_choices():
-        """
-        Dynamically generate currency choices from pycountry.
-        Returns a list of tuples (currency_code, currency_name).
-        """
-        try:
-            import pycountry
-            currencies = []
-            for currency in pycountry.currencies:
-                currencies.append((
-                    currency.alpha_3,
-                    f"{currency.name} ({currency.alpha_3})"
-                ))
-            return sorted(currencies, key=lambda x: x[1])
-        except ImportError:
-            logger.warning("pycountry not installed, using default currency list")
-            return [
-                ('UGX', 'Ugandan Shilling (UGX)'),
-                ('USD', 'US Dollar (USD)'),
-                ('EUR', 'Euro (EUR)'),
-                ('GBP', 'British Pound (GBP)'),
-                ('KES', 'Kenyan Shilling (KES)'),
-                ('TZS', 'Tanzanian Shilling (TZS)'),
-            ]
+        """Generate currency choices from pycountry or use defaults."""
+        if pycountry:
+            try:
+                currencies = []
+                for currency in pycountry.currencies:
+                    currencies.append((
+                        currency.alpha_3,
+                        f"{currency.name} ({currency.alpha_3})"
+                    ))
+                return sorted(currencies, key=lambda x: x[1])
+            except Exception:
+                pass
+        
+        # Fallback to default currencies
+        return [
+            ('UGX', 'Ugandan Shilling (UGX)'),
+            ('USD', 'US Dollar (USD)'),
+            ('EUR', 'Euro (EUR)'),
+            ('GBP', 'British Pound (GBP)'),
+            ('KES', 'Kenyan Shilling (KES)'),
+            ('TZS', 'Tanzanian Shilling (TZS)'),
+        ]
 
     @classmethod
     def get_settings(cls):
         """Get the financial settings instance for this school"""
-        return cls.objects.first()
+        return cls.get_instance()
 
     @classmethod
     def get_school_currency(cls):
@@ -1590,272 +1170,11 @@ class FinancialSettings(BaseModel):
         }
 
     # -------------------------------------------------------------------------
-    # CLASS METHODS - DEFAULT ACCOUNT HELPERS
-    # -------------------------------------------------------------------------
-    
-    @classmethod
-    def get_revenue_account(cls, invoice_type='TUITION'):
-        """
-        Get appropriate revenue account based on invoice type.
-        
-        Args:
-            invoice_type: 'TUITION', 'SERVICE', 'UNIFORM', 'TRANSPORT', etc.
-            
-        Returns:
-            Account: The appropriate revenue account or None
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        revenue_mapping = {
-            'UNIFORM': settings.uniform_sales_revenue_account,
-            'TEXTBOOK': settings.textbook_sales_revenue_account,
-            'TRANSPORT': settings.transport_revenue_account,
-            'BOARDING': settings.boarding_revenue_account,
-            'MEALS': settings.meals_revenue_account,
-            'LATE_FEE': settings.late_fee_revenue_account,
-            'PENALTY': settings.penalty_revenue_account,
-            'SERVICE': settings.default_service_revenue_account,
-        }
-        
-        # Return specific account or fallback to default
-        return revenue_mapping.get(invoice_type) or settings.default_revenue_account
-    
-    @classmethod
-    def get_cash_or_bank_account(cls, payment_method):
-        """
-        Get appropriate account based on payment method.
-        
-        Args:
-            payment_method: PaymentMethod instance
-            
-        Returns:
-            Account: The appropriate cash/bank account or None
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        # Check payment method type
-        if hasattr(payment_method, 'code'):
-            if payment_method.code in ['CASH', 'PETTY_CASH']:
-                return settings.petty_cash_account or settings.default_cash_account
-            elif payment_method.code == 'MOBILE_MONEY':
-                return settings.mobile_money_clearing_account or settings.default_bank_account
-        
-        return settings.default_bank_account
-    
-    @classmethod
-    def get_default_account(cls, account_type):
-        """
-        Get a default account by type name.
-        
-        Args:
-            account_type: String like 'revenue', 'receivables', 'cash', etc.
-            
-        Returns:
-            Account: The default account or None
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        field_name = f'default_{account_type}_account'
-        return getattr(settings, field_name, None)
-
-    # -------------------------------------------------------------------------
-    # CLASS METHODS - SPECIALIZED ACCOUNT HELPERS
-    # -------------------------------------------------------------------------
-    
-    @classmethod
-    def get_mobile_money_account(cls):
-        """Get mobile money clearing account"""
-        settings = cls.get_instance()
-        return settings.mobile_money_clearing_account if settings else None
-    
-    @classmethod
-    def get_payment_processing_fee_account(cls):
-        """Get payment processing fee expense account"""
-        settings = cls.get_instance()
-        return settings.payment_processing_fee_account if settings else None
-    
-    @classmethod
-    def get_uniform_revenue_account(cls):
-        """Get uniform-specific revenue account or default service revenue"""
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        return settings.uniform_sales_revenue_account or settings.default_service_revenue_account
-    
-    @classmethod
-    def get_late_fee_revenue_account(cls):
-        """Get late fee revenue account"""
-        settings = cls.get_instance()
-        return settings.late_fee_revenue_account if settings else None
-    
-    @classmethod
-    def get_refund_account(cls):
-        """Get refund contra-revenue account"""
-        settings = cls.get_instance()
-        return settings.default_refund_account if settings else None
-    
-    @classmethod
-    def get_student_credit_account(cls):
-        """Get student credit balance (overpayment) account"""
-        settings = cls.get_instance()
-        return settings.student_credit_balance_account if settings else None
-    
-    @classmethod
-    def get_unearned_revenue_account(cls):
-        """Get unearned revenue (advance payment) account"""
-        settings = cls.get_instance()
-        return settings.unearned_revenue_account if settings else None
-    
-    @classmethod
-    def get_bad_debt_expense_account(cls):
-        """Get bad debt write-off expense account"""
-        settings = cls.get_instance()
-        return settings.bad_debt_expense_account if settings else None
-
-    # -------------------------------------------------------------------------
-    # CLASS METHODS - PAYROLL ACCOUNT HELPERS
-    # -------------------------------------------------------------------------
-    
-    @classmethod
-    def get_payroll_accounts(cls):
-        """
-        Get all payroll-related accounts.
-        
-        Returns:
-            dict: Dictionary of payroll account types and accounts
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return {}
-        
-        return {
-            'salaries_expense': settings.salaries_expense_account,
-            'wages_payable': settings.wages_payable_account,
-            'payroll_tax_payable': settings.payroll_tax_payable_account,
-            'social_security_payable': settings.social_security_payable_account,
-            'pension_payable': settings.pension_payable_account,
-            'housing_allowance_expense': settings.housing_allowance_expense_account,
-            'transport_allowance_expense': settings.transport_allowance_expense_account,
-            'medical_allowance_expense': settings.medical_allowance_expense_account,
-            'general_allowance_expense': settings.general_allowance_expense_account,
-            'overtime_expense': settings.overtime_expense_account,
-            'bonus_expense': settings.bonus_expense_account,
-            'commission_expense': settings.commission_expense_account,
-            'staff_benefits_expense': settings.staff_benefits_expense_account,
-            'staff_insurance_expense': settings.staff_insurance_expense_account,
-            'staff_pension_contribution_expense': settings.staff_pension_contribution_expense_account,
-            'staff_loan_receivable': settings.staff_loan_receivable_account,
-            'staff_advance': settings.staff_advance_account,
-            'recruitment_expense': settings.recruitment_expense_account,
-            'staff_training_expense': settings.staff_training_expense_account,
-            'severance_expense': settings.severance_expense_account,
-            'gratuity_payable': settings.gratuity_payable_account,
-        }
-    
-    @classmethod
-    def get_allowance_expense_account(cls, allowance_type):
-        """
-        Get expense account for specific allowance type.
-        
-        Args:
-            allowance_type: Type of allowance (HOUSING, TRANSPORT, MEDICAL, etc.)
-            
-        Returns:
-            Account: The appropriate expense account
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        allowance_mapping = {
-            'HOUSING': settings.housing_allowance_expense_account,
-            'TRANSPORT': settings.transport_allowance_expense_account,
-            'MEDICAL': settings.medical_allowance_expense_account,
-            'MEAL': settings.general_allowance_expense_account,
-            'PHONE': settings.general_allowance_expense_account,
-            'EDUCATION': settings.general_allowance_expense_account,
-            'UNIFORM': settings.general_allowance_expense_account,
-            'OTHER': settings.general_allowance_expense_account,
-        }
-        
-        return allowance_mapping.get(allowance_type, settings.general_allowance_expense_account)
-    
-    @classmethod
-    def get_bonus_expense_account(cls, bonus_type):
-        """
-        Get expense account for specific bonus type.
-        
-        Args:
-            bonus_type: Type of bonus (OVERTIME, PERFORMANCE, COMMISSION, etc.)
-            
-        Returns:
-            Account: The appropriate expense account
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        bonus_mapping = {
-            'OVERTIME': settings.overtime_expense_account,
-            'COMMISSION': settings.commission_expense_account,
-            'PERFORMANCE': settings.bonus_expense_account,
-            'ANNUAL': settings.bonus_expense_account,
-            'HOLIDAY': settings.bonus_expense_account,
-            'INCENTIVE': settings.bonus_expense_account,
-            'OTHER': settings.bonus_expense_account,
-        }
-        
-        return bonus_mapping.get(bonus_type, settings.bonus_expense_account)
-    
-    @classmethod
-    def get_deduction_payable_account(cls, deduction_type):
-        """
-        Get liability account for specific deduction type.
-        
-        Args:
-            deduction_type: Type of deduction (TAX, PENSION, INSURANCE, etc.)
-            
-        Returns:
-            Account: The appropriate liability account
-        """
-        settings = cls.get_instance()
-        if not settings:
-            return None
-        
-        deduction_mapping = {
-            'TAX': settings.payroll_tax_payable_account,
-            'PENSION': settings.pension_payable_account,
-            'SOCIAL_SECURITY': settings.social_security_payable_account,
-            'INSURANCE': settings.staff_benefits_expense_account,
-            'LOAN': settings.staff_loan_receivable_account,
-            'ADVANCE': settings.staff_advance_account,
-            'HEALTHCARE': settings.staff_benefits_expense_account,
-            'OTHER': settings.default_payables_account,
-        }
-        
-        return deduction_mapping.get(deduction_type)
-
-    # -------------------------------------------------------------------------
     # INSTANCE METHODS - Currency Formatting
     # -------------------------------------------------------------------------
 
     def format_currency(self, amount, include_symbol=True):
-        """
-        Format amount based on school settings.
-        
-        Args:
-            amount: The amount to format
-            include_symbol: Whether to include currency symbol
-            
-        Returns:
-            str: Formatted currency string
-        """
+        """Format amount based on school settings."""
         try:
             amount = Decimal(str(amount or 0))
             formatted = f"{amount:,.{self.decimal_places}f}"
@@ -1902,6 +1221,27 @@ class FinancialSettings(BaseModel):
         super().clean()
         errors = {}
 
+        # Validate currency code
+        if self.school_currency:
+            if pycountry:
+                try:
+                    currency = pycountry.currencies.get(alpha_3=self.school_currency.upper())
+                    if not currency:
+                        errors['school_currency'] = f"'{self.school_currency}' is not a valid ISO 4217 currency code"
+                    else:
+                        self.school_currency = self.school_currency.upper()
+                except Exception:
+                    if len(self.school_currency) != 3:
+                        errors['school_currency'] = "Currency code must be 3 characters (ISO 4217)"
+                    else:
+                        self.school_currency = self.school_currency.upper()
+            else:
+                if len(self.school_currency) != 3:
+                    errors['school_currency'] = "Currency code must be 3 characters (ISO 4217)"
+                else:
+                    self.school_currency = self.school_currency.upper()
+
+        # Validate ranges
         if not (0 <= self.decimal_places <= 4):
             errors['decimal_places'] = "Decimal places must be between 0 and 4"
 
@@ -1932,12 +1272,9 @@ class FinancialSettings(BaseModel):
     
     @classmethod
     def get_instance(cls):
-        """
-        Get or create the singleton instance of FinancialSettings.
-        There should only be one FinancialSettings instance per school database.
-        """
+        """Get or create the singleton instance of FinancialSettings."""
         instance, created = cls.objects.get_or_create(
-            pk=cls.objects.first().pk if cls.objects.exists() else None,
+            pk=1,
             defaults={
                 'school_currency': 'UGX',
                 'currency_position': 'BEFORE',
@@ -1987,10 +1324,7 @@ class FinancialSettings(BaseModel):
 
     def save(self, *args, **kwargs):
         """Ensure only one instance exists (singleton pattern)"""
-        if not self.pk and FinancialSettings.objects.exists():
-            # If trying to create a new instance when one exists, update the existing one
-            existing = FinancialSettings.objects.first()
-            self.pk = existing.pk
+        self.pk = 1
         super().save(*args, **kwargs)
     
     def delete(self, *args, **kwargs):
@@ -1999,10 +1333,7 @@ class FinancialSettings(BaseModel):
     
     @classmethod
     def load(cls):
-        """
-        Alternative method name for getting the instance.
-        Alias for get_instance().
-        """
+        """Alternative method name for getting the instance."""
         return cls.get_instance()
 
     # -------------------------------------------------------------------------
@@ -2018,6 +1349,708 @@ class FinancialSettings(BaseModel):
 
 
 # =============================================================================
+# CORE ACCOUNT MAPPINGS
+# =============================================================================
+
+class CoreAccountMappings(BaseModel):
+    """Core account mappings for basic financial transactions."""
+    
+    financial_settings = models.OneToOneField(
+        'FinancialSettings',
+        on_delete=models.CASCADE,
+        related_name='core_account_mappings'
+    )
+    
+    # Revenue & Receivables
+    default_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for fee revenue'
+    )
+    
+    default_receivables_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_receivables_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for student receivables'
+    )
+    
+    default_service_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_service_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for other service revenue'
+    )
+    
+    # Cash & Bank
+    default_cash_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_cash_mappings',
+        null=True,
+        blank=True,
+        help_text='Default cash account for cash payments'
+    )
+    
+    default_bank_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_bank_mappings',
+        null=True,
+        blank=True,
+        help_text='Default bank account for bank payments'
+    )
+    
+    # Basic Expenses & Payables
+    default_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for general expenses'
+    )
+    
+    default_payables_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_payables_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for accounts payable'
+    )
+    
+    # Tax Accounts
+    default_tax_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_tax_payable_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for tax payable'
+    )
+    
+    default_tax_receivable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_tax_receivable_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for tax receivable'
+    )
+    
+    # Scholarships & Discounts
+    default_scholarship_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_scholarship_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for scholarship expenses'
+    )
+    
+    default_discount_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='core_discount_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for fee discounts'
+    )
+
+    def __str__(self):
+        return f"Core Account Mappings for {self.financial_settings}"
+
+    class Meta:
+        verbose_name = "Core Account Mappings"
+        verbose_name_plural = "Core Account Mappings"
+
+
+# =============================================================================
+# REVENUE ACCOUNT MAPPINGS
+# =============================================================================
+
+class RevenueAccountMappings(BaseModel):
+    """Specific revenue account mappings for different invoice types."""
+    
+    financial_settings = models.OneToOneField(
+        'FinancialSettings',
+        on_delete=models.CASCADE,
+        related_name='revenue_account_mappings'
+    )
+    
+    uniform_sales_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='uniform_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for uniform sales'
+    )
+    
+    textbook_sales_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='textbook_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for textbook sales'
+    )
+    
+    transport_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='transport_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for transportation fees'
+    )
+    
+    boarding_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='boarding_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for boarding fees'
+    )
+    
+    meals_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='meals_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for meal fees'
+    )
+    
+    late_fee_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='late_fee_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for late payment fees'
+    )
+    
+    penalty_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='penalty_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for penalties and fines'
+    )
+    
+    donation_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='donation_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for donations received'
+    )
+    
+    grant_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='grant_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Revenue account for grants received'
+    )
+
+    def __str__(self):
+        return f"Revenue Account Mappings for {self.financial_settings}"
+
+    class Meta:
+        verbose_name = "Revenue Account Mappings"
+        verbose_name_plural = "Revenue Account Mappings"
+
+
+# =============================================================================
+# EXPENSE ACCOUNT MAPPINGS
+# =============================================================================
+
+class ExpenseAccountMappings(BaseModel):
+    """Expense account mappings for different expense categories."""
+    
+    financial_settings = models.OneToOneField(
+        'FinancialSettings',
+        on_delete=models.CASCADE,
+        related_name='expense_account_mappings'
+    )
+    
+    # Inventory & COGS
+    default_inventory_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='inventory_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for inventory asset'
+    )
+    
+    default_cogs_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='cogs_mappings',
+        null=True,
+        blank=True,
+        help_text='Default account for cost of goods sold'
+    )
+    
+    # Operational Expenses
+    supplies_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='supplies_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for school supplies'
+    )
+    
+    utilities_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='utilities_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for utilities'
+    )
+    
+    maintenance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='maintenance_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for maintenance'
+    )
+    
+    # Fixed Assets & Depreciation
+    fixed_assets_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='fixed_assets_mappings',
+        null=True,
+        blank=True,
+        help_text='Asset account for property, plant, equipment'
+    )
+    
+    accumulated_depreciation_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='accumulated_depreciation_mappings',
+        null=True,
+        blank=True,
+        help_text='Contra-asset account for depreciation'
+    )
+    
+    depreciation_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='depreciation_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for depreciation charges'
+    )
+
+    def __str__(self):
+        return f"Expense Account Mappings for {self.financial_settings}"
+
+    class Meta:
+        verbose_name = "Expense Account Mappings"
+        verbose_name_plural = "Expense Account Mappings"
+
+
+# =============================================================================
+# PAYROLL ACCOUNT MAPPINGS
+# =============================================================================
+
+class PayrollAccountMappings(BaseModel):
+    """Payroll-specific account mappings."""
+    
+    financial_settings = models.OneToOneField(
+        'FinancialSettings',
+        on_delete=models.CASCADE,
+        related_name='payroll_account_mappings'
+    )
+    
+    # Salary & Wages
+    salaries_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='salaries_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for staff salaries'
+    )
+    
+    wages_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='wages_payable_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for accrued salaries'
+    )
+    
+    # Payroll Tax & Statutory Deductions
+    payroll_tax_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='payroll_tax_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for payroll taxes'
+    )
+    
+    social_security_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='social_security_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for social security'
+    )
+    
+    pension_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='pension_payable_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for pension contributions'
+    )
+    
+    # Staff Allowances
+    housing_allowance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='housing_allowance_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for housing allowances'
+    )
+    
+    transport_allowance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='transport_allowance_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for transport allowances'
+    )
+    
+    medical_allowance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='medical_allowance_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for medical allowances'
+    )
+    
+    general_allowance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='general_allowance_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for other allowances'
+    )
+    
+    # Bonuses & Overtime
+    overtime_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='overtime_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for overtime payments'
+    )
+    
+    bonus_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='bonus_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for bonuses'
+    )
+    
+    commission_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='commission_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for sales commissions'
+    )
+    
+    # Staff Benefits
+    staff_benefits_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_benefits_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for employee benefits'
+    )
+    
+    staff_insurance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_insurance_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for staff insurance'
+    )
+    
+    staff_pension_contribution_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_pension_contribution_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for pension contributions'
+    )
+
+    def __str__(self):
+        return f"Payroll Account Mappings for {self.financial_settings}"
+
+    class Meta:
+        verbose_name = "Payroll Account Mappings"
+        verbose_name_plural = "Payroll Account Mappings"
+
+
+# =============================================================================
+# SPECIAL ACCOUNT MAPPINGS
+# =============================================================================
+
+class SpecialAccountMappings(BaseModel):
+    """Special account mappings for specific transactions."""
+    
+    financial_settings = models.OneToOneField(
+        'FinancialSettings',
+        on_delete=models.CASCADE,
+        related_name='special_account_mappings'
+    )
+    
+    # Student Deposits & Credit Balances
+    default_student_deposit_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='student_deposit_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for student deposits'
+    )
+    
+    student_credit_balance_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='student_credit_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for student overpayments'
+    )
+    
+    unearned_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='unearned_revenue_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for advance payments'
+    )
+    
+    # Mobile Money & Payment Processing
+    mobile_money_clearing_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='mobile_money_mappings',
+        null=True,
+        blank=True,
+        help_text='Clearing account for mobile money'
+    )
+    
+    payment_processing_fee_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='payment_processing_fee_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for payment processing fees'
+    )
+    
+    # Refunds & Bad Debt
+    default_refund_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='refund_mappings',
+        null=True,
+        blank=True,
+        help_text='Contra-revenue account for refunds'
+    )
+    
+    bad_debt_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='bad_debt_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for bad debt write-offs'
+    )
+    
+    allowance_for_doubtful_accounts = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='doubtful_accounts_mappings',
+        null=True,
+        blank=True,
+        help_text='Contra-asset account for doubtful accounts'
+    )
+    
+    # Currency & Rounding
+    default_rounding_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='rounding_mappings',
+        null=True,
+        blank=True,
+        help_text='Account for currency rounding differences'
+    )
+    
+    default_currency_gain_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='currency_gain_mappings',
+        null=True,
+        blank=True,
+        help_text='Account for foreign currency gains'
+    )
+    
+    default_currency_loss_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='currency_loss_mappings',
+        null=True,
+        blank=True,
+        help_text='Account for foreign currency losses'
+    )
+    
+    # Withholding Tax
+    withholding_tax_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='withholding_tax_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for withholding tax'
+    )
+    
+    # Petty Cash & Suspense
+    petty_cash_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='petty_cash_mappings',
+        null=True,
+        blank=True,
+        help_text='Cash account for petty cash fund'
+    )
+    
+    suspense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='suspense_mappings',
+        null=True,
+        blank=True,
+        help_text='Temporary holding account'
+    )
+    
+    bank_reconciliation_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='bank_reconciliation_mappings',
+        null=True,
+        blank=True,
+        help_text='Temporary account for bank reconciliation'
+    )
+    
+    # Staff Loans & Advances
+    staff_loan_receivable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_loan_mappings',
+        null=True,
+        blank=True,
+        help_text='Asset account for staff loans'
+    )
+    
+    staff_advance_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_advance_mappings',
+        null=True,
+        blank=True,
+        help_text='Asset account for salary advances'
+    )
+    
+    # Training & Recruitment
+    recruitment_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='recruitment_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for recruitment costs'
+    )
+    
+    staff_training_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='staff_training_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for staff training'
+    )
+    
+    # Severance & Gratuity
+    severance_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='severance_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Expense account for severance payments'
+    )
+    
+    gratuity_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='gratuity_payable_mappings',
+        null=True,
+        blank=True,
+        help_text='Liability account for gratuity accrued'
+    )
+
+    def __str__(self):
+        return f"Special Account Mappings for {self.financial_settings}"
+
+    class Meta:
+        verbose_name = "Special Account Mappings"
+        verbose_name_plural = "Special Account Mappings"
+
+# =============================================================================
 # FISCAL YEAR MODEL
 # =============================================================================
 
@@ -2025,6 +2058,11 @@ class FiscalYear(BaseModel):
     """
     Fiscal/Academic year for school operations.
     Represents the entire year with multiple periods/terms within it.
+    
+    Changes from original:
+    - Uses get_school_today() from utils for timezone-aware operations
+    - Added is_upcoming() and is_past() methods
+    - Improved documentation with examples
     """
     
     STATUS_CHOICES = [
@@ -2190,14 +2228,25 @@ class FiscalYear(BaseModel):
             end_date__gte=check_date
         ).first()
 
+    # -------------------------------------------------------------------------
+    # PROGRESS TRACKING METHODS ⭐ USES TIMEZONE-AWARE UTILS
+    # -------------------------------------------------------------------------
+
     def get_progress_percentage(self):
         """
-        Calculate the progress percentage of this academic year.
+        Calculate the progress percentage of this academic year using school timezone.
         
         Returns:
             float: Progress percentage (0-100)
+        
+        Example:
+            >>> fiscal_year = FiscalYear.objects.get(name='2024')
+            >>> progress = fiscal_year.get_progress_percentage()
+            >>> print(f"Year is {progress}% complete")
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         duration_days = self.get_duration_days()
         
         # If academic year hasn't started yet
@@ -2218,12 +2267,14 @@ class FiscalYear(BaseModel):
     
     def get_elapsed_days(self):
         """
-        Get the number of days elapsed in this academic year.
+        Get the number of days elapsed in this academic year using school timezone.
         
         Returns:
             int: Days elapsed (0 if not started, duration if ended)
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         
         if today < self.start_date:
             return 0
@@ -2235,12 +2286,14 @@ class FiscalYear(BaseModel):
     
     def get_remaining_days(self):
         """
-        Get the number of days remaining in this academic year.
+        Get the number of days remaining in this academic year using school timezone.
         
         Returns:
             int: Days remaining (0 if ended, duration if not started)
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         
         if today > self.end_date:
             return 0
@@ -2252,13 +2305,57 @@ class FiscalYear(BaseModel):
     
     def is_current(self):
         """
-        Check if today's date falls within this academic year.
+        Check if today's date falls within this academic year using school timezone.
         
         Returns:
             bool: True if current, False otherwise
+        
+        Example:
+            >>> if fiscal_year.is_current():
+            >>>     print("This is the current academic year")
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         return self.start_date <= today <= self.end_date
+    
+    def is_upcoming(self):
+        """
+        Check if this academic year is upcoming (starts in the future) using school timezone.
+        ⭐ NEW METHOD
+        
+        Returns:
+            bool: True if upcoming, False otherwise
+        
+        Example:
+            >>> upcoming_years = FiscalYear.objects.filter(is_active=False)
+            >>> for year in upcoming_years:
+            >>>     if year.is_upcoming():
+            >>>         print(f"{year.name} starts in {year.get_remaining_days()} days")
+        """
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
+        return self.start_date > today
+    
+    def is_past(self):
+        """
+        Check if this academic year is in the past (already ended) using school timezone.
+        ⭐ NEW METHOD
+        
+        Returns:
+            bool: True if past, False otherwise
+        
+        Example:
+            >>> past_years = FiscalYear.objects.all()
+            >>> for year in past_years:
+            >>>     if year.is_past() and not year.is_closed:
+            >>>         print(f"Warning: {year.name} ended but is not closed")
+        """
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
+        return self.end_date < today
     
     def get_status_display_class(self):
         """
@@ -2281,9 +2378,11 @@ class FiscalYear(BaseModel):
     # -------------------------------------------------------------------------
     
     def close_fiscal_year(self, user=None):
-        """Close this academic year"""
+        """Close this academic year using school timezone for timestamp"""
         if self.is_closed:
             return
+        
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         
         # Close all periods in this academic year
         for period in self.periods.all():
@@ -2293,7 +2392,7 @@ class FiscalYear(BaseModel):
         self.is_closed = True
         self.is_active = False
         self.status = 'CLOSED'
-        self.closed_at = timezone.now()
+        self.closed_at = get_school_current_time()  # ⭐ USE SCHOOL TIMEZONE
         
         if user:
             self.closed_by_id = str(user.id) if hasattr(user, 'id') else str(user.pk)
@@ -2374,7 +2473,6 @@ class FiscalYear(BaseModel):
             return user.get_full_name() or user.username
         return "System"
 
-
 # =============================================================================
 # FISCAL PERIOD MODEL
 # =============================================================================
@@ -2385,24 +2483,12 @@ class FiscalPeriod(BaseModel):
     
     Purpose: Track financial transaction windows and accounting periods.
     Unlike AcademicSession (which tracks teaching/learning periods with strict dates),
-    FiscalPeriod provides flexible windows for financial operations that can:
-    - Extend beyond academic session dates (grace periods for late payments)
-    - Cover breaks between sessions (accept advance/arrears payments)
-    - Align with accounting requirements (month-end, quarter-end closing)
+    FiscalPeriod provides flexible windows for financial operations.
     
-    Examples:
-    - "Term 1 2024 - Fiscal Period" (Jan 15 - May 31) - includes 60-day grace
-    - "April Break 2024" (April 1-30) - accepts payments during school break
-    - "Q1 2024 Financial Period" (Jan-Mar) - quarterly accounting period
-    - "First Tertial 2024" (Jan-Apr) - 4-month tertial period
-    
-    Used by:
-    - Invoice generation and tracking
-    - Payment receipts and processing
-    - Financial reports (revenue, collections)
-    - Cash flow management
-    - Accounting period-end procedures
-    - Month-end/quarter-end closing
+    Changes from original:
+    - Uses get_school_today() from utils for timezone-aware operations
+    - Added is_upcoming() and is_past() methods
+    - Improved documentation with examples
     """
     
     # -------------------------------------------------------------------------
@@ -2696,14 +2782,12 @@ class FiscalPeriod(BaseModel):
         if self.related_academic_session and self.period_type == 'ACADEMIC_ALIGNED':
             session = self.related_academic_session
             
-            # Fiscal period should start at or before session start
             if self.start_date > session.start_date:
                 errors['start_date'] = (
                     f"For academic-aligned periods, start date should be at or before "
                     f"session start ({session.start_date})"
                 )
             
-            # Fiscal period should end at or after session end (to allow grace period)
             if self.end_date < session.end_date:
                 errors['end_date'] = (
                     f"For academic-aligned periods, end date should be at or after "
@@ -2749,18 +2833,20 @@ class FiscalPeriod(BaseModel):
     
     def can_accept_transactions(self):
         """
-        Check if this period can accept financial transactions.
+        Check if this period can accept financial transactions using school timezone.
         
         Returns:
             bool: True if transactions allowed, False otherwise
         """
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
         if self.is_closed or self.is_locked:
             return False
         
         if not self.is_active:
             return False
         
-        today = timezone.now().date()
+        today = get_school_today()
         
         # Check if within date range
         if not (self.start_date <= today <= self.end_date):
@@ -2800,11 +2886,13 @@ class FiscalPeriod(BaseModel):
     
     def close_period(self, user=None):
         """
-        Close this fiscal period (month-end/period-end close).
+        Close this fiscal period (month-end/period-end close) using school timezone.
         
         Args:
             user: User performing the closure
         """
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
+        
         if self.is_closed:
             logger.warning(f"Fiscal period {self} is already closed")
             return
@@ -2812,7 +2900,7 @@ class FiscalPeriod(BaseModel):
         self.is_closed = True
         self.is_active = False
         self.status = 'CLOSED'
-        self.closed_at = timezone.now()
+        self.closed_at = get_school_current_time()  # ⭐ USE SCHOOL TIMEZONE
         
         if user:
             self.closed_by_id = str(user.id) if hasattr(user, 'id') else str(user.pk)
@@ -2823,12 +2911,14 @@ class FiscalPeriod(BaseModel):
     
     def lock_period(self, user=None):
         """
-        Lock period for audit compliance.
+        Lock period for audit compliance using school timezone.
         Once locked, no changes can be made to transactions in this period.
         
         Args:
             user: User performing the lock
         """
+        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
+        
         if not self.is_closed:
             raise ValidationError("Period must be closed before it can be locked")
         
@@ -2838,7 +2928,7 @@ class FiscalPeriod(BaseModel):
         
         self.is_locked = True
         self.status = 'LOCKED'
-        self.locked_at = timezone.now()
+        self.locked_at = get_school_current_time()  # ⭐ USE SCHOOL TIMEZONE
         
         if user:
             self.locked_by_id = str(user.id) if hasattr(user, 'id') else str(user.pk)
@@ -2894,33 +2984,59 @@ class FiscalPeriod(BaseModel):
         logger.warning(f"Fiscal period {self} reopened by {user_name}")
     
     # -------------------------------------------------------------------------
-    # STATUS CHECK METHODS
+    # STATUS CHECK METHODS ⭐ USES TIMEZONE-AWARE UTILS
     # -------------------------------------------------------------------------
     
     def is_current(self):
         """
-        Check if today's date falls within this period.
+        Check if today's date falls within this period using school timezone.
         
         Returns:
             bool: True if current, False otherwise
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         return self.start_date <= today <= self.end_date and self.is_active
     
+    def is_current_period(self):
+        """Alias for is_current() for consistency"""
+        return self.is_current()
+    
     def is_upcoming(self):
-        """Check if period is in the future"""
-        return self.start_date > timezone.now().date()
+        """
+        Check if period is in the future using school timezone.
+        ⭐ NEW METHOD
+        
+        Returns:
+            bool: True if upcoming, False otherwise
+        """
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
+        return self.start_date > today
     
     def is_past(self):
-        """Check if period has ended"""
-        return self.end_date < timezone.now().date()
+        """
+        Check if period has ended using school timezone.
+        ⭐ NEW METHOD
+        
+        Returns:
+            bool: True if past, False otherwise
+        """
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
+        return self.end_date < today
     
     def is_in_grace_period(self):
-        """Check if currently in grace period"""
+        """Check if currently in grace period using school timezone"""
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
         if self.grace_period_days == 0:
             return False
         
-        today = timezone.now().date()
+        today = get_school_today()
         if today <= self.end_date:
             return False
         
@@ -2928,7 +3044,7 @@ class FiscalPeriod(BaseModel):
         return today <= grace_end
     
     # -------------------------------------------------------------------------
-    # DURATION AND PROGRESS METHODS
+    # DURATION AND PROGRESS METHODS ⭐ USES TIMEZONE-AWARE UTILS
     # -------------------------------------------------------------------------
     
     def get_duration_days(self):
@@ -2949,12 +3065,14 @@ class FiscalPeriod(BaseModel):
     
     def get_progress_percentage(self):
         """
-        Calculate the progress percentage of this period.
+        Calculate the progress percentage of this period using school timezone.
         
         Returns:
             float: Progress percentage (0-100)
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         duration_days = self.get_duration_days()
         
         if today < self.start_date:
@@ -2971,8 +3089,10 @@ class FiscalPeriod(BaseModel):
         return 0.0
     
     def get_elapsed_days(self):
-        """Get the number of days elapsed in this period"""
-        today = timezone.now().date()
+        """Get the number of days elapsed in this period using school timezone"""
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         
         if today < self.start_date:
             return 0
@@ -2983,8 +3103,10 @@ class FiscalPeriod(BaseModel):
         return (today - self.start_date).days
     
     def get_remaining_days(self):
-        """Get the number of days remaining in this period"""
-        today = timezone.now().date()
+        """Get the number of days remaining in this period using school timezone"""
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         
         if today > self.end_date:
             return 0
@@ -3059,7 +3181,7 @@ class FiscalPeriod(BaseModel):
             'GRACE_PERIOD': 'badge-warning',
             'MONTHLY': 'badge-secondary',
             'QUARTERLY': 'badge-success',
-            'TERTIAL': 'badge-purple',  # Custom color for tertials
+            'TERTIAL': 'badge-purple',
             'SEMI_ANNUAL': 'badge-dark',
             'ANNUAL': 'badge-danger',
             'CUSTOM': 'badge-light',
@@ -3073,12 +3195,14 @@ class FiscalPeriod(BaseModel):
     @classmethod
     def get_current_fiscal_period(cls):
         """
-        Get the current active fiscal period for transactions.
+        Get the current active fiscal period for transactions using school timezone.
         
         Returns:
             FiscalPeriod or None: Currently active period
         """
-        today = timezone.now().date()
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
+        today = get_school_today()
         return cls.objects.filter(
             start_date__lte=today,
             end_date__gte=today,
@@ -3089,338 +3213,18 @@ class FiscalPeriod(BaseModel):
     @classmethod
     def get_current_or_upcoming(cls):
         """Get current period or next upcoming period"""
+        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+        
         current = cls.get_current_fiscal_period()
         if current:
             return current
         
         # Get next upcoming period
-        today = timezone.now().date()
+        today = get_school_today()
         return cls.objects.filter(
             start_date__gt=today,
             is_active=True
         ).order_by('start_date').first()
-    
-    # -------------------------------------------------------------------------
-    # CLASS METHODS - PERIOD CREATION
-    # -------------------------------------------------------------------------
-    
-    @classmethod
-    def create_for_academic_session(cls, academic_session, grace_days=60):
-        """
-        Create a fiscal period aligned with an academic session.
-        Includes grace period for late payments.
-        
-        Args:
-            academic_session: AcademicSession instance
-            grace_days: Days after session ends to accept payments
-            
-        Returns:
-            FiscalPeriod: Created fiscal period
-        """
-        from datetime import timedelta
-        
-        # Find or create fiscal year
-        fiscal_year = cls._get_or_create_fiscal_year(academic_session)
-        
-        # Calculate period dates
-        period_start = academic_session.start_date
-        period_end = academic_session.end_date + timedelta(days=grace_days)
-        
-        # Determine period number
-        period_number = Decimal(str(academic_session.term_number))
-        
-        return cls.objects.create(
-            fiscal_year=fiscal_year,
-            name=f"{academic_session.name} - Fiscal Period",
-            code=f"FP_{academic_session.year_name.replace('/', '_')}_{academic_session.term_number}",
-            period_number=period_number,
-            period_type='ACADEMIC_ALIGNED',
-            related_academic_session=academic_session,
-            start_date=period_start,
-            end_date=period_end,
-            grace_period_days=grace_days,
-            is_active=True,
-            description=f"Financial period for {academic_session.name} with {grace_days} days grace period"
-        )
-    
-    @classmethod
-    def create_break_period(cls, previous_session, next_session):
-        """
-        Create fiscal period for break between academic sessions.
-        
-        Args:
-            previous_session: AcademicSession that just ended
-            next_session: AcademicSession that will start next
-            
-        Returns:
-            FiscalPeriod or None: Created break period, or None if sessions overlap
-        """
-        from datetime import timedelta
-        
-        # Validate that there's actually a gap
-        if previous_session.end_date >= next_session.start_date:
-            logger.warning(
-                f"No gap between {previous_session} and {next_session}. "
-                f"Cannot create break period."
-            )
-            return None
-        
-        fiscal_year = cls._get_or_create_fiscal_year(previous_session)
-        
-        break_start = previous_session.end_date + timedelta(days=1)
-        break_end = next_session.start_date - timedelta(days=1)
-        
-        # Period number is between the two sessions
-        period_number = Decimal(str(previous_session.term_number)) + Decimal('0.5')
-        
-        return cls.objects.create(
-            fiscal_year=fiscal_year,
-            name=f"Break: {previous_session.term_name} - {next_session.term_name}",
-            code=f"BREAK_{previous_session.year_name.replace('/', '_')}_{previous_session.term_number}",
-            period_number=period_number,
-            period_type='BREAK_PERIOD',
-            start_date=break_start,
-            end_date=break_end,
-            is_active=True,
-            allow_advance_payments=True,
-            allow_arrears_payments=True,
-            description=f"Financial period for break between {previous_session.term_name} and {next_session.term_name}"
-        )
-    
-    @classmethod
-    def create_monthly_periods(cls, fiscal_year):
-        """
-        Create monthly fiscal periods for a fiscal year.
-        
-        Args:
-            fiscal_year: FiscalYear instance
-            
-        Returns:
-            list: Created monthly periods
-        """
-        from dateutil.relativedelta import relativedelta
-        from calendar import monthrange
-        
-        periods = []
-        current_date = fiscal_year.start_date
-        month_number = 1
-        
-        while current_date <= fiscal_year.end_date:
-            # Calculate month end
-            month_end = date(
-                current_date.year,
-                current_date.month,
-                monthrange(current_date.year, current_date.month)[1]
-            )
-            
-            # Don't exceed fiscal year end
-            if month_end > fiscal_year.end_date:
-                month_end = fiscal_year.end_date
-            
-            period = cls.objects.create(
-                fiscal_year=fiscal_year,
-                name=f"{current_date.strftime('%B %Y')}",
-                code=f"M{month_number:02d}_{fiscal_year.code}",
-                period_number=Decimal(str(month_number)),
-                period_type='MONTHLY',
-                start_date=current_date,
-                end_date=month_end,
-                is_active=False,  # Activate as needed
-                description=f"Monthly period for {current_date.strftime('%B %Y')}"
-            )
-            
-            periods.append(period)
-            
-            # Move to next month
-            current_date = month_end + timedelta(days=1)
-            month_number += 1
-            
-            # Safety check
-            if month_number > 12:
-                break
-        
-        return periods
-    
-    @classmethod
-    def create_quarterly_periods(cls, fiscal_year):
-        """
-        Create quarterly fiscal periods for a fiscal year.
-        Each quarter is 3 months (1/4 of the year).
-        
-        Args:
-            fiscal_year: FiscalYear instance
-            
-        Returns:
-            list: Created quarterly periods
-        """
-        from dateutil.relativedelta import relativedelta
-        
-        periods = []
-        quarter_names = ['Q1', 'Q2', 'Q3', 'Q4']
-        current_date = fiscal_year.start_date
-        
-        for quarter_num in range(1, 5):
-            # Calculate quarter end (3 months)
-            quarter_end = current_date + relativedelta(months=3) - timedelta(days=1)
-            
-            # Don't exceed fiscal year end
-            if quarter_end > fiscal_year.end_date:
-                quarter_end = fiscal_year.end_date
-            
-            period = cls.objects.create(
-                fiscal_year=fiscal_year,
-                name=f"{quarter_names[quarter_num-1]} {fiscal_year.name}",
-                code=f"{quarter_names[quarter_num-1]}_{fiscal_year.code}",
-                period_number=Decimal(str(quarter_num)),
-                period_type='QUARTERLY',
-                start_date=current_date,
-                end_date=quarter_end,
-                is_active=False,
-                description=f"Quarter {quarter_num} of {fiscal_year.name} (3-month period)"
-            )
-            
-            periods.append(period)
-            
-            # Move to next quarter
-            current_date = quarter_end + timedelta(days=1)
-            
-            # Stop if we've reached the end of the fiscal year
-            if current_date > fiscal_year.end_date:
-                break
-        
-        return periods
-    
-    @classmethod
-    def create_tertial_periods(cls, fiscal_year):
-        """
-        Create tertial (3 periods per year) fiscal periods for a fiscal year.
-        Each tertial is approximately 4 months (1/3 of the year).
-        
-        Also known as:
-        - Tertials (financial/accounting term)
-        - Quadrimesters (academic term - 4 months)
-        
-        Args:
-            fiscal_year: FiscalYear instance
-            
-        Returns:
-            list: Created tertial periods
-        """
-        from dateutil.relativedelta import relativedelta
-        
-        periods = []
-        tertial_names = ['First Tertial', 'Second Tertial', 'Third Tertial']
-        current_date = fiscal_year.start_date
-        
-        for tertial_num in range(1, 4):
-            # Calculate tertial end (4 months)
-            tertial_end = current_date + relativedelta(months=4) - timedelta(days=1)
-            
-            # Don't exceed fiscal year end
-            if tertial_end > fiscal_year.end_date:
-                tertial_end = fiscal_year.end_date
-            
-            period = cls.objects.create(
-                fiscal_year=fiscal_year,
-                name=f"{tertial_names[tertial_num-1]} {fiscal_year.name}",
-                code=f"T{tertial_num}_{fiscal_year.code}",
-                period_number=Decimal(str(tertial_num)),
-                period_type='TERTIAL',
-                start_date=current_date,
-                end_date=tertial_end,
-                is_active=False,
-                description=f"Tertial {tertial_num} of {fiscal_year.name} (4-month period)"
-            )
-            
-            periods.append(period)
-            
-            # Move to next tertial
-            current_date = tertial_end + timedelta(days=1)
-            
-            # Stop if we've reached the end of the fiscal year
-            if current_date > fiscal_year.end_date:
-                break
-        
-        return periods
-    
-    @classmethod
-    def create_semi_annual_periods(cls, fiscal_year):
-        """
-        Create semi-annual (2 periods per year) fiscal periods for a fiscal year.
-        Each period is 6 months (1/2 of the year).
-        
-        Args:
-            fiscal_year: FiscalYear instance
-            
-        Returns:
-            list: Created semi-annual periods
-        """
-        from dateutil.relativedelta import relativedelta
-        
-        periods = []
-        period_names = ['First Half', 'Second Half']
-        current_date = fiscal_year.start_date
-        
-        for period_num in range(1, 3):
-            # Calculate period end (6 months)
-            period_end = current_date + relativedelta(months=6) - timedelta(days=1)
-            
-            # Don't exceed fiscal year end
-            if period_end > fiscal_year.end_date:
-                period_end = fiscal_year.end_date
-            
-            period = cls.objects.create(
-                fiscal_year=fiscal_year,
-                name=f"{period_names[period_num-1]} {fiscal_year.name}",
-                code=f"H{period_num}_{fiscal_year.code}",
-                period_number=Decimal(str(period_num)),
-                period_type='SEMI_ANNUAL',
-                start_date=current_date,
-                end_date=period_end,
-                is_active=False,
-                description=f"{period_names[period_num-1]} of {fiscal_year.name} (6-month period)"
-            )
-            
-            periods.append(period)
-            
-            # Move to next period
-            current_date = period_end + timedelta(days=1)
-            
-            # Stop if we've reached the end of the fiscal year
-            if current_date > fiscal_year.end_date:
-                break
-        
-        return periods
-    
-    # -------------------------------------------------------------------------
-    # HELPER METHODS
-    # -------------------------------------------------------------------------
-    
-    @staticmethod
-    def _get_or_create_fiscal_year(academic_session):
-        """
-        Helper to get or create fiscal year for an academic session.
-        
-        Args:
-            academic_session: AcademicSession instance
-            
-        Returns:
-            FiscalYear: The fiscal year
-        """
-        fiscal_year, created = FiscalYear.objects.get_or_create(
-            name=academic_session.year_name,
-            defaults={
-                'code': f"FY_{academic_session.year_name.replace('/', '_')}",
-                'start_date': academic_session.start_date,
-                'end_date': academic_session.end_date,
-                'is_active': True,
-            }
-        )
-        
-        if created:
-            logger.info(f"Created fiscal year: {fiscal_year}")
-        
-        return fiscal_year
     
     # -------------------------------------------------------------------------
     # FINANCIAL SUMMARY METHODS
@@ -3448,12 +3252,14 @@ class FiscalPeriod(BaseModel):
     
     def get_collection_rate(self):
         """Get collection rate as percentage"""
+        from core.utils import calculate_percentage
+        
         invoiced = self.get_total_invoiced()
         if invoiced == 0:
             return Decimal('0.00')
         
         collected = self.get_total_collected()
-        return round((collected / invoiced) * 100, 2)
+        return calculate_percentage(collected, invoiced)
     
     def get_transaction_count(self):
         """Get total number of transactions in this period"""

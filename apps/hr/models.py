@@ -1392,7 +1392,7 @@ class SalaryHistory(BaseModel):
     # -------------------------------------------------------------------------
     
     effective_period = models.ForeignKey(
-        'core.Period',
+        'core.FiscalPeriod',
         on_delete=models.PROTECT,
         related_name='salary_changes',
         help_text="Period when change becomes effective"
@@ -1737,7 +1737,7 @@ class Payroll(BaseModel):
     )
     
     period = models.ForeignKey(
-        'core.Period',
+        'core.FiscalPeriod',
         on_delete=models.PROTECT,
         related_name='staff_payrolls',
         help_text="Payroll period"

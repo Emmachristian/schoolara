@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* Class Status Badges */
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* Class Filters */
+.class-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Stats Cards */
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Capacity Indicator */
+.capacity-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+.capacity-full {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.capacity-near-full {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.capacity-available {
+    background-color: #d4edda;
+    color: #155724;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Classes
+                <div class="page-title-subheading">
+                    Manage class assignments, teachers, and student enrollments
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:class_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Create New Class
+                </a>
+                <a href="{% url 'academics:class_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Classes</div>
+                <h3>{{ stats.total_classes|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Classes</div>
+                <h3>{{ stats.active_classes|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Capacity</div>
+                <h3>{{ stats.capacity_analysis.total_capacity|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-user"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Avg Class Size</div>
+                <h3>{{ stats.enrollment_analysis.average_enrollment_per_class|default:0|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-study me-2 text-primary"></i>
+                                Classes Directory
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                <i class="fa fa-times me-1"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="class-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'academics:class_search' %}"
+                              hx-target="#class-results"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <!-- Search -->
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.q.label }}</label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <!-- Academic Level -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.academic_level.label }}</label>
+                                {{ filter_form.academic_level }}
+                            </div>
+
+                            <!-- Academic Session -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.academic_session.label }}</label>
+                                {{ filter_form.academic_session }}
+                            </div>
+                            
+                            <!-- Section -->
+                            <div class="col-md-1">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.section.label }}</label>
+                                {{ filter_form.section }}
+                            </div>
+
+                            <!-- Class Teacher -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.class_teacher.label }}</label>
+                                {{ filter_form.class_teacher }}
+                            </div>
+
+                            <!-- Classroom -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.classroom.label }}</label>
+                                {{ filter_form.classroom }}
+                            </div>
+
+                            <!-- Active Status -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.is_active.label }}</label>
+                                {{ filter_form.is_active }}
+                            </div>
+
+                            <!-- Has Capacity -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">{{ filter_form.has_capacity.label }}</label>
+                                {{ filter_form.has_capacity }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results -->
+                    <div id="class-results"
+                         hx-get="{% url 'academics:class_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading classes...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function resetFilters() {
+    window.location.href = "{% url 'academics:class_list' %}";
+}
+</script>
+{% endblock %}

@@ -13,6 +13,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from core.utils import (
+    get_school_today,
+    get_school_current_time
+)
 
 # =============================================================================
 # ACADEMIC SESSION STATISTICS
@@ -779,11 +783,6 @@ def get_classroom_statistics(filters=None):
     
     return stats
 
-
-# =============================================================================
-# CLASS STATISTICS
-# =============================================================================
-
 # =============================================================================
 # CLASS STATISTICS
 # =============================================================================
@@ -1222,3 +1221,444 @@ def format_statistics_for_export(stats, format_type='dict'):
         return clean_values(stats)
     
     return stats
+
+def get_enrollment_statistics(filters=None):
+    """
+    Get comprehensive enrollment statistics.
+    
+    Args:
+        filters (dict, optional): Filters to apply
+            - academic_session: Filter by academic session
+            - academic_level: Filter by academic level  
+            - class_instance: Filter by specific class
+            - enrollment_type: Filter by enrollment type
+            - completion_status: Filter by completion status
+            - date_range: Tuple of (start_date, end_date)
+            - is_active: Filter by active status
+    
+    Returns:
+        dict: Comprehensive enrollment statistics
+        
+    Example:
+        >>> from academics.stats import get_enrollment_statistics
+        >>> stats = get_enrollment_statistics()
+        >>> print(f"Total enrollments: {stats['overview']['total_enrollments']}")
+        >>> 
+        >>> # With filters
+        >>> stats = get_enrollment_statistics({
+        >>>     'academic_session': session_obj,
+        >>>     'completion_status': 'ONGOING'
+        >>> })
+    """
+    try:
+        from .models import StudentClassEnrollment, Class, AcademicSession, AcademicLevel
+        from students.models import Student
+        
+        # Start with base queryset
+        enrollments = StudentClassEnrollment.objects.select_related(
+            'student', 'class_instance', 'academic_session', 'class_instance__academic_level'
+        )
+        
+        # Apply filters
+        if filters:
+            if filters.get('academic_session'):
+                enrollments = enrollments.filter(academic_session=filters['academic_session'])
+            
+            if filters.get('academic_level'):
+                enrollments = enrollments.filter(class_instance__academic_level=filters['academic_level'])
+            
+            if filters.get('class_instance'):
+                enrollments = enrollments.filter(class_instance=filters['class_instance'])
+            
+            if filters.get('enrollment_type'):
+                enrollments = enrollments.filter(enrollment_type=filters['enrollment_type'])
+            
+            if filters.get('completion_status'):
+                enrollments = enrollments.filter(completion_status=filters['completion_status'])
+            
+            if filters.get('is_active') is not None:
+                enrollments = enrollments.filter(is_active=filters['is_active'])
+            
+            if filters.get('date_range'):
+                start_date, end_date = filters['date_range']
+                enrollments = enrollments.filter(
+                    enrollment_date__gte=start_date,
+                    enrollment_date__lte=end_date
+                )
+        
+        # =================================================================
+        # OVERVIEW STATISTICS
+        # =================================================================
+        
+        total_enrollments = enrollments.count()
+        active_enrollments = enrollments.filter(is_active=True).count()
+        ongoing_enrollments = enrollments.filter(completion_status='ONGOING').count()
+        completed_enrollments = enrollments.filter(completion_status='COMPLETED').count()
+        
+        overview = {
+            'total_enrollments': total_enrollments,
+            'active_enrollments': active_enrollments,
+            'ongoing_enrollments': ongoing_enrollments,
+            'completed_enrollments': completed_enrollments,
+            'inactive_enrollments': total_enrollments - active_enrollments,
+            'active_percentage': round((active_enrollments / total_enrollments * 100), 1) if total_enrollments > 0 else 0,
+            'completion_rate': round((completed_enrollments / total_enrollments * 100), 1) if total_enrollments > 0 else 0,
+        }
+        
+        # =================================================================
+        # ENROLLMENT STATUS BREAKDOWN
+        # =================================================================
+        
+        status_breakdown = enrollments.values('completion_status').annotate(
+            count=Count('id'),
+            percentage=Case(
+                When(count=0, then=0),
+                default=F('count') * 100.0 / total_enrollments,
+                output_field=IntegerField()
+            )
+        ).order_by('-count')
+        
+        # Convert to dict for easier access
+        status_stats = {}
+        for status in status_breakdown:
+            status_stats[status['completion_status']] = {
+                'count': status['count'],
+                'percentage': round(status['percentage'], 1) if status['percentage'] else 0
+            }
+        
+        # =================================================================
+        # ENROLLMENT TYPE BREAKDOWN
+        # =================================================================
+        
+        type_breakdown = enrollments.values('enrollment_type').annotate(
+            count=Count('id'),
+            percentage=Case(
+                When(count=0, then=0),
+                default=F('count') * 100.0 / total_enrollments,
+                output_field=IntegerField()
+            )
+        ).order_by('-count')
+        
+        type_stats = {}
+        for enrollment_type in type_breakdown:
+            type_stats[enrollment_type['enrollment_type']] = {
+                'count': enrollment_type['count'],
+                'percentage': round(enrollment_type['percentage'], 1) if enrollment_type['percentage'] else 0
+            }
+        
+        # =================================================================
+        # ACADEMIC SESSION BREAKDOWN
+        # =================================================================
+        
+        session_breakdown = enrollments.values(
+            'academic_session__year_name',
+            'academic_session__term_name'
+        ).annotate(
+            count=Count('id'),
+            active_count=Count('id', filter=Q(is_active=True)),
+            ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
+            session_id=F('academic_session__id')
+        ).order_by('-count')[:10]  # Top 10 sessions
+        
+        # =================================================================
+        # ACADEMIC LEVEL BREAKDOWN  
+        # =================================================================
+        
+        level_breakdown = enrollments.values(
+            'class_instance__academic_level__name',
+            'class_instance__academic_level__order'
+        ).annotate(
+            count=Count('id'),
+            active_count=Count('id', filter=Q(is_active=True)),
+            ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
+            level_id=F('class_instance__academic_level__id')
+        ).order_by('class_instance__academic_level__order')
+        
+        # =================================================================
+        # CLASS CAPACITY ANALYSIS
+        # =================================================================
+        
+        # Get classes with enrollment counts
+        class_analysis = Class.objects.annotate(
+            total_enrollments=Count('enrollments'),
+            active_enrollments=Count('enrollments', filter=Q(enrollments__is_active=True)),
+            ongoing_enrollments=Count('enrollments', filter=Q(enrollments__completion_status='ONGOING')),
+            capacity_utilization=Case(
+                When(max_students=0, then=0),
+                default=F('active_enrollments') * 100.0 / F('max_students'),
+                output_field=IntegerField()
+            )
+        ).filter(total_enrollments__gt=0)
+        
+        # Capacity statistics
+        total_capacity = class_analysis.aggregate(
+            total_capacity=Sum('max_students'),
+            total_enrolled=Sum('active_enrollments'),
+            avg_utilization=Avg('capacity_utilization')
+        )
+        
+        capacity_stats = {
+            'total_class_capacity': total_capacity['total_capacity'] or 0,
+            'total_students_enrolled': total_capacity['total_enrolled'] or 0,
+            'available_capacity': (total_capacity['total_capacity'] or 0) - (total_capacity['total_enrolled'] or 0),
+            'average_utilization': round(total_capacity['avg_utilization'] or 0, 1),
+            'utilization_percentage': round(
+                (total_capacity['total_enrolled'] / total_capacity['total_capacity'] * 100) 
+                if total_capacity['total_capacity'] and total_capacity['total_capacity'] > 0 else 0, 1
+            )
+        }
+        
+        # Classes by capacity status
+        at_capacity = class_analysis.filter(capacity_utilization__gte=100).count()
+        high_utilization = class_analysis.filter(capacity_utilization__gte=80, capacity_utilization__lt=100).count()
+        medium_utilization = class_analysis.filter(capacity_utilization__gte=50, capacity_utilization__lt=80).count()
+        low_utilization = class_analysis.filter(capacity_utilization__lt=50).count()
+        
+        capacity_distribution = {
+            'at_capacity': at_capacity,
+            'high_utilization': high_utilization,
+            'medium_utilization': medium_utilization,
+            'low_utilization': low_utilization,
+        }
+        
+        # =================================================================
+        # ENROLLMENT TRENDS (Last 30 days)
+        # =================================================================
+        
+        today = get_school_today()
+        thirty_days_ago = today - timedelta(days=30)
+        
+        recent_enrollments = enrollments.filter(
+            enrollment_date__gte=thirty_days_ago
+        )
+        
+        # Daily enrollment trend
+        daily_trend = recent_enrollments.extra(
+            select={'day': 'date(enrollment_date)'}
+        ).values('day').annotate(
+            count=Count('id')
+        ).order_by('day')
+        
+        # Weekly enrollment trend  
+        weekly_trend = recent_enrollments.annotate(
+            week=TruncDate('enrollment_date')
+        ).values('week').annotate(
+            count=Count('id')
+        ).order_by('week')
+        
+        trends = {
+            'recent_enrollments_count': recent_enrollments.count(),
+            'daily_average': round(recent_enrollments.count() / 30, 1),
+            'daily_trend': list(daily_trend),
+            'weekly_trend': list(weekly_trend)
+        }
+        
+        # =================================================================
+        # STUDENT PROGRESSION ANALYSIS
+        # =================================================================
+        
+        # Students by enrollment status
+        student_progression = Student.objects.annotate(
+            total_enrollments=Count('class_enrollments'),
+            active_enrollments=Count('class_enrollments', filter=Q(class_enrollments__is_active=True)),
+            completed_enrollments=Count('class_enrollments', filter=Q(class_enrollments__completion_status='COMPLETED'))
+        ).aggregate(
+            students_never_enrolled=Count('id', filter=Q(total_enrollments=0)),
+            students_currently_enrolled=Count('id', filter=Q(active_enrollments__gt=0)),
+            students_with_completions=Count('id', filter=Q(completed_enrollments__gt=0)),
+            avg_enrollments_per_student=Avg('total_enrollments')
+        )
+        
+        # =================================================================
+        # GENDER BREAKDOWN (if student data available)
+        # =================================================================
+        
+        gender_breakdown = enrollments.values('student__gender').annotate(
+            count=Count('id'),
+            active_count=Count('id', filter=Q(is_active=True))
+        ).order_by('-count')
+        
+        gender_stats = {}
+        for gender in gender_breakdown:
+            if gender['student__gender']:
+                gender_stats[gender['student__gender']] = {
+                    'total': gender['count'],
+                    'active': gender['active_count']
+                }
+        
+        # =================================================================
+        # RECENT ACTIVITY
+        # =================================================================
+        
+        recent_activity = {
+            'recent_enrollments': enrollments.order_by('-created_at')[:5],
+            'recent_completions': enrollments.filter(
+                completion_status__in=['COMPLETED', 'GRADUATED']
+            ).order_by('-completion_date')[:5],
+            'recent_withdrawals': enrollments.filter(
+                completion_status__in=['WITHDRAWN', 'TRANSFERRED']
+            ).order_by('-completion_date')[:5],
+        }
+        
+        # =================================================================
+        # COMPILE FINAL STATISTICS
+        # =================================================================
+        
+        statistics = {
+            'overview': overview,
+            'status_breakdown': status_stats,
+            'enrollment_type_breakdown': type_stats,
+            'academic_session_breakdown': list(session_breakdown),
+            'academic_level_breakdown': list(level_breakdown),
+            'capacity_analysis': capacity_stats,
+            'capacity_distribution': capacity_distribution,
+            'enrollment_trends': trends,
+            'student_progression': student_progression,
+            'gender_breakdown': gender_stats,
+            'recent_activity': recent_activity,
+            'metadata': {
+                'last_updated': get_school_current_time(),
+                'total_records_analyzed': total_enrollments,
+                'filters_applied': filters or {},
+                'calculation_date': today,
+            }
+        }
+        
+        return statistics
+        
+    except Exception as e:
+        logger.error(f"Error calculating enrollment statistics: {e}", exc_info=True)
+        
+        # Return minimal stats on error
+        return {
+            'overview': {
+                'total_enrollments': 0,
+                'active_enrollments': 0,
+                'ongoing_enrollments': 0,
+                'completed_enrollments': 0,
+                'active_percentage': 0,
+                'completion_rate': 0,
+            },
+            'error': str(e),
+            'metadata': {
+                'last_updated': get_school_current_time(),
+                'has_error': True,
+            }
+        }
+
+
+# =============================================================================
+# HELPER FUNCTIONS FOR ENROLLMENT STATISTICS
+# =============================================================================
+
+def get_enrollment_summary_by_session(academic_session):
+    """
+    Get enrollment summary for a specific academic session.
+    
+    Args:
+        academic_session: AcademicSession object
+        
+    Returns:
+        dict: Session-specific enrollment statistics
+    """
+    return get_enrollment_statistics({
+        'academic_session': academic_session,
+        'is_active': True
+    })
+
+
+def get_enrollment_summary_by_level(academic_level):
+    """
+    Get enrollment summary for a specific academic level.
+    
+    Args:
+        academic_level: AcademicLevel object
+        
+    Returns:
+        dict: Level-specific enrollment statistics
+    """
+    return get_enrollment_statistics({
+        'academic_level': academic_level
+    })
+
+
+def get_current_enrollment_statistics():
+    """
+    Get enrollment statistics for currently active enrollments only.
+    
+    Returns:
+        dict: Current enrollment statistics
+    """
+    return get_enrollment_statistics({
+        'is_active': True,
+        'completion_status': 'ONGOING'
+    })
+
+
+def get_enrollment_trends(days=30):
+    """
+    Get enrollment trends for the specified number of days.
+    
+    Args:
+        days (int): Number of days to analyze (default: 30)
+        
+    Returns:
+        dict: Enrollment trend statistics
+    """
+    today = get_school_today()
+    start_date = today - timedelta(days=days)
+    
+    return get_enrollment_statistics({
+        'date_range': (start_date, today)
+    })
+
+
+def get_class_enrollment_analysis(class_instance):
+    """
+    Get detailed enrollment analysis for a specific class.
+    
+    Args:
+        class_instance: Class object
+        
+    Returns:
+        dict: Class-specific enrollment analysis
+    """
+    from .models import StudentClassEnrollment
+    
+    try:
+        enrollments = StudentClassEnrollment.objects.filter(
+            class_instance=class_instance
+        ).select_related('student')
+        
+        total = enrollments.count()
+        active = enrollments.filter(is_active=True).count()
+        
+        status_breakdown = enrollments.values('completion_status').annotate(
+            count=Count('id')
+        )
+        
+        gender_breakdown = enrollments.values('student__gender').annotate(
+            count=Count('id')
+        )
+        
+        return {
+            'class': str(class_instance),
+            'total_enrollments': total,
+            'active_enrollments': active,
+            'capacity': class_instance.max_students,
+            'available_spots': max(0, class_instance.max_students - active),
+            'utilization_percentage': round((active / class_instance.max_students * 100), 1) if class_instance.max_students > 0 else 0,
+            'status_breakdown': {item['completion_status']: item['count'] for item in status_breakdown},
+            'gender_breakdown': {item['student__gender']: item['count'] for item in gender_breakdown if item['student__gender']},
+            'has_capacity': active < class_instance.max_students,
+            'is_at_capacity': active >= class_instance.max_students,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing class enrollment: {e}")
+        return {
+            'class': str(class_instance),
+            'error': str(e),
+            'total_enrollments': 0,
+            'active_enrollments': 0,
+        }

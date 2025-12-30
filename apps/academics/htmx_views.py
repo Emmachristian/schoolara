@@ -19,7 +19,7 @@ from .models import (
     StudentClassEnrollment,
     AcademicProgress
 )
-from utils.utils import parse_filters, paginate_queryset
+from core.utils import parse_filters, paginate_queryset
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def session_search(request):
         sessions = sessions.filter(allows_promotion=(allows_promotion.lower() == 'true'))
     
     # Paginate
-    sessions_page, paginator = paginate_queryset(request, sessions, per_page=20)
+    sessions_page, paginator = paginate_queryset(request, sessions, per_page=10)
     
     # Calculate stats from filtered queryset
     total = sessions.count()
@@ -260,7 +260,7 @@ def subject_search(request):
         subjects = subjects.filter(textbook_required=(textbook_required.lower() == 'true'))
     
     # Paginate
-    subjects_page, paginator = paginate_queryset(request, subjects, per_page=20)
+    subjects_page, paginator = paginate_queryset(request, subjects, per_page=10)
     
     # Calculate stats
     total = subjects.count()
@@ -415,7 +415,7 @@ def classroom_search(request):
             pass
     
     # Paginate
-    classrooms_page, paginator = paginate_queryset(request, classrooms, per_page=20)
+    classrooms_page, paginator = paginate_queryset(request, classrooms, per_page=10)
     
     # Calculate stats
     total = classrooms.count()
@@ -468,7 +468,7 @@ def class_search(request):
         'classroom'
     ).annotate(
         enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True))
-    ).order_by('academic_session__start_date', 'academic_level__order', 'section')
+    ).order_by('-academic_session__start_date', 'academic_level__order', 'section')
     
     # Apply text search
     if query:
@@ -498,7 +498,7 @@ def class_search(request):
         classes = classes.filter(enrollment_count__lt=F('max_students'))
     
     # Paginate
-    classes_page, paginator = paginate_queryset(request, classes, per_page=20)
+    classes_page, paginator = paginate_queryset(request, classes, per_page=10)
     
     # Calculate stats
     total = classes.count()
@@ -631,14 +631,26 @@ def enrollment_search(request):
         'academic_session'
     ).order_by('-enrollment_date')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        enrollments = enrollments.filter(
-            Q(student__first_name__icontains=query) |
-            Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query) |
-            Q(roll_number__icontains=query)
-        )
+        words = query.strip().split()
+
+        if words:
+            combined_q = Q()
+
+            for word in words:
+                word_q = (
+                    # Student fields
+                    Q(student__first_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__middle_name__icontains=word) |
+                    Q(student__admission_number__icontains=word) |
+                    Q(roll_number__icontains=word)
+                )
+
+                combined_q &= word_q
+
+            enrollments = enrollments.filter(combined_q)
     
     # Apply filters
     if academic_session:
@@ -663,7 +675,7 @@ def enrollment_search(request):
         enrollments = enrollments.filter(is_active=(is_active.lower() == 'true'))
     
     # Paginate
-    enrollments_page, paginator = paginate_queryset(request, enrollments, per_page=20)
+    enrollments_page, paginator = paginate_queryset(request, enrollments, per_page=10)
     
     # Calculate stats
     total = enrollments.count()

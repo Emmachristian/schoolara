@@ -1,0 +1,456 @@
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+<!-- Classes Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="150">Class Details</th>
+                <th width="150">Session</th>
+                <th width="150">Class Teacher</th>
+                <th width="120">Classroom</th>
+                <th width="120" class="text-center">Enrollment</th>
+                <th width="100" class="text-center">Capacity</th>
+                <th width="100">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if classes_page %}
+                {% for class in classes_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:classes_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Class Details -->
+                    <td>
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <strong>{{ class.get_display_name }}</strong>
+                                </h6>
+                                <div class="small text-muted">
+                                    <span><i class="fa fa-graduation-cap me-1"></i>{{ class.academic_level.name }}</span>
+                                    {% if class.section %}
+                                        <span class="ms-2">
+                                            <i class="fa fa-tag me-1"></i>Section {{ class.section }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                {% if class.class_motto %}
+                                    <small class="text-info d-block mt-1">
+                                        <i class="fa fa-quote-left me-1"></i>{{ class.class_motto|truncatewords:10 }}
+                                    </small>
+                                {% endif %}
+                                {% if class.class_colors %}
+                                    <small class="text-muted d-block">
+                                        <i class="fa fa-palette me-1"></i>Colors: {{ class.class_colors }}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Session -->
+                    <td>
+                        <div class="small">
+                            <strong>{{ class.academic_session.term_name }}</strong>
+                            <br><span class="text-muted">{{ class.academic_session.year_name }}</span>
+                        </div>
+                        {% if class.academic_session.is_current %}
+                            <span class="badge bg-success mt-1">
+                                <i class="fa fa-star me-1"></i>Current
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Class Teacher -->
+                    <td>
+                        {% if class.class_teacher %}
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <i class="fa fa-chalkboard-teacher text-primary me-1"></i>
+                                    <strong>{{ class.class_teacher.user.get_full_name }}</strong>
+                                    {% if class.assistant_teacher %}
+                                        <br><small class="text-muted">
+                                            <i class="fa fa-user-tie me-1"></i>Asst: {{ class.assistant_teacher.user.get_full_name|truncatewords:2 }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">
+                                <i class="fa fa-user-times me-1"></i>No teacher assigned
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Classroom -->
+                    <td>
+                        {% if class.classroom %}
+                            <div class="small">
+                                <i class="fa fa-door-open text-primary me-1"></i>
+                                <strong>{{ class.classroom.name }}</strong>
+                                {% if class.classroom.building %}
+                                    <br><span class="text-muted">
+                                        <i class="fa fa-building me-1"></i>{{ class.classroom.building }}
+                                        {% if class.classroom.floor %} - Floor {{ class.classroom.floor }}{% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span class="text-muted">
+                                <i class="fa fa-home me-1"></i>No room assigned
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Enrollment -->
+                    <td class="text-center">
+                        {% with enrolled=class.enrollment_count %}
+                            <div class="mb-1">
+                                <strong class="text-primary" style="font-size: 1.3em;">{{ enrolled }}</strong>
+                                <span class="text-muted">/ {{ class.max_students }}</span>
+                            </div>
+                            
+                            <!-- Enrollment Progress Bar -->
+                            {% with percent=class.get_occupancy_percentage %}
+                                <div class="progress" style="height: 6px;">
+                                    {% if percent >= 100 %}
+                                        <div class="progress-bar bg-danger" 
+                                             style="width: 100%"
+                                             data-bs-toggle="tooltip" 
+                                             title="Full - {{ percent }}%">
+                                        </div>
+                                    {% elif percent >= 80 %}
+                                        <div class="progress-bar bg-warning" 
+                                             style="width: {{ percent }}%"
+                                             data-bs-toggle="tooltip" 
+                                             title="Near Full - {{ percent }}%">
+                                        </div>
+                                    {% else %}
+                                        <div class="progress-bar bg-success" 
+                                             style="width: {{ percent }}%"
+                                             data-bs-toggle="tooltip" 
+                                             title="Available - {{ percent }}%">
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Capacity Badge -->
+                                <div class="mt-1">
+                                    {% if percent >= 100 %}
+                                        <span class="capacity-indicator capacity-full">
+                                            <i class="fa fa-exclamation-circle"></i> Full
+                                        </span>
+                                    {% elif percent >= 80 %}
+                                        <span class="capacity-indicator capacity-near-full">
+                                            <i class="fa fa-users"></i> {{ class.get_available_capacity }} left
+                                        </span>
+                                    {% else %}
+                                        <span class="capacity-indicator capacity-available">
+                                            <i class="fa fa-check-circle"></i> {{ class.get_available_capacity }} spaces
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            {% endwith %}
+                        {% endwith %}
+                    </td>
+                    
+                    <!-- Capacity -->
+                    <td class="text-center">
+                        <strong class="text-primary">{{ class.max_students }}</strong>
+                        <br><small class="text-muted">max students</small>
+                        
+                        <!-- Performance & Attendance -->
+                        {% if class.class_average_score %}
+                            <br><small class="text-success">
+                                <i class="fa fa-chart-line me-1"></i>{{ class.class_average_score }}%
+                            </small>
+                        {% endif %}
+                        {% if class.attendance_rate %}
+                            <br><small class="text-info">
+                                <i class="fa fa-calendar-check me-1"></i>{{ class.attendance_rate }}%
+                            </small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status -->
+                    <td class="text-center">
+                        {% if class.is_active %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                        
+                        <!-- Schedule -->
+                        {% if class.start_time and class.end_time %}
+                            <br><small class="text-muted mt-1 d-block">
+                                <i class="fa fa-clock me-1"></i>{{ class.start_time|time:"g:i A" }} - {{ class.end_time|time:"g:i A" }}
+                            </small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View -->
+                                <a class="dropdown-item text-success" href="{% url 'academics:class_detail' class.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'academics:class_edit' class.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Management</h6>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-users me-2"></i> View Students ({{ class.enrollment_count }})
+                                </a>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-book me-2"></i> Manage Subjects
+                                </a>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-calendar me-2"></i> View Timetable
+                                </a>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-calendar-check me-2"></i> Take Attendance
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <h6 class="dropdown-header">Reports</h6>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-chart-bar me-2"></i> Exam Results
+                                </a>
+                                
+                                <a class="dropdown-item" href="#">
+                                    <i class="fa fa-chart-line me-2"></i> Performance Report
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete -->
+                                <a class="dropdown-item text-danger" 
+                                   href="{% url 'academics:class_delete_modal' class.pk %}"
+                                   hx-get="{% url 'academics:class_delete_modal' class.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="py-5">
+                            <i class="pe-7s-study" style="font-size: 4rem; opacity: 0.3;"></i>
+                            <h5 class="mt-3">No Classes Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new class.</p>
+                            <a href="{% url 'academics:class_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Class
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if classes_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted">
+            Showing {{ classes_page.start_index }} - {{ classes_page.end_index }} of {{ classes_page.paginator.count }} classes
+        </div>
+        
+        <nav>
+            <ul class="pagination mb-0">
+                {% if classes_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'academics:class_search' %}" 
+                           hx-target="#class-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ classes_page.previous_page_number }}"}'>
+                            «
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for page_num in classes_page.paginator.page_range %}
+                    {% if page_num == classes_page.number %}
+                        <li class="page-item active">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > classes_page.number|add:"-3" and page_num < classes_page.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'academics:class_search' %}"
+                               hx-target="#class-results"
+                               hx-include="#searchForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if classes_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'academics:class_search' %}"
+                           hx-target="#class-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ classes_page.next_page_number }}"}'>
+                            »
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Capacity Indicators */
+.capacity-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.capacity-full {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.capacity-near-full {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.capacity-available {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+/* Progress Bar */
+.progress {
+    border-radius: 4px;
+    background-color: #e9ecef;
+}
+
+/* Status Badge */
+.status-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+</style>
+
+<!-- OUT OF BAND STATS UPDATE -->
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Classes</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Classes</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Enrolled</div>
+                <h3>{{ stats.total_enrolled|default:0|intcomma }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-user"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Avg Class Size</div>
+                <h3>{{ stats.avg_class_size|default:0|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+});
+
+htmx.on('htmx:afterSwap', function() {
+    initializeTooltips();
+});
+
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        var existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
+        if (existingTooltip) {
+            existingTooltip.dispose();
+        }
+        new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+</script>

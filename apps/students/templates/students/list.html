@@ -1,350 +1,354 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
+{% load widget_tweaks %}
 
 {% block extra_css %}
 <style>
 /* ============================================================================
-   PROFILE IMAGE & AVATAR STYLING
+   STUDENT STATUS BADGE STYLING
    ============================================================================ */
 
-.profile-image-container {
-    position: relative;
-    width: 40px;
-    height: 40px;
-    margin: 0 auto 20px;
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
 }
 
-.profile-image-container .profile-avatar {
-    width: 120px;
-    height: 120px;
-    object-fit: cover;
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.pending_approval {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.status-badge.suspended {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.status-badge.dismissed,
+.status-badge.withdrawn {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border-color: #d6d8db;
+}
+
+.status-badge.graduated {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+.status-badge.transferred {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.deferred {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.student-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STUDENT STATUS INDICATORS
+   ============================================================================ */
+
+.student-status-indicator {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-    border: 3px solid #fff;
+    border: 2px solid white;
+}
+
+.student-status-indicator.active {
+    background-color: #28a745;
+    animation: pulse-green 2s infinite;
+}
+
+.student-status-indicator.suspended {
+    background-color: #dc3545;
+}
+
+.student-status-indicator.graduated {
+    background-color: #17a2b8;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+/* ============================================================================
+   MEDICAL ALERT BADGE
+   ============================================================================ */
+
+.medical-alert-badge {
+    display: inline-block;
+    background-color: #dc3545;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* ============================================================================
+   PROFILE AVATAR
+   ============================================================================ */
+
+.profile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 .avatar-placeholder {
     width: 40px;
     height: 40px;
-    background-color: #f8f9fa;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 3px solid #fff;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-}
-
-.avatar-title {
-    font-size: 16px;
-    font-weight: 500;
-    color: #556ee6;
-    letter-spacing: 0px;
-    text-align: center;
-    line-height: 1;
-}
-
-.profile-image-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 60px;
-    height: 60px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    cursor: pointer;
-}
-
-.profile-image-container:hover .profile-image-overlay {
-    opacity: 1;
-}
-
-.profile-image-overlay i {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
 }
-
 
 /* ============================================================================
-   STATISTICS SUMMARY SECTION
+   STATISTICS SUMMARY
    ============================================================================ */
 
-.stats-summary {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-icon {
+    width: 45px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+
+.stat-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.stat-content h3 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1;
     color: white;
-    border-radius: 15px;
-    padding: 25px;
-    margin-bottom: 25px;
-    box-shadow: 0 8px 32px rgba(23, 162, 184, 0.3);
-    position: relative;
+}
+
+.stat-content p {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.95;
+    color: white;
+}
+
+.stat-content small {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.75rem;
+    opacity: 0.8;
+    color: white;
+}
+
+.stats-divider {
+    width: 1px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    border-radius: 8px;
     overflow: hidden;
 }
 
-.stats-summary::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="80" cy="80" r="3" fill="rgba(255,255,255,0.05)"/><circle cx="40" cy="70" r="1" fill="rgba(255,255,255,0.1)"/></svg>');
-    pointer-events: none;
+.table {
+    margin-bottom: 0;
 }
 
-.stats-card {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
 }
 
-.stats-card:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: translateY(-2px);
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
 }
 
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
 
 /* ============================================================================
-   BADGES & INDICATORS
+   EMPTY STATE
    ============================================================================ */
 
-/* Birthday Indicator */
-.birthday-indicator {
-    background-color: #ff6b6b;
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
     color: white;
-    padding: 2px 6px;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: bold;
-    margin-left: 5px;
-    animation: pulse 2s infinite;
+    border-color: #667eea;
 }
 
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.7;
-    }
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
 }
-
-/* Academic Level Badges */
-.academic-level-badge {
-    background-color: #e3f2fd;
-    color: #1976d2;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid #bbdefb;
-    display: inline-block;
-}
-
-.no-level-badge {
-    background-color: #fff3e0;
-    color: #f57c00;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-style: italic;
-    border: 1px solid #ffcc02;
-    display: inline-block;
-}
-
-/* Health Indicators */
-.health-indicator {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-left: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.health-excellent { background-color: #28a745; }
-.health-good { background-color: #17a2b8; }
-.health-fair { background-color: #ffc107; }
-.health-poor { background-color: #dc3545; }
-.health-chronic { background-color: #6f42c1; }
-.health-recovering { background-color: #fd7e14; }
-.health-special-needs { background-color: #e83e8c; }
-
 
 /* ============================================================================
-   ENROLLMENT STATUS INDICATORS
+   GENDER BADGE
    ============================================================================ */
 
-.enrollment-status-indicator {
-    position: absolute;
-    top: -1px;
-    right: -1px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 2px solid white;
-    z-index: 10;
+.gender-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
 }
 
-.enrollment-status-indicator.active { background-color: #28a745; }
-.enrollment-status-indicator.suspended { background-color: #ffc107; }
-.enrollment-status-indicator.graduated { background-color: #17a2b8; }
-.enrollment-status-indicator.transferred { background-color: #6c757d; }
-.enrollment-status-indicator.withdrawn { background-color: #dc3545; }
-.enrollment-status-indicator.dismissed { background-color: #dc3545; }
-.enrollment-status-indicator.deceased { background-color: #343a40; }
-.enrollment-status-indicator.deferred { background-color: #6c757d; }
-
-
-/* ============================================================================
-   PRINT STYLES
-   ============================================================================ */
-
-@media print {
-    /* Hide everything except printable content */
-    body * {
-        visibility: hidden;
-    }
-    
-    #printableTable,
-    #printableTable * {
-        visibility: visible;
-    }
-    
-    #printableTable {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-    }
-    
-    /* Print Header */
-    .print-header {
-        text-align: center;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #333;
-    }
-    
-    .print-title {
-        font-size: 24px;
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: #333;
-    }
-    
-    .print-date {
-        font-size: 12px;
-        color: #666;
-    }
-    
-    /* Print Table */
-    .print-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-    }
-    
-    .print-table th {
-        background-color: #4472C4 !important;
-        color: white !important;
-        padding: 10px;
-        text-align: left;
-        border: 1px solid #333;
-        font-weight: bold;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    
-    .print-table td {
-        padding: 8px;
-        border: 1px solid #ddd;
-        color: #333;
-    }
-    
-    .print-table tr:nth-child(even) {
-        background-color: #f8f9fa !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    
-    /* Print Footer */
-    .print-footer {
-        margin-top: 20px;
-        text-align: center;
-        font-size: 10px;
-        color: #666;
-        border-top: 1px solid #ddd;
-        padding-top: 10px;
-    }
-    
-    /* Page Break Settings */
-    .print-table {
-        page-break-inside: auto;
-    }
-    
-    .print-table tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
-    }
-    
-    .print-table thead {
-        display: table-header-group;
-    }
-    
-    .print-table tfoot {
-        display: table-footer-group;
-    }
-    
-    /* Ensure colors print correctly */
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-    }
+.gender-badge.male {
+    background-color: #cfe2ff;
+    color: #084298;
 }
 
+.gender-badge.female {
+    background-color: #f8d7da;
+    color: #842029;
+}
 
 /* ============================================================================
    RESPONSIVE DESIGN
    ============================================================================ */
 
 @media (max-width: 768px) {
-    .stats-summary {
-        padding: 15px;
-    }
-    
-    .stats-card {
-        margin-bottom: 10px;
-    }
-    
-    .avatar-placeholder,
-    .profile-image-container {
+    .profile-avatar,
+    .avatar-placeholder {
         width: 35px;
         height: 35px;
     }
     
-    .avatar-title {
-        font-size: 14px;
-    }
-}
-
-@media (max-width: 576px) {
-    .academic-level-badge,
-    .no-level-badge {
-        font-size: 0.75rem;
-        padding: 3px 8px;
-    }
-    
-    .birthday-indicator {
-        font-size: 0.6rem;
-        padding: 1px 4px;
+    .student-filters {
+        padding: 15px;
     }
 }
 </style>
@@ -352,6 +356,7 @@
 
 {% block content %}
 
+<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
@@ -359,400 +364,209 @@
                 <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
-                    Student Directory
+                Student Directory
                 <div class="page-title-subheading">
-                    Manage and monitor scholarship awards with comprehensive tracking and administration
+                    Manage student information, enrollment status, and academic records
                 </div>
             </div>
         </div>
         <div class="page-title-actions">
-            <div class="ms-2">
-                <div class="btn-group" role="group">
-                    <a href="{% url 'students:student_create' %}" class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Add New Student
-                    </a>
-
-                    <!-- Print Button -->
-                    <a href="#" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
-                        <i class="fa fa-print me-1"></i> Print
-                    </a>
-
-                    <!-- Excel Export -->
-                    <a href="{% url 'students:export_excel' %}" id="excelExportBtn" class="btn btn-outline-success">
-                        <i class="fa fa-file-excel me-1"></i> Export Excel
-                    </a>
-
-                    <!-- PDF Export -->
-                    <a href="{% url 'students:export_pdf' %}" id="pdfExportBtn" class="btn btn-outline-danger">
-                        <i class="fa fa-file-pdf me-1"></i> Export PDF
-                    </a>
-                </div>
+            <div class="btn-group" role="group">
+                <a href="{% url 'students:student_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Register New Student
+                </a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
+                    <i class="fa fa-print me-1"></i> Print
+                </button>
+                <a href="{% url 'students:export_students_excel' %}" class="btn btn-outline-success">
+                    <i class="fa fa-file-excel me-1"></i> Export Excel
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Statistics Summary -->
-<div class="stats-summary">
-    <div class="row">
-        <!-- Total Students -->
-        <div class="col-md-3">
-            <div class="stats-card text-center p-3">
-                <h3 class="mb-1">{{ stats.total_students|default:0 }}</h3>
-                <p class="mb-0 opacity-8">Total Students</p>
-                <small class="opacity-6">
-                    <i class="fa fa-users me-1"></i>
-                    Enrolled students
-                </small>
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Students</div>
+                <h3 id="statTotal">{{ stats.total_students|default:0 }}</h3>
             </div>
         </div>
-        
-        <!-- Male Students -->
-        <div class="col-md-3">
-            <div class="stats-card text-center p-3">
-                <h3 class="mb-1">{{ stats.male_count|default:0 }}</h3>
-                <p class="mb-0 opacity-8">Male Students</p>
-                <small class="opacity-6">
-                    <i class="fa fa-mars me-1"></i>
-                    {{ stats.male_percentage|floatformat:1|default:0 }}% of total
-                </small>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Students</div>
+                <h3 id="statActive">{{ stats.active_students|default:0 }}</h3>
             </div>
         </div>
-        
-        <!-- Female Students -->
-        <div class="col-md-3">
-            <div class="stats-card text-center p-3">
-                <h3 class="mb-1">{{ stats.female_count|default:0 }}</h3>
-                <p class="mb-0 opacity-8">Female Students</p>
-                <small class="opacity-6">
-                    <i class="fa fa-venus me-1"></i>
-                    {{ stats.female_percentage|floatformat:1|default:0 }}% of total
-                </small>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Male / Female</div>
+                <h3 id="statGender">{{ stats.male_count|default:0 }} / {{ stats.female_count|default:0 }}</h3>
             </div>
         </div>
-        
-        <!-- Average Age -->
-        <div class="col-md-3">
-            <div class="stats-card text-center p-3">
-                <h3 class="mb-1">{{ stats.avg_age|floatformat:1|default:0 }}</h3>
-                <p class="mb-0 opacity-8">Average Age</p>
-                <small class="opacity-6">
-                    <i class="fa fa-calendar-alt me-1"></i>
-                    Years old
-                </small>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Special Needs</div>
+                <h3 id="statSpecialNeeds">{{ stats.special_needs|default:0 }}</h3>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Main Content Section -->
 <section class="section">
     <div class="row">
         <div class="col-lg-12">
-            <div class="card">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
                 <div class="card-body">
-
-                    <!-- Search & Filters -->
-                    <form id="searchForm" class="row g-2 mb-3">
-                        <div class="col-md-4">
-                            <input type="text" name="q" id="searchInput" class="form-control" placeholder="Search by name, admission number, academic level......">
-                        </div>
-                        <div class="col-md-2">
-                            <select name="gender" id="genderFilter" class="form-select">
-                                <option value="">All Genders</option>
-                                {% for value, label in Student.GENDER_CHOICES %}
-                                    <option value="{{ value }}">{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <select name="current_academic_level" id="levelFilter" class="form-select">
-                                <option value="">All Levels</option>
-                                {% for level in academic_levels %}
-                                    <option value="{{ level.id }}">{{ level.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <select name="enrollment_status" id="statusFilter" class="form-select">
-                                <option value="">All Status</option>
-                                {% for value, label in Student.ENROLLMENT_STATUS_CHOICES %}
-                                    <option value="{{ value }}">{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-1">
-                            <input type="number" name="min_age" id="minAgeFilter" class="form-control" placeholder="Min Age" min="0">
-                        </div>
-                        <div class="col-md-1">
-                            <input type="number" name="max_age" id="maxAgeFilter" class="form-control" placeholder="Max Age" min="0">
-                        </div>
-                    </form>
-
-                    <!-- Results Table -->
-                    <div id="results">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Name</th>
-                                    <th>Admission No.</th>
-                                    <th>Gender</th>
-                                    <th>Academic Level</th>
-                                    <th>Age</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="studentTableBody">
-                                {% for student in students %}
-                                <tr>
-                                    <td>{{ forloop.counter }}</td>
-                                    <td>
-                                        <div class="d-flex align-items-center position-relative">
-                                            <!-- Avatar with Status Indicator -->
-                                            <div class="position-relative me-2">
-                                                {% if student.photo %}
-                                                    <img src="{{ student.photo.url }}" alt="{{ student.get_full_name }}" class="profile-avatar">
-                                                {% else %}
-                                                    <div class="avatar-placeholder">
-                                                        <div class="avatar-title">
-                                                            {{ student.first_name|first }}{{ student.last_name|first }}
-                                                        </div>
-                                                    </div>
-                                                {% endif %}
-
-                                                <!-- Status Indicator -->
-                                                <span class="enrollment-status-indicator {{ student.enrollment_status }}" 
-                                                    title="Status: {{ student.get_enrollment_status_display }}"></span>
-                                            </div>
-
-                                            <div class="d-flex align-items-center">
-                                                <h6 class="mb-0 me-2">{{ student.get_full_name }}</h6>
-                                                {% if student.date_of_birth %}
-                                                    {% now "m-d" as today %}
-                                                    {% if student.date_of_birth|date:"m-d" == today %}
-                                                        <span class="birthday-indicator">🎂 Birthday!</span>
-                                                    {% endif %}
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td>{{ student.admission_number }}</td>
-                                    <td>{{ student.get_gender_display }}</td>
-                                    <td>
-                                        {% if student.current_academic_level %}
-                                            <span class="academic-level-badge">{{ student.current_academic_level }}</span>
-                                        {% else %}
-                                            <span class="no-level-badge">Not Assigned</span>
-                                        {% endif %}
-                                    </td>
-                                    <td><strong>{{ student.get_age }}</strong> years old</td>
-                                    <td>
-                                        <div class="dropdown">
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                                data-bs-toggle="dropdown"
-                                                aria-expanded="false">
-                                                <i class="fa fa-ellipsis-v me-1"></i> Actions
-                                            </button>
-
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <!-- General Actions -->
-                                                <a class="dropdown-item text-success" href="{% url 'students:student_profile' student.pk %}">
-                                                    <i class="fa fa-eye me-2"></i> View
-                                                </a>
-
-                                                <a class="dropdown-item text-warning" href="{% url 'students:student_edit' student.pk %}">
-                                                    <i class="fa fa-edit me-2"></i> Edit
-                                                </a>
-
-                                                <a class="dropdown-item" href="#">
-                                                    <i class="fa fa-plus-circle me-1"></i> Enroll in Class
-                                                </a>
-
-                                                <a class="dropdown-item" href="#">
-                                                    <i class="fa fa-arrow-up me-1"></i> Promote
-                                                </a>
-
-                                                <hr class="dropdown-divider">
-
-                                                <!-- Records Section -->
-                                                <h6 class="dropdown-header">Records</h6>
-
-                                                <a class="dropdown-item" href="#">
-                                                    <i class="fa fa-ruler me-1"></i> Measurements
-                                                </a>
-
-                                                <a class="dropdown-item" href="#">
-                                                    <i class="fa fa-gavel me-1"></i> Disciplinary
-                                                </a>
-
-                                                <hr class="dropdown-divider">
-
-                                                <!-- Management Section -->
-                                                <h6 class="dropdown-header">Management</h6>
-
-                                                <a class="dropdown-item" href="#">
-                                                    <i class="fa fa-users me-1"></i> Guardians
-                                                </a>
-
-                                                <hr class="dropdown-divider">
-
-                                                <!-- Delete Action -->
-                                                <button
-                                                    type="button"
-                                                    class="dropdown-item text-danger"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#deleteStudent{{ student.pk }}">
-                                                    <i class="fa fa-trash me-2"></i> Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
-                                        <i class="fa fa-user-graduate fa-2x mb-2 d-block"></i>
-                                        <span>No students found</span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-
-                        <!-- Pagination -->
-                        <div id="paginationContainer" style="display: none;">
-                            <nav class="mb-3" aria-label="Page navigation">
-                                <ul class="pagination justify-content-center" id="paginationNav">
-                                    <!-- Pagination will be dynamically inserted here -->
-                                </ul>
-                            </nav>
-
-                            <!-- Showing X-Y of Z results -->
-                            <div class="text-center text-muted mb-3" id="resultsCount">
-                                <!-- Results count will be dynamically inserted here -->
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-study me-2 text-primary"></i>
+                                Student Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Delete Modals -->
-                    {% for student in students %}
-                    <div class="modal fade" id="deleteStudent{{ student.pk }}" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Delete Student</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body text-center">
-                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1 mb-3"></i>
-                                    <h5>Are you sure you want to delete "<strong>{{ student.get_full_name }}</strong>"?</h5>
-                                    <p class="text-muted">This action cannot be undone.</p>
-                                </div>
-                                <form action="{% url 'students:student_delete' student.pk %}" method="post">
-                                    {% csrf_token %}
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" class="btn btn-danger">Delete Student</button>
-                                    </div>
-                                </form>
+                    <!-- Search & Filters with HTMX -->
+                    <div class="student-filters">
+                        <form id="searchForm" class="row g-3">
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.q.label }}</label>
+                                {{ filter_form.q }}
                             </div>
-                        </div>
-                    </div>
-                    {% endfor %}
+                            
+                            <!-- Enrollment Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.enrollment_status.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.enrollment_status.label }}</label>
+                                {{ filter_form.enrollment_status }}
+                            </div>
 
-                    <!-- Print Modal -->
-                    <div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" id="printModalLabel">
-                                        <i class="fa fa-print me-2"></i>Print Student List
-                                    </h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <p class="text-muted mb-3">Select the columns you want to include in the printout:</p>
-                                    
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="number" id="col_number" checked>
-                                                <label class="form-check-label" for="col_number">
-                                                    #
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="name" id="col_name" checked>
-                                                <label class="form-check-label" for="col_name">
-                                                    Name
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="admission" id="col_admission" checked>
-                                                <label class="form-check-label" for="col_admission">
-                                                    Admission Number
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="gender" id="col_gender" checked>
-                                                <label class="form-check-label" for="col_gender">
-                                                    Gender
-                                                </label>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-6">
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="level" id="col_level" checked>
-                                                <label class="form-check-label" for="col_level">
-                                                    Academic Level
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="age" id="col_age" checked>
-                                                <label class="form-check-label" for="col_age">
-                                                    Age
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="status" id="col_status">
-                                                <label class="form-check-label" for="col_status">
-                                                    Enrollment Status
-                                                </label>
-                                            </div>
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input print-column" type="checkbox" value="phone" id="col_phone">
-                                                <label class="form-check-label" for="col_phone">
-                                                    Phone Number
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <hr class="my-3">
-                                    
-                                    <div class="d-flex justify-content-between">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllColumns()">
-                                            <i class="fa fa-check-square me-1"></i> Select All
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllColumns()">
-                                            <i class="fa fa-square me-1"></i> Deselect All
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                        Cancel
-                                    </button>
-                                    <button type="button" class="btn btn-primary" onclick="printStudentTable()">
-                                        <i class="fa fa-print me-1"></i> Print
-                                    </button>
-                                </div>
+                            <!-- Gender Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.gender.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.gender.label }}</label>
+                                {{ filter_form.gender }}
                             </div>
+                            
+                            <!-- Academic Level Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.current_academic_level.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.current_academic_level.label }}</label>
+                                {{ filter_form.current_academic_level }}
+                            </div>
+
+                            <!-- Religious Affiliation Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.religious_affiliation.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.religious_affiliation.label }}</label>
+                                {{ filter_form.religious_affiliation }}
+                            </div>
+
+                            <!-- Health Condition Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.health_condition.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.health_condition.label }}</label>
+                                {{ filter_form.health_condition }}
+                            </div>
+
+                            <!-- Special Needs Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.has_special_needs.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.has_special_needs.label }}</label>
+                                {{ filter_form.has_special_needs }}
+                            </div>
+
+                            <!-- Transportation Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.transportation_required.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.transportation_required.label }}</label>
+                                {{ filter_form.transportation_required }}
+                            </div>
+
+                            <!-- Date Range Filters -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.admission_date_from.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.admission_date_from.label }}</label>
+                                {{ filter_form.admission_date_from }}
+                            </div>
+
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.admission_date_to.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.admission_date_to.label }}</label>
+                                {{ filter_form.admission_date_to }}
+                            </div>
+
+                            <!-- Age Range Filters -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.age_min.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.age_min.label }}</label>
+                                {{ filter_form.age_min }}
+                            </div>
+
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.age_max.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.age_max.label }}</label>
+                                {{ filter_form.age_max }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="student-results"
+                         hx-get="{% url 'students:student_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <!-- Initial loading state -->
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading students...</p>
                         </div>
                     </div>
 
@@ -761,546 +575,375 @@
         </div>
     </div>
 </section>
+
+<!-- Print Options Modal -->
+<div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="printModalLabel">
+                    <i class="fa fa-print me-2"></i>Print Options
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"></i>
+                    Select the fields you want to include in your print. Current filters will be applied.
+                </div>
+
+                <!-- Field Selection -->
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">Select Fields to Print</label>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="selectAllFields()">
+                                    <i class="fa fa-check-square me-1"></i>Select All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="deselectAllFields()">
+                                    <i class="fa fa-square me-1"></i>Deselect All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Basic Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <strong><i class="fa fa-user me-2"></i>Basic Information</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="admission_number" id="field_admission_number" checked>
+                                    <label class="form-check-label" for="field_admission_number">
+                                        Admission Number
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="full_name" id="field_full_name" checked>
+                                    <label class="form-check-label" for="field_full_name">
+                                        Full Name
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="date_of_birth" id="field_date_of_birth">
+                                    <label class="form-check-label" for="field_date_of_birth">
+                                        Date of Birth
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="age" id="field_age">
+                                    <label class="form-check-label" for="field_age">
+                                        Age
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="gender" id="field_gender" checked>
+                                    <label class="form-check-label" for="field_gender">
+                                        Gender
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="nationality" id="field_nationality">
+                                    <label class="form-check-label" for="field_nationality">
+                                        Nationality
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <strong><i class="fa fa-phone me-2"></i>Contact Information</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="phone_number" id="field_phone_number" checked>
+                                    <label class="form-check-label" for="field_phone_number">
+                                        Phone Number
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="personal_email" id="field_personal_email">
+                                    <label class="form-check-label" for="field_personal_email">
+                                        Email
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="home_address" id="field_home_address">
+                                    <label class="form-check-label" for="field_home_address">
+                                        Home Address
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Academic Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <strong><i class="fa fa-graduation-cap me-2"></i>Academic</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="current_academic_level" id="field_current_academic_level" checked>
+                                    <label class="form-check-label" for="field_current_academic_level">
+                                        Current Grade/Class
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="admission_academic_level" id="field_admission_academic_level">
+                                    <label class="form-check-label" for="field_admission_academic_level">
+                                        Admission Grade/Class
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="enrollment_status" id="field_enrollment_status" checked>
+                                    <label class="form-check-label" for="field_enrollment_status">
+                                        Enrollment Status
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="admission_date" id="field_admission_date">
+                                    <label class="form-check-label" for="field_admission_date">
+                                        Admission Date
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Health & Special Needs -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-warning text-dark">
+                                <strong><i class="fa fa-heart me-2"></i>Health & Special Needs</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="health_condition" id="field_health_condition">
+                                    <label class="form-check-label" for="field_health_condition">
+                                        Health Condition
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="has_special_needs" id="field_has_special_needs">
+                                    <label class="form-check-label" for="field_has_special_needs">
+                                        Special Needs
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="transportation_required" id="field_transportation_required">
+                                    <label class="form-check-label" for="field_transportation_required">
+                                        Transportation Required
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="religious_affiliation" id="field_religious_affiliation">
+                                    <label class="form-check-label" for="field_religious_affiliation">
+                                        Religious Affiliation
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Options -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card border-secondary">
+                            <div class="card-header bg-secondary text-white">
+                                <strong><i class="fa fa-cog me-2"></i>Additional Options</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="include_stats" checked>
+                                    <label class="form-check-label" for="include_stats">
+                                        Include statistics summary
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="landscape">
+                                    <label class="form-check-label" for="landscape">
+                                        Landscape orientation (for more columns)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="generateAndPrint()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-
-/* ============================================================================
-   DJANGO URL TEMPLATES (DO NOT HARDCODE PATHS)
-============================================================================ */
-const STUDENT_PROFILE_URL =
-    "{% url 'students:student_profile' '00000000-0000-0000-0000-000000000000' %}";
-const STUDENT_EDIT_URL =
-    "{% url 'students:student_edit' '00000000-0000-0000-0000-000000000000' %}";
-
 // ============================================================================
-// MAIN STUDENT LIST FUNCTIONALITY
+// HTMX EVENT LISTENERS - UPDATE STATS
 // ============================================================================
-$(document).ready(function() {
-    let currentPage = 1;
 
-    // ------------------------------------------------------------------------
-    // AJAX Functions - Fetch and Display Students
-    // ------------------------------------------------------------------------
-    function fetchResults(page = 1) {
-        const formData = $('#searchForm').serialize() + '&page=' + page;
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'student-results') {
+        const firstRow = event.detail.target.querySelector('tr[data-stats]');
         
-        $.ajax({
-            url: "{% url 'students:student_search' %}",
-            data: formData,
-            dataType: 'json',
-            success: function(data) {
-                renderStudentTable(data);
-                updatePagination(data);
-                updateStatistics(data.stats);  // Update statistics
-                currentPage = data.current_page;
-            },
-            error: function(xhr, status, error) {
-                console.error('AJAX Error:', error);
-                $('#studentTableBody').html(
-                    `<tr>
-                        <td colspan="7" class="text-center text-danger">
-                            Error loading students. Please try again.
-                        </td>
-                    </tr>`
-                );
-            }
-        });
-    }
-
-    // ------------------------------------------------------------------------
-    // Statistics Update Function
-    // ------------------------------------------------------------------------
-    function updateStatistics(stats) {
-        // Update total students
-        $('.stats-card:eq(0) h3').text(stats.total_students || 0);
-        
-        // Update male students
-        $('.stats-card:eq(1) h3').text(stats.male_count || 0);
-        $('.stats-card:eq(1) small').html(
-            `<i class="fa fa-mars me-1"></i>${stats.male_percentage || 0}% of total`
-        );
-        
-        // Update female students
-        $('.stats-card:eq(2) h3').text(stats.female_count || 0);
-        $('.stats-card:eq(2) small').html(
-            `<i class="fa fa-venus me-1"></i>${stats.female_percentage || 0}% of total`
-        );
-        
-        // Update average age
-        $('.stats-card:eq(3) h3').text(stats.avg_age || 0);
-    }
-
-    function renderStudentTable(data) {
-        let tbody = '';
-        
-        if (data.students.length > 0) {
-            data.students.forEach(function(student, index) {
-                tbody += buildStudentRow(student, index, data.current_page);
-            });
-        } else {
-            tbody = `<tr>
-                <td colspan="7" class="text-center text-muted">
-                    No students found.
-                </td>
-            </tr>`;
-        }
-        
-        $('#studentTableBody').html(tbody);
-    }
-
-    function buildStudentRow(student, index, currentPage) {
-        const rowNumber = ((currentPage - 1) * 10) + index + 1;
-        const statusClass = student.status.toLowerCase().replace(/\s+/g, '-');
-        const photoHtml = buildPhotoHtml(student, statusClass);
-        const birthdayHtml = buildBirthdayHtml(student.date_of_birth);
-        const levelBadge = buildLevelBadge(student.level);
-
-        return `
-            <tr>
-                <td>${rowNumber}</td>
-                <td>
-                    <div class="d-flex align-items-center position-relative">
-                        ${photoHtml}
-                        <div class="d-flex align-items-center">
-                            <h6 class="mb-0 me-2">${student.full_name}</h6>
-                            ${birthdayHtml}
-                        </div>
-                    </div>
-                </td>
-                <td>${student.admission_number}</td>
-                <td>${student.gender}</td>
-                <td>${levelBadge}</td>
-                <td><strong>${student.age}</strong> years old</td>
-                <td>${buildActionsDropdown(student.id)}</td>
-            </tr>
-        `;
-    }
-
-    function buildPhotoHtml(student, statusClass) {
-        if (student.photo) {
-            return `
-                <div class="position-relative me-2">
-                    <img src="${student.photo}" class="profile-avatar" alt="${student.full_name}">
-                    <span class="enrollment-status-indicator ${statusClass}" 
-                        title="Status: ${student.status}"></span>
-                </div>
-            `;
-        } else {
-            const initials = getInitials(student.full_name);
-            return `
-                <div class="position-relative me-2">
-                    <div class="avatar-placeholder">
-                        <div class="avatar-title">${initials}</div>
-                    </div>
-                    <span class="enrollment-status-indicator ${statusClass}" 
-                        title="Status: ${student.status}"></span>
-                </div>
-            `;
+        if (firstRow) {
+            const stats = JSON.parse(firstRow.dataset.stats);
+            
+            // Update stats with smooth transition
+            updateStatValue('statTotal', stats.total || 0);
+            updateStatValue('statActive', stats.active || 0);
+            updateStatValue('statGender', `${stats.male || 0} / ${stats.female || 0}`);
+            updateStatValue('statSpecialNeeds', stats.special_needs || 0);
         }
     }
-
-    function getInitials(fullName) {
-        if (!fullName) return '';
-        const names = fullName.split(' ');
-        let initials = names[0] ? names[0][0].toUpperCase() : '';
-        initials += names[1] ? names[1][0].toUpperCase() : '';
-        return initials;
-    }
-
-    function buildBirthdayHtml(dateOfBirth) {
-        if (!dateOfBirth) return '';
-        
-        const today = new Date();
-        const dob = new Date(dateOfBirth);
-        
-        if (dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth()) {
-            return '<span class="birthday-indicator">🎂 Birthday!</span>';
-        }
-        
-        return '';
-    }
-
-    function buildLevelBadge(level) {
-        if (level) {
-            return `<span class="academic-level-badge">${level}</span>`;
-        }
-        return '<span class="no-level-badge">Not Assigned</span>';
-    }
-
-    function buildActionsDropdown(studentId) {
-
-        const profileUrl = STUDENT_PROFILE_URL.replace(
-            '00000000-0000-0000-0000-000000000000',
-            studentId
-        );
-        const editUrl = STUDENT_EDIT_URL.replace(
-            '00000000-0000-0000-0000-000000000000',
-            studentId
-        );
-
-        return `
-            <div class="dropdown">
-                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fa fa-ellipsis-v me-1"></i> Actions
-                </button>
-                <div class="dropdown-menu dropdown-menu-end">
-                    <a class="dropdown-item text-success" href="${profileUrl}">
-                        <i class="fa fa-eye me-2"></i> View
-                    </a>
-                    <a class="dropdown-item text-warning" href="${editUrl}">
-                        <i class="fa fa-edit me-2"></i> Edit
-                    </a>
-                    <a class="dropdown-item" href="#">
-                        <i class="fa fa-plus-circle me-1"></i> Enroll in Class
-                    </a>
-                    <a class="dropdown-item" href="#">
-                        <i class="fa fa-arrow-up me-1"></i> Promote
-                    </a>
-                    <hr class="dropdown-divider">
-                    <h6 class="dropdown-header">Records</h6>
-                    <a class="dropdown-item" href="#">
-                        <i class="fa fa-ruler me-1"></i> Measurements
-                    </a>
-                    <a class="dropdown-item" href="#">
-                        <i class="fa fa-gavel me-1"></i> Disciplinary
-                    </a>
-                    <hr class="dropdown-divider">
-                    <h6 class="dropdown-header">Management</h6>
-                    <a class="dropdown-item" href="#">
-                        <i class="fa fa-users me-1"></i> Guardians
-                    </a>
-                    <hr class="dropdown-divider">
-                    <button type="button" class="dropdown-item text-danger"
-                        data-bs-toggle="modal" data-bs-target="#deleteStudent${studentId}">
-                        <i class="fa fa-trash me-2"></i> Delete
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    // ------------------------------------------------------------------------
-    // Pagination Functions
-    // ------------------------------------------------------------------------
-    function updatePagination(data) {
-        if (data.total_pages <= 1) {
-            $('#paginationContainer').hide();
-            return;
-        }
-
-        $('#paginationContainer').show();
-        $('#paginationNav').html(buildPaginationHtml(data));
-        $('#resultsCount').html(
-            `Showing ${data.start_index} - ${data.end_index} of ${data.total_count} students`
-        );
-    }
-
-    function buildPaginationHtml(data) {
-        let html = '';
-
-        // Previous button
-        html += buildPaginationButton(
-            data.has_previous,
-            data.current_page - 1,
-            '«',
-            'Previous'
-        );
-
-        // Page numbers
-        for (let i = 1; i <= data.total_pages; i++) {
-            if (i === data.current_page) {
-                html += `
-                    <li class="page-item active" aria-current="page">
-                        <a class="page-link" href="#">${i}</a>
-                    </li>
-                `;
-            } else if (i > data.current_page - 3 && i < data.current_page + 3) {
-                html += `
-                    <li class="page-item">
-                        <a class="page-link pagination-link" href="#" data-page="${i}">${i}</a>
-                    </li>
-                `;
-            }
-        }
-
-        // Next button
-        html += buildPaginationButton(
-            data.has_next,
-            data.current_page + 1,
-            '»',
-            'Next'
-        );
-
-        return html;
-    }
-
-    function buildPaginationButton(isEnabled, page, symbol, label) {
-        if (isEnabled) {
-            return `
-                <li class="page-item">
-                    <a class="page-link pagination-link" href="#" data-page="${page}" 
-                       aria-label="${label}">
-                        <span aria-hidden="true">${symbol}</span>
-                        <span class="visually-hidden">${label}</span>
-                    </a>
-                </li>
-            `;
-        } else {
-            return `
-                <li class="page-item disabled">
-                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true" 
-                       aria-label="${label}">
-                        <span aria-hidden="true">${symbol}</span>
-                        <span class="visually-hidden">${label}</span>
-                    </a>
-                </li>
-            `;
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Export Functions
-    // ------------------------------------------------------------------------
-    function updateExportLinks() {
-        const formData = $('#searchForm').serialize();
-        const excelUrl = "{% url 'students:export_excel' %}" + (formData ? '?' + formData : '');
-        const pdfUrl = "{% url 'students:export_pdf' %}" + (formData ? '?' + formData : '');
-        
-        $('#excelExportBtn').attr('href', excelUrl);
-        $('#pdfExportBtn').attr('href', pdfUrl);
-    }
-
-    // ------------------------------------------------------------------------
-    // Event Handlers
-    // ------------------------------------------------------------------------
-    
-    // Search and filter changes
-    $('#searchInput, #genderFilter, #levelFilter, #statusFilter, #minAgeFilter, #maxAgeFilter')
-        .on('input change', function() {
-            updateExportLinks();
-            fetchResults(1);
-        });
-
-    // Pagination clicks
-    $(document).on('click', '.pagination-link', function(e) {
-        e.preventDefault();
-        const page = $(this).data('page');
-        fetchResults(page);
-        
-        // Scroll to top of results
-        $('html, body').animate({
-            scrollTop: $("#results").offset().top - 100
-        }, 300);
-    });
-
-    // ------------------------------------------------------------------------
-    // Initialize
-    // ------------------------------------------------------------------------
-    updateExportLinks();
-    fetchResults(1);
 });
 
-// ============================================================================
-// PRINT FUNCTIONALITY - Fetch ALL filtered students before printing
-// ============================================================================
-
-function selectAllColumns() {
-    document.querySelectorAll('.print-column').forEach(checkbox => {
-        checkbox.checked = true;
-    });
+// Helper function to update stat values with animation
+function updateStatValue(elementId, newValue) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.transition = 'opacity 0.2s ease-in-out';
+        element.style.opacity = '0.5';
+        
+        setTimeout(() => {
+            element.textContent = newValue;
+            element.style.opacity = '1';
+        }, 200);
+    }
 }
 
-function deselectAllColumns() {
-    document.querySelectorAll('.print-column').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-}
+// ============================================================================
+// PRINT FUNCTIONALITY
+// ============================================================================
 
-function printStudentTable() {
-    // Get selected columns
-    const selectedColumns = getSelectedColumns();
-    
-    if (selectedColumns.length === 0) {
-        alert('Please select at least one column to print');
+function generateAndPrint() {
+    // Validate at least one field is selected
+    const checkedFields = document.querySelectorAll('.field-checkbox:checked');
+    if (checkedFields.length === 0) {
+        alert('Please select at least one field to include in the print view.');
         return;
     }
     
     // Show loading indicator
-    const printBtn = document.querySelector('#printModal .btn-primary');
+    const printBtn = event.target;
     const originalText = printBtn.innerHTML;
-    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Loading...';
+    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating...';
     printBtn.disabled = true;
     
-    // Fetch ALL filtered students (without pagination)
-    fetchAllStudentsForPrint(selectedColumns, printBtn, originalText);
-}
-
-function fetchAllStudentsForPrint(selectedColumns, printBtn, originalText) {
-    // Get current filter values
-    const formData = $('#searchForm').serialize();
+    // Get selected fields
+    const selectedFields = Array.from(checkedFields).map(cb => cb.value);
     
-    // Make AJAX request to get ALL students (we'll create a new endpoint or modify existing)
-    $.ajax({
-        url: "{% url 'students:student_search' %}",
-        data: formData + '&page=all', // Request all results
-        dataType: 'json',
-        success: function(data) {
-            // Build and print with all students
-            const printHTML = buildPrintHTMLFromData(data.students, selectedColumns);
-            displayPrintPreview(printHTML);
-            
-            // Reset button
-            printBtn.innerHTML = originalText;
-            printBtn.disabled = false;
-        },
-        error: function(xhr, status, error) {
-            console.error('Print Error:', error);
-            alert('Error loading students for print. Please try again.');
-            
-            // Reset button
-            printBtn.innerHTML = originalText;
-            printBtn.disabled = false;
-        }
-    });
-}
-
-function getSelectedColumns() {
-    const columns = [];
-    document.querySelectorAll('.print-column:checked').forEach(checkbox => {
-        columns.push(checkbox.value);
-    });
-    return columns;
-}
-
-function buildPrintHTMLFromData(students, selectedColumns) {
-    const columnMap = {
-        'number': { header: '#' },
-        'name': { header: 'Name' },
-        'admission': { header: 'Admission No.' },
-        'gender': { header: 'Gender' },
-        'level': { header: 'Academic Level' },
-        'age': { header: 'Age' },
-        'status': { header: 'Enrollment Status' },
-        'phone': { header: 'Phone Number' }
-    };
+    // Get options
+    const includeStats = document.getElementById('include_stats').checked;
+    const landscape = document.getElementById('landscape').checked;
     
-    let html = `
-        <div id="printableTable">
-            <div class="print-header">
-                <div class="print-title">Student Directory</div>
-                <div class="print-date">Generated on: ${new Date().toLocaleString()}</div>
-            </div>
-            
-            <table class="print-table">
-                <thead>
-                    <tr>
-    `;
+    // Build query parameters (preserve current filters)
+    const params = new URLSearchParams();
+    params.append('q', '{{ request.GET.q|default:"" }}');
+    params.append('enrollment_status', '{{ request.GET.enrollment_status|default:"" }}');
+    params.append('gender', '{{ request.GET.gender|default:"" }}');
+    params.append('current_academic_level', '{{ request.GET.current_academic_level|default:"" }}');
+    params.append('religious_affiliation', '{{ request.GET.religious_affiliation|default:"" }}');
+    params.append('health_condition', '{{ request.GET.health_condition|default:"" }}');
+    params.append('has_special_needs', '{{ request.GET.has_special_needs|default:"" }}');
+    params.append('transportation_required', '{{ request.GET.transportation_required|default:"" }}');
     
-    // Add headers
-    selectedColumns.forEach(col => {
-        html += `<th>${columnMap[col].header}</th>`;
-    });
+    // Add selected fields
+    selectedFields.forEach(field => params.append('fields', field));
     
-    html += '</tr></thead><tbody>';
+    // Add options
+    if (includeStats) params.append('include_stats', 'true');
+    if (landscape) params.append('landscape', 'true');
+    params.append('direct_print', 'true');
     
-    // Add data rows from fetched data
-    students.forEach((student, index) => {
-        html += '<tr>';
-        
-        selectedColumns.forEach(col => {
-            const cellContent = extractCellContentFromData(student, col, index);
-            html += `<td>${cellContent}</td>`;
-        });
-        
-        html += '</tr>';
-    });
-    
-    html += `
-                </tbody>
-            </table>
-            
-            <div class="print-footer">
-                <p>Total Students: ${students.length}</p>
-                <p>Date: ${new Date().toLocaleDateString()}</p>
-            </div>
-        </div>
-    `;
-    
-    return html;
-}
-
-function extractCellContentFromData(student, columnType, index) {
-    switch(columnType) {
-        case 'number':
-            return index + 1;
-            
-        case 'name':
-            return student.full_name;
-            
-        case 'admission':
-            return student.admission_number;
-            
-        case 'gender':
-            return student.gender;
-            
-        case 'level':
-            return student.level || 'Not Assigned';
-            
-        case 'age':
-            return student.age;
-            
-        case 'status':
-            return student.status;
-            
-        case 'phone':
-            return student.phone || '-';
-            
-        default:
-            return '';
-    }
-}
-
-function displayPrintPreview(printHTML) {
-    // Remove any existing print container
-    const existingContainer = document.getElementById('printableTable');
-    if (existingContainer) {
-        existingContainer.remove();
-    }
-    
-    // Create and append the print container
-    const tempContainer = document.createElement('div');
-    tempContainer.innerHTML = printHTML;
-    document.body.appendChild(tempContainer);
-    
-    // Close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
-    if (modal) {
-        modal.hide();
-    }
-    
-    // Wait for modal to fully close, then trigger print
-    setTimeout(() => {
-        window.print();
-        
-        // Clean up after a delay (giving time for print dialog)
-        setTimeout(() => {
-            if (tempContainer && tempContainer.parentNode) {
-                tempContainer.remove();
+    // Fetch the print HTML
+    fetch(`{% url 'students:student_print_view' %}?${params.toString()}`)
+        .then(response => response.text())
+        .then(html => {
+            // Create a hidden iframe
+            let printFrame = document.getElementById('print-frame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'print-frame';
+                printFrame.style.display = 'none';
+                document.body.appendChild(printFrame);
             }
-        }, 1000);
-    }, 500);
+            
+            // Write HTML to iframe
+            const frameDoc = printFrame.contentWindow.document;
+            frameDoc.open();
+            frameDoc.write(html);
+            frameDoc.close();
+            
+            // Wait for content to load, then print
+            printFrame.onload = function() {
+                setTimeout(() => {
+                    printFrame.contentWindow.focus();
+                    printFrame.contentWindow.print();
+                    
+                    // Close modal and restore button
+                    bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
+                    printBtn.innerHTML = originalText;
+                    printBtn.disabled = false;
+                }, 500);
+            };
+        })
+        .catch(error => {
+            console.error('Print error:', error);
+            alert('Error generating print view. Please try again.');
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        });
 }
 
-// Optional: Add cleanup on afterprint event for better UX
-window.addEventListener('afterprint', function() {
-    const printContainer = document.getElementById('printableTable');
-    if (printContainer) {
-        printContainer.remove();
-    }
+// ============================================================================
+// PRINT MODAL FIELD SELECTION
+// ============================================================================
+
+function selectAllFields() {
+    document.querySelectorAll('.field-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAllFields() {
+    document.querySelectorAll('.field-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'students:student_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 });
 </script>
 {% endblock %}
-

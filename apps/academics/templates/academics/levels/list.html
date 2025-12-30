@@ -1,0 +1,486 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   LEVEL STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.level-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS CARDS
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* ============================================================================
+   BADGE STYLING
+   ============================================================================ */
+
+.badge-sections {
+    background-color: #007bff;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.badge-graduation {
+    background-color: #28a745;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+    position: relative;
+    overflow: visible;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   DROPDOWN MENU FIX
+   ============================================================================ */
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .level-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 15px;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Academic Levels
+                <div class="page-title-subheading">
+                    Manage academic level structure, progression, and class assignments
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:level_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Create New Level
+                </a>
+                <a href="{% url 'academics:level_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Levels</div>
+                <h3 id="statTotal">{{ stats.total_levels|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Levels</div>
+                <h3 id="statActive">{{ stats.active_levels|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-network"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">With Sections</div>
+                <h3 id="statWithSections">{{ stats.levels_with_sections|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-medal"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Classes</div>
+                <h3 id="statTotalClasses">{{ stats.class_stats.total_classes|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-study me-2 text-primary"></i>
+                                Academic Levels Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="level-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'academics:level_search' %}"
+                              hx-target="#level-results"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-6">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.q.label }}
+                                </label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <!-- Active Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.is_active.label }}
+                                </label>
+                                {{ filter_form.is_active }}
+                            </div>
+
+                            <!-- Has Sections Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.has_sections.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.has_sections.label }}
+                                </label>
+                                {{ filter_form.has_sections }}
+                            </div>
+                            
+                            <!-- Graduation Level Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_graduation_level.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.is_graduation_level.label }}
+                                </label>
+                                {{ filter_form.is_graduation_level }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="level-results"
+                         hx-get="{% url 'academics:level_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <!-- Initial loading state -->
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading academic levels...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// HTMX EVENT LISTENERS - UPDATE STATS
+// ============================================================================
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'level-results') {
+        // Stats are updated via out-of-band swap in _level_results.html
+        console.log('Level results updated');
+    }
+});
+
+// Helper function to update stat values with animation
+function updateStatValue(elementId, newValue) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.transition = 'opacity 0.2s ease-in-out';
+        element.style.opacity = '0.5';
+        
+        setTimeout(() => {
+            element.textContent = newValue;
+            element.style.opacity = '1';
+        }, 200);
+    }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'academics:level_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

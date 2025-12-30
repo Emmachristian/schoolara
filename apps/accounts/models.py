@@ -413,21 +413,17 @@ class School(DefaultDatabaseModel):
         """Get count of active students in this school"""
         try:
             from students.models import Student
-            return Student.objects.filter(status='ACTIVE').count()
+            return Student.objects.filter(enrollment_status='ACTIVE').count()
         except ImportError:
             return 0
     
     @property
     def active_teachers_count(self):
-        """Get count of active teachers"""
-        try:
-            from hr.models import Staff
-            return Staff.objects.filter(
-                employment_status='ACTIVE',
-                staff_type='TEACHING'
-            ).count()
-        except ImportError:
-            return 0
+        from hr.models import Teacher
+        return Teacher.objects.filter(
+            staff__is_active=True,
+            staff__date_of_leaving__isnull=True
+        ).count()
     
     @property
     def display_name(self):

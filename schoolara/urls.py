@@ -32,6 +32,15 @@ urlpatterns = [
     # Students app
     path('students/', include(('students.urls', 'students'), namespace='students')),
 
+    # Boarding app 
+    path('boarding/', include(('boarding.urls', 'boarding'), namespace='boarding')),
+
+    # Student Discipline app
+    path('discipline/', include(('discipline.urls', 'discipline'), namespace='discipline')),
+
+    # Documents app
+    path('documents/', include(('documents.urls', 'documents'), namespace='documents')),
+
     # Academics app - sessions, classes, subjects
     path('academics/', include(('academics.urls', 'academics'), namespace='academics')),
 

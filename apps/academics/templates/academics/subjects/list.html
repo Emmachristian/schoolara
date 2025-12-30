@@ -1,0 +1,490 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   SUBJECT STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.subject-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS CARDS
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* ============================================================================
+   SUBJECT TYPE BADGES
+   ============================================================================ */
+
+.badge-core {
+    background-color: #007bff;
+    color: white;
+}
+
+.badge-elective {
+    background-color: #28a745;
+    color: white;
+}
+
+.badge-compulsory {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-optional {
+    background-color: #6c757d;
+    color: white;
+}
+
+.badge-difficulty {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.difficulty-beginner {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.difficulty-intermediate {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.difficulty-advanced {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.difficulty-expert {
+    background-color: #d6d8db;
+    color: #383d41;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+    position: relative;
+    overflow: visible;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   DROPDOWN MENU FIX
+   ============================================================================ */
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .subject-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 15px;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-notebook icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Subjects
+                <div class="page-title-subheading">
+                    Manage subject definitions, requirements, and academic classifications
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'academics:subject_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Create New Subject
+                </a>
+                <a href="{% url 'academics:subject_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-notebook"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Subjects</div>
+                <h3 id="statTotal">{{ stats.total_subjects|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Subjects</div>
+                <h3 id="statActive">{{ stats.active_subjects|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-danger">
+                <i class="pe-7s-shield"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Compulsory</div>
+                <h3 id="statCompulsory">{{ stats.compulsory_subjects|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-book"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Avg Credit Hours</div>
+                <h3 id="statCreditHours">{{ stats.credit_analysis.average_credit_hours|default:0|floatformat:1 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-notebook me-2 text-primary"></i>
+                                Subjects Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="subject-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'academics:subject_search' %}"
+                              hx-target="#subject-results"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.q.label }}
+                                </label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <!-- Subject Type Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.subject_type.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.subject_type.label }}
+                                </label>
+                                {{ filter_form.subject_type }}
+                            </div>
+
+                            <!-- Active Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.is_active.label }}
+                                </label>
+                                {{ filter_form.is_active }}
+                            </div>
+                            
+                            <!-- Compulsory Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_compulsory.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.is_compulsory.label }}
+                                </label>
+                                {{ filter_form.is_compulsory }}
+                            </div>
+
+                            <!-- Difficulty Level Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.difficulty_level.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.difficulty_level.label }}
+                                </label>
+                                {{ filter_form.difficulty_level }}
+                            </div>
+
+                            <!-- Department Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.department.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.department.label }}
+                                </label>
+                                {{ filter_form.department }}
+                            </div>
+
+                            <!-- Academic Level Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.academic_level.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.academic_level.label }}
+                                </label>
+                                {{ filter_form.academic_level }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="subject-results"
+                         hx-get="{% url 'academics:subject_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <!-- Initial loading state -->
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading subjects...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'academics:subject_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

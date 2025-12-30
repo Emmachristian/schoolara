@@ -1,379 +1,1007 @@
+# utils/forms.py
+
+"""
+Base form utilities and mixins for consistent form handling across the application.
+Provides reusable form components, widgets, and validation helpers.
+
+Updated with school timezone support for all date/time validations.
+"""
+
 from django import forms
 from django.core.exceptions import ValidationError
-import json
-from decimal import Decimal
-from .models import (
-    FinancialSettings, SchoolConfiguration
-)
+from django.utils import timezone
+from decimal import Decimal, InvalidOperation
+from datetime import date, datetime
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # =============================================================================
-# FINANCIAL SETTINGS FORMS
+# CUSTOM WIDGETS
 # =============================================================================
 
-class FinancialSettingsForm(forms.ModelForm):
-    """
-    Form for managing financial settings with currency choices and previews.
-    """
+class DatePickerInput(forms.DateInput):
+    """Date picker widget with HTML5 date input"""
+    input_type = 'date'
     
-    # Override school_currency to use a ChoiceField
-    school_currency = forms.ChoiceField(
-        label="School Primary Currency",
-        choices=[],  # Populated dynamically in __init__
-        widget=forms.Select(attrs={
-            'class': 'form-select',
-            'onchange': 'updateCurrencyPreview()'
-        }),
-        help_text="Primary currency for all school financial transactions"
-    )
-    
-    # Field for currency preview
-    currency_preview = forms.CharField(
-        label="Currency Preview",
-        required=False,
-        widget=forms.TextInput(attrs={
-            'readonly': True,
-            'class': 'form-control bg-light',
-            'placeholder': 'Amount formatting preview will appear here'
-        }),
-        help_text="Preview of how amounts will be formatted"
-    )
+    def __init__(self, attrs=None, format=None):
+        default_attrs = {'class': 'form-control'}
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs, format=format or '%Y-%m-%d')
 
-    class Meta:
-        model = FinancialSettings
-        fields = [
-            'school_currency',
-            'currency_position',
-            'decimal_places',
-            'use_thousand_separator',
-            'default_payment_terms_days',
-            'late_fee_enabled',
-            'late_fee_percentage',
-            'grace_period_days',
-            'minimum_payment_amount',
-            'auto_apply_scholarships',
-            'scholarship_approval_required',
-            'auto_apply_discounts',
-            'discount_approval_required',
-            'expense_approval_required',
-            'expense_approval_limit',
-            'send_invoice_emails',
-            'send_payment_confirmations',
-            'send_overdue_reminders',
-        ]
-        widgets = {
-            'currency_position': forms.Select(attrs={'class': 'form-select', 'onchange': 'updateCurrencyPreview()'}),
-            'decimal_places': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'max': 4, 'onchange': 'updateCurrencyPreview()'}),
-            'use_thousand_separator': forms.CheckboxInput(attrs={'class': 'form-check-input', 'onchange': 'updateCurrencyPreview()'}),
-            'default_payment_terms_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 365}),
-            'late_fee_percentage': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0, 'max': 100}),
-            'grace_period_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'max': 90}),
-            'minimum_payment_amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0}),
-            'expense_approval_limit': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0}),
-            'auto_apply_scholarships': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'scholarship_approval_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'auto_apply_discounts': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'discount_approval_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'expense_approval_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'send_invoice_emails': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'send_payment_confirmations': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'send_overdue_reminders': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+
+class DateTimePickerInput(forms.DateTimeInput):
+    """DateTime picker widget with HTML5 datetime-local input"""
+    input_type = 'datetime-local'
+    
+    def __init__(self, attrs=None, format=None):
+        default_attrs = {'class': 'form-control'}
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs, format=format or '%Y-%m-%dT%H:%M')
+
+
+class MoneyInput(forms.NumberInput):
+    """Money input widget with proper formatting"""
+    
+    def __init__(self, attrs=None):
+        default_attrs = {
+            'class': 'form-control money-input',
+            'step': '0.01',
+            'min': '0',
+            'placeholder': '0.00'
         }
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
 
+
+class PercentageInput(forms.NumberInput):
+    """Percentage input widget"""
+    
+    def __init__(self, attrs=None):
+        default_attrs = {
+            'class': 'form-control percentage-input',
+            'step': '0.01',
+            'min': '0',
+            'max': '100',
+            'placeholder': '0.00'
+        }
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
+
+
+class PhoneInput(forms.TextInput):
+    """Phone number input widget"""
+    
+    def __init__(self, attrs=None):
+        default_attrs = {
+            'class': 'form-control phone-input',
+            'placeholder': '+256700000000',
+            'pattern': r'^\+?1?\d{9,15}$'
+        }
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
+
+
+class SearchInput(forms.TextInput):
+    """Search input widget"""
+    
+    def __init__(self, attrs=None):
+        default_attrs = {
+            'class': 'form-control search-input',
+            'placeholder': 'Search...',
+            'type': 'search',
+            'autocomplete': 'off'
+        }
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
+
+
+class SelectWithDefault(forms.Select):
+    """Select widget with a default "All" option"""
+    
+    def __init__(self, attrs=None, choices=(), default_label="All"):
+        super().__init__(attrs, choices)
+        self.default_label = default_label
+    
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        # Prepend default option if not already present
+        if context['widget']['optgroups']:
+            first_choice = context['widget']['optgroups'][0][1][0]['value']
+            if first_choice != '':
+                context['widget']['optgroups'].insert(
+                    0, 
+                    (None, [{'name': name, 'value': '', 'label': self.default_label, 'selected': value == ''}], 0)
+                )
+        return context
+
+
+# =============================================================================
+# CUSTOM FORM FIELDS
+# =============================================================================
+
+class MoneyField(forms.DecimalField):
+    """Custom field for money amounts with proper validation"""
+    
     def __init__(self, *args, **kwargs):
+        kwargs.setdefault('max_digits', 15)
+        kwargs.setdefault('decimal_places', 2)
+        kwargs.setdefault('min_value', Decimal('0.00'))
+        kwargs.setdefault('widget', MoneyInput())
+        super().__init__(*args, **kwargs)
+    
+    def clean(self, value):
+        """Clean and validate money value"""
+        if value in self.empty_values:
+            return super().clean(value)
+        
+        # Remove currency symbols and commas
+        if isinstance(value, str):
+            value = re.sub(r'[^\d.-]', '', value)
+        
+        try:
+            value = Decimal(value)
+        except (ValueError, InvalidOperation):
+            raise ValidationError('Enter a valid amount.')
+        
+        return super().clean(value)
+
+
+class PercentageField(forms.DecimalField):
+    """Custom field for percentage values"""
+    
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('max_digits', 5)
+        kwargs.setdefault('decimal_places', 2)
+        kwargs.setdefault('min_value', Decimal('0.00'))
+        kwargs.setdefault('max_value', Decimal('100.00'))
+        kwargs.setdefault('widget', PercentageInput())
         super().__init__(*args, **kwargs)
 
-        # Define currency choices
-        CURRENCY_CHOICES = [
-            ('', '---------'),
-            ('UGX', 'UGX - Ugandan Shilling'),
-            ('KES', 'KES - Kenyan Shilling'),
-            ('TZS', 'TZS - Tanzanian Shilling'),
-            ('RWF', 'RWF - Rwandan Franc'),
-            ('ETB', 'ETB - Ethiopian Birr'),
-            ('SSP', 'SSP - South Sudanese Pound'),
-            ('USD', 'USD - US Dollar'),
-            ('EUR', 'EUR - Euro'),
-            ('GBP', 'GBP - British Pound Sterling'),
-            ('JPY', 'JPY - Japanese Yen'),
-            ('CHF', 'CHF - Swiss Franc'),
-            ('ZAR', 'ZAR - South African Rand'),
-            ('NGN', 'NGN - Nigerian Naira'),
-            ('GHS', 'GHS - Ghanaian Cedi'),
-            ('EGP', 'EGP - Egyptian Pound'),
-            # Add other currencies as needed...
-        ]
 
-        self.fields['school_currency'].choices = CURRENCY_CHOICES
+class PhoneNumberField(forms.CharField):
+    """Custom field for phone numbers with validation"""
+    
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('max_length', 20)
+        kwargs.setdefault('widget', PhoneInput())
+        super().__init__(*args, **kwargs)
+    
+    def clean(self, value):
+        """Clean and validate phone number"""
+        value = super().clean(value)
+        
+        if value in self.empty_values:
+            return value
+        
+        # Remove spaces and special characters except +
+        cleaned = re.sub(r'[^\d+]', '', value)
+        
+        # Validate format
+        if not re.match(r'^\+?1?\d{9,15}$', cleaned):
+            raise ValidationError('Enter a valid phone number.')
+        
+        return cleaned
 
-        # Populate currency preview for existing instance
-        if self.instance and self.instance.pk:
-            try:
-                preview_amount = Decimal('12345.67')
-                formatted_preview = self.instance.format_currency(preview_amount)
-                self.fields['currency_preview'].initial = f"Example: {formatted_preview}"
-            except Exception:
-                self.fields['currency_preview'].initial = "Example: UGX 12,345.67"
-
-    # Validation methods
-    def clean_school_currency(self):
-        currency = self.cleaned_data.get('school_currency')
-        if currency and len(currency) != 3:
-            raise ValidationError('Currency code must be exactly 3 characters')
-        return currency
-
-    def clean_late_fee_percentage(self):
-        percentage = self.cleaned_data.get('late_fee_percentage')
-        if percentage is not None and not (0 <= percentage <= 100):
-            raise ValidationError('Late fee percentage must be between 0 and 100')
-        return percentage
-
-    def clean_minimum_payment_amount(self):
-        amount = self.cleaned_data.get('minimum_payment_amount')
-        if amount is not None and amount < 0:
-            raise ValidationError('Minimum payment amount cannot be negative')
-        return amount
-
-    def clean_expense_approval_limit(self):
-        limit = self.cleaned_data.get('expense_approval_limit')
-        if limit is not None and limit < 0:
-            raise ValidationError('Expense approval limit cannot be negative')
-        return limit
-
-    def clean_default_payment_terms_days(self):
-        days = self.cleaned_data.get('default_payment_terms_days')
-        if days is not None and not (1 <= days <= 365):
-            raise ValidationError('Payment terms must be between 1 and 365 days')
-        return days
-
-    def clean_grace_period_days(self):
-        days = self.cleaned_data.get('grace_period_days')
-        if days is not None and not (0 <= days <= 90):
-            raise ValidationError('Grace period must be between 0 and 90 days')
-        return days
-
-    def clean_decimal_places(self):
-        decimal_places = self.cleaned_data.get('decimal_places')
-        if decimal_places is not None and not (0 <= decimal_places <= 4):
-            raise ValidationError('Decimal places must be between 0 and 4')
-        return decimal_places
-
-    def clean(self):
-        cleaned_data = super().clean()
-        # Additional cross-field validations can be added here
-        return cleaned_data
 
 # =============================================================================
-# SCHOOL CONFIGURATION FORMS
+# FORM MIXINS
 # =============================================================================
 
-class SchoolConfigurationForm(forms.ModelForm):
-    """Form for managing school configuration with validation and impact analysis."""
-
-    sync_breaks_after_save = forms.BooleanField(
-        label="Sync Breaks After Save",
-        required=False,
-        initial=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text="Automatically update all breaks when configuration changes"
-    )
-
-    preview_changes = forms.BooleanField(
-        label="Preview Changes",
-        required=False,
-        initial=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text="Show preview of how changes will affect existing sessions and breaks"
-    )
-
-    validate_existing_sessions = forms.BooleanField(
-        label="Validate Existing Sessions",
-        required=False,
-        initial=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text="Check if existing sessions are compatible with new configuration"
-    )
-
-    class Meta:
-        model = SchoolConfiguration
-        fields = [
-            # Academic System
-            'term_system', 'periods_per_year', 'period_naming_convention', 'custom_period_names',
-            # Academic Year
-            'academic_year_type', 'regional_season_type', 'custom_season_names',
-            'academic_year_start_month', 'academic_year_start_day',
-            # Breaks
-            'auto_create_breaks', 'minimum_break_days', 'default_period_duration_weeks',
-            # Communication
-            'enable_automatic_reminders', 'enable_sms', 'enable_email_notifications',
-        ]
-        widgets = {
-            'term_system': forms.Select(attrs={'class': 'form-select', 'onchange': 'updateTermFields(this.value)'}),
-            'periods_per_year': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 20, 'placeholder': 'Number of periods per year', 'onchange': 'updatePeriodPreview()'}),
-            'period_naming_convention': forms.Select(attrs={'class': 'form-select', 'onchange': 'toggleCustomNamesField()'}),
-            'custom_period_names': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '{"1": "Fall Semester", "2": "Spring Semester"}'}),
-            'academic_year_type': forms.Select(attrs={'class': 'form-select', 'onchange': 'updatePeriodPreview()'}),
-            'regional_season_type': forms.Select(attrs={'class': 'form-select', 'onchange': 'toggleCustomSeasonsField()'}),
-            'custom_season_names': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '{"1": "Harmattan", "2": "Rainy Season"}'}),
-            'academic_year_start_month': forms.Select(attrs={'class': 'form-select'}),
-            'academic_year_start_day': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 31, 'placeholder': 'Day of month'}),
-            'auto_create_breaks': forms.CheckboxInput(attrs={'class': 'form-check-input', 'onchange': 'toggleBreakFields(this.checked)'}),
-            'minimum_break_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 30, 'placeholder': 'Minimum days for a break'}),
-            'default_period_duration_weeks': forms.NumberInput(attrs={'class': 'form-control', 'min': 4, 'max': 26, 'placeholder': 'Weeks per period'}),
-            'enable_automatic_reminders': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'enable_sms': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'enable_email_notifications': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        }
-
+class BootstrapFormMixin:
+    """Mixin to add Bootstrap classes to form fields"""
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._initialize_fields()
-        if self.instance.pk:
-            self._add_current_config_info()
-        self._add_impact_analysis_info()
+        self.apply_bootstrap_classes()
+    
+    def apply_bootstrap_classes(self):
+        """Apply Bootstrap classes to all form fields"""
+        for field_name, field in self.fields.items():
+            # Add form-control class to input fields
+            if isinstance(field.widget, (
+                forms.TextInput,
+                forms.NumberInput,
+                forms.EmailInput,
+                forms.PasswordInput,
+                forms.Textarea,
+                forms.Select,
+                forms.DateInput,
+                forms.DateTimeInput,
+                forms.TimeInput,
+                forms.URLInput,
+            )):
+                existing_classes = field.widget.attrs.get('class', '')
+                if 'form-control' not in existing_classes:
+                    field.widget.attrs['class'] = f"{existing_classes} form-control".strip()
+            
+            # Add form-check-input class to checkboxes and radios
+            elif isinstance(field.widget, (forms.CheckboxInput, forms.RadioSelect)):
+                existing_classes = field.widget.attrs.get('class', '')
+                if 'form-check-input' not in existing_classes:
+                    field.widget.attrs['class'] = f"{existing_classes} form-check-input".strip()
+            
+            # Add form-select class to select fields
+            elif isinstance(field.widget, forms.Select):
+                existing_classes = field.widget.attrs.get('class', '')
+                if 'form-select' not in existing_classes:
+                    field.widget.attrs['class'] = f"{existing_classes} form-select".strip()
+            
+            # Add placeholder if field has help_text
+            if field.help_text and not field.widget.attrs.get('placeholder'):
+                if isinstance(field.widget, (forms.TextInput, forms.EmailInput, forms.NumberInput)):
+                    field.widget.attrs['placeholder'] = field.help_text
 
-    def _initialize_fields(self):
-        """Set initial defaults and help texts."""
-        if not self.instance.pk:
-            defaults = {
-                'term_system': 'term',
-                'periods_per_year': 3,
-                'period_naming_convention': 'numeric',
-                'academic_year_type': 'northern',
-                'regional_season_type': 'temperate',
-                'academic_year_start_month': 9,
-                'academic_year_start_day': 1,
-                'auto_create_breaks': True,
-                'minimum_break_days': 1,
-                'default_period_duration_weeks': 12,
-                'default_payment_due_days': 30,
-                'allow_partial_payments': True,
-                'enable_automatic_reminders': True,
-                'enable_email_notifications': True,
-                'enable_sms': False
-            }
-            for field, value in defaults.items():
-                self.fields[field].initial = value
 
-    def _add_current_config_info(self):
-        """Add info about current period names."""
-        try:
-            period_names = [self.instance.get_period_name(i) for i in range(1, min(self.instance.periods_per_year + 1, 6))]
-            if len(period_names) < self.instance.periods_per_year:
-                period_names.append(f"... and {self.instance.periods_per_year - len(period_names)} more")
-            self.fields['period_naming_convention'].help_text += f" (Current: {', '.join(period_names)})"
-        except Exception:
-            pass
+class HTMXFormMixin:
+    """
+    Mixin to add HTMX attributes to forms.
+    
+    Usage:
+        class MyForm(HTMXFormMixin, BootstrapFormMixin, forms.Form):
+            htmx_post = '/api/submit/'
+            htmx_target = '#results'
+            htmx_swap = 'innerHTML'
+    """
+    
+    htmx_post = None  # URL to post to
+    htmx_get = None  # URL to get from
+    htmx_target = None  # Target element ID or selector
+    htmx_swap = 'innerHTML'  # Swap method
+    htmx_trigger = 'submit'  # Trigger event
+    htmx_indicator = None  # Loading indicator selector
+    htmx_push_url = None  # Whether to push URL to history
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_htmx_attributes()
+    
+    def apply_htmx_attributes(self):
+        """Apply HTMX attributes to form"""
+        # Get or create attrs dict
+        if not hasattr(self, 'attrs'):
+            self.attrs = {}
+        
+        # Add HTMX post/get
+        if self.htmx_post:
+            self.attrs['hx-post'] = self.htmx_post
+        elif self.htmx_get:
+            self.attrs['hx-get'] = self.htmx_get
+        
+        # Add target
+        if self.htmx_target:
+            if not self.htmx_target.startswith('#') and not self.htmx_target.startswith('.'):
+                self.attrs['hx-target'] = f"#{self.htmx_target}"
+            else:
+                self.attrs['hx-target'] = self.htmx_target
+        
+        # Add swap method
+        if self.htmx_swap:
+            self.attrs['hx-swap'] = self.htmx_swap
+        
+        # Add trigger if not default submit
+        if self.htmx_trigger and self.htmx_trigger != 'submit':
+            self.attrs['hx-trigger'] = self.htmx_trigger
+        
+        # Add loading indicator
+        if self.htmx_indicator:
+            self.attrs['hx-indicator'] = self.htmx_indicator
+        
+        # Add URL push
+        if self.htmx_push_url is not None:
+            self.attrs['hx-push-url'] = 'true' if self.htmx_push_url else 'false'
 
-    def _add_impact_analysis_info(self):
-        """Show potential impact on existing sessions and breaks."""
-        try:
-            from academics.models import AcademicSession, Holiday
-            session_count = AcademicSession.objects.count()
-            break_count = Holiday.objects.filter(holiday_type='BREAK').count()
-            info = []
-            if session_count: info.append(f"{session_count} existing sessions")
-            if break_count: info.append(f"{break_count} breaks")
-            if info:
-                self.fields['sync_breaks_after_save'].help_text += f" ({', '.join(info)})"
-        except Exception:
-            pass
 
-    def clean_periods_per_year(self):
-        periods = self.cleaned_data.get('periods_per_year')
-        term_system = self.cleaned_data.get('term_system')
-        if term_system == 'custom':
-            if not periods or not (1 <= periods <= 20):
-                raise ValidationError('Periods per year must be between 1 and 20 for custom system')
-        else:
-            expected = {
-                'term': 3, 'semester': 2, 'quarter': 4, 'trimester': 3, 'module': 6,
-                'block': 4, 'yearlong': 1, 'intensive': 10
-            }.get(term_system, 3)
-            if periods != expected:
-                periods = expected
-        # Validate impact on existing sessions
-        if self.instance.pk and periods != self.instance.periods_per_year:
-            try:
-                from academics.models import AcademicSession
-                invalid_sessions = AcademicSession.objects.filter(term_number__gt=periods)
-                if invalid_sessions.exists():
-                    raise ValidationError(f"Cannot reduce periods per year to {periods} because {invalid_sessions.count()} existing sessions exceed this limit.")
-            except ImportError:
-                pass
-        return periods
+class HTMXFilterFormMixin:
+    """
+    Enhanced mixin for HTMX-powered filter/search forms.
+    Automatically configures fields for live filtering.
+    
+    Usage:
+        class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
+            htmx_get = '/students/list/'
+            htmx_target = '#student-list'
+            search_delay = 300  # ms
+    """
+    
+    htmx_get = None  # URL for GET requests
+    htmx_target = '#results'  # Target element
+    htmx_swap = 'innerHTML'  # Swap method
+    htmx_indicator = '.htmx-indicator'  # Loading indicator
+    htmx_push_url = True  # Push URL to history
+    search_delay = 500  # Delay in ms for search fields
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.configure_htmx_filters()
+    
+    def configure_htmx_filters(self):
+        """Configure HTMX attributes on all filter fields"""
+        for field_name, field in self.fields.items():
+            widget_attrs = field.widget.attrs
+            
+            # Add HTMX attributes
+            if self.htmx_get:
+                widget_attrs['hx-get'] = self.htmx_get
+            
+            if self.htmx_target:
+                widget_attrs['hx-target'] = self.htmx_target
+            
+            if self.htmx_swap:
+                widget_attrs['hx-swap'] = self.htmx_swap
+            
+            if self.htmx_indicator:
+                widget_attrs['hx-indicator'] = self.htmx_indicator
+            
+            # Include all form fields in request
+            widget_attrs['hx-include'] = '[name]'
+            
+            # Different triggers for different field types
+            if isinstance(field.widget, (forms.TextInput, forms.Textarea, SearchInput)):
+                # Text fields: trigger on keyup with delay
+                widget_attrs['hx-trigger'] = f'keyup changed delay:{self.search_delay}ms, search'
+            elif isinstance(field.widget, forms.Select):
+                # Select fields: trigger on change immediately
+                widget_attrs['hx-trigger'] = 'change'
+            elif isinstance(field.widget, (forms.CheckboxInput, forms.RadioSelect)):
+                # Checkboxes/radios: trigger on change
+                widget_attrs['hx-trigger'] = 'change'
+            elif isinstance(field.widget, (DatePickerInput, forms.DateInput)):
+                # Date fields: trigger on change
+                widget_attrs['hx-trigger'] = 'change'
+            
+            # Push URL for better UX
+            if self.htmx_push_url:
+                widget_attrs['hx-push-url'] = 'true'
 
-    def clean_custom_period_names(self):
-        custom_names = self.cleaned_data.get('custom_period_names')
-        naming_convention = self.cleaned_data.get('period_naming_convention')
-        periods_per_year = self.cleaned_data.get('periods_per_year', 3)
-        if naming_convention == 'custom':
-            if not custom_names:
-                raise ValidationError('Custom period names are required for custom naming.')
-            if isinstance(custom_names, str):
-                try:
-                    custom_names = json.loads(custom_names)
-                    self.cleaned_data['custom_period_names'] = custom_names
-                except (json.JSONDecodeError, TypeError) as e:
-                    raise ValidationError(f'Custom period names must be valid JSON. Error: {e}')
-            missing = [str(i) for i in range(1, periods_per_year + 1) if str(i) not in custom_names or not custom_names[str(i)].strip()]
-            if missing:
-                raise ValidationError(f'Missing custom names for periods: {", ".join(missing)}')
-            for period, name in custom_names.items():
-                if len(name.strip()) > 50:
-                    raise ValidationError(f'Period name for period {period} is too long (max 50 characters)')
-        else:
-            custom_names = {}
-        return custom_names
 
-    def clean_custom_season_names(self):
-        custom_seasons = self.cleaned_data.get('custom_season_names')
-        if self.cleaned_data.get('regional_season_type') == 'custom_regional':
-            if not custom_seasons:
-                raise ValidationError('Custom season names are required for custom regional seasons.')
-            if isinstance(custom_seasons, str):
-                try:
-                    custom_seasons = json.loads(custom_seasons)
-                    self.cleaned_data['custom_season_names'] = custom_seasons
-                except (json.JSONDecodeError, TypeError) as e:
-                    raise ValidationError(f'Custom season names must be valid JSON. Error: {e}')
-        else:
-            custom_seasons = {}
-        return custom_seasons
-
+class DateRangeFormMixin:
+    """
+    Mixin for forms with date range fields.
+    Uses school timezone for validation. ⭐
+    """
+    
     def clean(self):
+        """Validate date range using school timezone"""
         cleaned_data = super().clean()
-        # Validate academic year start date
-        start_month = cleaned_data.get('academic_year_start_month')
-        start_day = cleaned_data.get('academic_year_start_day')
-        if start_month and start_day:
-            try:
-                from datetime import date
-                date(2024, start_month, start_day)
-            except ValueError:
-                self.add_error('academic_year_start_day', 'Invalid academic year start date')
-        # Breaks
-        min_break_days = cleaned_data.get('minimum_break_days')
-        if cleaned_data.get('auto_create_breaks') and min_break_days and min_break_days > 60:
-            self.add_error('minimum_break_days', 'Minimum break days seems too high; consider 30 or less')
-        # Financial
-        due_days = cleaned_data.get('default_payment_due_days')
-        if due_days and not (1 <= due_days <= 365):
-            self.add_error('default_payment_due_days', 'Payment due days must be between 1 and 365')
-        # Validate existing sessions
-        if cleaned_data.get('validate_existing_sessions', True):
-            self._validate_existing_sessions(cleaned_data)
+        
+        start_date = cleaned_data.get('start_date') or cleaned_data.get('date_from')
+        end_date = cleaned_data.get('end_date') or cleaned_data.get('date_to')
+        
+        if start_date and end_date:
+            if start_date > end_date:
+                raise ValidationError({
+                    'end_date': 'End date must be after start date.'
+                })
+            
+            # ⭐ Validate against school timezone "today"
+            from core.utils import get_school_today
+            today = get_school_today()
+            
+            # Optional: Check if dates are reasonable (not too far in past/future)
+            # Can be enabled per form by setting validate_reasonable_dates = True
+            if getattr(self, 'validate_reasonable_dates', False):
+                from datetime import timedelta
+                
+                # Warn if start date is more than 10 years in the past
+                if start_date < today - timedelta(days=3650):
+                    self.add_error('start_date', 'Start date seems unusually far in the past.')
+                
+                # Warn if end date is more than 5 years in the future
+                if end_date > today + timedelta(days=1825):
+                    self.add_error('end_date', 'End date seems unusually far in the future.')
+        
         return cleaned_data
 
-    def _validate_existing_sessions(self, cleaned_data):
+
+class MoneyFieldsMixin:
+    """Mixin for forms with money fields to ensure proper formatting"""
+    
+    def clean(self):
+        """Clean money fields"""
+        cleaned_data = super().clean()
+        
+        # Find all money fields
+        for field_name, field in self.fields.items():
+            if isinstance(field, (forms.DecimalField, MoneyField)):
+                value = cleaned_data.get(field_name)
+                if value is not None:
+                    # Ensure it's a Decimal
+                    if not isinstance(value, Decimal):
+                        try:
+                            cleaned_data[field_name] = Decimal(str(value))
+                        except (ValueError, InvalidOperation):
+                            self.add_error(field_name, 'Invalid amount.')
+        
+        return cleaned_data
+
+
+class RequiredFieldsMixin:
+    """Mixin to mark required fields with asterisk in label"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mark_required_fields()
+    
+    def mark_required_fields(self):
+        """Add asterisk to required field labels"""
+        for field_name, field in self.fields.items():
+            if field.required and field.label:
+                if not field.label.endswith(' *'):
+                    field.label = f"{field.label} *"
+
+
+# =============================================================================
+# BASE FILTER FORMS
+# =============================================================================
+
+class BaseFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
+    """
+    Base form for HTMX search/filter forms.
+    
+    Usage:
+        class StudentFilterForm(BaseFilterForm):
+            htmx_get = '/students/list/'
+            htmx_target = '#student-list'
+            
+            # Add your filter fields
+            grade = forms.ChoiceField(...)
+            status = forms.ChoiceField(...)
+    """
+    
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput()
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Remove 'q' field if not needed
+        if not self.use_search_field:
+            self.fields.pop('q', None)
+    
+    @property
+    def use_search_field(self):
+        """Override to disable search field"""
+        return True
+
+
+class BaseSearchForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
+    """
+    Simpler search-only form.
+    
+    Usage:
+        class StudentSearchForm(BaseSearchForm):
+            htmx_get = '/students/search/'
+            search_placeholder = 'Search students by name, admission number...'
+    """
+    
+    search_placeholder = 'Search...'
+    
+    q = forms.CharField(
+        label='',
+        required=False,
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set placeholder from class attribute
+        self.fields['q'].widget.attrs['placeholder'] = self.search_placeholder
+        # Hide label
+        self.fields['q'].label = ''
+
+
+# =============================================================================
+# DATE RANGE FILTER FORM
+# =============================================================================
+
+class DateRangeFilterForm(BaseFilterForm, DateRangeFormMixin):
+    """
+    Filter form with date range using school timezone. ⭐
+    
+    Usage:
+        class TransactionFilterForm(DateRangeFilterForm):
+            htmx_get = '/finance/transactions/list/'
+    """
+    
+    date_from = forms.DateField(
+        label='From Date',
+        required=False,
+        widget=DatePickerInput()
+    )
+    
+    date_to = forms.DateField(
+        label='To Date',
+        required=False,
+        widget=DatePickerInput()
+    )
+
+
+# =============================================================================
+# AMOUNT RANGE FILTER FORM
+# =============================================================================
+
+class AmountRangeFilterForm(BaseFilterForm):
+    """Filter form with amount range"""
+    
+    min_amount = MoneyField(
+        label='Minimum Amount',
+        required=False
+    )
+    
+    max_amount = MoneyField(
+        label='Maximum Amount',
+        required=False
+    )
+    
+    def clean(self):
+        """Validate amount range"""
+        cleaned_data = super().clean()
+        
+        min_amount = cleaned_data.get('min_amount')
+        max_amount = cleaned_data.get('max_amount')
+        
+        if min_amount and max_amount:
+            if min_amount > max_amount:
+                raise ValidationError({
+                    'max_amount': 'Maximum amount must be greater than minimum amount.'
+                })
+        
+        return cleaned_data
+
+
+# =============================================================================
+# VALIDATION HELPERS ⭐ UPDATED WITH SCHOOL TIMEZONE
+# =============================================================================
+
+def validate_future_date(value):
+    """
+    Validate that date is not in the future (uses school timezone). ⭐
+    
+    Args:
+        value: Date to validate
+        
+    Raises:
+        ValidationError: If date is in the future
+    """
+    from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+    
+    if value > get_school_today():
+        raise ValidationError('Date cannot be in the future.')
+
+
+def validate_past_date(value):
+    """
+    Validate that date is not in the past (uses school timezone). ⭐
+    
+    Args:
+        value: Date to validate
+        
+    Raises:
+        ValidationError: If date is in the past
+    """
+    from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+    
+    if value < get_school_today():
+        raise ValidationError('Date cannot be in the past.')
+
+
+def validate_age(date_of_birth, min_age=18, max_age=120):
+    """
+    Validate age based on date of birth (uses school timezone). ⭐
+    
+    Args:
+        date_of_birth: Date of birth to validate
+        min_age: Minimum age requirement
+        max_age: Maximum age allowed
+        
+    Raises:
+        ValidationError: If age is outside valid range
+    """
+    if not date_of_birth:
+        return
+    
+    from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+    today = get_school_today()
+    
+    age = today.year - date_of_birth.year - (
+        (today.month, today.day) < (date_of_birth.month, date_of_birth.day)
+    )
+    
+    if age < min_age:
+        raise ValidationError(f'Must be at least {min_age} years old.')
+    
+    if age > max_age:
+        raise ValidationError(f'Age cannot exceed {max_age} years.')
+
+
+def validate_date_not_before(value, earliest_date=None, error_message=None):
+    """
+    Validate that date is not before a specific date (uses school timezone). ⭐
+    
+    Args:
+        value: Date to validate
+        earliest_date: Earliest allowed date (defaults to school's today)
+        error_message: Custom error message
+        
+    Raises:
+        ValidationError: If date is before earliest_date
+    """
+    from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+    
+    if earliest_date is None:
+        earliest_date = get_school_today()
+    
+    if value < earliest_date:
+        if error_message:
+            raise ValidationError(error_message)
+        else:
+            raise ValidationError(f'Date cannot be before {earliest_date}.')
+
+
+def validate_date_not_after(value, latest_date=None, error_message=None):
+    """
+    Validate that date is not after a specific date (uses school timezone). ⭐
+    
+    Args:
+        value: Date to validate
+        latest_date: Latest allowed date (defaults to school's today)
+        error_message: Custom error message
+        
+    Raises:
+        ValidationError: If date is after latest_date
+    """
+    from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
+    
+    if latest_date is None:
+        latest_date = get_school_today()
+    
+    if value > latest_date:
+        if error_message:
+            raise ValidationError(error_message)
+        else:
+            raise ValidationError(f'Date cannot be after {latest_date}.')
+
+
+def validate_phone_number(value):
+    """Validate phone number format"""
+    if not value:
+        return
+    
+    cleaned = re.sub(r'[^\d+]', '', value)
+    
+    if not re.match(r'^\+?1?\d{9,15}$', cleaned):
+        raise ValidationError('Enter a valid phone number.')
+
+
+def validate_positive_amount(value):
+    """Validate that amount is positive"""
+    if value is not None and value <= 0:
+        raise ValidationError('Amount must be greater than zero.')
+
+
+def validate_percentage(value):
+    """Validate percentage value"""
+    if value is not None:
+        if value < 0 or value > 100:
+            raise ValidationError('Percentage must be between 0 and 100.')
+
+
+def validate_id_number(value):
+    """Validate ID number format (customize based on your country)"""
+    if not value:
+        return
+    
+    # Example validation for Uganda National ID (NIN)
+    # Format: CMXXXXXXXXXX (CM followed by 12 digits)
+    if not re.match(r'^[A-Z]{2}\d{12}$', value.upper()):
+        raise ValidationError('Enter a valid ID number.')
+
+
+def validate_academic_year_format(value):
+    """
+    Validate academic year format (e.g., '2024', '2024/2025', '2024-2025').
+    
+    Args:
+        value: Academic year string
+        
+    Raises:
+        ValidationError: If format is invalid
+    """
+    if not value:
+        return
+    
+    # Match patterns like: 2024, 2024/2025, 2024-2025
+    if not re.match(r'^\d{4}(/|-\d{4})?$', value):
+        raise ValidationError('Enter a valid academic year (e.g., 2024 or 2024/2025).')
+
+
+# =============================================================================
+# FORM HELPERS
+# =============================================================================
+
+def get_form_errors_as_dict(form):
+    """Convert form errors to a dictionary for JSON responses"""
+    errors = {}
+    
+    for field, error_list in form.errors.items():
+        errors[field] = [str(error) for error in error_list]
+    
+    return errors
+
+
+def get_form_errors_as_string(form):
+    """Convert form errors to a formatted string"""
+    error_messages = []
+    
+    for field, error_list in form.errors.items():
+        field_label = form.fields[field].label if field in form.fields else field
+        for error in error_list:
+            error_messages.append(f"{field_label}: {error}")
+    
+    return '\n'.join(error_messages)
+
+
+def get_form_errors_as_html(form):
+    """
+    Convert form errors to HTML for HTMX responses.
+    
+    Returns:
+        str: HTML string with Bootstrap alert styling
+    """
+    if not form.errors:
+        return ''
+    
+    error_html = '<div class="alert alert-danger alert-dismissible fade show" role="alert">'
+    error_html += '<strong>Please correct the following errors:</strong><ul class="mb-0 mt-2">'
+    
+    for field, error_list in form.errors.items():
+        field_label = form.fields[field].label if field in form.fields else field
+        for error in error_list:
+            error_html += f'<li>{field_label}: {error}</li>'
+    
+    error_html += '</ul>'
+    error_html += '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'
+    error_html += '</div>'
+    
+    return error_html
+
+
+def set_form_field_order(form, field_order):
+    """Reorder form fields"""
+    if not field_order:
+        return form
+    
+    fields = form.fields
+    ordered_fields = {}
+    
+    for field_name in field_order:
+        if field_name in fields:
+            ordered_fields[field_name] = fields[field_name]
+    
+    # Add remaining fields
+    for field_name, field in fields.items():
+        if field_name not in ordered_fields:
+            ordered_fields[field_name] = field
+    
+    form.fields = ordered_fields
+    return form
+
+
+def disable_form_fields(form, field_names):
+    """Disable specific form fields"""
+    for field_name in field_names:
+        if field_name in form.fields:
+            form.fields[field_name].widget.attrs['disabled'] = 'disabled'
+            form.fields[field_name].required = False
+
+
+def make_fields_readonly(form, field_names):
+    """Make specific form fields readonly"""
+    for field_name in field_names:
+        if field_name in form.fields:
+            form.fields[field_name].widget.attrs['readonly'] = 'readonly'
+
+
+def add_field_css_class(form, field_name, css_class):
+    """Add CSS class to a specific field"""
+    if field_name in form.fields:
+        existing = form.fields[field_name].widget.attrs.get('class', '')
+        form.fields[field_name].widget.attrs['class'] = f"{existing} {css_class}".strip()
+
+
+# =============================================================================
+# FORMSET HELPERS
+# =============================================================================
+
+def create_formset_with_initial(formset_class, queryset=None, initial_data=None, extra=1):
+    """Create a formset with initial data"""
+    if queryset is not None:
+        formset = formset_class(queryset=queryset)
+    elif initial_data is not None:
+        formset = formset_class(initial=initial_data)
+    else:
+        formset = formset_class()
+    
+    formset.extra = extra
+    return formset
+
+
+def get_formset_errors(formset):
+    """Get all errors from a formset"""
+    errors = []
+    
+    # Non-form errors
+    if formset.non_form_errors():
+        errors.extend(formset.non_form_errors())
+    
+    # Form errors
+    for i, form in enumerate(formset):
+        if form.errors:
+            for field, error_list in form.errors.items():
+                for error in error_list:
+                    errors.append(f"Form {i+1} - {field}: {error}")
+    
+    return errors
+
+
+def get_formset_errors_as_html(formset):
+    """Get formset errors as HTML"""
+    errors = get_formset_errors(formset)
+    if not errors:
+        return ''
+    
+    error_html = '<div class="alert alert-danger alert-dismissible fade show" role="alert">'
+    error_html += '<strong>Please correct the following errors:</strong><ul class="mb-0 mt-2">'
+    
+    for error in errors:
+        error_html += f'<li>{error}</li>'
+    
+    error_html += '</ul>'
+    error_html += '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'
+    error_html += '</div>'
+    
+    return error_html
+
+
+# =============================================================================
+# COMMON FORM PATTERNS
+# =============================================================================
+
+class ConfirmationForm(BootstrapFormMixin, forms.Form):
+    """Simple confirmation form"""
+    
+    confirm = forms.BooleanField(
+        label='I confirm this action',
+        required=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    reason = forms.CharField(
+        label='Reason (optional)',
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 3})
+    )
+
+
+class CommentForm(BootstrapFormMixin, forms.Form):
+    """Simple comment/notes form"""
+    
+    comment = forms.CharField(
+        label='Comment',
+        required=True,
+        widget=forms.Textarea(attrs={'rows': 4, 'placeholder': 'Enter your comment...'})
+    )
+
+
+class ApprovalForm(BootstrapFormMixin, forms.Form):
+    """Approval form with approve/reject options"""
+    
+    DECISION_CHOICES = [
+        ('', '-- Select Decision --'),
+        ('APPROVE', 'Approve'),
+        ('REJECT', 'Reject'),
+    ]
+    
+    decision = forms.ChoiceField(
+        label='Decision',
+        choices=DECISION_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    notes = forms.CharField(
+        label='Notes',
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 3})
+    )
+    
+    def clean_decision(self):
+        """Ensure a decision is selected"""
+        decision = self.cleaned_data.get('decision')
+        if not decision:
+            raise ValidationError('Please select a decision.')
+        return decision
+
+
+class DateRangeForm(BootstrapFormMixin, DateRangeFormMixin, forms.Form):
+    """
+    Standalone date range form (uses school timezone). ⭐
+    
+    Usage:
+        form = DateRangeForm(request.GET)
+        if form.is_valid():
+            start = form.cleaned_data['start_date']
+            end = form.cleaned_data['end_date']
+    """
+    
+    start_date = forms.DateField(
+        label='Start Date',
+        required=True,
+        widget=DatePickerInput()
+    )
+    
+    end_date = forms.DateField(
+        label='End Date',
+        required=True,
+        widget=DatePickerInput()
+    )
+
+
+class BulkActionForm(BootstrapFormMixin, forms.Form):
+    """
+    Form for bulk actions on selected items.
+    
+    Usage:
+        class StudentBulkActionForm(BulkActionForm):
+            ACTION_CHOICES = [
+                ('promote', 'Promote to next grade'),
+                ('graduate', 'Mark as graduated'),
+                ('suspend', 'Suspend students'),
+            ]
+    """
+    
+    ACTION_CHOICES = [
+        ('', '-- Select Action --'),
+    ]
+    
+    action = forms.ChoiceField(
+        label='Action',
+        choices=ACTION_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    selected_ids = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=True
+    )
+    
+    confirm = forms.BooleanField(
+        label='I confirm this bulk action',
+        required=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    def clean_selected_ids(self):
+        """Parse selected IDs"""
+        ids_str = self.cleaned_data.get('selected_ids', '')
+        if not ids_str:
+            raise ValidationError('No items selected.')
+        
         try:
-            from academics.models import AcademicSession
-            periods = cleaned_data.get('periods_per_year')
-            if periods and self.instance.pk:
-                invalid = AcademicSession.objects.filter(term_number__gt=periods)
-                if invalid.exists():
-                    sample = [str(s) for s in invalid[:3]]
-                    if invalid.count() > 3:
-                        sample.append(f"and {invalid.count() - 3} more")
-                    self.add_error('periods_per_year', f'Existing sessions would be invalid: {", ".join(sample)}. Update or remove them first.')
+            ids = [id.strip() for id in ids_str.split(',') if id.strip()]
+            if not ids:
+                raise ValidationError('No valid items selected.')
+            return ids
         except Exception:
-            pass
+            raise ValidationError('Invalid selection format.')

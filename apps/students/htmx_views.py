@@ -132,7 +132,7 @@ def student_search(request):
             pass
     
     # Paginate
-    students_page, paginator = paginate_queryset(request, students, per_page=20)
+    students_page, paginator = paginate_queryset(request, students, per_page=10)
     
     # Calculate stats
     total = students.count()
@@ -155,7 +155,7 @@ def student_search(request):
         ).count(),
     }
     
-    return render(request, 'students/students/_student_results.html', {
+    return render(request, 'students/_student_results.html', {
         'students_page': students_page,
         'stats': stats,
     })

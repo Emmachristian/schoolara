@@ -1,23 +1,320 @@
 # students/forms.py
 
+"""
+Student registration and management forms with timezone support.
+Uses utils/forms for consistent behavior across the application.
+"""
+
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Student, Guardian, StudentGuardian, StudentClassEnrollment, Dormitory, BoardingEnrollment
-import logging
-import re
 from django.utils import timezone
-from datetime import date, timedelta
 from django_countries import countries
+from django.contrib.auth import get_user_model
+from django.urls import reverse_lazy
+import re
+import logging
+
+# Import base form utilities with timezone support ⭐
+from utils.forms import (
+    BootstrapFormMixin,
+    HTMXFormMixin,
+    HTMXFilterFormMixin,
+    DateRangeFormMixin,
+    RequiredFieldsMixin,
+    BaseFilterForm,
+    DateRangeFilterForm,
+    DatePickerInput,
+    PhoneInput,
+    SearchInput,
+    SelectWithDefault,
+    validate_age,  # ⭐ Uses school timezone
+    validate_phone_number,
+    validate_future_date,  # ⭐ Uses school timezone
+    validate_past_date,  # ⭐ Uses school timezone
+)
+
+from .models import Student, Guardian, StudentGuardian
+
+User = get_user_model()
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# STUDENT FILTER FORMS (HTMX SEARCH)
+# =============================================================================
+
+class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
+    """
+    HTMX-powered student filter form.
+    All date validations use school timezone.
+    
+    Usage:
+        form = StudentFilterForm(request.GET)
+        if form.is_valid():
+            # Apply filters to queryset
+    """
+    
+    # Configuration
+    htmx_get = 'students:student_search'  
+    htmx_target = '#student-list'
+    search_delay = 100  # 300ms debounce for search
+    
+    # Search field
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput(attrs={
+            'placeholder': 'Search by name, admission number, email...'
+        })
+    )
+    
+    # Status filters
+    enrollment_status = forms.ChoiceField(
+        label='Enrollment Status',
+        choices=[('', 'All Statuses')] + list(Student.ENROLLMENT_STATUS_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All Statuses")
+    )
+    
+    # Academic filters
+    current_academic_level = forms.ModelChoiceField(
+        label='Grade/Class',
+        queryset=None,  # Set in __init__
+        required=False,
+        widget=SelectWithDefault(default_label="All Grades")
+    )
+    
+    # Demographics
+    gender = forms.ChoiceField(
+        label='Gender',
+        choices=[('', 'All')] + list(Student.GENDER_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All")
+    )
+    
+    religious_affiliation = forms.ChoiceField(
+        label='Religion',
+        choices=[('', 'All')] + list(Student.RELIGIOUS_AFFILIATION_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All")
+    )
+    
+    # Health filters
+    health_condition = forms.ChoiceField(
+        label='Health Condition',
+        choices=[('', 'All')] + list(Student.HEALTH_CONDITION_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All")
+    )
+    
+    has_special_needs = forms.NullBooleanField(
+        label='Special Needs',
+        required=False,
+        widget=forms.Select(choices=[
+            ('', 'All'),
+            ('true', 'Yes'),
+            ('false', 'No')
+        ], attrs={'class': 'form-select'})
+    )
+    
+    # Transport
+    transportation_required = forms.NullBooleanField(
+        label='Requires Transport',
+        required=False,
+        widget=forms.Select(choices=[
+            ('', 'All'),
+            ('true', 'Yes'),
+            ('false', 'No')
+        ], attrs={'class': 'form-select'})
+    )
+    
+    # Date range filters (uses school timezone) ⭐
+    admission_date_from = forms.DateField(
+        label='Admitted From',
+        required=False,
+        widget=DatePickerInput()
+    )
+    
+    admission_date_to = forms.DateField(
+        label='Admitted To',
+        required=False,
+        widget=DatePickerInput()
+    )
+    
+    # Age range (calculated using school timezone) ⭐
+    age_min = forms.IntegerField(
+        label='Min Age',
+        required=False,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 3,
+            'max': 25,
+            'placeholder': 'Min'
+        })
+    )
+    
+    age_max = forms.IntegerField(
+        label='Max Age',
+        required=False,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 3,
+            'max': 25,
+            'placeholder': 'Max'
+        })
+    )
+    
+    def __init__(self, *args, **kwargs):
+        # ⭐ FIX: Extract search URL if provided
+        search_url = kwargs.pop('search_url', None)
+        if search_url:
+            self.htmx_get = search_url
+        
+        super().__init__(*args, **kwargs)
+        
+        # Set academic level queryset
+        try:
+            from academics.models import AcademicLevel
+            self.fields['current_academic_level'].queryset = AcademicLevel.objects.filter(
+                is_active=True
+            ).order_by('order')
+        except Exception as e:
+            logger.error(f"Error setting academic level queryset: {e}")
+            self.fields['current_academic_level'].queryset = AcademicLevel.objects.none()
+    
+    def clean(self):
+        """
+        Validate filters using school timezone. ⭐
+        """
+        cleaned_data = super().clean()
+        
+        # Validate admission date range (uses school timezone)
+        admission_from = cleaned_data.get('admission_date_from')
+        admission_to = cleaned_data.get('admission_date_to')
+        
+        if admission_from and admission_to:
+            if admission_from > admission_to:
+                raise ValidationError({
+                    'admission_date_to': 'End date must be after start date.'
+                })
+        
+        # Validate age range
+        age_min = cleaned_data.get('age_min')
+        age_max = cleaned_data.get('age_max')
+        
+        if age_min and age_max:
+            if age_min > age_max:
+                raise ValidationError({
+                    'age_max': 'Maximum age must be greater than minimum age.'
+                })
+        
+        return cleaned_data
+
+
+class StudentQuickSearchForm(BootstrapFormMixin, forms.Form):
+    """
+    Quick search form for students (name, admission number only).
+    """
+    
+    q = forms.CharField(
+        label='',
+        required=False,
+        widget=SearchInput(attrs={
+            'placeholder': 'Search students...',
+            'autofocus': True
+        })
+    )
+    
+    def __init__(self, *args, **kwargs):
+        search_url = kwargs.pop('search_url', None)
+        super().__init__(*args, **kwargs)
+        
+        if search_url:
+            self.fields['q'].widget.attrs.update({
+                'hx-get': str(search_url),
+                'hx-trigger': 'keyup changed delay:300ms, search',
+                'hx-target': '#quick-search-results',
+                'hx-indicator': '.htmx-indicator'
+            })
+
+
+# =============================================================================
+# GUARDIAN FILTER FORM
+# =============================================================================
+
+class GuardianFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
+    """
+    HTMX-powered guardian filter form.
+    """
+    
+    # Configuration
+    htmx_get = 'students:guardian_search'  # ⭐ FIX: Use URL name
+    htmx_target = '#guardian-list'
+    search_delay = 300
+    
+    # Search field
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput(attrs={
+            'placeholder': 'Search by name, phone, email...'
+        })
+    )
+    
+    # Guardian type filter
+    guardian_type = forms.ChoiceField(
+        label='Guardian Type',
+        choices=[('', 'All Types')] + list(Guardian.GUARDIAN_TYPE_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All Types")
+    )
+    
+    # Gender filter
+    gender = forms.ChoiceField(
+        label='Gender',
+        choices=[('', 'All')] + list(Guardian.GENDER_CHOICES),
+        required=False,
+        widget=SelectWithDefault(default_label="All")
+    )
+    
+    # Active status
+    is_active = forms.NullBooleanField(
+        label='Active Status',
+        required=False,
+        widget=forms.Select(choices=[
+            ('', 'All'),
+            ('true', 'Active'),
+            ('false', 'Inactive')
+        ], attrs={'class': 'form-select'})
+    )
+    
+    # Country filter
+    country = forms.ChoiceField(
+        label='Country',
+        choices=[('', 'All Countries')] + list(countries),
+        required=False,
+        widget=SelectWithDefault(default_label="All Countries")
+    )
+    
+    def __init__(self, *args, **kwargs):
+        search_url = kwargs.pop('search_url', None)
+        if search_url:
+            self.htmx_get = search_url
+        
+        super().__init__(*args, **kwargs)
+
 
 # =============================================================================
 # STEP 1: BASIC INFORMATION FORM
 # =============================================================================
 
-class StudentBasicInfoForm(forms.ModelForm):
-    """Step 1: Basic personal information and admission details"""
+class StudentBasicInfoForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
+    """
+    Step 1: Basic personal information and admission details.
+    Uses school timezone for all date validations. ⭐
+    """
     
-    # Override gender field to use ChoiceField instead of ModelChoiceField
+    # Override gender field to use radio buttons
     gender = forms.ChoiceField(
         label="Gender",
         choices=Student.GENDER_CHOICES,
@@ -34,49 +331,21 @@ class StudentBasicInfoForm(forms.ModelForm):
             'birth_place', 'birth_country', 'religious_affiliation',
         ]
         widgets = {
-            'first_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'First Name'
-            }),
-            'middle_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Middle Name (optional)'
-            }),
-            'last_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Last Name'
-            }),
-            'date_of_birth': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
-            'admission_date': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
+            'first_name': forms.TextInput(attrs={'placeholder': 'First Name'}),
+            'middle_name': forms.TextInput(attrs={'placeholder': 'Middle Name (optional)'}),
+            'last_name': forms.TextInput(attrs={'placeholder': 'Last Name'}),
+            'date_of_birth': DatePickerInput(),
+            'admission_date': DatePickerInput(),
             'national_student_number': forms.TextInput(attrs={
-                'class': 'form-control',
                 'placeholder': 'National Student Number (EMIS/UPI)'
             }),
             'birth_certificate_number': forms.TextInput(attrs={
-                'class': 'form-control',
                 'placeholder': 'Birth Certificate Number'
             }),
-            'nationality': forms.Select(attrs={'class': 'form-control'}),
-            'ethnicity': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Ethnicity'
-            }),
-            'religious_affiliation': forms.Select(attrs={'class': 'form-control'}),
-            'birth_place': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Place of Birth'
-            }),
-            'birth_country': forms.Select(attrs={'class': 'form-control'}),
-            'photo': forms.FileInput(attrs={
-                'class': 'form-control',
-                'accept': 'image/*'
-            }),
+            'ethnicity': forms.TextInput(attrs={'placeholder': 'Ethnicity'}),
+            'religious_affiliation': forms.Select(),
+            'birth_place': forms.TextInput(attrs={'placeholder': 'Place of Birth'}),
+            'photo': forms.FileInput(attrs={'accept': 'image/*'}),
         }
     
     def __init__(self, *args, **kwargs):
@@ -88,77 +357,118 @@ class StudentBasicInfoForm(forms.ModelForm):
             if field_name in self.fields:
                 self.fields[field_name].required = True
         
-        # Set up nationality choices **with a blank option first**
+        # Set up nationality choices with blank option
         nationality_choices = [('', 'Select Nationality')] + list(countries)
         self.fields['nationality'].choices = nationality_choices
         
         # Set up religious affiliation choices
-        religious_choices = [('', 'Select Religious Affiliation')] + list(Student.RELIGIOUS_AFFILIATION_CHOICES)
+        religious_choices = [('', 'Select Religious Affiliation')] + list(
+            Student.RELIGIOUS_AFFILIATION_CHOICES
+        )
         self.fields['religious_affiliation'].choices = religious_choices
         
         # Set up birth country choices
         birth_country_choices = [('', 'Select Country')] + list(countries)
         self.fields['birth_country'].choices = birth_country_choices
         
-        # Set default admission date
-        if not self.is_bound:
-            self.fields['admission_date'].initial = timezone.now().date()
+        # Set default admission date to today (school timezone) ⭐
+        if not self.is_bound and not self.instance.pk:
+            from core.utils import get_school_today
+            self.fields['admission_date'].initial = get_school_today()
     
     def clean_first_name(self):
+        """Clean and validate first name"""
         value = self.cleaned_data.get('first_name')
         if value:
             value = ' '.join(value.strip().split()).title()
             if not re.match(r"^[a-zA-Z\s\-']+$", value):
-                raise ValidationError("First name should only contain letters, spaces, hyphens, and apostrophes.")
+                raise ValidationError(
+                    "First name should only contain letters, spaces, hyphens, and apostrophes."
+                )
             if len(value) < 2:
                 raise ValidationError("First name must be at least 2 characters long.")
         return value
     
     def clean_last_name(self):
+        """Clean and validate last name"""
         value = self.cleaned_data.get('last_name')
         if value:
             value = ' '.join(value.strip().split()).title()
             if not re.match(r"^[a-zA-Z\s\-']+$", value):
-                raise ValidationError("Last name should only contain letters, spaces, hyphens, and apostrophes.")
+                raise ValidationError(
+                    "Last name should only contain letters, spaces, hyphens, and apostrophes."
+                )
             if len(value) < 2:
                 raise ValidationError("Last name must be at least 2 characters long.")
         return value
     
     def clean_date_of_birth(self):
+        """
+        Validate date of birth using school timezone. ⭐
+        """
         dob = self.cleaned_data.get('date_of_birth')
         if dob:
-            today = date.today()
-            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            # Validate not in future (uses school timezone) ⭐
+            validate_future_date(dob)
             
-            if dob > today:
-                raise ValidationError("Date of birth cannot be in the future.")
-            if age < 2:
-                raise ValidationError("Student must be at least 2 years old.")
-            if age > 30:
-                raise ValidationError("Student age seems unusually high. Please verify.")
+            # Validate age (uses school timezone) ⭐
+            validate_age(dob, min_age=2, max_age=30)
+        
         return dob
     
     def clean_admission_date(self):
+        """
+        Validate admission date using school timezone. ⭐
+        """
         admission_date = self.cleaned_data.get('admission_date')
         if admission_date:
-            today = date.today()
+            from core.utils import get_school_today
+            from datetime import timedelta
+            
+            today = get_school_today()  # ⭐ USE SCHOOL TIMEZONE
+            
+            # Validate not in future
             if admission_date > today:
                 raise ValidationError("Admission date cannot be in the future.")
+            
+            # Validate not too far in past (10 years)
             if admission_date < (today - timedelta(days=10*365)):
-                raise ValidationError("Admission date seems too far in the past. Please verify.")
+                raise ValidationError(
+                    "Admission date seems too far in the past. Please verify."
+                )
+        
         return admission_date
+    
+    def clean(self):
+        """
+        Cross-field validation using school timezone. ⭐
+        """
+        cleaned_data = super().clean()
+        dob = cleaned_data.get('date_of_birth')
+        admission_date = cleaned_data.get('admission_date')
+        
+        # Validate admission date is after date of birth
+        if dob and admission_date:
+            if admission_date < dob:
+                raise ValidationError({
+                    'admission_date': 'Admission date cannot be before date of birth.'
+                })
+        
+        return cleaned_data
+
 
 # =============================================================================
 # STEP 2: CONTACT & ADDRESS FORM
 # =============================================================================
 
-class StudentContactInfoForm(forms.Form):
-    """Step 2: Contact and address information"""
+class StudentContactInfoForm(BootstrapFormMixin, forms.Form):
+    """
+    Step 2: Contact and address information.
+    """
     
     personal_email = forms.EmailField(
         required=False,
         widget=forms.EmailInput(attrs={
-            'class': 'form-control',
             'placeholder': 'personal@email.com (optional)'
         })
     )
@@ -166,17 +476,14 @@ class StudentContactInfoForm(forms.Form):
     phone_number = forms.CharField(
         max_length=20,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '+256xxxxxxxxx (optional)',
-            'type': 'tel'
+        widget=PhoneInput(attrs={
+            'placeholder': '+256xxxxxxxxx (optional)'
         })
     )
     
     home_address = forms.CharField(
         required=True,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 3,
             'placeholder': 'Complete home address including village/town'
         })
@@ -185,7 +492,6 @@ class StudentContactInfoForm(forms.Form):
     mailing_address = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 3,
             'placeholder': 'Mailing address (if different from home address)'
         })
@@ -194,26 +500,22 @@ class StudentContactInfoForm(forms.Form):
     district = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'District'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'District'})
     )
     
     region = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Region/Province'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Region/Province'})
     )
     
     country_of_residence = forms.ChoiceField(
-        choices=[('UG', 'Uganda')] + [(code, name) for code, name in countries if code != 'UG'],
+        choices=[('UG', 'Uganda')] + [
+            (code, name) for code, name in countries if code != 'UG'
+        ],
         initial='UG',
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     # Transportation fields
@@ -225,19 +527,13 @@ class StudentContactInfoForm(forms.Form):
     transport_route = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Transport route'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Transport route'})
     )
     
     pickup_point = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Pickup point'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Pickup point'})
     )
     
     pickup_time = forms.TimeField(
@@ -248,7 +544,15 @@ class StudentContactInfoForm(forms.Form):
         })
     )
     
+    def clean_phone_number(self):
+        """Validate phone number"""
+        phone = self.cleaned_data.get('phone_number')
+        if phone:
+            validate_phone_number(phone)
+        return phone
+    
     def clean(self):
+        """Validate transportation fields"""
         cleaned_data = super().clean()
         transportation_required = cleaned_data.get('transportation_required', False)
         
@@ -257,58 +561,64 @@ class StudentContactInfoForm(forms.Form):
             pickup_point = cleaned_data.get('pickup_point')
             
             if not transport_route:
-                self.add_error('transport_route', 'Transport route is required when transportation is needed.')
+                self.add_error(
+                    'transport_route',
+                    'Transport route is required when transportation is needed.'
+                )
             if not pickup_point:
-                self.add_error('pickup_point', 'Pickup point is required when transportation is needed.')
+                self.add_error(
+                    'pickup_point',
+                    'Pickup point is required when transportation is needed.'
+                )
         else:
+            # Clear transport fields if not required
             cleaned_data['transport_route'] = ''
             cleaned_data['pickup_point'] = ''
             cleaned_data['pickup_time'] = None
         
         return cleaned_data
 
+
 # =============================================================================
 # STEP 3: ACADEMIC INFORMATION FORM
 # =============================================================================
 
-class StudentAcademicInfoForm(forms.Form):
-    """Step 3: Academic and educational information"""
+class StudentAcademicInfoForm(BootstrapFormMixin, forms.Form):
+    """
+    Step 3: Academic and educational information.
+    """
     
     admission_academic_level = forms.ModelChoiceField(
         queryset=None,
         required=True,
-        widget=forms.Select(attrs={'class': 'form-control'}),
+        widget=forms.Select(attrs={'class': 'form-select'}),
         help_text="Academic level at time of admission"
     )
     
     current_academic_level = forms.ModelChoiceField(
         queryset=None,
         required=True,
-        widget=forms.Select(attrs={'class': 'form-control'}),
+        widget=forms.Select(attrs={'class': 'form-select'}),
         help_text="Current academic level"
     )
     
     enrollment_status = forms.ChoiceField(
         choices=Student.ENROLLMENT_STATUS_CHOICES,
         required=True,
-        initial='active',
-        widget=forms.Select(attrs={'class': 'form-control'})
+        initial='ACTIVE',
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     # Previous education
     previous_school = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Previous school name'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Previous school name'})
     )
     
     previous_school_address = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Previous school address'
         })
@@ -317,31 +627,24 @@ class StudentAcademicInfoForm(forms.Form):
     previous_academic_level = forms.ModelChoiceField(
         queryset=None,
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'}),
+        widget=forms.Select(attrs={'class': 'form-select'}),
         help_text="Academic level completed at previous school"
     )
     
     transfer_certificate_number = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Transfer certificate number'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Transfer certificate number'})
     )
     
     previous_school_completion_date = forms.DateField(
         required=False,
-        widget=forms.DateInput(attrs={
-            'class': 'form-control',
-            'type': 'date'
-        })
+        widget=DatePickerInput()
     )
     
     transfer_reason = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Reason for transfer (if applicable)'
         })
@@ -351,40 +654,53 @@ class StudentAcademicInfoForm(forms.Form):
         super().__init__(*args, **kwargs)
         
         # Import here to avoid circular imports
-        from academics.models import AcademicLevel
-        
-        # Set querysets
         try:
+            from academics.models import AcademicLevel
+            
+            # Set querysets
             queryset = AcademicLevel.objects.filter(is_active=True).order_by('order')
             self.fields['admission_academic_level'].queryset = queryset
             self.fields['current_academic_level'].queryset = queryset
             self.fields['previous_academic_level'].queryset = queryset
         except Exception as e:
             logger.error(f"Error setting academic level queryset: {e}")
+    
+    def clean_previous_school_completion_date(self):
+        """
+        Validate completion date using school timezone. ⭐
+        """
+        completion_date = self.cleaned_data.get('previous_school_completion_date')
+        if completion_date:
+            # Validate not in future (uses school timezone) ⭐
+            validate_future_date(completion_date)
+        
+        return completion_date
+
 
 # =============================================================================
 # STEP 4: HEALTH & MEDICAL FORM
 # =============================================================================
 
-class StudentHealthInfoForm(forms.Form):
-    """Step 4: Health and medical information (all optional)"""
+class StudentHealthInfoForm(BootstrapFormMixin, forms.Form):
+    """
+    Step 4: Health and medical information (all optional).
+    """
     
     health_condition = forms.ChoiceField(
         choices=Student.HEALTH_CONDITION_CHOICES,
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     blood_type = forms.ChoiceField(
         choices=Student.BLOOD_TYPE_CHOICES,
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     medical_conditions = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 3,
             'placeholder': 'Any existing medical conditions'
         })
@@ -393,7 +709,6 @@ class StudentHealthInfoForm(forms.Form):
     allergies = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Known allergies'
         })
@@ -402,7 +717,6 @@ class StudentHealthInfoForm(forms.Form):
     medications = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Current medications'
         })
@@ -411,7 +725,6 @@ class StudentHealthInfoForm(forms.Form):
     special_medical_needs = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Special medical needs or care instructions'
         })
@@ -420,38 +733,25 @@ class StudentHealthInfoForm(forms.Form):
     emergency_medical_contact = forms.CharField(
         max_length=20,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '+256xxxxxxxxx',
-            'type': 'tel'
-        })
+        widget=PhoneInput(attrs={'placeholder': '+256xxxxxxxxx'})
     )
     
     preferred_hospital = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Preferred hospital/clinic'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Preferred hospital/clinic'})
     )
     
     medical_insurance = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Medical insurance provider'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Medical insurance provider'})
     )
     
     insurance_policy_number = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Insurance policy number'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Insurance policy number'})
     )
     
     # Special needs
@@ -463,7 +763,6 @@ class StudentHealthInfoForm(forms.Form):
     special_needs_description = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 3,
             'placeholder': 'Description of special needs'
         })
@@ -472,7 +771,6 @@ class StudentHealthInfoForm(forms.Form):
     learning_disabilities = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Learning disabilities or challenges'
         })
@@ -481,7 +779,6 @@ class StudentHealthInfoForm(forms.Form):
     learning_accommodations = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Required learning accommodations'
         })
@@ -496,13 +793,20 @@ class StudentHealthInfoForm(forms.Form):
     special_diet_details = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Special diet requirements'
         })
     )
     
+    def clean_emergency_medical_contact(self):
+        """Validate emergency contact phone"""
+        phone = self.cleaned_data.get('emergency_medical_contact')
+        if phone:
+            validate_phone_number(phone)
+        return phone
+    
     def clean(self):
+        """Clear dependent fields when parent field is False"""
         cleaned_data = super().clean()
         
         # Clear special needs fields if not needed
@@ -517,12 +821,15 @@ class StudentHealthInfoForm(forms.Form):
         
         return cleaned_data
 
+
 # =============================================================================
 # STEP 5: GUARDIAN INFORMATION FORM
 # =============================================================================
 
-class StudentGuardianInfoForm(forms.Form):
-    """Step 5: Guardian information"""
+class StudentGuardianInfoForm(BootstrapFormMixin, forms.Form):
+    """
+    Step 5: Guardian information.
+    """
     
     guardian_option = forms.ChoiceField(
         choices=[
@@ -537,50 +844,36 @@ class StudentGuardianInfoForm(forms.Form):
     existing_guardian = forms.ModelChoiceField(
         queryset=None,
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     # New guardian fields
     guardian_first_name = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Guardian first name'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Guardian first name'})
     )
     
     guardian_last_name = forms.CharField(
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Guardian last name'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Guardian last name'})
     )
     
     guardian_phone = forms.CharField(
         max_length=20,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '+256xxxxxxxxx',
-            'type': 'tel'
-        })
+        widget=PhoneInput(attrs={'placeholder': '+256xxxxxxxxx'})
     )
     
     guardian_email = forms.EmailField(
         required=False,
-        widget=forms.EmailInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'guardian@example.com'
-        })
+        widget=forms.EmailInput(attrs={'placeholder': 'guardian@example.com'})
     )
     
     guardian_address = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 2,
             'placeholder': 'Guardian address'
         })
@@ -589,17 +882,14 @@ class StudentGuardianInfoForm(forms.Form):
     guardian_occupation = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Occupation'
-        })
+        widget=forms.TextInput(attrs={'placeholder': 'Occupation'})
     )
     
     # Relationship details
     relationship = forms.ChoiceField(
-        choices=[('', 'Select Relationship')] + list(Guardian.RELATION_CHOICES),
+        choices=[('', 'Select Relationship')] + list(StudentGuardian.RELATIONSHIP_CHOICES),
         required=True,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
 
     def __init__(self, *args, **kwargs):
@@ -615,8 +905,16 @@ class StudentGuardianInfoForm(forms.Form):
         except Exception as e:
             logger.error(f"Error setting guardian queryset: {e}")
             self.fields['existing_guardian'].queryset = Guardian.objects.none()
+    
+    def clean_guardian_phone(self):
+        """Validate guardian phone"""
+        phone = self.cleaned_data.get('guardian_phone')
+        if phone:
+            validate_phone_number(phone)
+        return phone
 
     def clean(self):
+        """Validate based on guardian option"""
         cleaned_data = super().clean()
         guardian_option = cleaned_data.get('guardian_option')
         
@@ -628,13 +926,19 @@ class StudentGuardianInfoForm(forms.Form):
                 })
         else:
             # Validate new guardian fields
-            required_fields = ['guardian_first_name', 'guardian_last_name', 'guardian_phone']
+            required_fields = [
+                'guardian_first_name', 
+                'guardian_last_name', 
+                'guardian_phone'
+            ]
             errors = {}
             
             for field in required_fields:
                 if not cleaned_data.get(field):
                     field_display = field.replace("guardian_", "").replace("_", " ").title()
-                    errors[field] = f'{field_display} is required when adding a new guardian.'
+                    errors[field] = (
+                        f'{field_display} is required when adding a new guardian.'
+                    )
             
             if errors:
                 raise ValidationError(errors)
@@ -642,17 +946,20 @@ class StudentGuardianInfoForm(forms.Form):
         # Validate relationship
         if not cleaned_data.get('relationship'):
             raise ValidationError({
-                'relationship': 'Please select the relationship between the guardian and student.'
+                'relationship': 'Please select the relationship between guardian and student.'
             })
         
         return cleaned_data
+
 
 # =============================================================================
 # STEP 6: CONFIRMATION FORM
 # =============================================================================
 
-class StudentConfirmationForm(forms.Form):
-    """Step 6: Final confirmation"""
+class StudentConfirmationForm(BootstrapFormMixin, forms.Form):
+    """
+    Step 6: Final confirmation.
+    """
     
     confirm_creation = forms.BooleanField(
         required=True,
@@ -663,12 +970,12 @@ class StudentConfirmationForm(forms.Form):
     additional_notes = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
-            'class': 'form-control',
             'rows': 4,
             'placeholder': 'Any additional notes or comments (optional)'
         }),
         help_text="Optional notes for record keeping"
     )
+
 
 # =============================================================================
 # WIZARD CONFIGURATION
@@ -692,11 +999,16 @@ STUDENT_WIZARD_STEP_NAMES = {
     'confirmation': 'Review & Confirmation'
 }
 
+
 # =============================================================================
-# GENERAL STUDENT FORM
+# GENERAL STUDENT FORM (SINGLE PAGE)
 # =============================================================================
 
-class StudentForm(forms.ModelForm):
+class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
+    """
+    Complete student form (all fields in one page).
+    Uses school timezone for all date validations. ⭐
+    """
 
     religious_affiliation = forms.ChoiceField(
         choices=Student.RELIGIOUS_AFFILIATION_CHOICES,
@@ -708,360 +1020,215 @@ class StudentForm(forms.ModelForm):
         model = Student
         fields = [
             # Identification & Basic Info
-            'admission_number',
-            'admission_date',
-            'national_student_number',
-            'birth_certificate_number',
-            'first_name',
-            'middle_name',
-            'last_name',
-            'date_of_birth',
-            'gender',
-
+            'admission_number', 'admission_date', 'national_student_number',
+            'birth_certificate_number', 'first_name', 'middle_name', 'last_name',
+            'date_of_birth', 'gender',
+            
             # Academic Information
-            'current_academic_level',
-            'admission_academic_level',
-
+            'current_academic_level', 'admission_academic_level',
+            
             # Demographics & Cultural Info
-            'nationality',
-            'ethnicity',
-            'birth_place',
-            'birth_country',
+            'nationality', 'ethnicity', 'birth_place', 'birth_country',
             'religious_affiliation',
-
+            
             # Contact & Address Information
-            'personal_email',
-            'phone_number',
-            'home_address',
-            'mailing_address',
-            'district',
-            'region',
-            'country_of_residence',
-
+            'personal_email', 'phone_number', 'home_address', 'mailing_address',
+            'district', 'region', 'country_of_residence',
+            
             # Health & Medical Information
-            'health_condition',
-            'blood_type',
-            'medical_conditions',
-            'allergies',
-            'medications',
-            'special_medical_needs',
-            'emergency_medical_contact',
-            'preferred_hospital',
-            'medical_insurance',
-            'insurance_policy_number',
-
+            'health_condition', 'blood_type', 'medical_conditions', 'allergies',
+            'medications', 'special_medical_needs', 'emergency_medical_contact',
+            'preferred_hospital', 'medical_insurance', 'insurance_policy_number',
+            
             # Special Needs & Accommodations
-            'has_special_needs',
-            'special_needs_description',
-            'requires_special_diet',
-            'special_diet_details',
-            'learning_disabilities',
-            'learning_accommodations',
-
+            'has_special_needs', 'special_needs_description', 'requires_special_diet',
+            'special_diet_details', 'learning_disabilities', 'learning_accommodations',
+            
             # Transport Information
-            'transportation_required',
-            'transport_route',
-            'pickup_point',
-            'pickup_time',
-
+            'transportation_required', 'transport_route', 'pickup_point', 'pickup_time',
+            
             # Previous Education
-            'previous_school',
-            'previous_school_address',
-            'previous_academic_level',
-            'transfer_reason',
-            'transfer_certificate_number',
+            'previous_school', 'previous_school_address', 'previous_academic_level',
+            'transfer_reason', 'transfer_certificate_number',
             'previous_school_completion_date',
-
+            
             # Media & Documents
             'photo',
-
-            # Guardian Relationships
-            'guardians',
-
+            
             # Status & Tracking
-            'enrollment_status',
-            'graduation_date',
-            'withdrawal_date',
+            'enrollment_status', 'graduation_date', 'withdrawal_date',
         ]
 
         widgets = {
             'admission_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'admission_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'national_student_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'birth_certificate_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'middle_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'date_of_birth': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'gender': forms.Select(choices=Student.GENDER_CHOICES,  attrs={'class': 'form-control'}),
-            'current_academic_level': forms.Select(attrs={'class': 'form-select'}),
-            'admission_academic_level': forms.Select(attrs={'class': 'form-select'}),
-            'nationality': forms.Select(attrs={'class': 'form-select'}),
-            'ethnicity': forms.TextInput(attrs={'class': 'form-control'}),
-            'birth_place': forms.TextInput(attrs={'class': 'form-control'}),
-            'birth_country': forms.Select(attrs={'class': 'form-select'}),
-            'personal_email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'home_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'mailing_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'district': forms.TextInput(attrs={'class': 'form-control'}),
-            'region': forms.TextInput(attrs={'class': 'form-control'}),
-            'country_of_residence': forms.Select(attrs={'class': 'form-select'}),
-            'health_condition': forms.Select(choices=Student.HEALTH_CONDITION_CHOICES, attrs={'class': 'form-select'}),
-            'blood_type': forms.Select(choices=Student.BLOOD_TYPE_CHOICES, attrs={'class': 'form-select'}),
-            'medical_conditions': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'allergies': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'medications': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'special_medical_needs': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'emergency_medical_contact': forms.TextInput(attrs={'class': 'form-control'}),
-            'preferred_hospital': forms.TextInput(attrs={'class': 'form-control'}),
-            'medical_insurance': forms.TextInput(attrs={'class': 'form-control'}),
-            'insurance_policy_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'has_special_needs': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'special_needs_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'requires_special_diet': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'special_diet_details': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'learning_disabilities': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'learning_accommodations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'transportation_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'transport_route': forms.TextInput(attrs={'class': 'form-control'}),
-            'pickup_point': forms.TextInput(attrs={'class': 'form-control'}),
+            'admission_date': DatePickerInput(),
+            'date_of_birth': DatePickerInput(),
+            'gender': forms.Select(choices=Student.GENDER_CHOICES, attrs={'class': 'form-select'}),
+            'photo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'graduation_date': DatePickerInput(),
+            'withdrawal_date': DatePickerInput(),
+            'previous_school_completion_date': DatePickerInput(),
             'pickup_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
-            'previous_school': forms.TextInput(attrs={'class': 'form-control'}),
-            'previous_school_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'previous_academic_level': forms.Select(attrs={'class': 'form-select'}),
-            'transfer_reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'transfer_certificate_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'previous_school_completion_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'photo': forms.FileInput(attrs={'class': 'form-control'}),
-            'guardians': forms.SelectMultiple(attrs={'class': 'form-select'}),
-            'enrollment_status': forms.Select(choices=Student.ENROLLMENT_STATUS_CHOICES, attrs={'class': 'form-select'}),
-            'graduation_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'withdrawal_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         from academics.models import AcademicLevel
-        # Dynamic queryset for admission_academic_level
-        self.fields['admission_academic_level'].queryset = AcademicLevel.objects.filter(is_active=True).order_by('order')
-        self.fields['admission_academic_level'].required = True
-        self.fields['admission_academic_level'].help_text = "Academic level at time of admission"
-
-        # Dynamic queryset for current_academic_level
-        self.fields['current_academic_level'].queryset = AcademicLevel.objects.filter(is_active=True).order_by('order')
-        self.fields['current_academic_level'].required = True
-        self.fields['current_academic_level'].help_text = "Current academic level of the student"
-
-        # Set up nationality choices with Uganda as default
-        nationality_choices = [('UG', 'Uganda')] + [(code, name) for code, name in countries if code != 'UG']
+        
+        # Set up academic level querysets
+        try:
+            queryset = AcademicLevel.objects.filter(is_active=True).order_by('order')
+            self.fields['admission_academic_level'].queryset = queryset
+            self.fields['current_academic_level'].queryset = queryset
+            self.fields['previous_academic_level'].queryset = queryset
+        except Exception as e:
+            logger.error(f"Error setting academic level queryset: {e}")
+        
+        # Set up nationality choices
+        nationality_choices = [('UG', 'Uganda')] + [
+            (code, name) for code, name in countries if code != 'UG'
+        ]
         self.fields['nationality'].choices = nationality_choices
         self.fields['nationality'].initial = 'UG'
-
-        # Auto-generate admission number for new instances only
-        if not self.instance.pk and not self.is_bound:
-            from .utils import generate_student_admission_number
-            admission_number = generate_student_admission_number(user=getattr(self, 'user', None))
-            self.fields['admission_number'].initial = admission_number
         
-        # Set default admission date
-        if not self.is_bound:
-            self.fields['admission_date'].initial = timezone.now().date()
+        # Set default admission date (school timezone) ⭐
+        if not self.is_bound and not self.instance.pk:
+            from core.utils import get_school_today
+            self.fields['admission_date'].initial = get_school_today()
+    
+    def clean_date_of_birth(self):
+        """Validate DOB using school timezone ⭐"""
+        dob = self.cleaned_data.get('date_of_birth')
+        if dob:
+            validate_future_date(dob)
+            validate_age(dob, min_age=2, max_age=30)
+        return dob
+    
+    def clean_admission_date(self):
+        """Validate admission date using school timezone ⭐"""
+        admission_date = self.cleaned_data.get('admission_date')
+        if admission_date:
+            from core.utils import get_school_today
+            from datetime import timedelta
+            
+            today = get_school_today()  # ⭐
+            
+            if admission_date > today:
+                raise ValidationError("Admission date cannot be in the future.")
+            
+            if admission_date < (today - timedelta(days=10*365)):
+                raise ValidationError("Admission date seems too far in the past.")
+        
+        return admission_date
+
 
 # =============================================================================
 # GUARDIAN FORM
 # =============================================================================
 
-class GuardianForm(forms.ModelForm):
-    """Form for creating/editing guardians"""
+class GuardianForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
+    """
+    Form for creating/editing guardians.
+    Uses school timezone for date validations. ⭐
+    """
     
     class Meta:
         model = Guardian
         fields = [
-            'first_name', 'middle_name', 'last_name', 'gender', 'guardian_type', 'date_of_birth',
-            'primary_phone', 'secondary_phone', 'email',
+            'first_name', 'middle_name', 'last_name', 'gender', 'guardian_type',
+            'date_of_birth', 'primary_phone', 'secondary_phone', 'email',
             'occupation', 'employer', 'work_phone', 'monthly_income',
-            'home_address', 'work_address',
-            'national_id', 'passport_number',
-            'photo', 'is_active',
+            'home_address', 'work_address', 'district', 'city', 'country',
+            'national_id', 'passport_number', 'photo', 'is_active',
         ]
         widgets = {
-            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'middle_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'date_of_birth': DatePickerInput(),
             'gender': forms.RadioSelect(choices=Guardian.GENDER_CHOICES),
-            'guardian_type': forms.Select(attrs={'class': 'form-select'}),
-            'date_of_birth': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'primary_phone': forms.TextInput(attrs={'class': 'form-control'}),
-            'secondary_phone': forms.TextInput(attrs={'class': 'form-control'}),
-            'email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'home_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'photo': forms.FileInput(attrs={'class': 'form-control'}),
+            'primary_phone': PhoneInput(),
+            'secondary_phone': PhoneInput(),
+            'work_phone': PhoneInput(),
+            'monthly_income': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'photo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # Set required fields
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
         self.fields['primary_phone'].required = True
         self.fields['home_address'].required = True
+    
+    def clean_date_of_birth(self):
+        """Validate DOB using school timezone ⭐"""
+        dob = self.cleaned_data.get('date_of_birth')
+        if dob:
+            validate_future_date(dob)
+            validate_age(dob, min_age=18, max_age=100)
+        return dob
 
 
 # =============================================================================
 # STUDENT-GUARDIAN RELATIONSHIP FORM
 # =============================================================================
 
-class StudentGuardianForm(forms.ModelForm):
-    """Form for managing student-guardian relationships"""
+class StudentGuardianForm(BootstrapFormMixin, forms.ModelForm):
+    """
+    Form for managing student-guardian relationships.
+    Uses school timezone for date validations. ⭐
+    """
     
     class Meta:
         model = StudentGuardian
         fields = [
             'student', 'guardian', 'relationship',
-            'is_primary', 'is_financial_responsible', 'can_pickup', 'can_authorize_medical',
-            'emergency_contact_priority', 'has_custody', 'custody_percentage',
-            'receives_academic_reports', 'receives_financial_statements', 'receives_emergency_notifications',
-            'is_active', 'relationship_start_date', 'relationship_end_date',
+            'is_primary', 'is_financial_responsible', 'can_pickup',
+            'can_authorize_medical', 'emergency_contact_priority',
+            'has_custody', 'custody_percentage',
+            'receives_academic_reports', 'receives_financial_statements',
+            'receives_emergency_notifications', 'is_active',
+            'relationship_start_date', 'relationship_end_date', 'notes',
         ]
         widgets = {
-            'student': forms.Select(attrs={'class': 'form-select'}),
-            'guardian': forms.Select(attrs={'class': 'form-select'}),
-            'relationship': forms.Select(attrs={'class': 'form-select'}),
-            'relationship_start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'relationship_end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'emergency_contact_priority': forms.NumberInput(attrs={'class': 'form-control'}),
-            'custody_percentage': forms.NumberInput(attrs={'class': 'form-control'}),
-        }
-
-
-# =============================================================================
-# DORMITORY FORM
-# =============================================================================
-
-class DormitoryForm(forms.ModelForm):
-    """Form for creating/editing dormitories"""
-    
-    class Meta:
-        model = Dormitory
-        fields = [
-            'name', 'code', 'dormitory_type',
-            'building', 'floor', 'wing',
-            'total_capacity', 'room_count', 'beds_per_room',
-            'has_bathroom', 'has_study_area', 'has_common_room', 'has_laundry',
-            'has_kitchen', 'has_wifi', 'has_security',
-            'dormitory_master', 'assistant_dormitory_master',
-            'is_active', 'is_available_for_new_admissions', 'maintenance_status',
-            'last_maintenance_date', 'next_maintenance_due',
-            'description', 'facilities_description', 'rules_and_regulations', 'emergency_procedures',
-            'dormitory_phone', 'dormitory_email',
-        ]
-        widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'code': forms.TextInput(attrs={'class': 'form-control'}),
-            'dormitory_type': forms.Select(attrs={'class': 'form-select'}),
-            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'last_maintenance_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'next_maintenance_due': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-        }
-
-# =============================================================================
-# CLASS ENROLLMENT FORM
-# =============================================================================
-
-class StudentClassEnrollmentForm(forms.ModelForm):
-    """Form for enrolling students in classes with enhanced validation and auto-generation"""
-    
-    class Meta:
-        model = StudentClassEnrollment
-        fields = [
-            'student', 'class_instance', 'academic_session', 'enrollment_date',
-            'roll_number', 'enrollment_type', 'progression_type', 
-            'previous_enrollment', 'enrollment_notes'
-        ]
-        
-        widgets = {
-            'student': forms.HiddenInput(),  # Hide the original student field
-            'enrollment_date': forms.DateInput(attrs={'type': 'date'}),
-            'roll_number': forms.TextInput(attrs={
-                'placeholder': 'Will be auto-generated',
-                'readonly': True,
-                'style': 'background-color: #f8f9fa;',
-                'data-field-name': 'roll_number'
+            'relationship_start_date': DatePickerInput(),
+            'relationship_end_date': DatePickerInput(),
+            'emergency_contact_priority': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'max': '999'
             }),
-            'enrollment_notes': forms.Textarea(attrs={'rows': 3}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # Filter students to only show active ones
-        self.fields['student'].queryset = Student.objects.filter(enrollment_status='active')
-            
-        from academics.models import Class, AcademicSession
-        self.fields['class_instance'].queryset = Class.objects.filter(is_active=True)
-        self.fields['academic_session'].queryset = AcademicSession.objects.all()
-
-    def clean_student(self):
-        """Validate student selection"""
-        student = self.cleaned_data.get('student')
-        if not student:
-            raise ValidationError("Please select a student.")
-        
-        if student.enrollment_status != 'active':
-            raise ValidationError(f"Selected student is {student.enrollment_status} and cannot be enrolled.")
-        
-        return student
-
-    def clean_enrollment_date(self):
-        enrollment_date = self.cleaned_data.get('enrollment_date')
-        if enrollment_date and enrollment_date > timezone.now().date():
-            raise ValidationError("Enrollment date cannot be in the future.")
-        return enrollment_date
-    
-# =============================================================================
-# BOARDING ENROLLMENT FORM
-# =============================================================================
-
-class BoardingEnrollmentForm(forms.ModelForm):
-    """Form for creating/editing boarding enrollments"""
-    
-    class Meta:
-        model = BoardingEnrollment
-        fields = [
-            'student', 'academic_session', 'boarding_type',
-            'dormitory', 'room_number', 'bed_number', 'boarding_roll_number',
-            'enrollment_date', 'effective_start_date', 'effective_end_date', 'status',
-            'guardian_consent', 'consent_date', 'consenting_guardian', 'consent_document',
-            'boarding_days',
-            'dietary_requirements', 'medical_requirements', 'special_accommodations',
-            'emergency_contact_during_boarding', 'emergency_contact_name', 'emergency_contact_relationship',
-            'reason_for_boarding', 'admin_notes',
-        ]
-        widgets = {
-            'student': forms.Select(attrs={'class': 'form-select'}),
-            'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'boarding_type': forms.Select(attrs={'class': 'form-select'}),
-            'dormitory': forms.Select(attrs={'class': 'form-select'}),
-            'enrollment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'boarding_roll_number': forms.TextInput(attrs={
-                'readonly': True,
-                'placeholder': 'Auto-generated',
-                'style': 'background-color:#f8f9fa;',
+            'custody_percentage': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '0',
+                'max': '100',
+                'step': '0.01'
             }),
-            'effective_start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'effective_end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'consent_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'dietary_requirements': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'medical_requirements': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'reason_for_boarding': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'admin_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'notes': forms.Textarea(attrs={'rows': 3}),
         }
     
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def clean_relationship_start_date(self):
+        """Validate start date using school timezone ⭐"""
+        start_date = self.cleaned_data.get('relationship_start_date')
+        if start_date:
+            validate_future_date(start_date)
+        return start_date
+    
+    def clean(self):
+        """Validate date range using school timezone ⭐"""
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('relationship_start_date')
+        end_date = cleaned_data.get('relationship_end_date')
         
-        # Set default enrollment date
-        if not self.is_bound:
-            self.fields['enrollment_date'].initial = timezone.now().date()
-            self.fields['effective_start_date'].initial = timezone.now().date()
+        if start_date and end_date:
+            if end_date < start_date:
+                raise ValidationError({
+                    'relationship_end_date': 'End date cannot be before start date.'
+                })
+        
+        return cleaned_data
