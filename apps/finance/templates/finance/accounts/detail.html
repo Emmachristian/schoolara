@@ -1,0 +1,975 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .detail-card {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .detail-card-header {
+        background: linear-gradient(135deg, #3494e6 0%, #ec6ead 100%);
+        color: white;
+        padding: 20px 25px;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .detail-card-header h5 {
+        margin: 0;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+    }
+    
+    .detail-card-header h5 i {
+        margin-right: 10px;
+        font-size: 1.3rem;
+    }
+    
+    .detail-card-body {
+        padding: 25px;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #f1f1f1;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 500;
+        color: #6c757d;
+        min-width: 200px;
+    }
+    
+    .info-value {
+        color: #495057;
+        font-weight: 600;
+        text-align: right;
+        flex: 1;
+    }
+    
+    .account-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    .account-header .account-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    
+    .account-header .account-name {
+        font-size: 1.25rem;
+        opacity: 0.9;
+        margin-bottom: 15px;
+    }
+    
+    .account-header .account-type-badge {
+        display: inline-block;
+        background-color: rgba(255, 255, 255, 0.2);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .balance-display {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        text-align: center;
+    }
+    
+    .balance-display h6 {
+        font-size: 0.875rem;
+        margin-bottom: 10px;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .balance-display .balance-amount {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    .balance-display .balance-note {
+        font-size: 0.875rem;
+        opacity: 0.8;
+        margin-top: 10px;
+    }
+    
+    .status-badge {
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: inline-block;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .status-active {
+        background-color: #28a745;
+        color: #fff;
+    }
+    
+    .status-inactive {
+        background-color: #6c757d;
+        color: #fff;
+    }
+    
+    .transactions-table {
+        margin-top: 20px;
+    }
+    
+    .transactions-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        padding: 12px 15px;
+        font-size: 0.875rem;
+    }
+    
+    .transactions-table td {
+        padding: 12px 15px;
+        vertical-align: middle;
+        font-size: 0.875rem;
+    }
+    
+    .debit-cell {
+        color: #28a745;
+        font-weight: 600;
+    }
+    
+    .credit-cell {
+        color: #dc3545;
+        font-weight: 600;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+    
+    .stat-card {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card .stat-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+        opacity: 0.7;
+    }
+    
+    .stat-card .stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #495057;
+    }
+    
+    .category-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    
+    .category-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        background-color: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        color: #004085;
+    }
+    
+    .category-badge i {
+        margin-right: 6px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .quick-actions-card {
+        position: sticky;
+        top: 20px;
+    }
+    
+    .child-accounts-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .child-account-item {
+        padding: 12px;
+        border-bottom: 1px solid #f1f1f1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+    }
+    
+    .child-account-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .child-account-item:last-child {
+        border-bottom: none;
+    }
+    
+    .child-account-info {
+        flex: 1;
+    }
+    
+    .child-account-number {
+        font-weight: 700;
+        color: #495057;
+        margin-right: 10px;
+    }
+    
+    .child-account-name {
+        color: #6c757d;
+    }
+    
+    .child-account-stats {
+        font-size: 0.875rem;
+        color: #adb5bd;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        opacity: 0.3;
+        margin-bottom: 15px;
+    }
+    
+    @media print {
+        .action-buttons,
+        .quick-actions-card,
+        .page-title-actions,
+        .app-page-title {
+            display: none !important;
+        }
+        
+        .detail-card {
+            break-inside: avoid;
+            box-shadow: none;
+            border: 1px solid #dee2e6;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-wallet icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Account Details
+                <div class="page-title-subheading">
+                    Complete account information and transaction history
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'finance:account_list' %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left me-1"></i> Back to List
+                </a>
+                
+                {% if account.is_active %}
+                    <a href="{% url 'finance:account_edit' account.pk %}" class="btn btn-warning">
+                        <i class="fa fa-edit me-1"></i> Edit
+                    </a>
+                {% endif %}
+                
+                <a href="{% url 'finance:account_print_statement' account.pk %}" 
+                   class="btn btn-info" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Account Header -->
+<div class="account-header">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <div class="account-number">{{ account.account_number }}</div>
+            <div class="account-name">{{ account.name }}</div>
+            <div class="mt-3">
+                <span class="account-type-badge">
+                    <i class="fa {{ account.icon }} me-2"></i>
+                    {{ account.account_type.name }} - {{ account.account_type.get_account_type_display }}
+                </span>
+            </div>
+        </div>
+        <div>
+            <span class="status-badge status-{{ account.is_active|yesno:'active,inactive' }}">
+                {{ account.is_active|yesno:"Active,Inactive" }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Content Column -->
+    <div class="col-lg-8">
+        
+        <!-- Current Balance -->
+        <div class="balance-display">
+            <h6>Current Balance</h6>
+            <p class="balance-amount">{{ account.current_balance|amount_no_decimals }}</p>
+            <p class="balance-note">
+                {% if account.account_type.normal_balance == 'DEBIT' %}
+                    <i class="fa fa-info-circle me-1"></i> Debit Balance Account
+                {% else %}
+                    <i class="fa fa-info-circle me-1"></i> Credit Balance Account
+                {% endif %}
+            </p>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon text-primary">
+                    <i class="pe-7s-refresh-2"></i>
+                </div>
+                <div class="stat-label">Total Transactions</div>
+                <div class="stat-value">{{ transaction_count|format_number }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon text-success">
+                    <i class="pe-7s-plus"></i>
+                </div>
+                <div class="stat-label">Total Debits</div>
+                <div class="stat-value">{{ debit_total|amount_no_decimals }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon text-danger">
+                    <i class="pe-7s-minus"></i>
+                </div>
+                <div class="stat-label">Total Credits</div>
+                <div class="stat-value">{{ credit_total|amount_no_decimals }}</div>
+            </div>
+        </div>
+        
+        <!-- Account Information -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-note"></i>
+                    Account Information
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <span class="info-label">Account Number</span>
+                    <span class="info-value">
+                        <strong>{{ account.account_number }}</strong>
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Account Name</span>
+                    <span class="info-value">{{ account.name }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Account Type</span>
+                    <span class="info-value">
+                        <span class="badge bg-primary">{{ account.account_type.name }}</span>
+                        <small class="text-muted ms-2">{{ account.account_type.get_account_type_display }}</small>
+                    </span>
+                </div>
+                
+                {% if account.description %}
+                <div class="info-row">
+                    <span class="info-label">Description</span>
+                    <span class="info-value">{{ account.description }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.parent_account %}
+                <div class="info-row">
+                    <span class="info-label">Parent Account</span>
+                    <span class="info-value">
+                        <a href="{% url 'finance:account_detail' account.parent_account.pk %}">
+                            {{ account.parent_account.account_number }} - {{ account.parent_account.name }}
+                        </a>
+                    </span>
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <span class="info-label">Opening Balance</span>
+                    <span class="info-value">{{ account.opening_balance|amount }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Current Balance</span>
+                    <span class="info-value">
+                        <strong>{{ account.current_balance|amount }}</strong>
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Normal Balance</span>
+                    <span class="info-value">
+                        {% if account.account_type.normal_balance == 'DEBIT' %}
+                            <span class="badge bg-success">Debit</span>
+                        {% else %}
+                            <span class="badge bg-danger">Credit</span>
+                        {% endif %}
+                    </span>
+                </div>
+                
+                {% if account.daily_limit %}
+                <div class="info-row">
+                    <span class="info-label">Daily Transaction Limit</span>
+                    <span class="info-value">{{ account.daily_limit|amount }}</span>
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <span class="info-label">Reconcilable</span>
+                    <span class="info-value">
+                        {{ account.is_reconcilable|yesno:"Yes,No" }}
+                    </span>
+                </div>
+                
+                {% if account.is_reconcilable and account.last_reconciled_date %}
+                <div class="info-row">
+                    <span class="info-label">Last Reconciled</span>
+                    <span class="info-value">
+                        {{ account.last_reconciled_date|date:"M d, Y" }}
+                    </span>
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">
+                        {{ account.created_at|date:"M d, Y g:i A" }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Account Categories -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-menu"></i>
+                    Account Categories
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="category-badges">
+                    {% if account.is_bank_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-university"></i> Bank Account
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_cash_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-money-bill-wave"></i> Cash Account
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_mobile_money_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-mobile-alt"></i> Mobile Money
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_receivable_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-receipt"></i> Receivable
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_payable_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-file-invoice"></i> Payable
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_inventory_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-boxes"></i> Inventory
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_fixed_asset %}
+                        <span class="category-badge">
+                            <i class="fa fa-building"></i> Fixed Asset
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_liability_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-balance-scale"></i> Liability
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_loan_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-hand-holding-usd"></i> Loan
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_equity_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-landmark"></i> Equity
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_revenue_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-dollar-sign"></i> Revenue
+                        </span>
+                    {% endif %}
+                    
+                    {% if account.is_expense_account %}
+                        <span class="category-badge">
+                            <i class="fa fa-file-invoice-dollar"></i> Expense
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Specific Account Details -->
+        {% if account.is_bank_account %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <h5>
+                    <i class="pe-7s-cash"></i>
+                    Bank Account Details
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if account.bank_name %}
+                <div class="info-row">
+                    <span class="info-label">Bank Name</span>
+                    <span class="info-value">{{ account.bank_name }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.bank_branch %}
+                <div class="info-row">
+                    <span class="info-label">Branch</span>
+                    <span class="info-value">{{ account.bank_branch }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.account_holder_name %}
+                <div class="info-row">
+                    <span class="info-label">Account Holder</span>
+                    <span class="info-value">{{ account.account_holder_name }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.bank_account_number %}
+                <div class="info-row">
+                    <span class="info-label">Account Number</span>
+                    <span class="info-value">
+                        <code>{{ account.bank_account_number }}</code>
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if account.bank_account_type %}
+                <div class="info-row">
+                    <span class="info-label">Account Type</span>
+                    <span class="info-value">{{ account.get_bank_account_type_display }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.bank_routing_number %}
+                <div class="info-row">
+                    <span class="info-label">Routing Number</span>
+                    <span class="info-value">
+                        <code>{{ account.bank_routing_number }}</code>
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if account.bank_swift_code %}
+                <div class="info-row">
+                    <span class="info-label">SWIFT Code</span>
+                    <span class="info-value">
+                        <code>{{ account.bank_swift_code }}</code>
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if account.is_cash_account %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <h5>
+                    <i class="pe-7s-wallet"></i>
+                    Cash Account Details
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if account.cash_location %}
+                <div class="info-row">
+                    <span class="info-label">Cash Location</span>
+                    <span class="info-value">{{ account.cash_location }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.get_responsible_person %}
+                <div class="info-row">
+                    <span class="info-label">Responsible Person</span>
+                    <span class="info-value">{{ account.get_responsible_person.get_full_name }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if account.is_mobile_money_account %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                <h5>
+                    <i class="pe-7s-phone"></i>
+                    Mobile Money Details
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if account.mobile_money_provider %}
+                <div class="info-row">
+                    <span class="info-label">Provider</span>
+                    <span class="info-value">{{ account.get_mobile_money_provider_display }}</span>
+                </div>
+                {% endif %}
+                
+                {% if account.mobile_number %}
+                <div class="info-row">
+                    <span class="info-label">Mobile Number</span>
+                    <span class="info-value">
+                        <code>{{ account.mobile_number }}</code>
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if account.mobile_account_name %}
+                <div class="info-row">
+                    <span class="info-label">Account Name</span>
+                    <span class="info-value">{{ account.mobile_account_name }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Recent Transactions -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-note2"></i>
+                    Recent Transactions (Last 50)
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover transactions-table">
+                            <thead>
+                                <tr>
+                                    <th width="100">Date</th>
+                                    <th width="120">Entry No.</th>
+                                    <th>Description</th>
+                                    <th width="120" class="text-end">Debit</th>
+                                    <th width="120" class="text-end">Credit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td>{{ transaction.journal_entry.entry_date|date:"M d, Y" }}</td>
+                                    <td>
+                                        <a href="{% url 'finance:journal_entry_detail' transaction.journal_entry.pk %}">
+                                            {{ transaction.journal_entry.entry_number }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <div>{{ transaction.description|default:transaction.journal_entry.description }}</div>
+                                        <small class="text-muted">
+                                            <i class="fa fa-book me-1"></i>
+                                            {{ transaction.journal_entry.journal.name }}
+                                        </small>
+                                    </td>
+                                    <td class="text-end debit-cell">
+                                        {% if transaction.is_debit %}
+                                            {{ transaction.amount|amount }}
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end credit-cell">
+                                        {% if not transaction.is_debit %}
+                                            {{ transaction.amount|amount }}
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if transaction_count > 50 %}
+                    <div class="alert alert-info mt-3">
+                        <i class="fa fa-info-circle me-2"></i>
+                        Showing 50 of {{ transaction_count|format_number }} total transactions.
+                        <a href="{% url 'finance:account_print_statement' account.pk %}" target="_blank">
+                            View full statement
+                        </a>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fa fa-inbox"></i>
+                        <p>No transactions recorded yet for this account.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Child Accounts -->
+        {% if child_accounts %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-network"></i>
+                    Sub-Accounts ({{ child_accounts.count }})
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <ul class="child-accounts-list">
+                    {% for child in child_accounts %}
+                    <li class="child-account-item">
+                        <div class="child-account-info">
+                            <span class="child-account-number">{{ child.account_number }}</span>
+                            <span class="child-account-name">{{ child.name }}</span>
+                            <div class="child-account-stats mt-1">
+                                <i class="fa fa-exchange-alt me-1"></i>
+                                {{ child.transaction_count }} transaction{{ child.transaction_count|pluralize }}
+                            </div>
+                        </div>
+                        <div>
+                            <a href="{% url 'finance:account_detail' child.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="fa fa-eye"></i>
+                            </a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+        
+    </div>
+    
+    <!-- Sidebar Column -->
+    <div class="col-lg-4">
+        
+        <!-- Quick Actions -->
+        <div class="detail-card quick-actions-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-plugin"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="action-buttons d-grid gap-2">
+                    
+                    {% if account.is_active %}
+                        <a href="{% url 'finance:account_edit' account.pk %}" class="btn btn-warning">
+                            <i class="fa fa-edit me-2"></i> Edit Account
+                        </a>
+                        
+                        {% if account.is_reconcilable %}
+                            <a href="{% url 'finance:account_reconcile' account.pk %}" class="btn btn-success">
+                                <i class="fa fa-check-double me-2"></i> Reconcile
+                            </a>
+                        {% endif %}
+                        
+                        <a href="{% url 'finance:account_toggle_active' account.pk %}"
+                           class="btn btn-secondary"
+                           hx-post="{% url 'finance:account_toggle_active' account.pk %}"
+                           hx-target="#modal-content"
+                           hx-swap="innerHTML">
+                            <i class="fa fa-ban me-2"></i> Deactivate
+                        </a>
+                    {% else %}
+                        <a href="{% url 'finance:account_toggle_active' account.pk %}"
+                           class="btn btn-success"
+                           hx-post="{% url 'finance:account_toggle_active' account.pk %}"
+                           hx-target="#modal-content"
+                           hx-swap="innerHTML">
+                            <i class="fa fa-check-circle me-2"></i> Activate
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{% url 'finance:account_print_statement' account.pk %}" 
+                       class="btn btn-info" target="_blank">
+                        <i class="fa fa-print me-2"></i> Print Statement
+                    </a>
+                    
+                    <a href="{% url 'finance:account_list' %}" class="btn btn-secondary">
+                        <i class="fa fa-list me-2"></i> View All Accounts
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Account Summary -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-graph2"></i>
+                    Account Summary
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <span class="info-label">Account Category</span>
+                    <span class="info-value">
+                        <span class="badge bg-info">{{ account.get_category_display }}</span>
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value">
+                        <span class="status-badge status-{{ account.is_active|yesno:'active,inactive' }}">
+                            {{ account.is_active|yesno:"Active,Inactive" }}
+                        </span>
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Total Transactions</span>
+                    <span class="info-value">{{ transaction_count|format_number }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Sub-Accounts</span>
+                    <span class="info-value">{{ child_accounts.count }}</span>
+                </div>
+                
+                {% if account.requires_approval %}
+                <div class="info-row">
+                    <span class="info-label">Approval Required</span>
+                    <span class="info-value">
+                        <span class="badge bg-warning text-dark">Yes</span>
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    console.log('Account detail page loaded');
+    console.log('Account Number: {{ account.account_number }}');
+    console.log('Account Type: {{ account.account_type.account_type }}');
+    console.log('Current Balance: {{ account.current_balance }}');
+});
+</script>
+{% endblock %}

@@ -26,6 +26,8 @@ from academics.models import AcademicSession
 from core.models import FinancialSettings
 from finance.models import JournalEntry, JournalTransaction, Journal
 
+from core.utils import get_school_today, get_school_current_time  # ✅ ADD THIS
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,38 +52,30 @@ class InvoiceService:
                 Required:
                     - student: Student instance or ID
                     - academic_session: AcademicSession instance or ID
-                    - issue_date: Date
-                    - due_date: Date
                 Optional:
+                    - issue_date: Date (defaults to today in school timezone) ⭐
+                    - due_date: Date (defaults to issue_date + 30 days) ⭐
                     - invoice_type: 'ACADEMIC', 'BOARDING', 'UNIFORM', etc.
                     - notes: str
                     - discount_amount: Decimal
                     - tax_amount: Decimal
-                    - items: List of item dicts (see add_invoice_item)
+                    - items: List of item dicts
                     
         Returns:
             FeeInvoice instance
-            
-        Example:
-            invoice = InvoiceService.create_invoice({
-                'student': student,
-                'academic_session': session,
-                'issue_date': date.today(),
-                'due_date': date.today() + timedelta(days=30),
-                'invoice_type': 'ACADEMIC',
-                'notes': 'Term 1 fees',
-                'items': [
-                    {
-                        'fee_category': tuition_category,
-                        'amount': 500000,
-                        'quantity': 1,
-                        'description': 'Tuition Fee'
-                    }
-                ]
-            })
         """
         # Extract items if provided
         items_data = invoice_data.pop('items', [])
+        
+        # ✅ SET DEFAULT DATES IF NOT PROVIDED
+        if 'issue_date' not in invoice_data:
+            invoice_data['issue_date'] = get_school_today()
+        
+        if 'due_date' not in invoice_data:
+            from datetime import timedelta
+            settings = FinancialSettings.get_instance()
+            payment_terms_days = settings.default_payment_terms_days if settings else 30
+            invoice_data['due_date'] = invoice_data['issue_date'] + timedelta(days=payment_terms_days)
         
         # Resolve foreign keys if IDs provided
         if isinstance(invoice_data.get('student'), int):
@@ -110,7 +104,10 @@ class InvoiceService:
         for item_data in items_data:
             InvoiceService.add_invoice_item(invoice, item_data)
         
-        logger.info(f"Created invoice {invoice.invoice_number} for {invoice.student.get_full_name()}")
+        logger.info(
+            f"Created invoice {invoice.invoice_number} for {invoice.student.get_full_name()} "
+            f"(issue_date: {invoice.issue_date}, due_date: {invoice.due_date})"  # ✅ Log dates
+        )
         
         return invoice
     
@@ -846,7 +843,8 @@ class InvoiceBulkOperations:
         """
         from django.db.models import Q
         
-        today = timezone.now().date()
+        # ✅ USE SCHOOL TIMEZONE
+        today = get_school_today()  # ✅ FIXED!
         
         overdue_invoices = FeeInvoice.objects.filter(
             Q(status='PENDING') | Q(status='PARTIALLY_PAID'),
@@ -858,6 +856,6 @@ class InvoiceBulkOperations:
             if InvoiceService.mark_invoice_as_overdue(invoice):
                 count += 1
         
-        logger.info(f"Marked {count} invoices as overdue")
+        logger.info(f"Marked {count} invoices as overdue (checked against {today})")  # ✅ Log date
         
         return count

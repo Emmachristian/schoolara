@@ -1,0 +1,1760 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .required-field::after {
+        content: " *";
+        color: red;
+    }
+    
+    .step-content {
+        min-height: 400px;
+        padding: 20px;
+    }
+    
+    .form-errors {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+    
+    /* Enhanced error styling */
+    #form-errors-container {
+        border: 2px solid #dc3545;
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(220, 53, 69, 0.2);
+    }
+    
+    #form-errors-container h5 {
+        color: #721c24;
+        font-weight: 600;
+        margin-bottom: 15px;
+    }
+    
+    #form-errors-container ul {
+        margin-bottom: 0;
+    }
+    
+    #form-errors-container li {
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+    
+    /* Invalid field styling */
+    .is-invalid {
+        border-color: #dc3545 !important;
+        background-color: #fff5f5 !important;
+    }
+    
+    .is-invalid:focus {
+        border-color: #dc3545 !important;
+        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+    }
+    
+    /* Shake animation for errors */
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+        20%, 40%, 60%, 80% { transform: translateX(10px); }
+    }
+    
+    .shake {
+        animation: shake 0.5s;
+    }
+    
+    /* Review Section Styles */
+    .review-section {
+        margin-bottom: 25px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    
+    .review-section h5 {
+        margin-bottom: 15px;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+        padding-bottom: 10px;
+    }
+    
+    .review-item {
+        display: flex;
+        padding: 8px 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .review-item:last-child {
+        border-bottom: none;
+    }
+    
+    .review-label {
+        font-weight: 600;
+        min-width: 200px;
+        color: #6c757d;
+    }
+    
+    .review-value {
+        flex: 1;
+        color: #212529;
+    }
+    
+    /* Fee Items Table */
+    .fee-items-table {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .fee-items-table th {
+        background-color: #e9ecef;
+        padding: 8px;
+        font-weight: 600;
+    }
+    
+    .fee-items-table td {
+        padding: 8px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .total-row {
+        font-weight: 700;
+        background-color: #f8f9fa;
+    }
+    
+    /* Formset Styles */
+    .formset-row {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 15px;
+        position: relative;
+    }
+    
+    .formset-row.deleted {
+        opacity: 0.5;
+        background-color: #f8d7da;
+    }
+    
+    .formset-row-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .formset-row-number {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    /* Section headers within formset rows */
+    .section-header {
+        color: #495057;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-top: 15px;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .section-header:first-of-type {
+        margin-top: 0;
+    }
+    
+    .section-header i {
+        color: #007bff;
+        margin-right: 5px;
+    }
+    
+    .delete-row-btn {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+    
+    .delete-row-btn:hover {
+        background-color: #c82333;
+    }
+    
+    .add-row-btn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    
+    .add-row-btn:hover {
+        background-color: #218838;
+    }
+    
+    /* Percentage Summary */
+    .percentage-summary {
+        background-color: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 15px;
+        font-weight: 600;
+    }
+    
+    .percentage-summary.valid {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+    }
+    
+    .percentage-summary.invalid {
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+    }
+    
+    /* Wizard Progress */
+    .forms-wizard li.done a em {
+        background-color: #28a745 !important;
+        color: white !important;
+    }
+
+    .forms-wizard li.done a em:after {
+        content: "✓";
+        font-style: normal;
+    }
+    
+    /* Conditional Fields */
+    .conditional-field {
+        display: none;
+        margin-top: 15px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+    }
+    
+    /* Tax Percentage Field - Initially Hidden */
+    .tax-percentage-field {
+        display: none;
+    }
+    
+    /* Help Text */
+    .form-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    /* Alert Boxes */
+    .alert-info {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+    }
+    
+    .alert-warning {
+        background-color: #fff3cd;
+        border-color: #ffeeba;
+        color: #856404;
+    }
+    
+    .alert-success {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-cash icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Fee Structure Creation Wizard
+                <div class="page-title-subheading">Create a new fee structure in four simple steps</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12 col-md-12">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <form method="post" id="wizard-form" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {{ wizard.management_form }}
+                    
+                    <div id="smartwizard">
+                        <!-- Wizard Steps Navigation -->
+                        <ul class="forms-wizard">
+                            <li>
+                                <a href="#step-basic-info">
+                                    <em>1</em>
+                                    <span>Basic Information</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#step-billing-schedule">
+                                    <em>2</em>
+                                    <span>Billing Schedule</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#step-fee-items">
+                                    <em>3</em>
+                                    <span>Fee Items</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#step-confirmation">
+                                    <em>4</em>
+                                    <span>Review & Confirm</span>
+                                </a>
+                            </li>
+                        </ul>
+                        
+                        <div class="form-wizard-content">
+                            <!-- Form Errors Display - Enhanced -->
+                            {% if wizard.form.errors or wizard.form.non_field_errors %}
+                            <div class="form-errors alert alert-danger" role="alert" id="form-errors-container">
+                                <h5><i class="fa fa-exclamation-triangle"></i> Please correct the following errors:</h5>
+                                <ul class="mb-0">
+                                    {% for field in wizard.form %}
+                                        {% for error in field.errors %}
+                                            <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                                        {% endfor %}
+                                    {% endfor %}
+                                    {% for error in wizard.form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+
+                            <!-- ========================================== -->
+                            <!-- STEP 1: BASIC INFORMATION -->
+                            <!-- ========================================== -->
+                            <div id="step-basic-info" class="step-content">
+                                {% if wizard.steps.current == 'basic_info' %}
+                                    <h4 class="mb-4">Basic Structure Information</h4>
+                                    
+                                    <!-- Basic Details -->
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.name.label }}</label>
+                                                {% render_field wizard.form.name class="form-control" %}
+                                                {% if wizard.form.name.help_text %}
+                                                    <small class="form-text">{{ wizard.form.name.help_text }}</small>
+                                                {% endif %}
+                                                {% if wizard.form.name.errors %}
+                                                    <div class="text-danger">{{ wizard.form.name.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.structure_type.label }}</label>
+                                                {% render_field wizard.form.structure_type class="form-select" %}
+                                                {% if wizard.form.structure_type.errors %}
+                                                    <div class="text-danger">{{ wizard.form.structure_type.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="position-relative mb-3">
+                                        <label class="form-label">{{ wizard.form.description.label }}</label>
+                                        {% render_field wizard.form.description class="form-control" %}
+                                    </div>
+
+                                    <!-- Academic Coverage -->
+                                    <h5 class="mt-4 mb-3">Academic Coverage</h5>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.academic_year.label }}</label>
+                                                {% render_field wizard.form.academic_year class="form-select" %}
+                                                {% if wizard.form.academic_year.help_text %}
+                                                    <small class="form-text">{{ wizard.form.academic_year.help_text }}</small>
+                                                {% endif %}
+                                                {% if wizard.form.academic_year.errors %}
+                                                    <div class="text-danger">{{ wizard.form.academic_year.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.billing_frequency.label }}</label>
+                                                {% render_field wizard.form.billing_frequency class="form-select" %}
+                                                {% if wizard.form.billing_frequency.help_text %}
+                                                    <small class="form-text">{{ wizard.form.billing_frequency.help_text }}</small>
+                                                {% endif %}
+                                                {% if wizard.form.billing_frequency.errors %}
+                                                    <div class="text-danger">{{ wizard.form.billing_frequency.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.applicable_sessions.label }}</label>
+                                                {% render_field wizard.form.applicable_sessions class="form-select" %}
+                                                {% if wizard.form.applicable_sessions.help_text %}
+                                                    <small class="form-text">{{ wizard.form.applicable_sessions.help_text }}</small>
+                                                {% endif %}
+                                                {% if wizard.form.applicable_sessions.errors %}
+                                                    <div class="text-danger">{{ wizard.form.applicable_sessions.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.academic_levels.label }}</label>
+                                                {% render_field wizard.form.academic_levels class="form-select" %}
+                                                {% if wizard.form.academic_levels.help_text %}
+                                                    <small class="form-text">{{ wizard.form.academic_levels.help_text }}</small>
+                                                {% endif %}
+                                                {% if wizard.form.academic_levels.errors %}
+                                                    <div class="text-danger">{{ wizard.form.academic_levels.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="position-relative mb-3">
+                                        <label class="form-label">{{ wizard.form.applicable_classes.label }}</label>
+                                        {% render_field wizard.form.applicable_classes class="form-select" %}
+                                        {% if wizard.form.applicable_classes.help_text %}
+                                            <small class="form-text">{{ wizard.form.applicable_classes.help_text }}</small>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Student Filters -->
+                                    <h5 class="mt-4 mb-3">Student Filters</h5>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.boarding_type_filter.label }}</label>
+                                                {% render_field wizard.form.boarding_type_filter class="form-select" %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.student_type_filter.label }}</label>
+                                                {% render_field wizard.form.student_type_filter class="form-select" %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Payment Terms -->
+                                    <h5 class="mt-4 mb-3">Payment Terms</h5>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.payment_terms_days.label }}</label>
+                                                {% render_field wizard.form.payment_terms_days class="form-control" %}
+                                                {% if wizard.form.payment_terms_days.help_text %}
+                                                    <small class="form-text">{{ wizard.form.payment_terms_days.help_text }}</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.grace_period_days.label }}</label>
+                                                {% render_field wizard.form.grace_period_days class="form-control" %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.priority.label }}</label>
+                                                {% render_field wizard.form.priority class="form-control" %}
+                                                {% if wizard.form.priority.help_text %}
+                                                    <small class="form-text">{{ wizard.form.priority.help_text }}</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="position-relative mb-3">
+                                        <div class="form-check">
+                                            {% render_field wizard.form.charges_late_fee class="form-check-input" %}
+                                            <label class="form-check-label" for="{{ wizard.form.charges_late_fee.id_for_label }}">
+                                                {{ wizard.form.charges_late_fee.label }}
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div id="late-fee-fields" class="conditional-field">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="position-relative mb-3">
+                                                    <label class="form-label">{{ wizard.form.late_fee_amount.label }}</label>
+                                                    {% render_field wizard.form.late_fee_amount class="form-control" %}
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="position-relative mb-3">
+                                                    <label class="form-label">{{ wizard.form.late_fee_percentage.label }}</label>
+                                                    {% render_field wizard.form.late_fee_percentage class="form-control" %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Status & Dates -->
+                                    <h5 class="mt-4 mb-3">Status & Validity</h5>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label required-field">{{ wizard.form.effective_date.label }}</label>
+                                                {% render_field wizard.form.effective_date class="form-control" %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.expiry_date.label }}</label>
+                                                {% render_field wizard.form.expiry_date class="form-control" %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="position-relative mb-3">
+                                        <div class="form-check">
+                                            {% render_field wizard.form.is_active class="form-check-input" %}
+                                            <label class="form-check-label" for="{{ wizard.form.is_active.id_for_label }}">
+                                                {{ wizard.form.is_active.label }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- ========================================== -->
+                            <!-- STEP 2: BILLING SCHEDULE (CONDITIONAL) -->
+                            <!-- ========================================== -->
+                            <div id="step-billing-schedule" class="step-content">
+                                {% if wizard.steps.current == 'billing_schedule' %}
+                                    <h4 class="mb-4">Billing Schedule - Custom Splits</h4>
+                                    
+                                    <div class="alert alert-info">
+                                        <i class="fa fa-info-circle"></i> 
+                                        Configure how the total fee amount will be split across fiscal periods.
+                                        The total of all percentages must equal exactly 100%.
+                                    </div>
+
+                                    <div id="billing-formset">
+                                        {{ wizard.form.management_form }}
+                                        
+                                        {% for form in wizard.form %}
+                                            <div class="formset-row" data-formset-form>
+                                                <div class="formset-row-header">
+                                                    <div class="formset-row-number">Billing Split #<span class="row-number">{{ forloop.counter }}</span></div>
+                                                    {% if not forloop.first or wizard.form|length > 1 %}
+                                                        <button type="button" class="delete-row-btn" data-delete-row>
+                                                            <i class="fa fa-trash"></i> Remove
+                                                        </button>
+                                                    {% endif %}
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-4">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label required-field">{{ form.fiscal_period.label }}</label>
+                                                            {% render_field form.fiscal_period class="form-control" %}
+                                                            {% if form.fiscal_period.errors %}
+                                                                <div class="text-danger">{{ form.fiscal_period.errors.0 }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label required-field">{{ form.percentage.label }}</label>
+                                                            {% render_field form.percentage class="form-control percentage-input" %}
+                                                            {% if form.percentage.errors %}
+                                                                <div class="text-danger">{{ form.percentage.errors.0 }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label required-field">{{ form.sequence.label }}</label>
+                                                            {% render_field form.sequence class="form-control" %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label">{{ form.description.label }}</label>
+                                                            {% render_field form.description class="form-control" %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {{ form.id }}
+                                                {% render_field form.DELETE style="display:none" %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+
+                                    <button type="button" class="add-row-btn" id="add-billing-split">
+                                        <i class="fa fa-plus"></i> Add Another Split
+                                    </button>
+
+                                    <div id="percentage-summary" class="percentage-summary">
+                                        Total Percentage: <span id="total-percentage">0.00</span>%
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- ========================================== -->
+                            <!-- STEP 3: FEE ITEMS -->
+                            <!-- ========================================== -->
+                            <div id="step-fee-items" class="step-content">
+                                {% if wizard.steps.current == 'fee_items' %}
+                                    <h4 class="mb-4">Fee Items</h4>
+                                    
+                                    <div class="alert alert-info">
+                                        <i class="fa fa-info-circle"></i> 
+                                        Add the individual fee categories and amounts for this structure.
+                                        At least one fee item is required.
+                                    </div>
+
+                                    <div id="fee-items-formset">
+                                        {{ wizard.form.management_form }}
+                                        
+                                        {% for form in wizard.form %}
+                                            <div class="formset-row" data-formset-form data-row-index="{{ forloop.counter0 }}">
+                                                <div class="formset-row-header">
+                                                    <div class="formset-row-number">Fee Item #<span class="row-number">{{ forloop.counter }}</span></div>
+                                                    {% if not forloop.first or wizard.form|length > 1 %}
+                                                        <button type="button" class="delete-row-btn" data-delete-row>
+                                                            <i class="fa fa-trash"></i> Remove
+                                                        </button>
+                                                    {% endif %}
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label required-field">{{ form.fee_category.label }}</label>
+                                                            {% render_field form.fee_category class="form-control" %}
+                                                            {% if form.fee_category.errors %}
+                                                                <div class="text-danger">{{ form.fee_category.errors.0 }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label required-field">{{ form.amount.label }}</label>
+                                                            {% render_field form.amount class="form-control fee-amount" %}
+                                                            {% if form.amount.errors %}
+                                                                <div class="text-danger">{{ form.amount.errors.0 }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label">{{ form.display_order.label }}</label>
+                                                            {% render_field form.display_order class="form-control" %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Row 2: Tax Configuration -->
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.is_taxable class="form-check-input item-is-taxable" data-row="{{ forloop.counter0 }}" %}
+                                                            <label class="form-check-label" for="{{ form.is_taxable.id_for_label }}">
+                                                                {{ form.is_taxable.label }}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3 tax-percentage-field">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label">{{ form.tax_percentage.label }}</label>
+                                                            {% render_field form.tax_percentage class="form-control" placeholder="0.00" %}
+                                                            {% if form.tax_percentage.help_text %}
+                                                                <small class="form-text">{{ form.tax_percentage.help_text }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label">{{ form.default_discount_percentage.label }}</label>
+                                                            {% render_field form.default_discount_percentage class="form-control" placeholder="0.00" %}
+                                                            {% if form.default_discount_percentage.help_text %}
+                                                                <small class="form-text">{{ form.default_discount_percentage.help_text }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.use_variable_amount class="form-check-input" %}
+                                                            <label class="form-check-label" for="{{ form.use_variable_amount.id_for_label }}">
+                                                                {{ form.use_variable_amount.label }}
+                                                            </label>
+                                                            {% if form.use_variable_amount.help_text %}
+                                                                <small class="form-text d-block">{{ form.use_variable_amount.help_text }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Row 3: Scholarship & Eligibility -->
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.scholarship_eligible class="form-check-input" %}
+                                                            <label class="form-check-label" for="{{ form.scholarship_eligible.id_for_label }}">
+                                                                {{ form.scholarship_eligible.label }}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="position-relative mb-3">
+                                                            <label class="form-label">{{ form.max_scholarship_discount.label }}</label>
+                                                            {% render_field form.max_scholarship_discount class="form-control" placeholder="100.00" %}
+                                                            {% if form.max_scholarship_discount.help_text %}
+                                                                <small class="form-text">{{ form.max_scholarship_discount.help_text }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.is_mandatory class="form-check-input" %}
+                                                            <label class="form-check-label" for="{{ form.is_mandatory.id_for_label }}">
+                                                                {{ form.is_mandatory.label }}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.is_conditional class="form-check-input" %}
+                                                            <label class="form-check-label" for="{{ form.is_conditional.id_for_label }}">
+                                                                {{ form.is_conditional.label }}
+                                                            </label>
+                                                            {% if form.is_conditional.help_text %}
+                                                                <small class="form-text d-block">{{ form.is_conditional.help_text }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Row 4: Display Options -->
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="form-check mb-3">
+                                                            {% render_field form.print_on_invoice class="form-check-input" %}
+                                                            <label class="form-check-label" for="{{ form.print_on_invoice.id_for_label }}">
+                                                                {{ form.print_on_invoice.label }}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {{ form.id }}
+                                                {% render_field form.DELETE style="display:none" %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+
+                                    <button type="button" class="add-row-btn" id="add-fee-item">
+                                        <i class="fa fa-plus"></i> Add Another Fee Item
+                                    </button>
+
+                                    <div class="percentage-summary valid" style="margin-top: 20px;">
+                                        <i class="fa fa-calculator"></i> Total Amount: UGX <span id="total-fee-amount">0.00</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- ========================================== -->
+                            <!-- STEP 4: CONFIRMATION - WITH CUSTOM FILTERS -->
+                            <!-- ========================================== -->
+
+                            {# Load custom template tags at the top of your template #}
+                            {% load fees_tags %}
+
+                            <div id="step-confirmation" class="step-content">
+                                {% if wizard.steps.current == 'confirmation' %}
+                                    <h4 class="mb-4">Review & Confirmation</h4>
+                                    
+                                    <!-- Basic Information Review -->
+                                    {% if basic_data %}
+                                    <div class="review-section">
+                                        <h5><i class="pe-7s-cash"></i> Basic Structure Information</h5>
+                                        <div class="review-item">
+                                            <div class="review-label">Structure Name:</div>
+                                            <div class="review-value">{{ basic_data.name }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Structure Type:</div>
+                                            <div class="review-value">{{ basic_data.structure_type|get_structure_type_display }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Academic Year:</div>
+                                            <div class="review-value">{{ basic_data.academic_year }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Billing Frequency:</div>
+                                            <div class="review-value">{{ basic_data.billing_frequency|get_billing_frequency_display }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Applicable Sessions:</div>
+                                            <div class="review-value">
+                                                {% for session in basic_data.applicable_sessions.all %}
+                                                    {{ session }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Academic Levels:</div>
+                                            <div class="review-value">
+                                                {% for level in basic_data.academic_levels.all %}
+                                                    {{ level }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Boarding Type Filter:</div>
+                                            <div class="review-value">{{ basic_data.boarding_type_filter|get_boarding_type_display }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Student Type Filter:</div>
+                                            <div class="review-value">{{ basic_data.student_type_filter|get_student_type_display }}</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Payment Terms:</div>
+                                            <div class="review-value">{{ basic_data.payment_terms_days }} days</div>
+                                        </div>
+                                        <div class="review-item">
+                                            <div class="review-label">Priority:</div>
+                                            <div class="review-value">{{ basic_data.priority }}</div>
+                                        </div>
+                                        {% if basic_data.charges_late_fee %}
+                                        <div class="review-item">
+                                            <div class="review-label">Late Fee:</div>
+                                            <div class="review-value">
+                                                {% if basic_data.late_fee_amount > 0 %}
+                                                    UGX {{ basic_data.late_fee_amount|floatformat:2 }}
+                                                {% endif %}
+                                                {% if basic_data.late_fee_percentage > 0 %}
+                                                    {{ basic_data.late_fee_percentage }}%
+                                                {% endif %}
+                                                (Grace Period: {{ basic_data.grace_period_days }} days)
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Billing Schedule Review -->
+                                    {% if billing_data %}
+                                    <div class="review-section">
+                                        <h5><i class="pe-7s-date"></i> Billing Schedule</h5>
+                                        <table class="fee-items-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Sequence</th>
+                                                    <th>Fiscal Period</th>
+                                                    <th>Percentage</th>
+                                                    <th>Description</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for split in billing_data %}
+                                                    {% if not split.DELETE %}
+                                                    <tr>
+                                                        <td>{{ split.sequence }}</td>
+                                                        <td>{{ split.fiscal_period }}</td>
+                                                        <td>{{ split.percentage }}%</td>
+                                                        <td>{{ split.description|default:"—" }}</td>
+                                                    </tr>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <!-- Show automatic billing info when custom splits aren't used -->
+                                    <div class="review-section">
+                                        <h5><i class="pe-7s-date"></i> Billing Schedule</h5>
+                                        <div class="alert alert-info mb-0">
+                                            <i class="fa fa-info-circle"></i>
+                                            {% if basic_data.billing_frequency == 'ONCE' %}
+                                                <strong>Full Payment:</strong> The entire amount will be billed in the first fiscal period.
+                                            {% elif basic_data.billing_frequency == 'PER_PERIOD' %}
+                                                <strong>Equal Installments:</strong> The amount will be split equally across all active fiscal periods.
+                                            {% elif basic_data.billing_frequency == 'ON_ENROLLMENT' %}
+                                                <strong>On Enrollment:</strong> The amount will be billed when the student enrolls.
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Fee Items Review -->
+                                    {% if items_data %}
+                                    <div class="review-section">
+                                        <h5><i class="pe-7s-menu"></i> Fee Items</h5>
+                                        <table class="fee-items-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fee Category</th>
+                                                    <th class="text-end">Amount (UGX)</th>
+                                                    <th class="text-center">Taxable</th>
+                                                    <th class="text-center">Discount %</th>
+                                                    <th class="text-center">Scholarship</th>
+                                                    <th class="text-center">Mandatory</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for item in items_data %}
+                                                    {% if not item.DELETE %}
+                                                    <tr>
+                                                        <td>{{ item.fee_category }}</td>
+                                                        <td class="text-end">{{ item.amount|floatformat:2 }}</td>
+                                                        <td class="text-center">
+                                                            {% if item.is_taxable %}
+                                                                <i class="fa fa-check text-success"></i> {{ item.tax_percentage }}%
+                                                            {% else %}
+                                                                <i class="fa fa-times text-muted"></i>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="text-center">
+                                                            {% if item.default_discount_percentage > 0 %}
+                                                                {{ item.default_discount_percentage }}%
+                                                            {% else %}
+                                                                —
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="text-center">
+                                                            {% if item.scholarship_eligible %}
+                                                                <i class="fa fa-check text-success"></i>
+                                                                {% if item.max_scholarship_discount %}
+                                                                    (max {{ item.max_scholarship_discount }}%)
+                                                                {% endif %}
+                                                            {% else %}
+                                                                <i class="fa fa-times text-muted"></i>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="text-center">
+                                                            {% if item.is_mandatory %}
+                                                                <i class="fa fa-check text-success"></i>
+                                                            {% else %}
+                                                                <i class="fa fa-times text-muted"></i>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endif %}
+                                                {% endfor %}
+                                                <tr class="total-row">
+                                                    <td><strong>TOTAL</strong></td>
+                                                    <td class="text-end"><strong>UGX {{ total_amount|floatformat:2 }}</strong></td>
+                                                    <td colspan="4"></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% endif %}
+
+                                    <hr class="my-4">
+
+                                    <!-- Confirmation Fields -->
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="position-relative mb-3">
+                                                <div class="form-check">
+                                                    {% render_field wizard.form.confirm_creation class="form-check-input" %}
+                                                    <label class="form-check-label required-field" for="{{ wizard.form.confirm_creation.id_for_label }}">
+                                                        {{ wizard.form.confirm_creation.label }}
+                                                    </label>
+                                                </div>
+                                                {% if wizard.form.confirm_creation.errors %}
+                                                    <div class="text-danger">{{ wizard.form.confirm_creation.errors.0 }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="position-relative mb-3">
+                                                <label class="form-label">{{ wizard.form.notes.label }}</label>
+                                                {% render_field wizard.form.notes class="form-control" %}
+                                                {% if wizard.form.notes.help_text %}
+                                                    <small class="form-text">{{ wizard.form.notes.help_text }}</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-success mt-4">
+                                        <i class="fa fa-check-circle"></i> 
+                                        Please review all information carefully before submitting. 
+                                        You can always edit the fee structure after creation.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="divider"></div>
+                <div class="clearfix">
+                    <button type="button" id="reset-btn" class="btn-shadow float-start btn btn-link">Reset</button>
+                    <button type="button" id="next-btn" class="btn-shadow btn-wide float-end btn-pill btn-hover-shine btn btn-primary">
+                        <span class="next-text">Next</span>
+                    </button>
+                    <button type="button" id="prev-btn" class="btn-shadow float-end btn-wide btn-pill me-3 btn btn-outline-secondary">Previous</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script type="text/javascript" src="{% static 'vendors/smartwizard/dist/js/jquery.smartWizard.min.js' %}"></script>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    console.log('='.repeat(80));
+    console.log('FEE STRUCTURE WIZARD INITIALIZATION');
+    console.log('='.repeat(80));
+    
+    // =========================================================================
+    // ERROR LOGGING SETUP
+    // =========================================================================
+    
+    // Global error handler
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error('❌ GLOBAL ERROR:', {
+            message: message,
+            source: source,
+            line: lineno,
+            column: colno,
+            error: error
+        });
+        return false;
+    };
+    
+    // jQuery error handler
+    $(document).on('error', function(e) {
+        console.error('❌ JQUERY ERROR:', e);
+    });
+    
+    // =========================================================================
+    // ERROR HANDLING AND DISPLAY
+    // =========================================================================
+    
+    // Scroll to errors if they exist
+    if ($('#form-errors-container').length > 0) {
+        console.log('⚠️  Form errors detected - scrolling to error container');
+        $('html, body').animate({
+            scrollTop: $('#form-errors-container').offset().top - 100
+        }, 500);
+        
+        // Add animation to draw attention
+        $('#form-errors-container').addClass('shake');
+        setTimeout(function() {
+            $('#form-errors-container').removeClass('shake');
+        }, 1000);
+    }
+    
+    // Highlight fields with errors
+    $('.text-danger').each(function() {
+        var $input = $(this).closest('.position-relative').find('input, select, textarea');
+        if ($input.length > 0) {
+            $input.addClass('is-invalid');
+            console.log('⚠️  Field marked as invalid:', $input.attr('name'));
+        }
+    });
+    
+    // =========================================================================
+    // WIZARD SETUP
+    // =========================================================================
+    
+    try {
+        console.log('📋 Setting up wizard...');
+        
+        // Map wizard steps to form steps
+        var stepMapping = {
+            0: 'basic_info',
+            1: 'billing_schedule',
+            2: 'fee_items',
+            3: 'confirmation'
+        };
+
+        // Get current Django wizard step
+        var currentDjangoStep = '{{ wizard.steps.current }}';
+        var currentStepIndex = parseInt(Object.keys(stepMapping).find(key => stepMapping[key] === currentDjangoStep));
+        
+        console.log('✓ Current Django Step:', currentDjangoStep);
+        console.log('✓ Current Step Index:', currentStepIndex);
+        console.log('✓ Step Mapping:', stepMapping);
+
+        // Initialize SmartWizard
+        console.log('📋 Initializing SmartWizard...');
+        var wizard = $("#smartwizard").smartWizard({
+            selected: currentStepIndex,
+            transitionEffect: "fade",
+            transitionSpeed: 400,
+            showStepURLhash: false,
+            toolbarSettings: {
+                toolbarPosition: "none",
+            },
+            anchorSettings: {
+                anchorClickable: false,
+                enableAllAnchors: false,
+                markDoneStep: true,
+                markAllPreviousStepsAsDone: true
+            }
+        });
+        
+        console.log('✓ SmartWizard initialized successfully');
+
+        // Mark previous steps as done
+        setTimeout(function() {
+            console.log('📋 Marking previous steps as done...');
+            for (var i = 0; i < currentStepIndex; i++) {
+                var $stepAnchor = wizard.find('.forms-wizard li').eq(i);
+                $stepAnchor.addClass('done').removeClass('disabled');
+                wizard.smartWizard("setState", [i], "done");
+                console.log('✓ Step', i, 'marked as done');
+            }
+            wizard.smartWizard("setState", [currentStepIndex], "active");
+            console.log('✓ Step', currentStepIndex, 'marked as active');
+        }, 100);
+
+    } catch (error) {
+        console.error('❌ ERROR during wizard setup:', error);
+    }
+
+    // =========================================================================
+    // NAVIGATION BUTTONS
+    // =========================================================================
+    
+    $("#next-btn").on("click", function() {
+        console.log('➡️  NEXT button clicked');
+        console.log('='.repeat(60));
+        console.log('FORM SUBMISSION ATTEMPT');
+        console.log('='.repeat(60));
+        
+        try {
+            var currentStep = '{{ wizard.steps.current }}';
+            console.log('Current Step:', currentStep);
+            
+            // Enable HTML5 validation
+            $('#wizard-form').removeAttr('novalidate');
+            console.log('✓ Form validation enabled');
+            
+            // Check if form is valid using HTML5 validation
+            var form = document.getElementById('wizard-form');
+            if (form.checkValidity && !form.checkValidity()) {
+                console.warn('⚠️  Form has validation errors');
+                form.reportValidity(); // Show browser validation messages
+                return false;
+            }
+            
+            // Log form data for debugging
+            console.log('📋 Form Data Summary:');
+            var formData = new FormData(form);
+            var dataObject = {};
+            for (var pair of formData.entries()) {
+                if (!dataObject[pair[0]]) {
+                    dataObject[pair[0]] = [];
+                }
+                dataObject[pair[0]].push(pair[1]);
+            }
+            console.table(dataObject);
+            
+            // Custom validation for Step 3 (Fee Items)
+            if (currentStep === 'fee_items') {
+                console.log('🔍 Validating Fee Items...');
+                
+                var validFeeItems = 0;
+                var invalidFeeItems = [];
+                
+                $('.fee-amount').each(function(index) {
+                    var row = $(this).closest('[data-formset-form]');
+                    var isDeleted = row.find('input[name$="DELETE"]').is(':checked');
+                    
+                    if (!isDeleted) {
+                        var amount = parseFloat($(this).val()) || 0;
+                        var categorySelect = row.find('select[name$="fee_category"]');
+                        var category = categorySelect.val();
+                        var categoryName = categorySelect.find('option:selected').text();
+                        
+                        console.log(`  Item ${index + 1}:`, {
+                            category: categoryName || '(none)',
+                            amount: amount,
+                            isValid: category && amount > 0
+                        });
+                        
+                        if (category && amount > 0) {
+                            validFeeItems++;
+                        } else {
+                            invalidFeeItems.push({
+                                index: index + 1,
+                                category: categoryName || '(none)',
+                                amount: amount
+                            });
+                        }
+                    }
+                });
+                
+                console.log('Valid fee items:', validFeeItems);
+                console.log('Invalid fee items:', invalidFeeItems.length);
+                
+                if (validFeeItems === 0) {
+                    console.error('❌ VALIDATION FAILED: No valid fee items found');
+                    console.error('Invalid items:', invalidFeeItems);
+                    
+                    alert('❌ Validation Error\n\nPlease add at least one fee item with:\n- A fee category selected\n- An amount greater than 0');
+                    
+                    // Scroll to fee items section
+                    $('html, body').animate({
+                        scrollTop: $('#fee-items-formset').offset().top - 100
+                    }, 500);
+                    
+                    return false;
+                }
+                
+                console.log('✓ Fee items validation passed');
+            }
+            
+            console.log('='.repeat(60));
+            console.log('✅ Submitting form...');
+            console.log('='.repeat(60));
+            
+            $("#wizard-form").submit();
+        } catch (error) {
+            console.error('❌ ERROR in next button handler:', error);
+            alert('An error occurred. Check the console for details.');
+        }
+    });
+
+    $("#prev-btn").on("click", function() {
+        console.log('⬅️  PREVIOUS button clicked');
+        try {
+            var currentIndex = wizard.smartWizard("getStepIndex");
+            console.log('✓ Current step index:', currentIndex);
+            
+            if (currentIndex > 0) {
+                var prevStep = stepMapping[currentIndex - 1];
+                console.log('✓ Going to previous step:', prevStep);
+                
+                $('input[name="wizard_goto_step"]').remove();
+                $('button[name="wizard_goto_step"]').remove();
+                
+                $('#wizard-form').attr('novalidate', 'novalidate');
+                console.log('✓ Form validation disabled for backwards navigation');
+                
+                $('<button>')
+                    .attr({
+                        type: 'submit',
+                        name: 'wizard_goto_step',
+                        value: prevStep,
+                        style: 'display:none'
+                    })
+                    .appendTo('#wizard-form')
+                    .click();
+                    
+                console.log('✓ Navigation button created and clicked');
+            }
+        } catch (error) {
+            console.error('❌ ERROR in previous button handler:', error);
+        }
+    });
+
+    $("#reset-btn").on("click", function() {
+        console.log('🔄 RESET button clicked');
+        if (confirm("Are you sure you want to reset the form? All data will be lost.")) {
+            console.log('✓ User confirmed reset');
+            window.location.href = "{% url 'fees:structure_create' %}";
+        } else {
+            console.log('✓ User cancelled reset');
+        }
+    });
+
+    // Update buttons based on current step
+    function updateButtons() {
+        try {
+            var currentIndex = wizard.smartWizard("getStepIndex");
+            console.log('🔘 Updating buttons for step:', currentIndex);
+            
+            if (currentIndex === 3) {
+                $("#next-btn .next-text").html('<i class="fa fa-check me-2"></i>Create Structure');
+                $("#next-btn").removeClass("btn-primary").addClass("btn-success");
+                console.log('✓ Final step - showing Create button');
+            } else {
+                $("#next-btn .next-text").html('Next <i class="fa fa-arrow-right ms-2"></i>');
+                $("#next-btn").removeClass("btn-success").addClass("btn-primary");
+                console.log('✓ Intermediate step - showing Next button');
+            }
+
+            if (currentIndex === 0) {
+                $("#prev-btn").hide();
+                console.log('✓ First step - hiding Previous button');
+            } else {
+                $("#prev-btn").show();
+                console.log('✓ Not first step - showing Previous button');
+            }
+        } catch (error) {
+            console.error('❌ ERROR in updateButtons:', error);
+        }
+    }
+
+    updateButtons();
+    wizard.on("showStep", function(e, anchorObject, stepIndex, stepDirection, stepPosition) {
+        console.log('👁️  Wizard showStep event:', {
+            stepIndex: stepIndex,
+            direction: stepDirection,
+            position: stepPosition
+        });
+        updateButtons();
+    });
+
+    // =========================================================================
+    // STEP 1: CONDITIONAL FIELDS
+    // =========================================================================
+    
+    console.log('📋 Setting up conditional fields...');
+    
+    // Late fee fields toggle
+    $(document).on('change', 'input[name="basic_info-charges_late_fee"]', function() {
+        console.log('💰 Late fee checkbox changed:', $(this).is(':checked'));
+        try {
+            if ($(this).is(':checked')) {
+                $('#late-fee-fields').slideDown();
+                console.log('✓ Late fee fields shown');
+            } else {
+                $('#late-fee-fields').slideUp();
+                console.log('✓ Late fee fields hidden');
+            }
+        } catch (error) {
+            console.error('❌ ERROR toggling late fee fields:', error);
+        }
+    });
+
+    if ($('input[name="basic_info-charges_late_fee"]').is(':checked')) {
+        $('#late-fee-fields').show();
+        console.log('✓ Late fee fields initially visible');
+    }
+
+    // =========================================================================
+    // STEP 3: TAX PERCENTAGE CONDITIONAL DISPLAY (FIXED)
+    // =========================================================================
+    
+    console.log('📋 Setting up tax percentage conditional fields...');
+    
+    // Function to toggle tax percentage field for a specific row
+    function toggleTaxPercentageField(checkbox) {
+        var $checkbox = $(checkbox);
+        var rowIndex = $checkbox.data('row');
+        var isChecked = $checkbox.is(':checked');
+        var $row = $checkbox.closest('[data-formset-form]');
+        var $taxField = $row.find('.tax-percentage-field');
+        
+        console.log('💵 Toggling tax field for row', rowIndex, '- Checked:', isChecked);
+        
+        try {
+            if (isChecked) {
+                $taxField.slideDown(300);
+                console.log('✓ Tax percentage field shown for row', rowIndex);
+            } else {
+                $taxField.slideUp(300);
+                console.log('✓ Tax percentage field hidden for row', rowIndex);
+            }
+        } catch (error) {
+            console.error('❌ ERROR toggling tax percentage field for row', rowIndex, ':', error);
+        }
+    }
+    
+    // Initialize tax percentage fields on page load
+    console.log('📋 Initializing tax percentage fields...');
+    $('.item-is-taxable').each(function() {
+        var rowIndex = $(this).data('row');
+        var isChecked = $(this).is(':checked');
+        var $row = $(this).closest('[data-formset-form]');
+        var $taxField = $row.find('.tax-percentage-field');
+        
+        console.log('🔍 Row', rowIndex, 'taxable checkbox state:', isChecked);
+        
+        // Set initial state without animation
+        if (isChecked) {
+            $taxField.show();
+        } else {
+            $taxField.hide();
+        }
+    });
+    console.log('✓ Tax percentage fields initialized');
+    
+    // Handle tax checkbox changes
+    $(document).on('change', '.item-is-taxable', function() {
+        var rowIndex = $(this).data('row');
+        var isChecked = $(this).is(':checked');
+        console.log('📝 Tax checkbox changed for row', rowIndex, '- New state:', isChecked);
+        
+        toggleTaxPercentageField(this);
+    });
+
+    // =========================================================================
+    // STEP 2: BILLING SCHEDULE PERCENTAGE CALCULATION
+    // =========================================================================
+    
+    function calculateTotalPercentage() {
+        try {
+            var total = 0;
+            var count = 0;
+            
+            $('.percentage-input').each(function() {
+                var row = $(this).closest('[data-formset-form]');
+                if (!row.find('input[name$="DELETE"]').is(':checked')) {
+                    var value = parseFloat($(this).val()) || 0;
+                    total += value;
+                    count++;
+                }
+            });
+            
+            console.log('📊 Billing percentage calculation:', {
+                total: total,
+                activeRows: count
+            });
+            
+            $('#total-percentage').text(total.toFixed(2));
+            
+            var summary = $('#percentage-summary');
+            if (total === 100) {
+                summary.removeClass('invalid').addClass('valid');
+                console.log('✓ Total percentage is valid (100%)');
+            } else {
+                summary.removeClass('valid').addClass('invalid');
+                console.log('⚠️  Total percentage is invalid:', total + '%');
+            }
+            
+            return total;
+        } catch (error) {
+            console.error('❌ ERROR calculating total percentage:', error);
+            return 0;
+        }
+    }
+
+    $(document).on('input', '.percentage-input', function() {
+        console.log('📝 Percentage input changed:', $(this).val());
+        calculateTotalPercentage();
+    });
+
+    // Initialize on load
+    if ($('.percentage-input').length > 0) {
+        console.log('📋 Initializing percentage calculation...');
+        calculateTotalPercentage();
+    }
+
+    // =========================================================================
+    // STEP 3: FEE ITEMS TOTAL CALCULATION
+    // =========================================================================
+    
+    function calculateTotalFees() {
+        try {
+            var total = 0;
+            var count = 0;
+            
+            $('.fee-amount').each(function() {
+                var row = $(this).closest('[data-formset-form]');
+                if (!row.find('input[name$="DELETE"]').is(':checked')) {
+                    var value = parseFloat($(this).val()) || 0;
+                    total += value;
+                    count++;
+                }
+            });
+            
+            console.log('💰 Fee items calculation:', {
+                total: total,
+                activeItems: count
+            });
+            
+            $('#total-fee-amount').text(total.toLocaleString('en-UG', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }));
+            
+            return total;
+        } catch (error) {
+            console.error('❌ ERROR calculating total fees:', error);
+            return 0;
+        }
+    }
+
+    $(document).on('input', '.fee-amount', function() {
+        console.log('📝 Fee amount changed:', $(this).val());
+        calculateTotalFees();
+    });
+
+    // Initialize on load
+    if ($('.fee-amount').length > 0) {
+        console.log('📋 Initializing fee calculation...');
+        calculateTotalFees();
+    }
+
+    // =========================================================================
+    // FORMSET: DELETE ROW FUNCTIONALITY
+    // =========================================================================
+    
+    $(document).on('click', '[data-delete-row]', function() {
+        console.log('🗑️  Delete row button clicked');
+        try {
+            var row = $(this).closest('[data-formset-form]');
+            var deleteInput = row.find('input[name$="DELETE"]');
+            
+            if (deleteInput.is(':checked')) {
+                // Undelete
+                deleteInput.prop('checked', false);
+                row.removeClass('deleted');
+                $(this).html('<i class="fa fa-trash"></i> Remove');
+                console.log('✓ Row undeleted');
+            } else {
+                // Delete
+                deleteInput.prop('checked', true);
+                row.addClass('deleted');
+                $(this).html('<i class="fa fa-undo"></i> Undo');
+                console.log('✓ Row marked for deletion');
+            }
+            
+            // Recalculate totals
+            calculateTotalPercentage();
+            calculateTotalFees();
+            updateRowNumbers();
+        } catch (error) {
+            console.error('❌ ERROR in delete row handler:', error);
+        }
+    });
+
+    // =========================================================================
+    // FORMSET: ADD NEW ROW FUNCTIONALITY
+    // =========================================================================
+    
+    // Add billing split
+    $('#add-billing-split').on('click', function() {
+        console.log('➕ Add billing split clicked');
+        try {
+            var formset = $('#billing-formset');
+            var totalForms = formset.find('input[name$="TOTAL_FORMS"]');
+            var currentTotal = parseInt(totalForms.val());
+            
+            // Get the last form as template
+            var lastForm = formset.find('[data-formset-form]:last');
+            var newForm = lastForm.clone(true);
+            
+            // Update form index in all fields
+            var formRegex = new RegExp('-(\\d+)-', 'g');
+            newForm.html(newForm.html().replace(formRegex, '-' + currentTotal + '-'));
+            
+            // Update name and id attributes
+            newForm.find(':input').each(function() {
+                var name = $(this).attr('name');
+                var id = $(this).attr('id');
+                
+                if (name) {
+                    $(this).attr('name', name.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+                if (id) {
+                    $(this).attr('id', id.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+                
+                // Clear the value
+                if ($(this).attr('type') !== 'hidden') {
+                    $(this).val('');
+                }
+                if ($(this).attr('name') && $(this).attr('name').endsWith('DELETE')) {
+                    $(this).prop('checked', false);
+                }
+            });
+            
+            // Update labels
+            newForm.find('label').each(function() {
+                var forAttr = $(this).attr('for');
+                if (forAttr) {
+                    $(this).attr('for', forAttr.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+            });
+            
+            // Remove deleted class and reset
+            newForm.removeClass('deleted');
+            newForm.find('.delete-row-btn').html('<i class="fa fa-trash"></i> Remove');
+            
+            // Set default sequence number
+            newForm.find('input[name$="sequence"]').val(currentTotal + 1);
+            
+            // Append to formset
+            lastForm.after(newForm);
+            
+            // Update total forms count
+            totalForms.val(currentTotal + 1);
+            
+            // Update row numbers
+            updateRowNumbers();
+            
+            console.log('✓ Billing split added. New total:', currentTotal + 1);
+        } catch (error) {
+            console.error('❌ ERROR adding billing split:', error);
+        }
+    });
+
+    // Add fee item
+    $('#add-fee-item').on('click', function() {
+        console.log('➕ Add fee item clicked');
+        try {
+            var formset = $('#fee-items-formset');
+            var totalForms = formset.find('input[name$="TOTAL_FORMS"]');
+            var currentTotal = parseInt(totalForms.val());
+            
+            // Get the last form as template
+            var lastForm = formset.find('[data-formset-form]:last');
+            var newForm = lastForm.clone(true);
+            
+            // Update form index in all fields
+            var formRegex = new RegExp('-(\\d+)-', 'g');
+            newForm.html(newForm.html().replace(formRegex, '-' + currentTotal + '-'));
+            
+            // Update name, id, and data attributes
+            newForm.find(':input').each(function() {
+                var name = $(this).attr('name');
+                var id = $(this).attr('id');
+                
+                if (name) {
+                    $(this).attr('name', name.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+                if (id) {
+                    $(this).attr('id', id.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+                
+                // Update data-row attribute for taxable checkbox
+                if ($(this).hasClass('item-is-taxable')) {
+                    $(this).attr('data-row', currentTotal);
+                }
+                
+                // Clear the value
+                if ($(this).attr('type') !== 'hidden') {
+                    if ($(this).attr('type') === 'checkbox') {
+                        $(this).prop('checked', false);
+                    } else {
+                        $(this).val('');
+                    }
+                }
+                if ($(this).attr('name') && $(this).attr('name').endsWith('DELETE')) {
+                    $(this).prop('checked', false);
+                }
+            });
+            
+            // Update labels
+            newForm.find('label').each(function() {
+                var forAttr = $(this).attr('for');
+                if (forAttr) {
+                    $(this).attr('for', forAttr.replace(/-\d+-/, '-' + currentTotal + '-'));
+                }
+            });
+            
+            // Update data-row-index attribute
+            newForm.attr('data-row-index', currentTotal);
+            
+            // Remove deleted class and reset
+            newForm.removeClass('deleted');
+            newForm.find('.delete-row-btn').html('<i class="fa fa-trash"></i> Remove');
+            
+            // Hide tax percentage field by default
+            newForm.find('.tax-percentage-field').hide();
+            
+            // Set default display order
+            newForm.find('input[name$="display_order"]').val(currentTotal + 1);
+            
+            // Append to formset
+            lastForm.after(newForm);
+            
+            // Update total forms count
+            totalForms.val(currentTotal + 1);
+            
+            // Update row numbers
+            updateRowNumbers();
+            
+            // Recalculate totals
+            calculateTotalFees();
+            
+            console.log('✓ Fee item added. New total:', currentTotal + 1);
+        } catch (error) {
+            console.error('❌ ERROR adding fee item:', error);
+        }
+    });
+
+    // =========================================================================
+    // FORMSET: UPDATE ROW NUMBERS
+    // =========================================================================
+    
+    function updateRowNumbers() {
+        try {
+            console.log('🔢 Updating row numbers...');
+            var visibleIndex = 1;
+            
+            $('[data-formset-form]').each(function(index) {
+                if (!$(this).find('input[name$="DELETE"]').is(':checked')) {
+                    $(this).find('.row-number').text(visibleIndex);
+                    visibleIndex++;
+                }
+            });
+            
+            console.log('✓ Row numbers updated - Visible rows:', visibleIndex - 1);
+        } catch (error) {
+            console.error('❌ ERROR updating row numbers:', error);
+        }
+    }
+
+    // =========================================================================
+    // PREVENT ENTER KEY FORM SUBMISSION
+    // =========================================================================
+    
+    $('#wizard-form').on('keypress', function(e) {
+        if (e.which === 13 && e.target.tagName !== 'TEXTAREA') {
+            console.log('⚠️  Enter key pressed - preventing form submission');
+            e.preventDefault();
+            return false;
+        }
+    });
+    
+    // =========================================================================
+    // FINAL INITIALIZATION LOG
+    // =========================================================================
+    
+    console.log('='.repeat(80));
+    console.log('✅ WIZARD INITIALIZATION COMPLETE');
+    console.log('Current Step:', currentDjangoStep, '(Index:', currentStepIndex + ')');
+    console.log('Form validation:', $('#wizard-form').attr('novalidate') ? 'Disabled' : 'Enabled');
+    console.log('='.repeat(80));
+});
+</script>
+{% endblock %}

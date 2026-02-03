@@ -1,0 +1,745 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+    .invoice-header-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 25px;
+        color: white;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .invoice-header-card h4 {
+        color: white;
+        font-weight: 600;
+        margin-bottom: 15px;
+    }
+    
+    .invoice-info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .invoice-info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .form-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .form-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .form-section-header h5 {
+        margin: 0;
+        color: #495057;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+    }
+    
+    .form-section-header h5 i {
+        font-size: 1.5rem;
+        color: #007bff;
+        margin-right: 12px;
+    }
+    
+    .items-table {
+        width: 100%;
+        margin-bottom: 0;
+    }
+    
+    .items-table thead {
+        background-color: #f8f9fa;
+    }
+    
+    .items-table thead th {
+        font-weight: 600;
+        color: #495057;
+        padding: 12px;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+    }
+    
+    .items-table tbody td {
+        padding: 12px;
+        vertical-align: middle;
+    }
+    
+    .item-row {
+        transition: background-color 0.2s;
+    }
+    
+    .item-row:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .item-row.to-delete {
+        background-color: #f8d7da;
+        opacity: 0.7;
+    }
+    
+    .item-input {
+        width: 100%;
+        padding: 6px 10px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 0.875rem;
+    }
+    
+    .item-input:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    }
+    
+    .item-input[readonly] {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+    
+    .item-textarea {
+        width: 100%;
+        padding: 6px 10px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        resize: vertical;
+        min-height: 60px;
+    }
+    
+    .delete-checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+    
+    .add-item-btn {
+        margin-top: 15px;
+    }
+    
+    .totals-card {
+        background-color: #e7f3ff;
+        border: 2px solid #b3d9ff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    
+    .totals-card h6 {
+        color: #004085;
+        font-weight: 600;
+        margin-bottom: 15px;
+    }
+    
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #b3d9ff;
+    }
+    
+    .total-row:last-child {
+        border-bottom: none;
+        border-top: 2px solid #004085;
+        padding-top: 15px;
+        margin-top: 10px;
+        font-weight: 700;
+    }
+    
+    .total-label {
+        font-weight: 500;
+        color: #004085;
+    }
+    
+    .total-value {
+        color: #004085;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    
+    .warning-box {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-left: 4px solid #ffc107;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .warning-box h6 {
+        color: #856404;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .info-box {
+        background-color: #d1ecf1;
+        border: 1px solid #0c5460;
+        border-left: 4px solid #0c5460;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .info-box h6 {
+        color: #0c5460;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 5px 0 0 0;
+    }
+    
+    .errorlist li {
+        color: #dc3545;
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        background-color: #f8d7da;
+        border-radius: 4px;
+        margin-top: 3px;
+    }
+    
+    .formset-row {
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .formset-row:last-child {
+        border-bottom: none;
+    }
+    
+    .sidebar-sticky {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+    }
+    
+    .info-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .info-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .calculated-field {
+        background-color: #e7f3ff;
+        font-weight: 600;
+        color: #004085;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-pen icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Edit Invoice
+                <div class="page-title-subheading">
+                    Modify invoice items and details before finalizing
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'fees:invoice_detail' invoice.pk %}" class="btn btn-secondary">
+                <i class="fa fa-arrow-left"></i> Back to Invoice
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Warning for DRAFT status -->
+<div class="warning-box">
+    <h6><i class="fa fa-exclamation-triangle"></i> Important Notes</h6>
+    <ul class="mb-0">
+        <li>Only DRAFT invoices can be edited</li>
+        <li>Changes will recalculate all totals automatically</li>
+        <li>After editing, review the invoice before finalizing to PENDING</li>
+        <li>Once finalized to PENDING, the invoice creates accounting entries and cannot be easily edited</li>
+    </ul>
+</div>
+
+<!-- Invoice Header Info -->
+<div class="invoice-header-card">
+    <h4><i class="fa fa-file-invoice"></i> {{ invoice.invoice_number }}</h4>
+    <div class="invoice-info-row">
+        <span>Student</span>
+        <span>{{ invoice.student.get_full_name }}</span>
+    </div>
+    <div class="invoice-info-row">
+        <span>Session</span>
+        <span>{{ invoice.academic_session.name }}</span>
+    </div>
+    <div class="invoice-info-row">
+        <span>Current Total</span>
+        <span style="font-size: 1.3rem; font-weight: 700;">{{ invoice.total_amount|money }}</span>
+    </div>
+    <div class="invoice-info-row">
+        <span>Status</span>
+        <span class="badge bg-secondary">{{ invoice.get_status_display }}</span>
+    </div>
+</div>
+
+<!-- Form Errors -->
+{% if header_form.errors or items_formset.errors %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Form Errors</h5>
+    <ul class="mb-0">
+        {% for field in header_form %}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                    <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+        {% for error in items_formset.non_form_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<form method="post" id="invoice-edit-form" novalidate>
+    {% csrf_token %}
+    
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            
+            <!-- Invoice Header Details -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h5>
+                        <i class="pe-7s-date"></i>
+                        Invoice Details
+                    </h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ header_form.issue_date.id_for_label }}" class="form-label">
+                            {{ header_form.issue_date.label }}
+                        </label>
+                        {% render_field header_form.issue_date class="form-control" %}
+                        {% if header_form.issue_date.help_text %}
+                            <small class="text-muted">{{ header_form.issue_date.help_text }}</small>
+                        {% endif %}
+                        {{ header_form.issue_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ header_form.due_date.id_for_label }}" class="form-label">
+                            {{ header_form.due_date.label }}
+                        </label>
+                        {% render_field header_form.due_date class="form-control" %}
+                        {% if header_form.due_date.help_text %}
+                            <small class="text-muted">{{ header_form.due_date.help_text }}</small>
+                        {% endif %}
+                        {{ header_form.due_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ header_form.payment_terms.id_for_label }}" class="form-label">
+                            {{ header_form.payment_terms.label }}
+                        </label>
+                        {% render_field header_form.payment_terms class="form-control" %}
+                        {% if header_form.payment_terms.help_text %}
+                            <small class="text-muted">{{ header_form.payment_terms.help_text }}</small>
+                        {% endif %}
+                        {{ header_form.payment_terms.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ header_form.internal_notes.id_for_label }}" class="form-label">
+                            {{ header_form.internal_notes.label }}
+                        </label>
+                        {% render_field header_form.internal_notes class="form-control" %}
+                        {% if header_form.internal_notes.help_text %}
+                            <small class="text-muted">{{ header_form.internal_notes.help_text }}</small>
+                        {% endif %}
+                        {{ header_form.internal_notes.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Invoice Items -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h5>
+                        <i class="pe-7s-note2"></i>
+                        Invoice Items
+                    </h5>
+                    <span class="badge bg-primary">{{ items_formset.total_form_count }} items</span>
+                </div>
+                
+                <div class="info-box">
+                    <h6><i class="fa fa-info-circle"></i> Editing Instructions</h6>
+                    <ul class="mb-0" style="font-size: 0.875rem;">
+                        <li>Modify unit amounts, quantities, or tax rates as needed</li>
+                        <li>Check "Delete" to remove an item (must have at least 1 item)</li>
+                        <li>Totals will be recalculated automatically when you save</li>
+                        <li>Scholarship amounts are calculated automatically and cannot be edited</li>
+                    </ul>
+                </div>
+                
+                {{ items_formset.management_form }}
+                
+                <div class="table-responsive">
+                    <table class="table items-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%;">Del</th>
+                                <th style="width: 25%;">Fee Category</th>
+                                <th style="width: 12%;">Unit Amount</th>
+                                <th style="width: 10%;">Qty</th>
+                                <th style="width: 10%;">Tax %</th>
+                                <th style="width: 13%;">Discount</th>
+                                <th style="width: 15%;">Scholarship</th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-tbody">
+                            {% for form in items_formset %}
+                            <tr class="item-row" data-form-index="{{ forloop.counter0 }}">
+                                <td class="text-center">
+                                    {% if items_formset.can_delete %}
+                                        {% render_field form.DELETE class="delete-checkbox" %}
+                                    {% endif %}
+                                    {{ form.id }}
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark mb-1">{{ form.instance.fee_category.name }}</div>
+                                </td>
+                                <td>
+                                    {% render_field form.unit_amount class="item-input item-unit-amount" placeholder="0.00" %}
+                                    {{ form.unit_amount.errors }}
+                                </td>
+                                <td>
+                                    {% render_field form.quantity class="item-input item-quantity" placeholder="1" %}
+                                    {{ form.quantity.errors }}
+                                </td>
+                                <td>
+                                    {% render_field form.tax_percentage class="item-input item-tax-percentage" placeholder="0.00" %}
+                                    {{ form.tax_percentage.errors }}
+                                </td>
+                                <td>
+                                    {% render_field form.discount_amount class="item-input item-discount" placeholder="0.00" %}
+                                    {{ form.discount_amount.errors }}
+                                </td>
+                                <td>
+                                    {% render_field form.scholarship_discount_amount class="item-input calculated-field" readonly="readonly" %}
+                                    {{ form.scholarship_discount_amount.errors }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Add New Item Button -->
+                <button type="button" class="btn btn-success add-item-btn" id="add-item-btn">
+                    <i class="fa fa-plus"></i> Add New Item
+                </button>
+            </div>
+            
+        </div>
+        
+        <!-- Right Column - Totals & Info -->
+        <div class="col-lg-4">
+            
+            <div class="sidebar-sticky">
+                
+                <!-- Current Totals -->
+                <div class="totals-card">
+                    <h6><i class="fa fa-calculator"></i> Invoice Totals</h6>
+                    
+                    <div class="total-row">
+                        <span class="total-label">Subtotal</span>
+                        <span class="total-value" id="display-subtotal">{{ invoice.subtotal_amount|money }}</span>
+                    </div>
+                    
+                    {% if invoice.discount_amount > 0 %}
+                    <div class="total-row">
+                        <span class="total-label">Regular Discount</span>
+                        <span class="total-value text-success">-{{ invoice.discount_amount|money }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if invoice.scholarship_discount_amount > 0 %}
+                    <div class="total-row">
+                        <span class="total-label">Scholarship Discount</span>
+                        <span class="total-value text-warning">-{{ invoice.scholarship_discount_amount|money }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="total-row">
+                        <span class="total-label">Tax</span>
+                        <span class="total-value" id="display-tax">{{ invoice.tax_amount|money }}</span>
+                    </div>
+                    
+                    <div class="total-row">
+                        <span class="total-label">Total Amount</span>
+                        <span class="total-value" id="display-total" style="font-size: 1.3rem;">{{ invoice.total_amount|money }}</span>
+                    </div>
+                </div>
+                
+                <!-- Quick Guide -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-help1"></i> Quick Guide</h6>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        <strong>Unit Amount:</strong> Base price per unit
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        <strong>Quantity:</strong> Number of units (usually 1 for fees)
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        <strong>Tax %:</strong> VAT or other tax percentage
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        <strong>Discount:</strong> Regular discount amount (not percentage)
+                    </div>
+                    
+                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        <strong>Scholarship:</strong> Auto-calculated, cannot be edited directly
+                    </div>
+                </div>
+                
+                <!-- Calculation Formula -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-calculator"></i> Calculation</h6>
+                    
+                    <div style="font-size: 0.875rem; font-family: monospace; background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
+                        <div>Amount = Unit Amount × Quantity</div>
+                        <div>Total Discount = Regular + Scholarship</div>
+                        <div>Taxable = Amount - Total Discount</div>
+                        <div>Tax = Taxable × (Tax % / 100)</div>
+                        <div><strong>Final = Taxable + Tax</strong></div>
+                    </div>
+                </div>
+                
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- Form Actions -->
+    <div class="form-actions">
+        <a href="{% url 'fees:invoice_detail' invoice.pk %}" class="btn btn-secondary btn-lg">
+            <i class="fa fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="btn btn-primary btn-lg" id="save-btn">
+            <i class="fa fa-save"></i> Save Changes
+        </button>
+    </div>
+    
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    console.log('Invoice Edit Form Initialized');
+    
+    // =========================================================================
+    // DELETE CHECKBOX - Visual Feedback
+    // =========================================================================
+    
+    $('.delete-checkbox').on('change', function() {
+        const row = $(this).closest('.item-row');
+        if ($(this).is(':checked')) {
+            row.addClass('to-delete');
+        } else {
+            row.removeClass('to-delete');
+        }
+    });
+    
+    // =========================================================================
+    // ADD NEW ITEM (Clone empty form)
+    // =========================================================================
+    
+    $('#add-item-btn').on('click', function() {
+        const totalForms = $('#id_items-TOTAL_FORMS');
+        const formIndex = parseInt(totalForms.val());
+        
+        // Get empty form template (last form in formset)
+        const emptyForm = $('.item-row:last').clone();
+        
+        // Update form index in cloned form
+        emptyForm.find(':input').each(function() {
+            const name = $(this).attr('name');
+            if (name) {
+                $(this).attr('name', name.replace('-' + (formIndex - 1) + '-', '-' + formIndex + '-'));
+                $(this).attr('id', 'id_' + $(this).attr('name'));
+            }
+            $(this).val(''); // Clear values
+        });
+        
+        // Remove 'to-delete' class if present
+        emptyForm.removeClass('to-delete');
+        
+        // Add to table
+        $('#items-tbody').append(emptyForm);
+        
+        // Increment form count
+        totalForms.val(formIndex + 1);
+        
+        console.log('Added new item form:', formIndex);
+    });
+    
+    // =========================================================================
+    // REAL-TIME CALCULATION (Optional - Preview only)
+    // =========================================================================
+    
+    function calculateLineTotal(row) {
+        const unitAmount = parseFloat(row.find('.item-unit-amount').val()) || 0;
+        const quantity = parseFloat(row.find('.item-quantity').val()) || 1;
+        const taxPercentage = parseFloat(row.find('.item-tax-percentage').val()) || 0;
+        const discount = parseFloat(row.find('.item-discount').val()) || 0;
+        
+        const amount = unitAmount * quantity;
+        const taxable = amount - discount;
+        const tax = taxable * (taxPercentage / 100);
+        const total = taxable + tax;
+        
+        return {
+            amount: amount,
+            tax: tax,
+            total: total
+        };
+    }
+    
+    // Optional: Update live preview as user types
+    $('.item-unit-amount, .item-quantity, .item-tax-percentage, .item-discount').on('input', function() {
+        // You can add live calculation preview here
+        console.log('Item value changed, recalculating...');
+    });
+    
+    // =========================================================================
+    // FORM VALIDATION
+    // =========================================================================
+    
+    $('#invoice-edit-form').on('submit', function(e) {
+        console.log('Submitting invoice edit form...');
+        
+        let isValid = true;
+        const errors = [];
+        
+        // Check if at least one item remains (not deleted)
+        const itemCount = $('.item-row').length;
+        const deletedCount = $('.delete-checkbox:checked').length;
+        
+        if (itemCount - deletedCount < 1) {
+            errors.push('Invoice must have at least one item');
+            isValid = false;
+        }
+        
+        // Validate unit amounts are positive
+        $('.item-unit-amount').each(function() {
+            const amount = parseFloat($(this).val());
+            if (isNaN(amount) || amount < 0) {
+                errors.push('All unit amounts must be positive numbers');
+                isValid = false;
+                return false; // break loop
+            }
+        });
+        
+        // Validate quantities are positive
+        $('.item-quantity').each(function() {
+            const quantity = parseFloat($(this).val());
+            if (isNaN(quantity) || quantity < 1) {
+                errors.push('All quantities must be at least 1');
+                isValid = false;
+                return false; // break loop
+            }
+        });
+        
+        if (!isValid) {
+            e.preventDefault();
+            
+            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Validation Errors</h5>';
+            errorHtml += '<ul class="mb-0">';
+            errors.forEach(function(error) {
+                errorHtml += '<li>' + error + '</li>';
+            });
+            errorHtml += '</ul>';
+            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            errorHtml += '</div>';
+            
+            $('form').prepend(errorHtml);
+            
+            $('html, body').animate({ scrollTop: 0 }, 500);
+            
+            return false;
+        }
+        
+        // Show loading state
+        $('#save-btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Saving...');
+    });
+    
+    console.log('Invoice Edit Form Ready');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,110 @@
+{# students/templates/students/modals/_sibling_form.html #}
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-users me-2"></i>
+                {% if sibling_rel %}Edit Sibling Relationship{% else %}Add Sibling Relationship{% endif %}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            {% if error_message %}
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>{{ error_message }}
+                </div>
+            {% endif %}
+            
+            <div class="alert alert-info mb-4">
+                <i class="fa fa-user me-2"></i>
+                <strong>Student:</strong> {{ student.get_full_name }} ({{ student.admission_number }})
+            </div>
+            
+            <form {% if sibling_rel %}
+                      hx-post="{% url 'students:sibling_update' student.pk sibling_rel.pk %}"
+                  {% else %}
+                      hx-post="{% url 'students:sibling_create' student.pk %}"
+                  {% endif %}
+                  id="sibling-form">
+                {% csrf_token %}
+                
+                <!-- Sibling Selection -->
+                <div class="mb-3">
+                    <label for="to_student_id" class="form-label">
+                        <i class="fa fa-user me-1"></i>Sibling Student <span class="text-danger">*</span>
+                    </label>
+                    <select name="to_student_id" id="to_student_id" class="form-select" required {% if sibling_rel %}disabled{% endif %}>
+                        <option value="">-- Select Student --</option>
+                        {% for available_student in available_students %}
+                            <option value="{{ available_student.pk }}" 
+                                    {% if sibling_rel and sibling_rel.to_student.pk == available_student.pk %}selected{% endif %}>
+                                {{ available_student.get_full_name }} ({{ available_student.admission_number }})
+                                {% if available_student.current_academic_level %}- {{ available_student.current_academic_level }}{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    {% if sibling_rel %}
+                        <input type="hidden" name="to_student_id" value="{{ sibling_rel.to_student.pk }}">
+                        <small class="form-text text-muted">Sibling cannot be changed when editing.</small>
+                    {% endif %}
+                </div>
+                
+                <!-- Relationship Type -->
+                <div class="mb-3">
+                    <label for="relationship_type" class="form-label">
+                        <i class="fa fa-link me-1"></i>Relationship Type <span class="text-danger">*</span>
+                    </label>
+                    <select name="relationship_type" id="relationship_type" class="form-select" required>
+                        {% for rel_code, rel_name in relationship_types %}
+                            <option value="{{ rel_code }}" 
+                                    {% if not sibling_rel and rel_code == 'FULL' %}selected{% endif %}
+                                    {% if sibling_rel and sibling_rel.relationship_type == rel_code %}selected{% endif %}>
+                                {{ rel_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Verification -->
+                {% if sibling_rel %}
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_verified" name="is_verified"
+                                   {% if sibling_rel.is_verified %}checked{% endif %}>
+                            <label class="form-check-label" for="is_verified">
+                                <i class="fa fa-check-circle text-success me-1"></i>Verified Relationship
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">
+                            Check this if the sibling relationship has been verified with documentation.
+                        </small>
+                    </div>
+                {% endif %}
+                
+                <!-- Notes -->
+                <div class="mb-3">
+                    <label for="notes" class="form-label">
+                        <i class="fa fa-comment me-1"></i>Notes
+                    </label>
+                    <textarea name="notes" id="notes" class="form-control" rows="3" 
+                              placeholder="Additional notes about this sibling relationship...">{% if sibling_rel %}{{ sibling_rel.notes }}{% endif %}</textarea>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"></i>
+                    A reciprocal relationship will be created automatically.
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-save me-1"></i>
+                        {% if sibling_rel %}Update Relationship{% else %}Add Sibling{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

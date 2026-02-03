@@ -1,0 +1,515 @@
+{# hr/templates/hr/contracts/partials/_contract_results.html #}
+
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+<!-- Contracts Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Contract Number</th>
+                <th>Staff Member</th>
+                <th>Contract Type</th>
+                <th>Period</th>
+                <th>Salary</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="contractTableBody">
+            {% if contracts_page %}
+                {% for contract in contracts_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:contracts_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Contract Number -->
+                    <td>
+                        <code class="text-primary fw-bold">{{ contract.contract_number }}</code>
+                        {% if contract.approved_at %}
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="fa fa-check-circle me-1"></i>
+                                    Approved {{ contract.approved_at|date:"M d, Y" }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Staff Member -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div>
+                                <h6 class="mb-0">
+                                    <a href="{% url 'hr:staff_profile' contract.staff.pk %}" class="text-decoration-none">
+                                        {{ contract.staff.full_name }}
+                                    </a>
+                                </h6>
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        <i class="fa fa-id-card me-1"></i>
+                                        {{ contract.staff.staff_id }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Contract Type -->
+                    <td>
+                        <span class="badge contract-type-badge contract-type-{{ contract.contract_type|lower }}">
+                            {{ contract.get_contract_type_display }}
+                        </span>
+                        {% if contract.designation %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-briefcase me-1"></i>
+                                    {{ contract.designation.name }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Period -->
+                    <td>
+                        <div class="mb-1">
+                            <strong>Start:</strong> {{ contract.start_date|date:"M d, Y" }}
+                        </div>
+                        {% if contract.end_date %}
+                            <div>
+                                <strong>End:</strong> {{ contract.end_date|date:"M d, Y" }}
+                            </div>
+                            {% if contract.is_expiring_soon %}
+                                <div class="mt-1">
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fa fa-exclamation-triangle me-1"></i>
+                                        Expiring Soon
+                                    </span>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="text-muted">
+                                <em>Permanent</em>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Salary -->
+                    <td>
+                        <div class="fw-bold text-success">
+                            {{ contract.basic_salary|floatformat:0|intcomma }}
+                        </div>
+                        {% if contract.gross_salary %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    Gross: {{ contract.gross_salary|floatformat:0|intcomma }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td class="text-center">
+                        {% if contract.status == 'ACTIVE' %}
+                            <span class="badge status-badge active">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% elif contract.status == 'DRAFT' %}
+                            <span class="badge status-badge draft">
+                                <i class="fa fa-file me-1"></i>Draft
+                            </span>
+                        {% elif contract.status == 'EXPIRED' %}
+                            <span class="badge status-badge expired">
+                                <i class="fa fa-calendar-times me-1"></i>Expired
+                            </span>
+                        {% elif contract.status == 'TERMINATED' %}
+                            <span class="badge status-badge terminated">
+                                <i class="fa fa-ban me-1"></i>Terminated
+                            </span>
+                        {% elif contract.status == 'CANCELLED' %}
+                            <span class="badge status-badge cancelled">
+                                <i class="fa fa-times-circle me-1"></i>Cancelled
+                            </span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">
+                                {{ contract.get_status_display }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Detail -->
+                                <a class="dropdown-item text-success" href="{% url 'hr:contract_detail' contract.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                {% if contract.status == 'DRAFT' or contract.status == 'REVIEW' %}
+                                    <a class="dropdown-item text-warning" href="{% url 'hr:contract_edit' contract.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                {% if contract.status == 'DRAFT' or contract.status == 'REVIEW' %}
+                                    <button type="button" class="dropdown-item" 
+                                            hx-get="{% url 'hr:contract_activate_modal' contract.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i> Activate Contract
+                                    </button>
+                                {% endif %}
+                                
+                                {% if contract.status == 'ACTIVE' %}
+                                    <button type="button" class="dropdown-item text-warning" 
+                                            hx-get="{% url 'hr:contract_terminate_modal' contract.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-ban me-2"></i> Terminate
+                                    </button>
+                                    
+                                    <button type="button" class="dropdown-item text-info" 
+                                            hx-get="{% url 'hr:contract_renew_modal' contract.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-redo me-2"></i> Renew Contract
+                                    </button>
+                                {% endif %}
+                                
+                                <a class="dropdown-item" href="{% url 'hr:contract_print' contract.pk %}" target="_blank">
+                                    <i class="fa fa-print me-2"></i> Print Contract
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                {% if contract.status == 'DRAFT' or contract.status == 'CANCELLED' %}
+                                    <button type="button" class="dropdown-item text-danger" 
+                                            hx-get="{% url 'hr:contract_delete_modal' contract.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i> Delete
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="pe-7s-search"></i>
+                            </div>
+                            <h4 class="text-muted mb-2">No Contracts Found</h4>
+                            <p class="text-muted">
+                                Try adjusting your search filters or 
+                                <a href="{% url 'hr:contract_create' %}" class="text-primary">create a new contract</a>.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if contracts_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ contracts_page.start_index }} - {{ contracts_page.end_index }} of {{ contracts_page.paginator.count }} contracts
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Contract pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if contracts_page.has_previous %}
+                    <li class="page-item">
+                        <button type="button" class="page-link" 
+                                hx-get="{% url 'hr:contract_list' %}" 
+                                hx-target="#contract-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ contracts_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in contracts_page.paginator.page_range %}
+                    {% if page_num == contracts_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > contracts_page.number|add:"-3" and page_num < contracts_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button type="button" class="page-link"
+                                    hx-get="{% url 'hr:contract_list' %}"
+                                    hx-target="#contract-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if contracts_page.has_next %}
+                    <li class="page-item">
+                        <button type="button" class="page-link"
+                                hx-get="{% url 'hr:contract_list' %}"
+                                hx-target="#contract-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ contracts_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Contract Type Badges */
+.contract-type-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.contract-type-badge.contract-type-permanent {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.contract-type-badge.contract-type-fixed_term {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.contract-type-badge.contract-type-probation {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.contract-type-badge.contract-type-temporary {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+.contract-type-badge.contract-type-part_time {
+    background-color: #e7f3ff;
+    color: #004085;
+}
+
+.contract-type-badge.contract-type-consultant {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.draft {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border-color: #d6d8db;
+}
+
+.status-badge.expired {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.status-badge.terminated {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.status-badge.cancelled {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border-color: #d6d8db;
+}
+
+/* Fix for table responsive overflow with dropdowns */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* Empty State */
+.empty-state {
+    padding: 60px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+/* Table Improvements */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Responsive handling for mobile devices */
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-file"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Contracts</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Expiring Soon</div>
+                <h3>{{ stats.expiring_soon|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Avg Salary</div>
+                <h3>{{ stats.avg_salary|floatformat:0|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Initialize tooltips after HTMX swap
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+});
+
+// Re-initialize tooltips after HTMX updates
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'contract-list') {
+        initializeTooltips();
+    }
+});
+
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+</script>

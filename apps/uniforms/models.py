@@ -558,40 +558,6 @@ class UniformItem(BaseModel):
     reorder_level = models.IntegerField("Reorder Level", default=10)
     maximum_stock = models.IntegerField("Maximum Stock", null=True, blank=True)
     
-    # =========================================================================
-    # ACCOUNTING INTEGRATION
-    # =========================================================================
-    
-    inventory_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Inventory Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_items_inventory',
-        null=True,
-        blank=True,
-        help_text="Asset account for this inventory item (auto-assigned from category if blank)"
-    )
-    
-    cogs_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="COGS Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_items_cogs',
-        null=True,
-        blank=True,
-        help_text="Cost of Goods Sold expense account (auto-assigned if blank)"
-    )
-    
-    revenue_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Revenue Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_items_revenue',
-        null=True,
-        blank=True,
-        help_text="Revenue account for sales (auto-assigned if blank)"
-    )
-    
     # -------------------------------------------------------------------------
     # SUPPLIER INFORMATION
     # -------------------------------------------------------------------------
@@ -695,41 +661,43 @@ class UniformItem(BaseModel):
     # HELPER METHODS
     # -------------------------------------------------------------------------
     
-    def get_default_accounts(self):
-        """
-        Get default accounts for this item from financial settings.
-        Returns dict with 'inventory', 'cogs', 'revenue' accounts.
-        """
+    def get_inventory_account(self):
+        """Get inventory account from mappings or use override"""
+        if self.inventory_account:  # Use override if set
+            return self.inventory_account
+        
         from core.models import FinancialSettings
-        
         settings = FinancialSettings.get_instance()
-        if not settings:
-            return {}
-        
-        return {
-            'inventory': settings.default_inventory_account,
-            'cogs': settings.default_cogs_account,
-            'revenue': settings.default_service_revenue_account,
-        }
+        if settings:
+            expense_mappings = settings.get_expense_mappings()
+            return expense_mappings.default_inventory_account
+        return None
     
-    def ensure_accounts_assigned(self):
-        """
-        Ensure accounting accounts are assigned.
-        Auto-assigns from defaults if not set.
-        """
-        if not self.inventory_account or not self.cogs_account or not self.revenue_account:
-            defaults = self.get_default_accounts()
-            
-            if not self.inventory_account:
-                self.inventory_account = defaults.get('inventory')
-            
-            if not self.cogs_account:
-                self.cogs_account = defaults.get('cogs')
-            
-            if not self.revenue_account:
-                self.revenue_account = defaults.get('revenue')
-            
-            self.save()
+    def get_cogs_account(self):
+        """Get COGS account from mappings or use override"""
+        if self.cogs_account:
+            return self.cogs_account
+        
+        from core.models import FinancialSettings
+        settings = FinancialSettings.get_instance()
+        if settings:
+            expense_mappings = settings.get_expense_mappings()
+            return expense_mappings.default_cogs_account
+        return None
+    
+    def get_revenue_account(self):
+        """Get revenue account from mappings or use override"""
+        if self.revenue_account:
+            return self.revenue_account
+        
+        from core.models import FinancialSettings
+        settings = FinancialSettings.get_instance()
+        if settings:
+            mappings = settings.get_account_mappings()
+            if mappings.uniform_and_book_sales_account:
+                return mappings.uniform_and_book_sales_account
+            return mappings.default_revenue_account
+        return None
 
 
 # =============================================================================
@@ -894,16 +862,6 @@ class UniformPurchaseOrder(BaseModel):
     # ACCOUNTING INTEGRATION
     # =========================================================================
     
-    payable_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Accounts Payable Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_purchase_orders',
-        null=True,
-        blank=True,
-        help_text="Accounts Payable account to credit when PO is received"
-    )
-    
     journal_entry = models.ForeignKey(
         'finance.JournalEntry',
         verbose_name="Journal Entry",
@@ -958,6 +916,15 @@ class UniformPurchaseOrder(BaseModel):
     # -------------------------------------------------------------------------
     
     notes = models.TextField("Notes", blank=True)
+
+    def get_payable_account(self):
+        """Get payable account from CoreAccountMappings"""
+        from core.models import FinancialSettings
+        settings = FinancialSettings.get_instance()
+        if settings:
+            mappings = settings.get_account_mappings()
+            return mappings.default_payable_account
+        return None
     
     # -------------------------------------------------------------------------
     # META CLASS
@@ -1076,6 +1043,8 @@ class UniformPurchaseOrderItem(BaseModel):
 # UNIFORM SALE/ISSUANCE - FULLY INTEGRATED
 # =============================================================================
 
+# uniforms/models.py - UPDATED UniformSale with Cancellation/Return Support
+
 class UniformSale(BaseModel):
     """
     Sales/issuance of uniforms to students with FULL FINANCIAL INTEGRATION.
@@ -1085,6 +1054,16 @@ class UniformSale(BaseModel):
     - Journal entries for inventory and revenue
     - Student account transactions
     - Payment records when linked
+    
+    REVERSAL SCENARIOS:
+    1. CANCELLED (before issuance) → Cancel invoice, no inventory movement, process refund if paid
+    2. RETURNED (after issuance) → Return to inventory, reverse journal entries, process refund
+    
+    KEY CONCEPTS:
+    - A sale can be EITHER cancelled OR returned, never both
+    - Cancellation: Sale never happened (items never left warehouse)
+    - Return: Items were issued but came back (inventory adjusted)
+    - Both scenarios may require payment refunds if student already paid
     """
     
     STATUS_CHOICES = [
@@ -1093,8 +1072,8 @@ class UniformSale(BaseModel):
         ('PAID', 'Paid'),
         ('PARTIAL', 'Partially Paid'),
         ('ISSUED', 'Issued'),
-        ('CANCELLED', 'Cancelled'),
-        ('RETURNED', 'Returned'),
+        ('CANCELLED', 'Cancelled'),  # Before items issued
+        ('RETURNED', 'Returned'),    # After items issued
     ]
     
     SALE_TYPE_CHOICES = [
@@ -1104,31 +1083,38 @@ class UniformSale(BaseModel):
         ('REPLACEMENT', 'Replacement'),
     ]
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # IDENTIFICATION
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
-    sale_number = models.CharField("Sale Number", max_length=50, unique=True, db_index=True)
+    sale_number = models.CharField(
+        "Sale Number", 
+        max_length=50, 
+        unique=True, 
+        db_index=True
+    )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # CORE RELATIONSHIPS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     student = models.ForeignKey(
         'students.Student',
+        verbose_name="Student",
         on_delete=models.CASCADE,
         related_name='uniform_sales'
     )
     
     academic_session = models.ForeignKey(
         'academics.AcademicSession',
+        verbose_name="Academic Session",
         on_delete=models.CASCADE,
         related_name='uniform_sales'
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # FISCAL PERIOD
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     fiscal_period = models.ForeignKey(
         'core.FiscalPeriod',
@@ -1138,9 +1124,9 @@ class UniformSale(BaseModel):
         help_text="Fiscal period when this sale was recorded"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # SALE DETAILS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     sale_type = models.CharField(
         "Sale Type",
@@ -1149,7 +1135,11 @@ class UniformSale(BaseModel):
         default='SALE'
     )
     
-    sale_date = models.DateField("Sale Date", default=timezone.now, db_index=True)
+    sale_date = models.DateField(
+        "Sale Date", 
+        default=timezone.now, 
+        db_index=True
+    )
     
     # =========================================================================
     # FINANCIAL INTEGRATION - FEE INVOICE
@@ -1171,50 +1161,56 @@ class UniformSale(BaseModel):
         help_text="Automatically create fee invoice when sale is finalized"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # FINANCIAL AMOUNTS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     subtotal = models.DecimalField(
         "Subtotal", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Sum of all item prices before tax and discount"
     )
     
     discount_amount = models.DecimalField(
         "Discount Amount", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Total discount applied to this sale"
     )
     
     tax_amount = models.DecimalField(
         "Tax Amount", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Total tax (VAT) on this sale"
     )
     
     total_amount = models.DecimalField(
         "Total Amount", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Final amount: Subtotal + Tax - Discount"
     )
     
     paid_amount = models.DecimalField(
         "Paid Amount", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Amount already paid by student"
     )
     
     balance = models.DecimalField(
         "Balance", 
         max_digits=12, 
         decimal_places=2, 
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text="Remaining balance: Total - Paid"
     )
     
     # =========================================================================
@@ -1246,50 +1242,6 @@ class UniformSale(BaseModel):
     )
     
     # =========================================================================
-    # ACCOUNTING INTEGRATION - ACCOUNTS
-    # =========================================================================
-    
-    inventory_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Inventory Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_sales_inventory',
-        null=True,
-        blank=True,
-        help_text="Inventory asset account to credit (reduce inventory)"
-    )
-    
-    cogs_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="COGS Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_sales_cogs',
-        null=True,
-        blank=True,
-        help_text="Cost of Goods Sold expense account to debit"
-    )
-    
-    revenue_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Revenue Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_sales_revenue',
-        null=True,
-        blank=True,
-        help_text="Uniform sales revenue account to credit"
-    )
-    
-    receivable_account = models.ForeignKey(
-        'finance.Account',
-        verbose_name="Receivable Account",
-        on_delete=models.PROTECT,
-        related_name='uniform_sales_receivable',
-        null=True,
-        blank=True,
-        help_text="Accounts receivable to debit (if not paid immediately)"
-    )
-    
-    # =========================================================================
     # JOURNAL ENTRY INTEGRATION
     # =========================================================================
     
@@ -1300,7 +1252,7 @@ class UniformSale(BaseModel):
         null=True,
         blank=True,
         related_name='uniform_sales',
-        help_text="Journal entry for this uniform sale"
+        help_text="Journal entry for this uniform sale (COGS and Revenue recognition)"
     )
     
     auto_create_journal_entry = models.BooleanField(
@@ -1309,9 +1261,9 @@ class UniformSale(BaseModel):
         help_text="Automatically create journal entries when sale is completed"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # STATUS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     status = models.CharField(
         "Status",
@@ -1321,43 +1273,62 @@ class UniformSale(BaseModel):
         db_index=True
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # PAYMENT
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     payment_method = models.ForeignKey(
         'core.PaymentMethod',
+        verbose_name="Payment Method",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name='uniform_sales'
+        related_name='uniform_sales',
+        help_text="How payment was made (if paid immediately)"
     )
     
-    payment_reference = models.CharField("Payment Reference", max_length=100, blank=True)
+    payment_reference = models.CharField(
+        "Payment Reference", 
+        max_length=100, 
+        blank=True,
+        help_text="Payment reference/transaction number"
+    )
     
-    # -------------------------------------------------------------------------
-    # ISSUANCE
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # ISSUANCE TRACKING
+    # =========================================================================
     
-    issued_by_id = models.CharField("Issued By ID", max_length=50, null=True, blank=True)
-    issued_at = models.DateTimeField("Issued At", null=True, blank=True)
+    issued_by_id = models.CharField(
+        "Issued By ID", 
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text="User ID who issued the uniforms to student"
+    )
+    
+    issued_at = models.DateTimeField(
+        "Issued At", 
+        null=True, 
+        blank=True,
+        help_text="When uniforms were physically handed to student"
+    )
     
     return_date = models.DateField(
-        "Return Date", 
+        "Expected Return Date", 
         null=True, 
         blank=True, 
-        help_text="For loaned items"
+        help_text="For loaned items - when they should be returned"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # DISCOUNT TRACKING
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     discount_reason = models.CharField(
         "Discount Reason",
         max_length=200,
         blank=True,
-        help_text="Reason for discount (staff child, sibling, etc.)"
+        help_text="Reason for discount (staff child, sibling discount, bulk purchase, etc.)"
     )
     
     discount_approved_by_id = models.CharField(
@@ -1368,55 +1339,397 @@ class UniformSale(BaseModel):
         help_text="User ID who approved the discount"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # CANCELLATION TRACKING (Before Issuance) ⭐ NEW
+    # =========================================================================
+    
+    cancelled = models.BooleanField(
+        "Cancelled",
+        default=False,
+        db_index=True,
+        help_text=(
+            "Sale was cancelled before items were issued to student. "
+            "No inventory adjustment needed (items never left warehouse)."
+        )
+    )
+    
+    cancelled_on = models.DateTimeField(
+        "Cancelled On",
+        null=True,
+        blank=True,
+        help_text="When this sale was cancelled"
+    )
+    
+    cancelled_by_id = models.CharField(
+        "Cancelled By ID",
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="User ID who cancelled this sale"
+    )
+    
+    cancellation_reason = models.TextField(
+        "Cancellation Reason",
+        blank=True,
+        help_text=(
+            "Detailed reason for cancellation. Examples: "
+            "'Student withdrew before receiving items', "
+            "'Wrong items selected', "
+            "'Parent changed mind before payment/issuance'"
+        )
+    )
+    
+    cancellation_journal_entry = models.ForeignKey(
+        'finance.JournalEntry',
+        verbose_name="Cancellation Journal Entry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cancelled_uniform_sales',
+        help_text="Journal entry reversing the original sale (if journal was already created)"
+    )
+    
+    # =========================================================================
+    # RETURN TRACKING (After Issuance) ⭐ NEW
+    # =========================================================================
+    
+    returned = models.BooleanField(
+        "Returned",
+        default=False,
+        db_index=True,
+        help_text=(
+            "Issued items were physically returned by student. "
+            "Items are added back to inventory."
+        )
+    )
+    
+    returned_on = models.DateTimeField(
+        "Returned On",
+        null=True,
+        blank=True,
+        help_text="When items were returned to warehouse"
+    )
+    
+    returned_by_id = models.CharField(
+        "Returned By ID",
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="User ID who processed the return"
+    )
+    
+    return_reason = models.TextField(
+        "Return Reason",
+        blank=True,
+        help_text=(
+            "Why items were returned. Examples: "
+            "'Wrong size issued', "
+            "'Student withdrew from school', "
+            "'Items defective', "
+            "'Parent requested refund'"
+        )
+    )
+    
+    return_condition = models.CharField(
+        "Return Condition",
+        max_length=20,
+        choices=[
+            ('GOOD', 'Good Condition - Can Resell'),
+            ('FAIR', 'Fair Condition - Can Resell with Discount'),
+            ('WORN', 'Worn - Cannot Resell'),
+            ('DAMAGED', 'Damaged - Cannot Resell'),
+            ('UNUSABLE', 'Unusable - Write Off'),
+        ],
+        blank=True,
+        help_text="Condition of returned items (determines if they can be resold)"
+    )
+    
+    return_journal_entry = models.ForeignKey(
+        'finance.JournalEntry',
+        verbose_name="Return Journal Entry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='returned_uniform_sales',
+        help_text="Journal entry for returned inventory (reverses COGS and Revenue)"
+    )
+    
+    partial_return = models.BooleanField(
+        "Partial Return",
+        default=False,
+        help_text="Only some items were returned (not all)"
+    )
+    
+    # =========================================================================
     # NOTES
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
-    notes = models.TextField("Notes", blank=True)
-    internal_notes = models.TextField("Internal Notes", blank=True)
+    notes = models.TextField(
+        "Notes", 
+        blank=True,
+        help_text="Public notes visible to parents/students"
+    )
     
-    # -------------------------------------------------------------------------
-    # META CLASS
-    # -------------------------------------------------------------------------
+    internal_notes = models.TextField(
+        "Internal Notes", 
+        blank=True,
+        help_text="Internal notes for staff only (not visible to parents/students)"
+    )
     
-    class Meta:
-        verbose_name = "Uniform Sale"
-        verbose_name_plural = "Uniform Sales"
-        ordering = ['-sale_date']
-        indexes = [
-            models.Index(fields=['sale_number']),
-            models.Index(fields=['student', 'sale_date']),
-            models.Index(fields=['status']),
-            models.Index(fields=['sale_date']),
-            models.Index(fields=['fiscal_period']),
-            models.Index(fields=['academic_session']),
-        ]
+    # =========================================================================
+    # ACCOUNT MAPPING HELPERS
+    # =========================================================================
     
-    # -------------------------------------------------------------------------
-    # STRING REPRESENTATION
-    # -------------------------------------------------------------------------
-    
-    def __str__(self):
-        return f"{self.sale_number} - {self.student.get_full_name()}"
-    
-    # -------------------------------------------------------------------------
-    # SAVE METHOD
-    # -------------------------------------------------------------------------
-    
-    def save(self, *args, **kwargs):
-        """Calculate gross profit and margin automatically"""
-        if self.total_amount > 0:
-            self.gross_profit = self.total_amount - self.total_cost
-            self.gross_margin_percentage = (self.gross_profit / self.total_amount) * 100
-        else:
-            self.gross_profit = Decimal('0.00')
-            self.gross_margin_percentage = Decimal('0.00')
+    def get_inventory_account(self):
+        """
+        Get inventory asset account.
         
-        super().save(*args, **kwargs)
+        Returns:
+            Account: Uniform inventory account
+        """
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            logger.error("FinancialSettings not configured")
+            return None
+        
+        # Try to get specific uniform inventory account
+        mappings = settings.get_account_mappings()
+        
+        # Check if there's a specific uniform inventory account
+        if hasattr(mappings, 'uniform_inventory_account') and mappings.uniform_inventory_account:
+            return mappings.uniform_inventory_account
+        
+        # Otherwise use default inventory account
+        if hasattr(mappings, 'default_inventory_account') and mappings.default_inventory_account:
+            return mappings.default_inventory_account
+        
+        logger.error("No inventory account configured")
+        return None
     
-    # -------------------------------------------------------------------------
-    # HELPER METHODS
-    # -------------------------------------------------------------------------
+    def get_cogs_account(self):
+        """
+        Get Cost of Goods Sold expense account.
+        
+        Returns:
+            Account: COGS account
+        """
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            logger.error("FinancialSettings not configured")
+            return None
+        
+        mappings = settings.get_account_mappings()
+        
+        # Try specific uniform COGS account
+        if hasattr(mappings, 'uniform_cogs_account') and mappings.uniform_cogs_account:
+            return mappings.uniform_cogs_account
+        
+        # Otherwise use default COGS
+        if hasattr(mappings, 'default_cogs_account') and mappings.default_cogs_account:
+            return mappings.default_cogs_account
+        
+        logger.error("No COGS account configured")
+        return None
+    
+    def get_revenue_account(self):
+        """
+        Get uniform sales revenue account.
+        
+        Returns:
+            Account: Revenue account for uniform sales
+        """
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            logger.error("FinancialSettings not configured")
+            return None
+        
+        mappings = settings.get_account_mappings()
+        
+        # Try specific uniform sales revenue account
+        if hasattr(mappings, 'uniform_sales_revenue_account') and mappings.uniform_sales_revenue_account:
+            return mappings.uniform_sales_revenue_account
+        
+        # Try combined uniform and book sales account
+        if hasattr(mappings, 'uniform_and_book_sales_account') and mappings.uniform_and_book_sales_account:
+            return mappings.uniform_and_book_sales_account
+        
+        # Otherwise use default revenue
+        if hasattr(mappings, 'default_revenue_account') and mappings.default_revenue_account:
+            return mappings.default_revenue_account
+        
+        logger.error("No revenue account configured for uniform sales")
+        return None
+    
+    def get_receivable_account(self):
+        """
+        Get student receivables account.
+        
+        Returns:
+            Account: Student receivables account
+        """
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            logger.error("FinancialSettings not configured")
+            return None
+        
+        mappings = settings.get_account_mappings()
+        
+        if hasattr(mappings, 'student_receivables_account') and mappings.student_receivables_account:
+            return mappings.student_receivables_account
+        
+        logger.error("No student receivables account configured")
+        return None
+    
+    # =========================================================================
+    # VALIDATION
+    # =========================================================================
+    
+    def clean(self):
+        """Validate uniform sale data"""
+        super().clean()
+        errors = {}
+        
+        # Cannot be both cancelled AND returned
+        if self.cancelled and self.returned:
+            errors['cancelled'] = "Sale cannot be both cancelled and returned. Choose one."
+            errors['returned'] = "Sale cannot be both cancelled and returned. Choose one."
+        
+        # If cancelled, must have reason
+        if self.cancelled and not self.cancellation_reason:
+            errors['cancellation_reason'] = "Cancellation reason is required for cancelled sales"
+        
+        # If returned, must have reason and condition
+        if self.returned:
+            if not self.return_reason:
+                errors['return_reason'] = "Return reason is required for returned sales"
+            if not self.return_condition:
+                errors['return_condition'] = "Return condition is required for returned sales"
+        
+        # Cannot cancel/return a draft
+        if self.cancelled or self.returned:
+            if self.status == 'DRAFT':
+                errors['status'] = "Cannot cancel or return a draft sale. Delete it instead."
+        
+        # Amounts validation
+        if self.total_amount < 0:
+            errors['total_amount'] = "Total amount cannot be negative"
+        
+        if self.paid_amount < 0:
+            errors['paid_amount'] = "Paid amount cannot be negative"
+        
+        if self.paid_amount > self.total_amount:
+            errors['paid_amount'] = "Paid amount cannot exceed total amount"
+        
+        if errors:
+            raise ValidationError(errors)
+    
+    # =========================================================================
+    # STATUS PROPERTIES ⭐ NEW
+    # =========================================================================
+    
+    @property
+    def is_active(self):
+        """
+        Check if sale is still active (not cancelled or returned).
+        
+        Active sales count toward revenue and inventory.
+        Inactive sales are kept for audit trail only.
+        
+        Returns:
+            bool: True if sale is active
+        """
+        return not self.cancelled and not self.returned
+    
+    @property
+    def effective_total_amount(self):
+        """
+        Get effective total amount (0 if cancelled/returned).
+        
+        Returns:
+            Decimal: Total amount if active, 0 if inactive
+        """
+        if not self.is_active:
+            return Decimal('0.00')
+        return self.total_amount
+    
+    @property
+    def sale_state(self):
+        """
+        Get human-readable sale state.
+        
+        Returns:
+            str: Current state of sale
+        """
+        if self.cancelled:
+            return "CANCELLED"
+        elif self.returned:
+            return "RETURNED"
+        else:
+            return self.status
+    
+    def can_be_cancelled(self):
+        """
+        Check if this sale can be cancelled.
+        
+        Cancellation is for sales that never completed (items never issued).
+        
+        Returns:
+            tuple: (can_cancel: bool, reason: str)
+        """
+        if self.cancelled:
+            return False, "Sale already cancelled"
+        
+        if self.returned:
+            return False, "Sale was already returned (cannot cancel after return)"
+        
+        if self.status == 'ISSUED':
+            return False, "Cannot cancel issued sale (items already given to student). Use RETURN instead."
+        
+        # Check if fiscal period is closed
+        if self.fiscal_period and hasattr(self.fiscal_period, 'is_closed'):
+            if self.fiscal_period.is_closed:
+                return False, "Cannot cancel sale from closed fiscal period"
+        
+        return True, "OK"
+    
+    def can_be_returned(self):
+        """
+        Check if items can be returned.
+        
+        Return is for sales where items were issued but are coming back.
+        
+        Returns:
+            tuple: (can_return: bool, reason: str)
+        """
+        if self.cancelled:
+            return False, "Sale was cancelled (items were never issued, so nothing to return)"
+        
+        if self.returned:
+            return False, "Items already returned"
+        
+        if self.status != 'ISSUED':
+            return False, "Items must be issued before they can be returned (current status: {})".format(
+                self.get_status_display()
+            )
+        
+        # Check if fiscal period is closed
+        if self.fiscal_period and hasattr(self.fiscal_period, 'is_closed'):
+            if self.fiscal_period.is_closed:
+                return False, "Cannot process return from closed fiscal period"
+        
+        return True, "OK"
+    
+    # =========================================================================
+    # USER RETRIEVAL HELPERS
+    # =========================================================================
     
     def get_issued_by_user(self):
         """Get the user who issued this sale"""
@@ -1442,50 +1755,130 @@ class UniformSale(BaseModel):
             logger.error(f"Error fetching discount_approved_by user: {e}")
             return None
     
-    def get_default_accounts(self):
-        """
-        Get default accounts for this sale from financial settings.
-        Returns dict with account references.
-        """
-        from core.models import FinancialSettings
-        
-        settings = FinancialSettings.get_instance()
-        if not settings:
-            return {}
-        
-        return {
-            'inventory': settings.default_inventory_account,
-            'cogs': settings.default_cogs_account,
-            'revenue': settings.default_service_revenue_account,
-            'receivable': settings.default_receivables_account,
-        }
+    def get_cancelled_by_user(self):
+        """Get user who cancelled this sale"""
+        if not self.cancelled_by_id:
+            return None
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.using('default').get(id=self.cancelled_by_id)
+        except Exception as e:
+            logger.error(f"Error fetching cancelled_by user: {e}")
+            return None
     
-    def ensure_accounts_assigned(self):
+    def get_returned_by_user(self):
+        """Get user who processed return"""
+        if not self.returned_by_id:
+            return None
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.using('default').get(id=self.returned_by_id)
+        except Exception as e:
+            logger.error(f"Error fetching returned_by user: {e}")
+            return None
+    
+    # =========================================================================
+    # AUDIT TRAIL HELPERS
+    # =========================================================================
+    
+    def get_audit_trail(self):
         """
-        Ensure accounting accounts are assigned.
-        Auto-assigns from defaults if not set.
+        Get complete audit trail for this uniform sale.
+        
+        Returns:
+            list: Chronological audit trail
         """
-        if not all([self.inventory_account, self.cogs_account, 
-                   self.revenue_account, self.receivable_account]):
-            defaults = self.get_default_accounts()
+        trail = []
+        
+        # Creation
+        trail.append({
+            'action': 'CREATED',
+            'timestamp': self.created_at,
+            'user': self.get_created_by_user(),
+            'details': f"Uniform sale {self.sale_number} created for {self.student.get_full_name()}"
+        })
+        
+        # Invoice creation
+        if self.fee_invoice:
+            trail.append({
+                'action': 'INVOICE_CREATED',
+                'timestamp': self.fee_invoice.created_at,
+                'details': f"Fee invoice {self.fee_invoice.invoice_number} generated"
+            })
+        
+        # Journal entry
+        if self.journal_entry:
+            trail.append({
+                'action': 'JOURNAL_ENTRY_CREATED',
+                'timestamp': self.journal_entry.created_at,
+                'details': f"Journal entry {self.journal_entry.entry_number} created"
+            })
+        
+        # Discount approval
+        if self.discount_approved_by_id and self.discount_amount > 0:
+            trail.append({
+                'action': 'DISCOUNT_APPROVED',
+                'timestamp': self.updated_at,  # Approximate
+                'user': self.get_discount_approved_by_user(),
+                'details': f"Discount of {self.discount_amount:,.2f} approved: {self.discount_reason}"
+            })
+        
+        # Issuance
+        if self.issued_at:
+            trail.append({
+                'action': 'ITEMS_ISSUED',
+                'timestamp': self.issued_at,
+                'user': self.get_issued_by_user(),
+                'details': "Uniforms physically issued to student"
+            })
+        
+        # Cancellation
+        if self.cancelled and self.cancelled_on:
+            trail.append({
+                'action': 'CANCELLED',
+                'timestamp': self.cancelled_on,
+                'user': self.get_cancelled_by_user(),
+                'details': f"Sale cancelled: {self.cancellation_reason}"
+            })
             
-            if not self.inventory_account:
-                self.inventory_account = defaults.get('inventory')
+            if self.cancellation_journal_entry:
+                trail.append({
+                    'action': 'CANCELLATION_JOURNAL_ENTRY',
+                    'timestamp': self.cancellation_journal_entry.created_at,
+                    'details': f"Cancellation journal entry {self.cancellation_journal_entry.entry_number} created"
+                })
+        
+        # Return
+        if self.returned and self.returned_on:
+            trail.append({
+                'action': 'ITEMS_RETURNED',
+                'timestamp': self.returned_on,
+                'user': self.get_returned_by_user(),
+                'details': f"Items returned in {self.get_return_condition_display()} condition: {self.return_reason}"
+            })
             
-            if not self.cogs_account:
-                self.cogs_account = defaults.get('cogs')
-            
-            if not self.revenue_account:
-                self.revenue_account = defaults.get('revenue')
-            
-            if not self.receivable_account:
-                self.receivable_account = defaults.get('receivable')
-            
-            self.save()
+            if self.return_journal_entry:
+                trail.append({
+                    'action': 'RETURN_JOURNAL_ENTRY',
+                    'timestamp': self.return_journal_entry.created_at,
+                    'details': f"Return journal entry {self.return_journal_entry.entry_number} created"
+                })
+        
+        # Sort by timestamp
+        trail.sort(key=lambda x: x['timestamp'])
+        
+        return trail
+    
+    # =========================================================================
+    # CALCULATION METHODS
+    # =========================================================================
     
     def calculate_totals(self):
         """
         Calculate all totals from sale items.
+        
         Should be called after adding/modifying items.
         """
         items = self.items.all()
@@ -1512,6 +1905,78 @@ class UniformSale(BaseModel):
             self.gross_margin_percentage = Decimal('0.00')
         
         self.save()
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
+    
+    class Meta:
+        verbose_name = "Uniform Sale"
+        verbose_name_plural = "Uniform Sales"
+        ordering = ['-sale_date', '-created_at']
+        indexes = [
+            models.Index(fields=['sale_number']),
+            models.Index(fields=['student', 'sale_date']),
+            models.Index(fields=['status']),
+            models.Index(fields=['sale_date']),
+            models.Index(fields=['fiscal_period']),
+            models.Index(fields=['academic_session']),
+            # NEW indexes for cancellation/return tracking
+            models.Index(fields=['cancelled']),
+            models.Index(fields=['returned']),
+            models.Index(fields=['cancelled_on']),
+            models.Index(fields=['returned_on']),
+        ]
+        constraints = [
+            # Ensure amounts are non-negative
+            models.CheckConstraint(
+                check=models.Q(total_amount__gte=0),
+                name='uniform_sale_total_amount_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(paid_amount__gte=0),
+                name='uniform_sale_paid_amount_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(discount_amount__gte=0),
+                name='uniform_sale_discount_amount_non_negative'
+            ),
+        ]
+    
+    # =========================================================================
+    # STRING REPRESENTATION
+    # =========================================================================
+    
+    def __str__(self):
+        state_suffix = ""
+        if self.cancelled:
+            state_suffix = " [CANCELLED]"
+        elif self.returned:
+            state_suffix = " [RETURNED]"
+        
+        return f"{self.sale_number} - {self.student.get_full_name()} - {self.total_amount:,.2f}{state_suffix}"
+    
+    # =========================================================================
+    # SAVE METHOD
+    # =========================================================================
+    
+    def save(self, *args, **kwargs):
+        """Calculate gross profit and margin automatically"""
+        # Calculate gross profit and margin
+        if self.total_amount > 0:
+            self.gross_profit = self.total_amount - self.total_cost
+            self.gross_margin_percentage = (self.gross_profit / self.total_amount) * 100
+        else:
+            self.gross_profit = Decimal('0.00')
+            self.gross_margin_percentage = Decimal('0.00')
+        
+        # Update status based on cancellation/return
+        if self.cancelled and self.status != 'CANCELLED':
+            self.status = 'CANCELLED'
+        elif self.returned and self.status != 'RETURNED':
+            self.status = 'RETURNED'
+        
+        super().save(*args, **kwargs)
 
 
 class UniformSaleItem(BaseModel):

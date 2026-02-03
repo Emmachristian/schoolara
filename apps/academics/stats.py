@@ -38,6 +38,9 @@ def get_academic_session_statistics(filters=None):
         dict: Statistics including counts, durations, status breakdowns
     """
     from .models import AcademicSession
+    from django.db.models import Q, Count
+    from django.utils import timezone
+    from datetime import timedelta
     
     sessions = AcademicSession.objects.all()
     
@@ -67,8 +70,8 @@ def get_academic_session_statistics(filters=None):
         'active_sessions': sessions.filter(is_active=True).count(),
         'inactive_sessions': sessions.filter(is_active=False).count(),
         'current_session': sessions.filter(is_current=True).first(),
-        'closed_sessions': sessions.filter(is_closed=True).count(),
-        'open_sessions': sessions.filter(is_closed=False).count(),
+        'closed_sessions': sessions.filter(is_academically_closed=True).count(),  # ✅ FIXED
+        'open_sessions': sessions.filter(is_academically_closed=False).count(),    # ✅ FIXED
         
         # Status breakdown
         'status_breakdown': {
@@ -80,8 +83,8 @@ def get_academic_session_statistics(filters=None):
                 is_active=True,
                 is_current=False
             ).count(),
-            'completed': sessions.filter(end_date__lt=current_date, is_closed=False).count(),
-            'closed': sessions.filter(is_closed=True).count(),
+            'completed': sessions.filter(end_date__lt=current_date, is_academically_closed=False).count(),  # ✅ FIXED
+            'closed': sessions.filter(is_academically_closed=True).count(),  # ✅ FIXED
         },
         
         # Period type distribution
@@ -90,6 +93,12 @@ def get_academic_session_statistics(filters=None):
             .annotate(count=Count('id'))
             .values_list('period_type', 'count')
         ),
+        
+        # Special session breakdown
+        'special_session_stats': {
+            'regular_sessions': sessions.filter(is_special_session=False).count(),
+            'special_sessions': sessions.filter(is_special_session=True).count(),
+        },
         
         # Promotion statistics
         'promotion_stats': {
@@ -113,7 +122,7 @@ def get_academic_session_statistics(filters=None):
         'enrollment_stats': {
             'open_for_enrollment': sessions.filter(
                 is_active=True,
-                is_closed=False
+                is_academically_closed=False  # ✅ FIXED
             ).count(),
             'past_deadline': sessions.filter(
                 enrollment_deadline__lt=current_date,
@@ -143,7 +152,7 @@ def get_academic_session_statistics(filters=None):
             }
         
         # Progress analysis for active sessions
-        active_sessions = sessions.filter(is_active=True, is_closed=False)
+        active_sessions = sessions.filter(is_active=True, is_academically_closed=False)  # ✅ FIXED
         if active_sessions.exists():
             progress_data = []
             for session in active_sessions:
@@ -160,10 +169,10 @@ def get_academic_session_statistics(filters=None):
     # Recent activity
     stats['recent_activity'] = {
         'created_last_30_days': sessions.filter(
-            created_at__gte=current_date - timedelta(days=30)
+            created_at__gte=timezone.now() - timedelta(days=30)  # ✅ FIXED: use timezone.now()
         ).count(),
         'modified_last_7_days': sessions.filter(
-            updated_at__gte=current_date - timedelta(days=7)
+            updated_at__gte=timezone.now() - timedelta(days=7)  # ✅ FIXED: use timezone.now()
         ).count(),
         'starting_next_30_days': sessions.filter(
             start_date__gte=current_date,
@@ -190,6 +199,7 @@ def get_session_timeline_data(year_name=None, include_breaks=True):
         dict: Timeline data with sessions and optional breaks
     """
     from .models import AcademicSession, Holiday
+    from django.db.models import Q
     
     sessions = AcademicSession.objects.all().order_by('start_date')
     if year_name:
@@ -207,28 +217,33 @@ def get_session_timeline_data(year_name=None, include_breaks=True):
             'duration_days': session.total_days,
             'status': session.status_display,
             'is_current': session.is_current,
+            'is_closed': session.is_academically_closed,  # ✅ FIXED
             'term_number': session.term_number,
             'year_name': session.year_name,
         })
     
     if include_breaks:
-        breaks = Holiday.objects.filter(holiday_type='BREAK').order_by('start_date')
-        if year_name:
-            breaks = breaks.filter(
-                Q(previous_session__year_name=year_name) |
-                Q(next_session__year_name=year_name)
-            )
-        
-        for holiday in breaks:
-            timeline.append({
-                'type': 'break',
-                'id': holiday.id,
-                'name': holiday.name,
-                'start_date': holiday.start_date,
-                'end_date': holiday.end_date,
-                'duration_days': holiday.duration,
-                'break_type': holiday.break_type,
-            })
+        try:
+            breaks = Holiday.objects.filter(holiday_type='BREAK').order_by('start_date')
+            if year_name:
+                breaks = breaks.filter(
+                    Q(academic_session__year_name=year_name)  # ✅ Adjust relationship name if needed
+                )
+            
+            for holiday in breaks:
+                timeline.append({
+                    'type': 'break',
+                    'id': holiday.id,
+                    'name': holiday.name,
+                    'start_date': holiday.start_date,
+                    'end_date': holiday.end_date,
+                    'duration_days': (holiday.end_date - holiday.start_date).days + 1 if holiday.end_date else 1,
+                })
+        except Exception as e:
+            # If Holiday model doesn't exist or has different structure, just skip
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not fetch holiday data: {e}")
     
     # Sort by start date
     timeline.sort(key=lambda x: x['start_date'])
@@ -238,6 +253,62 @@ def get_session_timeline_data(year_name=None, include_breaks=True):
         'total_items': len(timeline),
         'year_name': year_name,
     }
+
+
+def get_current_academic_session():
+    """
+    Get the current academic session
+    
+    Returns:
+        AcademicSession or None: The current session if one exists
+    """
+    from .models import AcademicSession
+    
+    return AcademicSession.get_current_session()
+
+
+def get_academic_dashboard_statistics():
+    """
+    Get comprehensive statistics for the academics dashboard
+    
+    Returns:
+        dict: Dashboard statistics
+    """
+    from .models import AcademicSession, Class, StudentClassEnrollment, Subject, AcademicLevel
+    from django.db.models import Count
+    from django.utils import timezone
+    
+    current_date = timezone.now().date()
+    
+    # Get current session
+    current_session = AcademicSession.get_current_session()
+    
+    # Basic counts
+    stats = {
+        'current_session': current_session,
+        'total_sessions': AcademicSession.objects.count(),
+        'active_sessions': AcademicSession.objects.filter(is_active=True).count(),
+        'total_classes': Class.objects.filter(is_active=True).count(),
+        'total_subjects': Subject.objects.filter(is_active=True).count(),
+        'total_levels': AcademicLevel.objects.filter(is_active=True).count(),
+    }
+    
+    # Current session stats
+    if current_session:
+        stats['current_session_stats'] = {
+            'total_enrollments': StudentClassEnrollment.objects.filter(
+                academic_session=current_session,
+                is_active=True
+            ).count(),
+            'total_classes': Class.objects.filter(
+                academic_session=current_session,
+                is_active=True
+            ).count(),
+            'progress_percentage': current_session.progress_percentage,
+            'days_remaining': current_session.days_remaining,
+        }
+    
+    return stats
 
 
 # =============================================================================

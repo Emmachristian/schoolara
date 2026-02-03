@@ -1,4 +1,4 @@
-# academics/htmx_views.py
+# academics/htmx_views.py - FIXED VERSION
 
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
@@ -19,13 +19,48 @@ from .models import (
     StudentClassEnrollment,
     AcademicProgress
 )
+
+from .forms import ClassSubjectFilterForm
 from core.utils import parse_filters, paginate_queryset
+# Import stats functions
+from . import stats as academic_stats
 
 logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# ACADEMIC SESSION SEARCH
+# HELPER FUNCTION - Apply Boolean Filters Correctly
+# =============================================================================
+
+def apply_boolean_filter(queryset, field_name, filter_value):
+    """
+    Helper to correctly apply boolean filters.
+    
+    Args:
+        queryset: Django queryset
+        field_name: Model field name (e.g., 'is_active')
+        filter_value: Filter value from request (can be '', 'true', 'false', None)
+    
+    Returns:
+        Filtered queryset (or unchanged if filter_value is empty)
+    
+    The problem:
+        parse_filters() returns '' for empty dropdowns
+        Checking `if filter_value is not None:` passes for ''
+        Then ''.lower() == 'true' evaluates to False
+        Filtering everything out!
+    
+    The fix:
+        Only apply filter if value is truthy AND not empty string
+    """
+    # ✅ CRITICAL FIX: Check for empty string specifically
+    if filter_value and filter_value != '':
+        return queryset.filter(**{field_name: (filter_value.lower() == 'true')})
+    return queryset
+
+
+# =============================================================================
+# ACADEMIC SESSION SEARCH - FIXED
 # =============================================================================
 
 def session_search(request):
@@ -38,51 +73,33 @@ def session_search(request):
         'allows_promotion', 'term_number'
     ])
     
-    query = filters['q']
-    year_name = filters['year_name']
-    period_type = filters['period_type']
-    is_current = filters['is_current']
-    is_active = filters['is_active']
-    is_academically_closed = filters['is_academically_closed']
-    is_special_session = filters['is_special_session']
-    allows_promotion = filters['allows_promotion']
-    term_number = filters['term_number']
-    
     # Build queryset
     sessions = AcademicSession.objects.all().order_by('-start_date', 'term_number')
     
     # Apply text search
-    if query:
+    if filters['q']:
         sessions = sessions.filter(
-            Q(year_name__icontains=query) |
-            Q(term_name__icontains=query) |
-            Q(description__icontains=query)
+            Q(year_name__icontains=filters['q']) |
+            Q(term_name__icontains=filters['q']) |
+            Q(description__icontains=filters['q'])
         )
     
-    # Apply filters
-    if year_name:
-        sessions = sessions.filter(year_name=year_name)
+    # Apply simple text filters
+    if filters['year_name']:
+        sessions = sessions.filter(year_name=filters['year_name'])
     
-    if period_type:
-        sessions = sessions.filter(period_type=period_type)
+    if filters['period_type']:
+        sessions = sessions.filter(period_type=filters['period_type'])
     
-    if term_number:
-        sessions = sessions.filter(term_number=term_number)
+    if filters['term_number']:
+        sessions = sessions.filter(term_number=filters['term_number'])
     
-    if is_current is not None:
-        sessions = sessions.filter(is_current=(is_current.lower() == 'true'))
-    
-    if is_active is not None:
-        sessions = sessions.filter(is_active=(is_active.lower() == 'true'))
-    
-    if is_academically_closed is not None:
-        sessions = sessions.filter(is_academically_closed=(is_academically_closed.lower() == 'true'))
-    
-    if is_special_session is not None:
-        sessions = sessions.filter(is_special_session=(is_special_session.lower() == 'true'))
-    
-    if allows_promotion is not None:
-        sessions = sessions.filter(allows_promotion=(allows_promotion.lower() == 'true'))
+    # ✅ FIXED: Apply boolean filters correctly
+    sessions = apply_boolean_filter(sessions, 'is_current', filters['is_current'])
+    sessions = apply_boolean_filter(sessions, 'is_active', filters['is_active'])
+    sessions = apply_boolean_filter(sessions, 'is_academically_closed', filters['is_academically_closed'])
+    sessions = apply_boolean_filter(sessions, 'is_special_session', filters['is_special_session'])
+    sessions = apply_boolean_filter(sessions, 'allows_promotion', filters['allows_promotion'])
     
     # Paginate
     sessions_page, paginator = paginate_queryset(request, sessions, per_page=10)
@@ -116,7 +133,7 @@ def session_search(request):
 
 
 # =============================================================================
-# HOLIDAY SEARCH
+# HOLIDAY SEARCH - FIXED
 # =============================================================================
 
 def holiday_search(request):
@@ -128,47 +145,34 @@ def holiday_search(request):
         'is_recurring', 'academic_session', 'year', 'month'
     ])
     
-    query = filters['q']
-    holiday_type = filters['holiday_type']
-    is_school_closed = filters['is_school_closed']
-    is_partial_closure = filters['is_partial_closure']
-    is_recurring = filters['is_recurring']
-    academic_session = filters['academic_session']
-    year = filters['year']
-    month = filters['month']
-    
     # Build queryset
     holidays = Holiday.objects.select_related('academic_session').order_by('-start_date')
     
     # Apply text search
-    if query:
+    if filters['q']:
         holidays = holidays.filter(
-            Q(name__icontains=query) |
-            Q(description__icontains=query) |
-            Q(notes__icontains=query)
+            Q(name__icontains=filters['q']) |
+            Q(description__icontains=filters['q']) |
+            Q(notes__icontains=filters['q'])
         )
     
-    # Apply filters
-    if holiday_type:
-        holidays = holidays.filter(holiday_type=holiday_type)
+    # Apply simple filters
+    if filters['holiday_type']:
+        holidays = holidays.filter(holiday_type=filters['holiday_type'])
     
-    if academic_session:
-        holidays = holidays.filter(academic_session_id=academic_session)
+    if filters['academic_session']:
+        holidays = holidays.filter(academic_session_id=filters['academic_session'])
     
-    if is_school_closed is not None:
-        holidays = holidays.filter(is_school_closed=(is_school_closed.lower() == 'true'))
+    if filters['year']:
+        holidays = holidays.filter(start_date__year=filters['year'])
     
-    if is_partial_closure is not None:
-        holidays = holidays.filter(is_partial_closure=(is_partial_closure.lower() == 'true'))
+    if filters['month']:
+        holidays = holidays.filter(start_date__month=filters['month'])
     
-    if is_recurring is not None:
-        holidays = holidays.filter(is_recurring=(is_recurring.lower() == 'true'))
-    
-    if year:
-        holidays = holidays.filter(start_date__year=year)
-    
-    if month:
-        holidays = holidays.filter(start_date__month=month)
+    # ✅ FIXED: Apply boolean filters correctly
+    holidays = apply_boolean_filter(holidays, 'is_school_closed', filters['is_school_closed'])
+    holidays = apply_boolean_filter(holidays, 'is_partial_closure', filters['is_partial_closure'])
+    holidays = apply_boolean_filter(holidays, 'is_recurring', filters['is_recurring'])
     
     # Paginate
     holidays_page, paginator = paginate_queryset(request, holidays, per_page=20)
@@ -205,7 +209,7 @@ def holiday_search(request):
 
 
 # =============================================================================
-# SUBJECT SEARCH
+# SUBJECT SEARCH - FIXED
 # =============================================================================
 
 def subject_search(request):
@@ -217,14 +221,6 @@ def subject_search(request):
         'department', 'difficulty_level', 'textbook_required'
     ])
     
-    query = filters['q']
-    subject_type = filters['subject_type']
-    is_active = filters['is_active']
-    is_compulsory = filters['is_compulsory']
-    department = filters['department']
-    difficulty_level = filters['difficulty_level']
-    textbook_required = filters['textbook_required']
-    
     # Build queryset
     subjects = Subject.objects.select_related('department').prefetch_related(
         'applicable_levels',
@@ -232,32 +228,28 @@ def subject_search(request):
     ).order_by('subject_type', 'abbreviation')
     
     # Apply text search
-    if query:
+    if filters['q']:
         subjects = subjects.filter(
-            Q(name__icontains=query) |
-            Q(abbreviation__icontains=query) |
-            Q(code__icontains=query) |
-            Q(description__icontains=query)
+            Q(name__icontains=filters['q']) |
+            Q(abbreviation__icontains=filters['q']) |
+            Q(code__icontains=filters['q']) |
+            Q(description__icontains=filters['q'])
         )
     
-    # Apply filters
-    if subject_type:
-        subjects = subjects.filter(subject_type=subject_type)
+    # Apply simple filters
+    if filters['subject_type']:
+        subjects = subjects.filter(subject_type=filters['subject_type'])
     
-    if department:
-        subjects = subjects.filter(department_id=department)
+    if filters['department']:
+        subjects = subjects.filter(department_id=filters['department'])
     
-    if difficulty_level:
-        subjects = subjects.filter(difficulty_level=difficulty_level)
+    if filters['difficulty_level']:
+        subjects = subjects.filter(difficulty_level=filters['difficulty_level'])
     
-    if is_active is not None:
-        subjects = subjects.filter(is_active=(is_active.lower() == 'true'))
-    
-    if is_compulsory is not None:
-        subjects = subjects.filter(is_compulsory=(is_compulsory.lower() == 'true'))
-    
-    if textbook_required is not None:
-        subjects = subjects.filter(textbook_required=(textbook_required.lower() == 'true'))
+    # ✅ FIXED: Apply boolean filters correctly
+    subjects = apply_boolean_filter(subjects, 'is_active', filters['is_active'])
+    subjects = apply_boolean_filter(subjects, 'is_compulsory', filters['is_compulsory'])
+    subjects = apply_boolean_filter(subjects, 'textbook_required', filters['textbook_required'])
     
     # Paginate
     subjects_page, paginator = paginate_queryset(request, subjects, per_page=10)
@@ -285,7 +277,7 @@ def subject_search(request):
 
 
 # =============================================================================
-# ACADEMIC LEVEL SEARCH
+# ACADEMIC LEVEL SEARCH - FIXED
 # =============================================================================
 
 def academic_level_search(request):
@@ -296,33 +288,23 @@ def academic_level_search(request):
         'q', 'is_active', 'has_sections', 'is_graduation_level'
     ])
     
-    query = filters['q']
-    is_active = filters['is_active']
-    has_sections = filters['has_sections']
-    is_graduation_level = filters['is_graduation_level']
-    
     # Build queryset
     levels = AcademicLevel.objects.select_related('next_level').annotate(
         class_count=Count('classes', distinct=True)
     ).order_by('order')
     
     # Apply text search
-    if query:
+    if filters['q']:
         levels = levels.filter(
-            Q(name__icontains=query) |
-            Q(code__icontains=query) |
-            Q(description__icontains=query)
+            Q(name__icontains=filters['q']) |
+            Q(code__icontains=filters['q']) |
+            Q(description__icontains=filters['q'])
         )
     
-    # Apply filters
-    if is_active is not None:
-        levels = levels.filter(is_active=(is_active.lower() == 'true'))
-    
-    if has_sections is not None:
-        levels = levels.filter(has_sections=(has_sections.lower() == 'true'))
-    
-    if is_graduation_level is not None:
-        levels = levels.filter(is_graduation_level=(is_graduation_level.lower() == 'true'))
+    # ✅ FIXED: Apply boolean filters correctly
+    levels = apply_boolean_filter(levels, 'is_active', filters['is_active'])
+    levels = apply_boolean_filter(levels, 'has_sections', filters['has_sections'])
+    levels = apply_boolean_filter(levels, 'is_graduation_level', filters['is_graduation_level'])
     
     # Paginate
     levels_page, paginator = paginate_queryset(request, levels, per_page=20)
@@ -345,7 +327,7 @@ def academic_level_search(request):
 
 
 # =============================================================================
-# CLASSROOM SEARCH
+# CLASSROOM SEARCH - FIXED
 # =============================================================================
 
 def classroom_search(request):
@@ -358,61 +340,42 @@ def classroom_search(request):
         'is_bookable', 'min_capacity'
     ])
     
-    query = filters['q']
-    room_type = filters['room_type']
-    building = filters['building']
-    floor = filters['floor']
-    is_active = filters['is_active']
-    has_projector = filters['has_projector']
-    has_computer = filters['has_computer']
-    has_air_conditioning = filters['has_air_conditioning']
-    is_bookable = filters['is_bookable']
-    min_capacity = filters['min_capacity']
-    
     # Build queryset
     classrooms = ClassRoom.objects.annotate(
         assigned_class_count=Count('assigned_classes', distinct=True)
     ).order_by('building', 'floor', 'room_number')
     
     # Apply text search
-    if query:
+    if filters['q']:
         classrooms = classrooms.filter(
-            Q(name__icontains=query) |
-            Q(room_number__icontains=query) |
-            Q(building__icontains=query) |
-            Q(specialized_equipment__icontains=query)
+            Q(name__icontains=filters['q']) |
+            Q(room_number__icontains=filters['q']) |
+            Q(building__icontains=filters['q']) |
+            Q(specialized_equipment__icontains=filters['q'])
         )
     
-    # Apply filters
-    if room_type:
-        classrooms = classrooms.filter(room_type=room_type)
+    # Apply simple filters
+    if filters['room_type']:
+        classrooms = classrooms.filter(room_type=filters['room_type'])
     
-    if building:
-        classrooms = classrooms.filter(building__icontains=building)
+    if filters['building']:
+        classrooms = classrooms.filter(building__icontains=filters['building'])
     
-    if floor:
-        classrooms = classrooms.filter(floor=floor)
+    if filters['floor']:
+        classrooms = classrooms.filter(floor=filters['floor'])
     
-    if is_active is not None:
-        classrooms = classrooms.filter(is_active=(is_active.lower() == 'true'))
-    
-    if has_projector is not None:
-        classrooms = classrooms.filter(has_projector=(has_projector.lower() == 'true'))
-    
-    if has_computer is not None:
-        classrooms = classrooms.filter(has_computer=(has_computer.lower() == 'true'))
-    
-    if has_air_conditioning is not None:
-        classrooms = classrooms.filter(has_air_conditioning=(has_air_conditioning.lower() == 'true'))
-    
-    if is_bookable is not None:
-        classrooms = classrooms.filter(is_bookable=(is_bookable.lower() == 'true'))
-    
-    if min_capacity:
+    if filters['min_capacity']:
         try:
-            classrooms = classrooms.filter(capacity__gte=int(min_capacity))
+            classrooms = classrooms.filter(capacity__gte=int(filters['min_capacity']))
         except ValueError:
             pass
+    
+    # ✅ FIXED: Apply boolean filters correctly
+    classrooms = apply_boolean_filter(classrooms, 'is_active', filters['is_active'])
+    classrooms = apply_boolean_filter(classrooms, 'has_projector', filters['has_projector'])
+    classrooms = apply_boolean_filter(classrooms, 'has_computer', filters['has_computer'])
+    classrooms = apply_boolean_filter(classrooms, 'has_air_conditioning', filters['has_air_conditioning'])
+    classrooms = apply_boolean_filter(classrooms, 'is_bookable', filters['is_bookable'])
     
     # Paginate
     classrooms_page, paginator = paginate_queryset(request, classrooms, per_page=10)
@@ -440,7 +403,7 @@ def classroom_search(request):
 
 
 # =============================================================================
-# CLASS SEARCH
+# CLASS SEARCH - FIXED
 # =============================================================================
 
 def class_search(request):
@@ -451,14 +414,6 @@ def class_search(request):
         'q', 'academic_level', 'academic_session', 'section',
         'class_teacher', 'is_active', 'has_capacity'
     ])
-    
-    query = filters['q']
-    academic_level = filters['academic_level']
-    academic_session = filters['academic_session']
-    section = filters['section']
-    class_teacher = filters['class_teacher']
-    is_active = filters['is_active']
-    has_capacity = filters['has_capacity']
     
     # Build queryset
     classes = Class.objects.select_related(
@@ -471,30 +426,31 @@ def class_search(request):
     ).order_by('-academic_session__start_date', 'academic_level__order', 'section')
     
     # Apply text search
-    if query:
+    if filters['q']:
         classes = classes.filter(
-            Q(academic_level__name__icontains=query) |
-            Q(section__icontains=query) |
-            Q(class_motto__icontains=query)
+            Q(academic_level__name__icontains=filters['q']) |
+            Q(section__icontains=filters['q']) |
+            Q(class_motto__icontains=filters['q'])
         )
     
-    # Apply filters
-    if academic_level:
-        classes = classes.filter(academic_level_id=academic_level)
+    # Apply simple filters
+    if filters['academic_level']:
+        classes = classes.filter(academic_level_id=filters['academic_level'])
     
-    if academic_session:
-        classes = classes.filter(academic_session_id=academic_session)
+    if filters['academic_session']:
+        classes = classes.filter(academic_session_id=filters['academic_session'])
     
-    if section:
-        classes = classes.filter(section__iexact=section)
+    if filters['section']:
+        classes = classes.filter(section__iexact=filters['section'])
     
-    if class_teacher:
-        classes = classes.filter(class_teacher_id=class_teacher)
+    if filters['class_teacher']:
+        classes = classes.filter(class_teacher_id=filters['class_teacher'])
     
-    if is_active is not None:
-        classes = classes.filter(is_active=(is_active.lower() == 'true'))
+    # ✅ FIXED: Apply boolean filters correctly
+    classes = apply_boolean_filter(classes, 'is_active', filters['is_active'])
     
-    if has_capacity and has_capacity.lower() == 'true':
+    # Special filter for capacity
+    if filters['has_capacity'] and filters['has_capacity'] == 'true':
         classes = classes.filter(enrollment_count__lt=F('max_students'))
     
     # Paginate
@@ -524,84 +480,263 @@ def class_search(request):
 
 
 # =============================================================================
-# CLASS SUBJECT SEARCH
+# CLASS SUBJECT SEARCH VIEW
 # =============================================================================
+
+from django.db.models import Q, Count, Prefetch
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.shortcuts import render
+
 
 def class_subject_search(request):
-    """HTMX-compatible class subject search with pagination and stats"""
+    """
+    HTMX view for searching and filtering class subjects.
+    Focuses on class-subject assignments. Teacher assignment is handled separately.
     
-    # Parse filters
-    filters = parse_filters(request, [
-        'q', 'class_instance', 'subject', 'teacher', 
-        'is_active', 'is_optional'
-    ])
+    Supports two view modes:
+    - 'class': Group by class (default) - shows classes with their assigned subjects
+    - 'subject': Group by subject - shows subjects with their assigned classes
+    """
     
-    query = filters['q']
-    class_instance = filters['class_instance']
-    subject = filters['subject']
-    teacher = filters['teacher']
-    is_active = filters['is_active']
-    is_optional = filters['is_optional']
+    # =========================================================================
+    # GET PARAMETERS
+    # =========================================================================
     
-    # Build queryset
-    class_subjects = ClassSubject.objects.select_related(
-        'class_instance__academic_level',
-        'class_instance__academic_session',
-        'subject',
-        'teacher'
-    ).order_by('class_instance', 'subject__name')
+    view_mode = request.GET.get('view_mode', 'class')
+    query = request.GET.get('q', '').strip()
+    academic_session_id = request.GET.get('academic_session')
+    academic_level_id = request.GET.get('academic_level')
+    is_active = request.GET.get('is_active')
+    subject_count_filter = request.GET.get('subject_count_filter')
     
-    # Apply text search
-    if query:
-        class_subjects = class_subjects.filter(
-            Q(subject__name__icontains=query) |
-            Q(subject__code__icontains=query) |
-            Q(class_instance__academic_level__name__icontains=query)
+    # =========================================================================
+    # BUILD QUERYSET BASED ON VIEW MODE
+    # =========================================================================
+    
+    if view_mode == 'class':
+        # ---------------------------------------------------------------------
+        # CLASS VIEW: Show classes with their assigned subjects
+        # ---------------------------------------------------------------------
+        
+        queryset = Class.objects.select_related(
+            'academic_level',
+            'academic_session',
+            'class_teacher__staff'  # For displaying class teacher
+        ).prefetch_related(
+            Prefetch(
+                'subjects',
+                queryset=ClassSubject.objects.filter(
+                    is_active=True
+                ).select_related(
+                    'subject',
+                    'teacher__staff'  # For displaying subject teacher if assigned
+                ).order_by('subject__name')
+            )
+        ).annotate(
+            subject_count=Count('subjects', filter=Q(subjects__is_active=True)),
+            assigned_teacher_count=Count(
+                'subjects',
+                filter=Q(subjects__is_active=True, subjects__teacher__isnull=False)
+            )
         )
+        
+        # -----------------------------------------------------------------
+        # APPLY FILTERS
+        # -----------------------------------------------------------------
+        
+        # Filter by active status
+        if is_active == 'true':
+            queryset = queryset.filter(is_active=True)
+        elif is_active == 'false':
+            queryset = queryset.filter(is_active=False)
+        # If not specified, show all
+        
+        # Search filter
+        if query:
+            queryset = queryset.filter(
+                Q(academic_level__name__icontains=query) |
+                Q(section__icontains=query) |
+                Q(academic_session__year_name__icontains=query) |
+                Q(subjects__subject__name__icontains=query) |
+                Q(subjects__subject__code__icontains=query)
+            ).distinct()
+        
+        # Academic session filter
+        if academic_session_id:
+            queryset = queryset.filter(academic_session_id=academic_session_id)
+        
+        # Academic level filter
+        if academic_level_id:
+            queryset = queryset.filter(academic_level_id=academic_level_id)
+        
+        # Subject count filter
+        if subject_count_filter == 'empty':
+            # Classes with no subjects assigned
+            queryset = queryset.filter(subject_count=0)
+        elif subject_count_filter == 'partial':
+            # Classes with 1-5 subjects
+            queryset = queryset.filter(subject_count__gte=1, subject_count__lte=5)
+        elif subject_count_filter == 'full':
+            # Classes with 6+ subjects
+            queryset = queryset.filter(subject_count__gte=6)
+        
+        # Order results
+        queryset = queryset.order_by(
+            '-academic_session__start_date',  # Most recent first
+            'academic_level__order',           # Then by level
+            'section'                          # Then by section
+        )
+        
+    else:
+        # ---------------------------------------------------------------------
+        # SUBJECT VIEW: Show subjects with their assigned classes
+        # ---------------------------------------------------------------------
+        
+        queryset = ClassSubject.objects.filter(
+            is_active=True
+        ).select_related(
+            'subject',
+            'class_instance__academic_level',
+            'class_instance__academic_session',
+            'teacher__staff'
+        ).order_by(
+            'subject__name',
+            'class_instance__academic_level__order',
+            'class_instance__section'
+        )
+        
+        # Apply filters for subject view
+        if query:
+            queryset = queryset.filter(
+                Q(subject__name__icontains=query) |
+                Q(subject__code__icontains=query) |
+                Q(class_instance__academic_level__name__icontains=query)
+            )
+        
+        if academic_session_id:
+            queryset = queryset.filter(
+                class_instance__academic_session_id=academic_session_id
+            )
+        
+        if academic_level_id:
+            queryset = queryset.filter(
+                class_instance__academic_level_id=academic_level_id
+            )
     
-    # Apply filters
-    if class_instance:
-        class_subjects = class_subjects.filter(class_instance_id=class_instance)
+    # =========================================================================
+    # PAGINATION
+    # =========================================================================
     
-    if subject:
-        class_subjects = class_subjects.filter(subject_id=subject)
+    page = request.GET.get('page', 1)
+    items_per_page = 20
+    paginator = Paginator(queryset, items_per_page)
     
-    if teacher:
-        class_subjects = class_subjects.filter(teacher_id=teacher)
+    try:
+        page_obj = paginator.page(page)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
     
-    if is_active is not None:
-        class_subjects = class_subjects.filter(is_active=(is_active.lower() == 'true'))
+    # =========================================================================
+    # CALCULATE STATISTICS
+    # =========================================================================
     
-    if is_optional is not None:
-        class_subjects = class_subjects.filter(is_optional=(is_optional.lower() == 'true'))
+    if view_mode == 'class':
+        # Statistics for class view
+        filtered_classes = queryset
+        
+        total_classes = filtered_classes.count()
+        classes_with_subjects = filtered_classes.filter(subject_count__gt=0).count()
+        classes_without_subjects = filtered_classes.filter(subject_count=0).count()
+        
+        # Total assignments in filtered classes
+        total_assignments = ClassSubject.objects.filter(
+            class_instance__in=filtered_classes,
+            is_active=True
+        ).count()
+        
+        # Average subjects per class (only for classes with subjects)
+        if classes_with_subjects > 0:
+            avg_subjects = total_assignments / classes_with_subjects
+            avg_subjects_per_class = f"{avg_subjects:.1f}"
+        else:
+            avg_subjects_per_class = "0.0"
+        
+        # Teacher assignment stats (for information only)
+        assignments_with_teacher = ClassSubject.objects.filter(
+            class_instance__in=filtered_classes,
+            is_active=True,
+            teacher__isnull=False
+        ).count()
+        
+        assignments_without_teacher = ClassSubject.objects.filter(
+            class_instance__in=filtered_classes,
+            is_active=True,
+            teacher__isnull=True
+        ).count()
+        
+        stats = {
+            'total_classes': total_classes,
+            'classes_with_subjects': classes_with_subjects,
+            'classes_without_subjects': classes_without_subjects,
+            'total_assignments': total_assignments,
+            'avg_subjects_per_class': avg_subjects_per_class,
+            'assignments_with_teacher': assignments_with_teacher,
+            'assignments_without_teacher': assignments_without_teacher,
+        }
+        
+    else:
+        # Statistics for subject view
+        unique_subjects = queryset.values('subject').distinct().count()
+        total_assignments = queryset.count()
+        
+        # Calculate average classes per subject
+        if unique_subjects > 0:
+            avg_classes = total_assignments / unique_subjects
+            avg_classes_per_subject = f"{avg_classes:.1f}"
+        else:
+            avg_classes_per_subject = "0.0"
+        
+        assignments_with_teacher = queryset.filter(teacher__isnull=False).count()
+        assignments_without_teacher = queryset.filter(teacher__isnull=True).count()
+        
+        stats = {
+            'unique_subjects': unique_subjects,
+            'total_assignments': total_assignments,
+            'avg_classes_per_subject': avg_classes_per_subject,
+            'assignments_with_teacher': assignments_with_teacher,
+            'assignments_without_teacher': assignments_without_teacher,
+        }
     
-    # Paginate
-    class_subjects_page, paginator = paginate_queryset(request, class_subjects, per_page=20)
+    # =========================================================================
+    # PREPARE CONTEXT
+    # =========================================================================
     
-    # Calculate stats
-    total = class_subjects.count()
-    
-    stats = {
-        'total': total,
-        'active': class_subjects.filter(is_active=True).count(),
-        'compulsory': class_subjects.filter(is_optional=False).count(),
-        'optional': class_subjects.filter(is_optional=True).count(),
-        'with_teacher': class_subjects.filter(teacher__isnull=False).count(),
-        'avg_hours_per_week': round(
-            class_subjects.aggregate(Avg('hours_per_week'))['hours_per_week__avg'] or 0,
-            1
-        ),
-        'total_hours': class_subjects.aggregate(Sum('total_hours'))['total_hours__sum'] or 0,
+    context = {
+        'page_obj': page_obj,
+        'stats': stats,
+        'view_mode': view_mode,
+        'query': query,
+        'academic_session_id': academic_session_id,
+        'academic_level_id': academic_level_id,
+        'is_active': is_active,
+        'subject_count_filter': subject_count_filter,
     }
     
-    return render(request, 'academics/class_subjects/_class_subject_results.html', {
-        'class_subjects_page': class_subjects_page,
-        'stats': stats,
-    })
-
+    # =========================================================================
+    # RENDER APPROPRIATE TEMPLATE
+    # =========================================================================
+    
+    if view_mode == 'class':
+        template = 'academics/class_subjects/_class_subject_results.html'
+    else:
+        template = 'academics/class_subjects/_subject_view_results.html'
+    
+    return render(request, template, context)
 
 # =============================================================================
-# STUDENT CLASS ENROLLMENT SEARCH
+# STUDENT CLASS ENROLLMENT SEARCH - FIXED
 # =============================================================================
 
 def enrollment_search(request):
@@ -614,15 +749,6 @@ def enrollment_search(request):
         'progression_type'
     ])
     
-    query = filters['q']
-    academic_session = filters['academic_session']
-    class_instance = filters['class_instance']
-    student = filters['student']
-    enrollment_type = filters['enrollment_type']
-    completion_status = filters['completion_status']
-    is_active = filters['is_active']
-    progression_type = filters['progression_type']
-    
     # Build queryset
     enrollments = StudentClassEnrollment.objects.select_related(
         'student',
@@ -632,47 +758,42 @@ def enrollment_search(request):
     ).order_by('-enrollment_date')
     
     # Apply text search with multi-word support
-    if query:
-        words = query.strip().split()
-
+    if filters['q']:
+        words = filters['q'].strip().split()
         if words:
             combined_q = Q()
-
             for word in words:
                 word_q = (
-                    # Student fields
                     Q(student__first_name__icontains=word) |
                     Q(student__last_name__icontains=word) |
                     Q(student__middle_name__icontains=word) |
                     Q(student__admission_number__icontains=word) |
                     Q(roll_number__icontains=word)
                 )
-
                 combined_q &= word_q
-
             enrollments = enrollments.filter(combined_q)
     
-    # Apply filters
-    if academic_session:
-        enrollments = enrollments.filter(academic_session_id=academic_session)
+    # Apply simple filters
+    if filters['academic_session']:
+        enrollments = enrollments.filter(academic_session_id=filters['academic_session'])
     
-    if class_instance:
-        enrollments = enrollments.filter(class_instance_id=class_instance)
+    if filters['class_instance']:
+        enrollments = enrollments.filter(class_instance_id=filters['class_instance'])
     
-    if student:
-        enrollments = enrollments.filter(student_id=student)
+    if filters['student']:
+        enrollments = enrollments.filter(student_id=filters['student'])
     
-    if enrollment_type:
-        enrollments = enrollments.filter(enrollment_type=enrollment_type)
+    if filters['enrollment_type']:
+        enrollments = enrollments.filter(enrollment_type=filters['enrollment_type'])
     
-    if completion_status:
-        enrollments = enrollments.filter(completion_status=completion_status)
+    if filters['completion_status']:
+        enrollments = enrollments.filter(completion_status=filters['completion_status'])
     
-    if progression_type:
-        enrollments = enrollments.filter(progression_type=progression_type)
+    if filters['progression_type']:
+        enrollments = enrollments.filter(progression_type=filters['progression_type'])
     
-    if is_active is not None:
-        enrollments = enrollments.filter(is_active=(is_active.lower() == 'true'))
+    # ✅ FIXED: Apply boolean filter correctly
+    enrollments = apply_boolean_filter(enrollments, 'is_active', filters['is_active'])
     
     # Paginate
     enrollments_page, paginator = paginate_queryset(request, enrollments, per_page=10)
@@ -699,7 +820,102 @@ def enrollment_search(request):
 
 
 # =============================================================================
-# ACADEMIC PROGRESS SEARCH
+# BULK ENROLLMENT STUDENT SEARCH - FIXED
+# =============================================================================
+
+@require_http_methods(["GET"])
+def bulk_enrollment_student_search(request):
+    """HTMX endpoint for student search in bulk enrollment wizard"""
+    
+    # Get context from query params
+    session_id = request.GET.get('session_id')
+    class_id = request.GET.get('class_id')
+    
+    if not session_id or not class_id:
+        return HttpResponse("Missing required parameters", status=400)
+    
+    try:
+        academic_session = AcademicSession.objects.get(pk=session_id)
+        class_instance = Class.objects.get(pk=class_id)
+    except (AcademicSession.DoesNotExist, Class.DoesNotExist):
+        return HttpResponse("Invalid session or class", status=400)
+    
+    # Parse filters
+    filters = parse_filters(request, [
+        'search', 'current_level', 'gender', 'enrollment_status', 
+        'exclude_enrolled', 'show_eligible_only'
+    ])
+    
+    # Build queryset
+    from students.models import Student
+    students = Student.objects.select_related('current_academic_level')
+    
+    # Filter by enrollment status
+    if filters['enrollment_status']:
+        students = students.filter(enrollment_status=filters['enrollment_status'])
+    else:
+        students = students.filter(enrollment_status='ACTIVE')
+    
+    # Apply search filter
+    if filters['search']:
+        words = filters['search'].split()
+        combined_q = Q()
+        for word in words:
+            word_q = (
+                Q(first_name__icontains=word) |
+                Q(last_name__icontains=word) |
+                Q(middle_name__icontains=word) |
+                Q(admission_number__icontains=word)
+            )
+            combined_q &= word_q
+        students = students.filter(combined_q)
+    
+    # Simple filters
+    if filters['current_level']:
+        students = students.filter(current_academic_level_id=filters['current_level'])
+    
+    if filters['gender']:
+        students = students.filter(gender=filters['gender'])
+    
+    # ✅ FIXED: Exclude enrolled filter
+    if not filters['exclude_enrolled'] or filters['exclude_enrolled'] == 'true':
+        already_enrolled_ids = StudentClassEnrollment.objects.filter(
+            academic_session=academic_session,
+            is_active=True,
+            completion_status='ONGOING'
+        ).values_list('student_id', flat=True)
+        students = students.exclude(id__in=already_enrolled_ids)
+    
+    # ✅ FIXED: Show only eligible filter
+    if filters['show_eligible_only'] and filters['show_eligible_only'] == 'true':
+        students = students.filter(current_academic_level=class_instance.academic_level)
+    
+    # Order by name
+    students = students.order_by('first_name', 'last_name')
+    
+    # Paginate
+    students_page, paginator = paginate_queryset(request, students, per_page=20)
+    
+    # Get academic levels for filter
+    academic_levels = AcademicLevel.objects.filter(is_active=True).order_by('order')
+    
+    context = {
+        'students_page': students_page,
+        'academic_session': academic_session,
+        'class_instance': class_instance,
+        'academic_levels': academic_levels,
+        'filters': filters,
+    }
+    
+    return render(
+        request,
+        'academics/enrollments/wizard/_student_search_results.html',
+        context
+    )
+
+
+# =============================================================================
+# ACADEMIC PROGRESS SEARCH - FIXED
 # =============================================================================
 
 def progress_search(request):
@@ -712,16 +928,6 @@ def progress_search(request):
         'is_final', 'min_gpa', 'max_gpa'
     ])
     
-    query = filters['q']
-    academic_session = filters['academic_session']
-    student = filters['student']
-    progress_status = filters['progress_status']
-    promotion_decision = filters['promotion_decision']
-    is_eligible_for_promotion = filters['is_eligible_for_promotion']
-    is_final = filters['is_final']
-    min_gpa = filters['min_gpa']
-    max_gpa = filters['max_gpa']
-    
     # Build queryset
     progress_records = AcademicProgress.objects.select_related(
         'student',
@@ -731,45 +937,42 @@ def progress_search(request):
     ).order_by('-academic_session__start_date', 'student__last_name')
     
     # Apply text search
-    if query:
+    if filters['q']:
         progress_records = progress_records.filter(
-            Q(student__first_name__icontains=query) |
-            Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query)
+            Q(student__first_name__icontains=filters['q']) |
+            Q(student__last_name__icontains=filters['q']) |
+            Q(student__admission_number__icontains=filters['q'])
         )
     
-    # Apply filters
-    if academic_session:
-        progress_records = progress_records.filter(academic_session_id=academic_session)
+    # Apply simple filters
+    if filters['academic_session']:
+        progress_records = progress_records.filter(academic_session_id=filters['academic_session'])
     
-    if student:
-        progress_records = progress_records.filter(student_id=student)
+    if filters['student']:
+        progress_records = progress_records.filter(student_id=filters['student'])
     
-    if progress_status:
-        progress_records = progress_records.filter(progress_status=progress_status)
+    if filters['progress_status']:
+        progress_records = progress_records.filter(progress_status=filters['progress_status'])
     
-    if promotion_decision:
-        progress_records = progress_records.filter(promotion_decision=promotion_decision)
+    if filters['promotion_decision']:
+        progress_records = progress_records.filter(promotion_decision=filters['promotion_decision'])
     
-    if is_eligible_for_promotion is not None:
-        progress_records = progress_records.filter(
-            is_eligible_for_promotion=(is_eligible_for_promotion.lower() == 'true')
-        )
-    
-    if is_final is not None:
-        progress_records = progress_records.filter(is_final=(is_final.lower() == 'true'))
-    
-    if min_gpa:
+    # Numeric filters
+    if filters['min_gpa']:
         try:
-            progress_records = progress_records.filter(gpa__gte=float(min_gpa))
+            progress_records = progress_records.filter(gpa__gte=float(filters['min_gpa']))
         except ValueError:
             pass
     
-    if max_gpa:
+    if filters['max_gpa']:
         try:
-            progress_records = progress_records.filter(gpa__lte=float(max_gpa))
+            progress_records = progress_records.filter(gpa__lte=float(filters['max_gpa']))
         except ValueError:
             pass
+    
+    # ✅ FIXED: Apply boolean filters correctly
+    progress_records = apply_boolean_filter(progress_records, 'is_eligible_for_promotion', filters['is_eligible_for_promotion'])
+    progress_records = apply_boolean_filter(progress_records, 'is_final', filters['is_final'])
     
     # Paginate
     progress_page, paginator = paginate_queryset(request, progress_records, per_page=20)
@@ -806,13 +1009,12 @@ def progress_search(request):
 
 
 # =============================================================================
-# QUICK STATS ENDPOINTS (for dashboard widgets)
+# QUICK STATS ENDPOINTS
 # =============================================================================
 
 @require_http_methods(["GET"])
 def session_quick_stats(request):
     """Get quick statistics for academic sessions"""
-    
     current_date = timezone.now().date()
     
     stats = {
@@ -829,7 +1031,6 @@ def session_quick_stats(request):
 @require_http_methods(["GET"])
 def class_quick_stats(request):
     """Get quick statistics for classes"""
-    
     classes = Class.objects.annotate(
         enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True))
     )
@@ -848,7 +1049,6 @@ def class_quick_stats(request):
 @require_http_methods(["GET"])
 def enrollment_quick_stats(request):
     """Get quick statistics for student enrollments"""
-    
     stats = {
         'total': StudentClassEnrollment.objects.count(),
         'active': StudentClassEnrollment.objects.filter(is_active=True).count(),

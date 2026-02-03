@@ -295,6 +295,16 @@ class SchoolConfiguration(BaseModel):
             return "Trimesters (3 per year, same as Terms)"
         return self.get_term_system_display()
     
+    def get_term_system_display(self):
+        """
+        Get display value for term_system field.
+        This is what Django's get_FOO_display() does automatically for choice fields.
+        """
+        return dict(self.TERM_SYSTEM_CHOICES).get(
+            self.term_system, 
+            self.term_system.title()
+        )
+    
     # -------------------------------------------------------------------------
     # TIMEZONE HELPER METHODS ⭐ NEW
     # -------------------------------------------------------------------------
@@ -1020,11 +1030,76 @@ class FinancialSettings(BaseModel):
     # -------------------------------------------------------------------------
 
     def get_account_mappings(self):
-        """Get or create core account mappings"""
-        mappings, created = CoreAccountMappings.objects.get_or_create(
-            financial_settings=self
-        )
-        return mappings
+        """
+        Get or create SIMPLIFIED core account mappings with intelligent defaults.
+        
+        This is the universal mapping that works for all schools.
+        Other specialized mappings (Revenue, Payroll, etc.) are optional.
+        """
+        from finance.models import Account
+        
+        # Try to get existing mappings first
+        try:
+            return CoreAccountMappings.objects.get(financial_settings=self)
+        except CoreAccountMappings.DoesNotExist:
+            pass
+        
+        # If mappings don't exist, we need to create them with defaults
+        # Try to find accounts by account number (from initialization)
+        account_number_map = {
+            'default_bank_account': '1000',  # Main Bank Account
+            'default_cash_account': '1010',   # Cash on Hand / Petty Cash
+            'student_receivables_account': '1100',  # Student Receivables
+            'default_payable_account': '2000',  # Accounts Payable
+            'default_equity_account': '3000',  # Capital
+            'default_revenue_account': '4000',  # School Fees
+            'default_expense_account': '5900',  # Other/Miscellaneous Expenses
+            'scholarship_discount_account': '5800',  # Scholarships & Discounts
+        }
+        
+        # Try to find each required account
+        defaults = {}
+        for field_name, account_number in account_number_map.items():
+            # First: Try to find by account number
+            account = Account.objects.filter(account_number=account_number).first()
+            
+            if account:
+                defaults[field_name] = account
+            else:
+                # Fallback: Get first account of appropriate type
+                account_type_map = {
+                    'default_bank_account': 'ASSET',
+                    'default_cash_account': 'ASSET',
+                    'student_receivables_account': 'ASSET',
+                    'default_payable_account': 'LIABILITY',
+                    'default_equity_account': 'EQUITY',
+                    'default_revenue_account': 'REVENUE',
+                    'default_expense_account': 'EXPENSE',
+                    'scholarship_discount_account': 'EXPENSE',
+                }
+                
+                account = Account.objects.filter(
+                    account_type__account_type=account_type_map[field_name]
+                ).first()
+                
+                if account:
+                    defaults[field_name] = account
+        
+        # Check if we have all 8 required accounts
+        if len(defaults) == 8:
+            # Create the mappings with the found accounts
+            return CoreAccountMappings.objects.create(
+                financial_settings=self,
+                **defaults
+            )
+        else:
+            # Cannot create mappings - accounts not initialized
+            missing = set(account_number_map.keys()) - set(defaults.keys())
+            raise ValueError(
+                f"Cannot create CoreAccountMappings: Missing {len(missing)} required accounts: {missing}. "
+                f"Found {len(defaults)}/8 required accounts. "
+                f"Please run school initialization first using: python manage.py init_school --database <db_name>"
+            )
 
     def get_revenue_mappings(self):
         """Get or create revenue account mappings"""
@@ -1349,129 +1424,390 @@ class FinancialSettings(BaseModel):
 
 
 # =============================================================================
-# CORE ACCOUNT MAPPINGS
+# SIMPLIFIED CORE ACCOUNT MAPPINGS 
 # =============================================================================
 
 class CoreAccountMappings(BaseModel):
-    """Core account mappings for basic financial transactions."""
+    """
+    Simplified core account mappings that work universally for all schools.
+    
+    Architecture:
+    - REQUIRED mappings (The Big 7 - covering all 5 account types)
+    - Optional SPECIALIZED mappings (for schools that need them)
+    - Intelligent fallback system
+    - Works for BASIC, STANDARD, and ADVANCED complexity
+    
+    The Big 7 Required Accounts:
+    1. default_bank_account (ASSET)
+    2. default_cash_account (ASSET)
+    3. student_receivables_account (ASSET)
+    4. default_payable_account (LIABILITY)
+    5. default_equity_account (EQUITY)
+    6. default_revenue_account (REVENUE)
+    7. default_expense_account (EXPENSE)
+    + scholarship_discount_account (EXPENSE) - special case
+    
+    This ensures complete double-entry bookkeeping coverage for all schools.
+    """
     
     financial_settings = models.OneToOneField(
         'FinancialSettings',
         on_delete=models.CASCADE,
-        related_name='core_account_mappings'
+        related_name='account_mappings'
     )
     
-    # Revenue & Receivables
-    default_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='core_revenue_mappings',
-        null=True,
-        blank=True,
-        help_text='Default account for fee revenue'
-    )
+    # =========================================================================
+    # REQUIRED: THE BIG 7+ ACCOUNTS (Every school needs these) ⭐
+    # =========================================================================
     
-    default_receivables_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='core_receivables_mappings',
-        null=True,
-        blank=True,
-        help_text='Default account for student receivables'
-    )
-    
-    default_service_revenue_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='core_service_revenue_mappings',
-        null=True,
-        blank=True,
-        help_text='Default account for other service revenue'
-    )
-    
-    # Cash & Bank
-    default_cash_account = models.ForeignKey(
-        'finance.Account',
-        on_delete=models.PROTECT,
-        related_name='core_cash_mappings',
-        null=True,
-        blank=True,
-        help_text='Default cash account for cash payments'
-    )
-    
+    # ASSET Accounts (3 required)
     default_bank_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_bank_mappings',
-        null=True,
-        blank=True,
-        help_text='Default bank account for bank payments'
+        related_name='default_bank_mappings',
+        help_text='Primary bank account for school operations (ASSET)'
     )
     
-    # Basic Expenses & Payables
+    default_cash_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='default_cash_mappings',
+        help_text='Primary cash account - Cash on Hand (ASSET)'
+    )
+    
+    student_receivables_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='receivables_mappings',
+        help_text='Accounts Receivable - Students (ASSET - CONTROL ACCOUNT)'
+    )
+    
+    # LIABILITY Account (1 required)
+    default_payable_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='default_payable_mappings',
+        help_text='Accounts Payable - vendors and suppliers (LIABILITY)'
+    )
+    
+    # EQUITY Account (1 required)
+    default_equity_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='default_equity_mappings',
+        help_text='Capital/Retained Earnings account (EQUITY)'
+    )
+    
+    # REVENUE Account (1 required)
+    default_revenue_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='default_revenue_mappings',
+        help_text='Default account for all school fees revenue (REVENUE)'
+    )
+    
+    # EXPENSE Accounts (2 required)
     default_expense_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_expense_mappings',
-        null=True,
-        blank=True,
-        help_text='Default account for general expenses'
+        related_name='default_expense_mappings',
+        help_text='Default account for general expenses (EXPENSE)'
     )
     
-    default_payables_account = models.ForeignKey(
+    scholarship_discount_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_payables_mappings',
-        null=True,
-        blank=True,
-        help_text='Default account for accounts payable'
+        related_name='scholarship_mappings',
+        help_text='Account for scholarships and discounts (EXPENSE)'
     )
     
-    # Tax Accounts
-    default_tax_payable_account = models.ForeignKey(
+    # =========================================================================
+    # OPTIONAL: COMMON SPECIALIZED ACCOUNTS (null=True) ⭐
+    # =========================================================================
+    
+    # Additional cash/bank accounts
+    petty_cash_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_tax_payable_mappings',
+        related_name='core_petty_cash_mappings',
         null=True,
         blank=True,
-        help_text='Default account for tax payable'
+        help_text='Separate petty cash account (ASSET - optional)'
     )
     
-    default_tax_receivable_account = models.ForeignKey(
+    mobile_money_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_tax_receivable_mappings',
+        related_name='core_mobile_money_mappings',
         null=True,
         blank=True,
-        help_text='Default account for tax receivable'
+        help_text='Mobile money clearing account (ASSET - optional)'
     )
     
-    # Scholarships & Discounts
-    default_scholarship_account = models.ForeignKey(
+    # Specialized revenue (optional)
+    boarding_revenue_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_scholarship_mappings',
+        related_name='core_boarding_revenue_mappings',
         null=True,
         blank=True,
-        help_text='Default account for scholarship expenses'
+        help_text='Separate boarding revenue account (REVENUE - optional, falls back to default)'
     )
     
-    default_discount_account = models.ForeignKey(
+    uniform_and_book_sales_account = models.ForeignKey(
         'finance.Account',
         on_delete=models.PROTECT,
-        related_name='core_discount_mappings',
+        related_name='uniform_book_sales_mappings',
         null=True,
         blank=True,
-        help_text='Default account for fee discounts'
+        help_text='Uniform and book sales revenue (REVENUE - optional, falls back to default)'
     )
-
-    def __str__(self):
-        return f"Core Account Mappings for {self.financial_settings}"
-
+    
+    # Specialized expenses (optional)
+    salaries_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='salaries_mappings',
+        null=True,
+        blank=True,
+        help_text='Staff salaries expense (EXPENSE - optional, falls back to default)'
+    )
+    
+    utilities_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='utilities_mappings',
+        null=True,
+        blank=True,
+        help_text='Utilities expenses (EXPENSE - optional, falls back to default)'
+    )
+    
+    # Additional boarding expense (optional)
+    boarding_expense_account = models.ForeignKey(
+        'finance.Account',
+        on_delete=models.PROTECT,
+        related_name='boarding_expense_mappings',
+        null=True,
+        blank=True,
+        help_text='Boarding operational expenses (EXPENSE - optional, falls back to default)'
+    )
+    
+    # =========================================================================
+    # SMART ACCOUNT RESOLUTION WITH FALLBACKS ⭐
+    # =========================================================================
+    
+    def get_cash_or_bank_account(self, payment_method=None):
+        """
+        Get appropriate cash or bank account with intelligent fallback.
+        
+        Logic:
+        1. If petty cash payment → use petty_cash_account (if set)
+        2. If mobile money → use mobile_money_account (if set)
+        3. If cash payment → use default_cash_account
+        4. Otherwise → use default_bank_account (most common)
+        
+        Args:
+            payment_method: PaymentMethod instance or None
+            
+        Returns:
+            Account instance
+        """
+        if payment_method:
+            if hasattr(payment_method, 'code'):
+                # Specific payment method overrides
+                if payment_method.code == 'PETTY_CASH' and self.petty_cash_account:
+                    return self.petty_cash_account
+                
+                if payment_method.code == 'MOBILE_MONEY' and self.mobile_money_account:
+                    return self.mobile_money_account
+                
+                # Cash payments go to cash account
+                if payment_method.code in ['CASH', 'CASH_ON_HAND']:
+                    return self.default_cash_account
+        
+        # Default: Main bank account (most common for electronic payments)
+        return self.default_bank_account
+    
+    def get_revenue_account(self, fee_category=None):
+        """
+        Get appropriate revenue account with intelligent fallback.
+        
+        Logic:
+        1. Check if fee category has its own account override
+        2. Check if there's a specialized account for this category type
+        3. Fall back to default_revenue_account
+        
+        Args:
+            fee_category: FeeCategory instance or None
+            
+        Returns:
+            Account instance
+        """
+        if fee_category:
+            # First: Check if fee category has its own account override
+            if hasattr(fee_category, 'revenue_account') and fee_category.revenue_account:
+                return fee_category.revenue_account
+            
+            # Second: Check for category-specific overrides
+            if hasattr(fee_category, 'category_type'):
+                category_type = fee_category.category_type
+                
+                # Boarding/Meals → boarding account (if set)
+                if category_type in ['BOARDING', 'MEALS']:
+                    if self.boarding_revenue_account:
+                        return self.boarding_revenue_account
+                
+                # Uniform/Books → uniform sales account (if set)
+                if category_type in ['UNIFORM', 'BOOKS', 'TEXTBOOKS']:
+                    if self.uniform_and_book_sales_account:
+                        return self.uniform_and_book_sales_account
+        
+        # Default: Use main revenue account (always works)
+        return self.default_revenue_account
+    
+    def get_expense_account(self, expense_category=None):
+        """
+        Get appropriate expense account with intelligent fallback.
+        
+        Logic:
+        1. Check if expense category has specific account
+        2. Check if there's a specialized account for this category type
+        3. Fall back to default_expense_account
+        
+        Args:
+            expense_category: ExpenseCategory instance or None
+            
+        Returns:
+            Account instance
+        """
+        if expense_category:
+            # First: Check if category has its own specific account
+            if hasattr(expense_category, 'default_expense_account') and expense_category.default_expense_account:
+                return expense_category.default_expense_account
+            
+            # Second: Check for common category-specific accounts
+            if hasattr(expense_category, 'category_type'):
+                category_type = expense_category.category_type
+                
+                if category_type in ['STAFF', 'SALARIES'] and self.salaries_account:
+                    return self.salaries_account
+                
+                if category_type == 'UTILITIES' and self.utilities_account:
+                    return self.utilities_account
+                
+                if category_type == 'BOARDING' and self.boarding_expense_account:
+                    return self.boarding_expense_account
+        
+        # Default: Use main expense account (always works)
+        return self.default_expense_account
+    
+    def get_scholarship_account(self):
+        """Get scholarship/discount account"""
+        return self.scholarship_discount_account
+    
+    def get_payable_account(self):
+        """Get default accounts payable account"""
+        return self.default_payable_account
+    
+    def get_equity_account(self):
+        """Get default equity account"""
+        return self.default_equity_account
+    
+    # =========================================================================
+    # BACKWARD COMPATIBILITY HELPER ⭐
+    # =========================================================================
+    
+    def get_cash_account(self, payment_method=None):
+        """
+        DEPRECATED: Use get_cash_or_bank_account() instead.
+        Kept for backward compatibility.
+        """
+        return self.get_cash_or_bank_account(payment_method)
+    
+    # =========================================================================
+    # VALIDATION ⭐
+    # =========================================================================
+    
+    def clean(self):
+        """Validate that required accounts are set and are correct types"""
+        super().clean()
+        errors = {}
+        
+        # Validate REQUIRED ASSET accounts
+        if self.default_bank_account:
+            if self.default_bank_account.account_type.account_type != 'ASSET':
+                errors['default_bank_account'] = 'Must be an ASSET account'
+        
+        if self.default_cash_account:
+            if self.default_cash_account.account_type.account_type != 'ASSET':
+                errors['default_cash_account'] = 'Must be an ASSET account'
+        
+        if self.student_receivables_account:
+            if self.student_receivables_account.account_type.account_type != 'ASSET':
+                errors['student_receivables_account'] = 'Must be an ASSET account'
+        
+        # Validate REQUIRED LIABILITY account
+        if self.default_payable_account:
+            if self.default_payable_account.account_type.account_type != 'LIABILITY':
+                errors['default_payable_account'] = 'Must be a LIABILITY account'
+        
+        # Validate REQUIRED EQUITY account
+        if self.default_equity_account:
+            if self.default_equity_account.account_type.account_type != 'EQUITY':
+                errors['default_equity_account'] = 'Must be an EQUITY account'
+        
+        # Validate REQUIRED REVENUE account
+        if self.default_revenue_account:
+            if self.default_revenue_account.account_type.account_type != 'REVENUE':
+                errors['default_revenue_account'] = 'Must be a REVENUE account'
+        
+        # Validate REQUIRED EXPENSE accounts
+        if self.default_expense_account:
+            if self.default_expense_account.account_type.account_type != 'EXPENSE':
+                errors['default_expense_account'] = 'Must be an EXPENSE account'
+        
+        if self.scholarship_discount_account:
+            if self.scholarship_discount_account.account_type.account_type != 'EXPENSE':
+                errors['scholarship_discount_account'] = 'Must be an EXPENSE account'
+        
+        # Validate OPTIONAL accounts if set
+        if self.petty_cash_account:
+            if self.petty_cash_account.account_type.account_type != 'ASSET':
+                errors['petty_cash_account'] = 'Must be an ASSET account'
+        
+        if self.mobile_money_account:
+            if self.mobile_money_account.account_type.account_type != 'ASSET':
+                errors['mobile_money_account'] = 'Must be an ASSET account'
+        
+        if self.boarding_revenue_account:
+            if self.boarding_revenue_account.account_type.account_type != 'REVENUE':
+                errors['boarding_revenue_account'] = 'Must be a REVENUE account'
+        
+        if self.uniform_and_book_sales_account:
+            if self.uniform_and_book_sales_account.account_type.account_type != 'REVENUE':
+                errors['uniform_and_book_sales_account'] = 'Must be a REVENUE account'
+        
+        if self.salaries_account:
+            if self.salaries_account.account_type.account_type != 'EXPENSE':
+                errors['salaries_account'] = 'Must be an EXPENSE account'
+        
+        if self.utilities_account:
+            if self.utilities_account.account_type.account_type != 'EXPENSE':
+                errors['utilities_account'] = 'Must be an EXPENSE account'
+        
+        if self.boarding_expense_account:
+            if self.boarding_expense_account.account_type.account_type != 'EXPENSE':
+                errors['boarding_expense_account'] = 'Must be an EXPENSE account'
+        
+        if errors:
+            raise ValidationError(errors)
+    
     class Meta:
         verbose_name = "Core Account Mappings"
         verbose_name_plural = "Core Account Mappings"
-
+    
+    def __str__(self):
+        return f"Account Mappings for {self.financial_settings}"
 
 # =============================================================================
 # REVENUE ACCOUNT MAPPINGS
@@ -2105,8 +2441,8 @@ class FiscalYear(BaseModel):
         "Status",
         max_length=10,
         choices=STATUS_CHOICES,
-        default='DRAFT',
-        db_index=True
+        default='DRAFT',  # ✅ Has default
+        blank=True,  
     )
     
     is_active = models.BooleanField(
@@ -2376,7 +2712,7 @@ class FiscalYear(BaseModel):
     # -------------------------------------------------------------------------
     # INSTANCE METHODS
     # -------------------------------------------------------------------------
-    
+
     def close_fiscal_year(self, user=None):
         """Close this academic year using school timezone for timestamp"""
         if self.is_closed:
@@ -2385,7 +2721,8 @@ class FiscalYear(BaseModel):
         from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         
         # Close all periods in this academic year
-        for period in self.periods.all():
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        for period in self.fiscal_periods.all():
             if not period.is_closed:
                 period.close_period(user)
         
@@ -2405,16 +2742,18 @@ class FiscalYear(BaseModel):
             raise ValidationError("Academic year must be closed before it can be locked")
         
         # Lock all periods in this academic year
-        self.periods.all().update(is_locked=True, status='LOCKED')
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        self.fiscal_periods.all().update(is_locked=True, status='LOCKED')
         
         self.is_locked = True
         self.status = 'LOCKED'
         self.save()
-    
+
     def unlock_fiscal_year(self):
         """Unlock this academic year"""
         # Unlock all periods in this academic year
-        for period in self.periods.all():
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        for period in self.fiscal_periods.all():
             period.unlock_period()
         
         self.is_locked = False
@@ -2438,15 +2777,18 @@ class FiscalYear(BaseModel):
     
     def get_period_count(self):
         """Get the number of periods in this academic year"""
-        return self.periods.count()
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        return self.fiscal_periods.count()
     
     def get_active_period(self):
         """Get the currently active period within this academic year"""
-        return self.periods.filter(is_active=True).first()
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        return self.fiscal_periods.filter(is_active=True).first()
     
     def get_all_periods(self):
         """Get all periods in this academic year, ordered by period number"""
-        return self.periods.all().order_by('period_number')
+        # ⭐ FIX: Change self.periods to self.fiscal_periods
+        return self.fiscal_periods.all().order_by('period_number')
     
     def can_be_deleted(self):
         """Check if this academic year can be deleted"""
@@ -2766,38 +3108,51 @@ class FiscalPeriod(BaseModel):
                 errors['end_date'] = "End date must be after start date"
         
         # Fiscal year validation
-        if self.fiscal_year and self.start_date and self.end_date:
-            if self.start_date < self.fiscal_year.start_date:
-                errors['start_date'] = (
-                    f"Period cannot start before fiscal year start date "
-                    f"({self.fiscal_year.start_date})"
-                )
-            if self.end_date > self.fiscal_year.end_date:
-                errors['end_date'] = (
-                    f"Period cannot end after fiscal year end date "
-                    f"({self.fiscal_year.end_date})"
-                )
+        # ⭐ FIX: Use fiscal_year_id to avoid RelatedObjectDoesNotExist on unsaved instances
+        if self.fiscal_year_id and self.start_date and self.end_date:
+            try:
+                # Get the fiscal year object
+                fiscal_year = FiscalYear.objects.get(pk=self.fiscal_year_id)
+                
+                if self.start_date < fiscal_year.start_date:
+                    errors['start_date'] = (
+                        f"Period cannot start before fiscal year start date "
+                        f"({fiscal_year.start_date})"
+                    )
+                if self.end_date > fiscal_year.end_date:
+                    errors['end_date'] = (
+                        f"Period cannot end after fiscal year end date "
+                        f"({fiscal_year.end_date})"
+                    )
+            except FiscalYear.DoesNotExist:
+                errors['fiscal_year'] = "Invalid fiscal year selected"
         
         # Academic session validation (if applicable)
-        if self.related_academic_session and self.period_type == 'ACADEMIC_ALIGNED':
-            session = self.related_academic_session
-            
-            if self.start_date > session.start_date:
-                errors['start_date'] = (
-                    f"For academic-aligned periods, start date should be at or before "
-                    f"session start ({session.start_date})"
-                )
-            
-            if self.end_date < session.end_date:
-                errors['end_date'] = (
-                    f"For academic-aligned periods, end date should be at or after "
-                    f"session end ({session.end_date})"
-                )
+        if self.related_academic_session_id and self.period_type == 'ACADEMIC_ALIGNED':
+            try:
+                # ⭐ Use related_academic_session_id to avoid same issue
+                from academics.models import AcademicSession
+                session = AcademicSession.objects.get(pk=self.related_academic_session_id)
+                
+                if self.start_date and self.start_date > session.start_date:
+                    errors['start_date'] = (
+                        f"For academic-aligned periods, start date should be at or before "
+                        f"session start ({session.start_date})"
+                    )
+                
+                if self.end_date and self.end_date < session.end_date:
+                    errors['end_date'] = (
+                        f"For academic-aligned periods, end date should be at or after "
+                        f"session end ({session.end_date})"
+                    )
+            except Exception:
+                pass  # If academics app not available or session not found, skip validation
         
         # Check for overlapping periods within same fiscal year
-        if self.fiscal_year and self.start_date and self.end_date:
+        # ⭐ FIX: Use fiscal_year_id instead of fiscal_year
+        if self.fiscal_year_id and self.start_date and self.end_date:
             overlapping = FiscalPeriod.objects.filter(
-                fiscal_year=self.fiscal_year,
+                fiscal_year_id=self.fiscal_year_id,
                 start_date__lt=self.end_date,
                 end_date__gt=self.start_date
             ).exclude(pk=self.pk)
@@ -3188,24 +3543,15 @@ class FiscalPeriod(BaseModel):
         }
         return badge_map.get(self.period_type, 'badge-secondary')
     
-    # -------------------------------------------------------------------------
-    # CLASS METHODS - CURRENT PERIOD
-    # -------------------------------------------------------------------------
-    
     @classmethod
     def get_current_fiscal_period(cls):
         """
-        Get the current active fiscal period for transactions using school timezone.
+        Get the current active fiscal period for transactions.
         
         Returns:
             FiscalPeriod or None: Currently active period
         """
-        from core.utils import get_school_today  # ⭐ USE SCHOOL TIMEZONE
-        
-        today = get_school_today()
         return cls.objects.filter(
-            start_date__lte=today,
-            end_date__gte=today,
             is_active=True,
             is_closed=False
         ).first()

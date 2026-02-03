@@ -1,0 +1,375 @@
+{# finance/templates/finance/account_types/partials/_type_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Account Types Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="100">Code</th>
+                <th width="250">Type Name</th>
+                <th width="140" class="text-center">Category</th>
+                <th width="100">Prefix</th>
+                <th width="100" class="text-center">Accounts</th>
+                <th width="120" class="text-center">Settings</th>
+                <th width="100" class="text-center">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="accountTypeTableBody">
+            {% if account_types_page %}
+                {% for type in account_types_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:account_types_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Code -->
+                    <td>
+                        <div>
+                            <a href="{% url 'finance:account_type_detail' type.pk %}" class="text-primary fw-bold">
+                                {{ type.code }}
+                            </a>
+                        </div>
+                    </td>
+                    
+                    <!-- Type Name with Icon and Color -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            {% if type.icon %}
+                                <div class="me-2" style="color: {{ type.color|default:'#6c757d' }};">
+                                    <i class="fa {{ type.icon }} fa-lg"></i>
+                                </div>
+                            {% endif %}
+                            <div>
+                                <div class="fw-bold text-dark">{{ type.name }}</div>
+                                {% if type.description %}
+                                    <small class="text-muted">{{ type.description|truncatewords:8 }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Account Category Badge -->
+                    <td class="text-center">
+                        {% if type.account_type == 'ASSET' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-coins me-1"></i>Asset
+                            </span>
+                        {% elif type.account_type == 'LIABILITY' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-hand-holding-usd me-1"></i>Liability
+                            </span>
+                        {% elif type.account_type == 'EQUITY' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-balance-scale me-1"></i>Equity
+                            </span>
+                        {% elif type.account_type == 'REVENUE' %}
+                            <span class="badge bg-primary">
+                                <i class="fa fa-arrow-up me-1"></i>Revenue
+                            </span>
+                        {% elif type.account_type == 'EXPENSE' %}
+                            <span class="badge bg-danger">
+                                <i class="fa fa-arrow-down me-1"></i>Expense
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                {{ type.get_account_type_display }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Number Prefix -->
+                    <td class="text-center">
+                        {% if type.number_prefix %}
+                            <span class="badge bg-secondary">
+                                {{ type.number_prefix }}-{{ type.next_number }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Accounts Count -->
+                    <td class="text-center">
+                        {% if type.accounts.count > 0 %}
+                            <a href="{% url 'finance:account_list' %}?account_type={{ type.id }}" 
+                               class="badge bg-primary text-decoration-none">
+                                {{ type.accounts.count }} account{{ type.accounts.count|pluralize }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No accounts</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Settings -->
+                    <td class="text-center">
+                        <div class="d-flex flex-column gap-1 align-items-center">
+                            {% if type.requires_approval %}
+                                <span class="badge bg-warning text-dark" title="Requires Approval">
+                                    <i class="fa fa-check-circle me-1"></i>Approval
+                                </span>
+                            {% endif %}
+                            {% if type.allows_manual_entries %}
+                                <span class="badge bg-info" title="Allows Manual Entries">
+                                    <i class="fa fa-edit me-1"></i>Manual
+                                </span>
+                            {% endif %}
+                            {% if not type.requires_approval and not type.allows_manual_entries %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- ✅ STATUS COLUMN - SIMPLIFIED BADGES -->
+                    <td class="text-center status-cell">
+                        {% if type.is_active %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'finance:account_type_detail' type.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'finance:account_type_edit' type.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- View Accounts -->
+                                <a class="dropdown-item" href="{% url 'finance:account_list' %}?account_type={{ type.id }}">
+                                    <i class="fa fa-list me-2"></i> View Accounts
+                                    {% if type.accounts.count > 0 %}
+                                        <span class="badge bg-primary ms-1">{{ type.accounts.count }}</span>
+                                    {% endif %}
+                                </a>
+                                
+                                <!-- Create Account -->
+                                <a class="dropdown-item" href="{% url 'finance:account_create' %}?account_type={{ type.id }}">
+                                    <i class="fa fa-plus me-2"></i> Create Account
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'finance:account_type_delete_modal' type.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Account Types Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new account type.</p>
+                            <a href="{% url 'finance:account_type_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Account Type
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if account_types_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ account_types_page.start_index }} - {{ account_types_page.end_index }} of {{ account_types_page.paginator.count|format_number }} account types
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Account type pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if account_types_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:account_type_list' %}"
+                                hx-target="#account-type-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ account_types_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in account_types_page.paginator.page_range %}
+                    {% if page_num == account_types_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > account_types_page.number|add:"-3" and page_num < account_types_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'finance:account_type_list' %}"
+                                    hx-target="#account-type-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if account_types_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:account_type_list' %}"
+                                hx-target="#account-type-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ account_types_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Simplified Status Badge Styling - Matching Pattern */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.status-cell {
+    min-width: 100px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown {
+    position: static !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-folder"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Types</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active</div>
+                <h3>{{ stats.active|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Asset Types</div>
+                <h3>{{ stats.asset|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-portfolio"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Accounts</div>
+                <h3>{{ stats.total_accounts|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

@@ -284,21 +284,64 @@ def generate_refund_number():
         return f"{prefix}-{current_year}-{formatted_number}"
 
 
-def generate_scholarship_application_number():
+def generate_scholarship_application_number(scholarship_program=None, year=None):
     """
     Generate unique scholarship application number.
-    Format: SCH-2024-0001
+    Format: 
+    - With type: APP-2024-MERIT-001, APP-2024-NEED-001, APP-2024-SIB-001
+    - Without type: APP-2024-001
+    
+    Args:
+        scholarship_program: ScholarshipProgram instance (to get scholarship_type)
+        year: Optional year (defaults to current year)
     
     Returns:
         str: Unique application number
     """
     from fees.models import StudentScholarshipApplication
+    from django.utils import timezone
+    from django.db.models import Max
+    from django.db import transaction
     
-    current_year = timezone.now().year
-    prefix = "SCH"
-    search_prefix = f"{prefix}-{current_year}-"
+    if year is None:
+        year = timezone.now().year
+    
+    prefix = "APP"
+    
+    # Map scholarship types to short prefixes for application numbers
+    TYPE_PREFIX_MAP = {
+        'ACADEMIC_MERIT': 'MERIT',
+        'SPORTS_EXCELLENCE': 'SPORT',
+        'ARTS_TALENT': 'ARTS',
+        'NEED_BASED': 'NEED',
+        'STAFF_CHILD': 'STAFF',
+        'SIBLING_DISCOUNT': 'SIB',
+        'MULTIPLE_SIBLING': 'SIB',
+        'COMMUNITY_SERVICE': 'COMMUNITY',
+        'LEADERSHIP': 'LEADER',
+        'SPECIAL_CIRCUMSTANCES': 'SPECIAL',
+        'ALUMNI_SPONSORED': 'ALUMNI',
+        'CORPORATE_SPONSORED': 'CORP',
+        'GOVERNMENT_BURSARY': 'GOV',
+        'FULL_SCHOLARSHIP': 'FULL',
+        'PARTIAL_SCHOLARSHIP': 'PARTIAL',
+        'EMERGENCY_AID': 'EMERG',
+    }
+    
+    # Get scholarship type prefix
+    type_prefix = None
+    if scholarship_program:
+        scholarship_type = scholarship_program.scholarship_type
+        type_prefix = TYPE_PREFIX_MAP.get(scholarship_type)
+    
+    # Build search prefix based on whether type is provided
+    if type_prefix:
+        search_prefix = f"{prefix}-{year}-{type_prefix}-"
+    else:
+        search_prefix = f"{prefix}-{year}-"
     
     with transaction.atomic():
+        # Query for applications with the same prefix
         queryset = StudentScholarshipApplication.objects.filter(
             application_number__startswith=search_prefix
         ).select_for_update()
@@ -307,9 +350,11 @@ def generate_scholarship_application_number():
         
         if result['max_number']:
             try:
+                # Extract the last part (numeric portion)
                 last_number = int(result['max_number'].split('-')[-1])
                 new_number = last_number + 1
             except (ValueError, IndexError):
+                # Fallback: manually parse all numbers
                 numbers = []
                 for app_num in queryset.values_list('application_number', flat=True):
                     try:
@@ -321,8 +366,14 @@ def generate_scholarship_application_number():
         else:
             new_number = 1
         
-        formatted_number = f"{new_number:04d}"
-        return f"{prefix}-{current_year}-{formatted_number}"
+        # Format number with leading zeros (3 digits)
+        formatted_number = f"{new_number:03d}"
+        
+        # Build final application number
+        if type_prefix:
+            return f"{prefix}-{year}-{type_prefix}-{formatted_number}"
+        else:
+            return f"{prefix}-{year}-{formatted_number}"
 
 
 # =============================================================================
@@ -763,3 +814,292 @@ def get_invoice_summary_stats(queryset):
     stats['by_status'] = status_counts
     
     return stats
+
+# =============================================================================
+# PAYMENT REVERSAL UTILITIES
+# =============================================================================
+
+@transaction.atomic
+def reverse_payment(payment, user, reason):
+    """
+    Reverse a student fee payment (internal correction, no money returned).
+    
+    Accounting Impact:
+    - REVERSAL creates opposite journal entry:
+      DR: Student Receivables (increase what student owes)
+      CR: Cash/Bank Account (reduce cash received)
+    
+    Args:
+        payment: Payment instance to reverse
+        user: User performing the reversal
+        reason: Reason for reversal
+    
+    Returns:
+        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
+    
+    Example:
+        >>> success, msg, entry = reverse_payment(payment, request.user, "Duplicate entry")
+    """
+    if payment.reversed:
+        return False, "Payment already reversed", None
+    
+    if payment.refunded:
+        return False, "Cannot reverse a refunded payment", None
+    
+    try:
+        from fees.models import StudentAccount, AccountTransaction
+        from finance.models import JournalEntry, JournalTransaction, Journal
+        from core.models import FiscalPeriod
+        
+        # 1. Mark payment as reversed
+        payment.reversed = True
+        payment.reversed_on = timezone.now()
+        payment.reversed_by_id = str(user.id)
+        payment.reversal_reason = reason
+        
+        # 2. Update invoice balance (restore what was paid)
+        if payment.invoice:
+            payment.invoice.paid_amount -= payment.amount_applied_to_invoice
+            payment.invoice.balance = payment.invoice.total_amount - payment.invoice.paid_amount
+            
+            # Update status
+            if payment.invoice.balance > 0:
+                if payment.invoice.paid_amount > 0:
+                    payment.invoice.status = 'PARTIALLY_PAID'
+                else:
+                    payment.invoice.status = 'PENDING'
+            
+            payment.invoice.save()
+        
+        # 3. Update student account
+        student_account = StudentAccount.objects.get(student=payment.student)
+        new_balance = student_account.current_balance - payment.amount
+        
+        AccountTransaction.objects.create(
+            student_account=student_account,
+            transaction_type='ADJUSTMENT',
+            amount=-payment.amount,
+            description=f"Reversal of Payment {payment.payment_number}: {reason}",
+            balance_after=new_balance,
+            invoice=payment.invoice,
+            payment=payment,
+            academic_session=payment.academic_session,
+            fiscal_period=payment.fiscal_period,
+            reference_number=f"REV-{payment.payment_number}"
+        )
+        
+        student_account.current_balance = new_balance
+        student_account.total_payments_received -= payment.amount
+        student_account.last_transaction_date = timezone.now()
+        student_account.save()
+        
+        # 4. Create REVERSAL journal entry (opposite of original)
+        fiscal_period = FiscalPeriod.get_current_fiscal_period()
+        
+        general_journal = Journal.objects.filter(
+            journal_type='GENERAL',
+            is_active=True
+        ).first()
+        
+        if not general_journal:
+            logger.error("No active general journal found")
+            return False, "No active journal found for reversal", None
+        
+        reversal_entry = JournalEntry.objects.create(
+            journal=general_journal,
+            entry_date=timezone.now().date(),
+            fiscal_period=fiscal_period,
+            academic_session=payment.academic_session,
+            reference_number=payment.payment_number,
+            description=f"REVERSAL: Payment {payment.payment_number} - {reason}",
+            status='POSTED'
+        )
+        
+        # Get accounts
+        receivable_account = payment.get_receivable_account()
+        deposit_account = payment.get_deposit_account()
+        
+        if not receivable_account or not deposit_account:
+            logger.error("Required accounts not found for reversal")
+            return False, "Account configuration error", None
+        
+        # REVERSAL entries (opposite of payment):
+        # DR: Student Receivables (increases what student owes)
+        JournalTransaction.objects.create(
+            journal_entry=reversal_entry,
+            account=receivable_account,
+            amount=payment.amount,
+            is_debit=True,
+            description=f"Reversal: Student receivable restored"
+        )
+        
+        # CR: Cash/Bank (reduces cash we recorded)
+        JournalTransaction.objects.create(
+            journal_entry=reversal_entry,
+            account=deposit_account,
+            amount=payment.amount,
+            is_debit=False,
+            description=f"Reversal: Cash/bank payment reversed"
+        )
+        
+        # Update account balances
+        receivable_account.current_balance += payment.amount
+        receivable_account.save()
+        
+        deposit_account.current_balance -= payment.amount
+        deposit_account.save()
+        
+        # Link reversal journal to payment
+        payment.reversal_journal_entry = reversal_entry
+        payment.save()
+        
+        logger.info(
+            f"Payment reversed: {payment.payment_number} by {user} - "
+            f"Journal Entry: {reversal_entry.entry_number}"
+        )
+        
+        return True, f"Payment reversed successfully. Journal Entry: {reversal_entry.entry_number}", reversal_entry
+    
+    except Exception as e:
+        logger.error(f"Error reversing payment {payment.payment_number}: {e}", exc_info=True)
+        return False, f"Error reversing payment: {str(e)}", None
+
+
+@transaction.atomic
+def refund_payment(payment, user, refund_method, refund_reference, reason):
+    """
+    Process a payment refund (actual money returned to payer).
+    
+    Accounting Impact:
+    - REFUND returns actual cash:
+      DR: Student Receivables (increase what student owes)
+      DR: Cash/Bank (decrease cash on hand)
+      CR: Refund Clearing (if using clearing account)
+    
+    Args:
+        payment: Payment instance to refund
+        user: User processing refund
+        refund_method: How refund was issued (e.g., "Bank Transfer")
+        refund_reference: Reference number for refund transaction
+        reason: Reason for refund
+    
+    Returns:
+        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
+    """
+    if payment.refunded:
+        return False, "Payment already refunded", None
+    
+    if payment.reversed:
+        return False, "Cannot refund a reversed payment (use reversal instead)", None
+    
+    try:
+        from fees.models import StudentAccount, AccountTransaction
+        from finance.models import JournalEntry, JournalTransaction, Journal
+        from core.models import FiscalPeriod, FinancialSettings
+        
+        # 1. Mark payment as refunded
+        payment.refunded = True
+        payment.refunded_on = timezone.now()
+        payment.refund_method = refund_method
+        payment.refund_reference = refund_reference
+        payment.reversal_reason = reason  # Store reason here too
+        
+        # 2. Update invoice balance
+        if payment.invoice:
+            payment.invoice.paid_amount -= payment.amount_applied_to_invoice
+            payment.invoice.balance = payment.invoice.total_amount - payment.invoice.paid_amount
+            
+            if payment.invoice.balance > 0:
+                if payment.invoice.paid_amount > 0:
+                    payment.invoice.status = 'PARTIALLY_PAID'
+                else:
+                    payment.invoice.status = 'PENDING'
+            
+            payment.invoice.save()
+        
+        # 3. Update student account
+        student_account = StudentAccount.objects.get(student=payment.student)
+        new_balance = student_account.current_balance - payment.amount
+        
+        AccountTransaction.objects.create(
+            student_account=student_account,
+            transaction_type='REFUND',
+            amount=-payment.amount,
+            description=f"Refund of Payment {payment.payment_number}: {reason}",
+            balance_after=new_balance,
+            invoice=payment.invoice,
+            payment=payment,
+            academic_session=payment.academic_session,
+            fiscal_period=payment.fiscal_period,
+            reference_number=refund_reference
+        )
+        
+        student_account.current_balance = new_balance
+        student_account.total_refunds_issued += payment.amount
+        student_account.last_transaction_date = timezone.now()
+        student_account.save()
+        
+        # 4. Create REFUND journal entry
+        fiscal_period = FiscalPeriod.get_current_fiscal_period()
+        
+        general_journal = Journal.objects.filter(
+            journal_type='GENERAL',
+            is_active=True
+        ).first()
+        
+        if not general_journal:
+            return False, "No active journal found for refund", None
+        
+        refund_entry = JournalEntry.objects.create(
+            journal=general_journal,
+            entry_date=timezone.now().date(),
+            fiscal_period=fiscal_period,
+            academic_session=payment.academic_session,
+            reference_number=refund_reference,
+            description=f"REFUND: Payment {payment.payment_number} - {reason}",
+            status='POSTED'
+        )
+        
+        # Get accounts
+        receivable_account = payment.get_receivable_account()
+        refund_account = payment.get_deposit_account()  # Money comes from same account
+        
+        # REFUND entries:
+        # DR: Student Receivables (restore what student owes)
+        JournalTransaction.objects.create(
+            journal_entry=refund_entry,
+            account=receivable_account,
+            amount=payment.amount,
+            is_debit=True,
+            description=f"Refund: Receivable restored"
+        )
+        
+        # CR: Cash/Bank (actual money out)
+        JournalTransaction.objects.create(
+            journal_entry=refund_entry,
+            account=refund_account,
+            amount=payment.amount,
+            is_debit=False,
+            description=f"Refund issued via {refund_method}"
+        )
+        
+        # Update balances
+        receivable_account.current_balance += payment.amount
+        receivable_account.save()
+        
+        refund_account.current_balance -= payment.amount
+        refund_account.save()
+        
+        payment.refund_journal_entry = refund_entry
+        payment.save()
+        
+        logger.info(
+            f"Payment refunded: {payment.payment_number} - "
+            f"Journal Entry: {refund_entry.entry_number}"
+        )
+        
+        return True, f"Refund processed. Journal Entry: {refund_entry.entry_number}", refund_entry
+    
+    except Exception as e:
+        logger.error(f"Error refunding payment {payment.payment_number}: {e}", exc_info=True)
+        return False, f"Error processing refund: {str(e)}", None

@@ -2,12 +2,15 @@
 
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
-from django.db.models import Q, Count, Sum, Avg, F, DecimalField
+from django.db.models import Q, Count, Sum, Avg, F, DecimalField, Case, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from datetime import timedelta, date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from fees.invoice_generators import ClassEnrollmentInvoiceGenerator
+from fees.models import FeesStructure
+from academics.models import StudentClassEnrollment, AcademicSession
 import logging
 
 from .models import (
@@ -34,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# STUDENT ACCOUNT SEARCH
+# STUDENT ACCOUNT SEARCH - CORRECTED
 # =============================================================================
 
 def student_account_search(request):
@@ -43,22 +46,28 @@ def student_account_search(request):
     # Parse filters
     filters = parse_filters(request, [
         'q', 'status', 'min_balance', 'max_balance', 
-        'has_debt', 'has_credit', 'is_active'
+        'balance_status'  # Changed from has_debt/has_credit
     ])
     
-    query = filters['q']
-    status = filters['status']
-    min_balance = filters['min_balance']
-    max_balance = filters['max_balance']
-    has_debt = filters['has_debt']
-    has_credit = filters['has_credit']
+    query = filters.get('q', '')
+    status = filters.get('status', '')
+    min_balance = filters.get('min_balance', '')
+    max_balance = filters.get('max_balance', '')
+    balance_status = filters.get('balance_status', '')
     
-    # Build queryset
+    # Build queryset with calculated balance annotation
     accounts = StudentAccount.objects.select_related(
-        'student'
+        'student',
+        'student__current_academic_level'
     ).annotate(
-        transaction_count=Count('transactions')
-    ).order_by('-current_balance')
+        # Calculate balance from transactions
+        calculated_balance=Coalesce(
+            Sum('transactions__amount'),  # Transactions already have signed amounts
+            Decimal('0.00')
+        ),
+        # Count transactions
+        transaction_count=Count('transactions', distinct=True)
+    )
     
     # Apply text search
     if query:
@@ -74,47 +83,84 @@ def student_account_search(request):
     
     if min_balance:
         try:
-            accounts = accounts.filter(current_balance__gte=Decimal(min_balance))
-        except:
+            accounts = accounts.filter(calculated_balance__gte=Decimal(min_balance))
+        except (ValueError, InvalidOperation):
             pass
     
     if max_balance:
         try:
-            accounts = accounts.filter(current_balance__lte=Decimal(max_balance))
-        except:
+            accounts = accounts.filter(calculated_balance__lte=Decimal(max_balance))
+        except (ValueError, InvalidOperation):
             pass
     
-    if has_debt and has_debt.lower() == 'true':
-        accounts = accounts.filter(current_balance__lt=0)
+    # Apply balance status filter
+    if balance_status == 'positive':
+        # Positive balance = student has credit
+        accounts = accounts.filter(calculated_balance__gt=0)
+    elif balance_status == 'zero':
+        # Zero balance = settled
+        accounts = accounts.filter(calculated_balance=0)
+    elif balance_status == 'negative':
+        # Negative balance = student owes money
+        accounts = accounts.filter(calculated_balance__lt=0)
     
-    if has_credit and has_credit.lower() == 'true':
-        accounts = accounts.filter(current_balance__gt=0)
+    # Order by calculated balance (most negative/debt first)
+    accounts = accounts.order_by('calculated_balance', 'student__first_name')
     
     # Paginate
     accounts_page, paginator = paginate_queryset(request, accounts, per_page=20)
     
-    # Calculate stats
-    total = accounts.count()
+    # =========================================================================
+    # CALCULATE STATS - MATCHING TEMPLATE STRUCTURE
+    # =========================================================================
     
+    total_accounts = accounts.count()
+    
+    # Status breakdown
+    status_counts = accounts.values('status').annotate(count=Count('id'))
+    by_status = {item['status'].lower(): item['count'] for item in status_counts}
+    
+    # Debt analysis
+    accounts_with_debt = accounts.filter(calculated_balance__lt=0)
+    accounts_with_credit = accounts.filter(calculated_balance__gt=0)
+    accounts_zero_balance = accounts.filter(calculated_balance=0)
+    
+    total_outstanding = abs(
+        accounts_with_debt.aggregate(
+            total=Sum('calculated_balance')
+        )['total'] or Decimal('0.00')
+    )
+    
+    total_credit = accounts_with_credit.aggregate(
+        total=Sum('calculated_balance')
+    )['total'] or Decimal('0.00')
+    
+    # Build stats matching template expectations
     stats = {
-        'total': total,
-        'active': accounts.filter(status='ACTIVE').count(),
-        'suspended': accounts.filter(status='SUSPENDED').count(),
-        'with_debt': accounts.filter(current_balance__lt=0).count(),
-        'with_credit': accounts.filter(current_balance__gt=0).count(),
-        'zero_balance': accounts.filter(current_balance=0).count(),
-        'total_debt': abs(accounts.filter(current_balance__lt=0).aggregate(
-            Sum('current_balance'))['current_balance__sum'] or 0),
-        'total_credit': accounts.filter(current_balance__gt=0).aggregate(
-            Sum('current_balance'))['current_balance__sum'] or 0,
-        'avg_balance': accounts.aggregate(Avg('current_balance'))['current_balance__avg'] or 0,
+        'total_accounts': total_accounts,
+        'by_status': {
+            'active': by_status.get('active', 0),
+            'suspended': by_status.get('suspended', 0),
+            'frozen': by_status.get('frozen', 0),
+            'closed': by_status.get('closed', 0),
+        },
+        'debt_analysis': {
+            'total_debtors': accounts_with_debt.count(),
+            'total_outstanding': total_outstanding,
+            'accounts_with_credit': accounts_with_credit.count(),
+            'total_credit': total_credit,
+            'zero_balance_accounts': accounts_zero_balance.count(),
+        },
+        'collection_rate': (
+            (total_accounts - accounts_with_debt.count()) / total_accounts * 100
+            if total_accounts > 0 else 0
+        ),
     }
     
     return render(request, 'fees/accounts/_account_results.html', {
         'accounts_page': accounts_page,
         'stats': stats,
     })
-
 
 # =============================================================================
 # ACCOUNT TRANSACTION SEARCH
@@ -248,7 +294,7 @@ def display_group_search(request):
         groups = groups.filter(show_as_group=(show_as_group.lower() == 'true'))
     
     # Paginate
-    groups_page, paginator = paginate_queryset(request, groups, per_page=20)
+    groups_page, paginator = paginate_queryset(request, groups, per_page=10)
     
     # Calculate stats
     total = groups.count()
@@ -294,10 +340,8 @@ def fee_category_search(request):
     # Build queryset
     categories = FeesCategory.objects.select_related(
         'display_group'
-    ).prefetch_related(
-        'applicable_levels'
     ).annotate(
-        structure_count=Count('feesstructureitem')
+        structure_count=Count('structure_items')  # ← FIXED HERE
     ).order_by('display_order', 'name')
     
     # Apply text search
@@ -334,7 +378,7 @@ def fee_category_search(request):
         categories = categories.filter(is_taxable=(is_taxable.lower() == 'true'))
     
     # Paginate
-    categories_page, paginator = paginate_queryset(request, categories, per_page=20)
+    categories_page, paginator = paginate_queryset(request, categories, per_page=10)
     
     # Calculate stats
     total = categories.count()
@@ -355,87 +399,6 @@ def fee_category_search(request):
         'categories_page': categories_page,
         'stats': stats,
     })
-
-
-# =============================================================================
-# FEE STRUCTURE SEARCH
-# =============================================================================
-
-def fee_structure_search(request):
-    """HTMX-compatible fee structure search with pagination and stats"""
-    
-    # Parse filters
-    filters = parse_filters(request, [
-        'q', 'structure_type', 'boarding_type_filter', 'student_type_filter',
-        'is_active', 'academic_session', 'academic_level'
-    ])
-    
-    query = filters['q']
-    structure_type = filters['structure_type']
-    boarding_type_filter = filters['boarding_type_filter']
-    student_type_filter = filters['student_type_filter']
-    is_active = filters['is_active']
-    academic_session = filters['academic_session']
-    academic_level = filters['academic_level']
-    
-    # Build queryset
-    structures = FeesStructure.objects.prefetch_related(
-        'academic_levels',
-        'applicable_sessions',
-        'applicable_classes',
-        'items__fee_category'
-    ).annotate(
-        item_count=Count('items', distinct=True),
-        total_amount=Sum('items__amount')
-    ).order_by('structure_type', 'priority', 'name')
-    
-    # Apply text search
-    if query:
-        structures = structures.filter(
-            Q(name__icontains=query) |
-            Q(description__icontains=query)
-        )
-    
-    # Apply filters
-    if structure_type:
-        structures = structures.filter(structure_type=structure_type)
-    
-    if boarding_type_filter:
-        structures = structures.filter(boarding_type_filter=boarding_type_filter)
-    
-    if student_type_filter:
-        structures = structures.filter(student_type_filter=student_type_filter)
-    
-    if academic_session:
-        structures = structures.filter(applicable_sessions__id=academic_session)
-    
-    if academic_level:
-        structures = structures.filter(academic_levels__id=academic_level)
-    
-    if is_active is not None:
-        structures = structures.filter(is_active=(is_active.lower() == 'true'))
-    
-    # Paginate
-    structures_page, paginator = paginate_queryset(request, structures, per_page=20)
-    
-    # Calculate stats
-    total = structures.count()
-    
-    stats = {
-        'total': total,
-        'active': structures.filter(is_active=True).count(),
-        'standard': structures.filter(structure_type='STANDARD').count(),
-        'boarder': structures.filter(structure_type='BOARDER').count(),
-        'day_scholar': structures.filter(structure_type='DAY_SCHOLAR').count(),
-        'scholarship': structures.filter(structure_type='SCHOLARSHIP').count(),
-        'with_late_fees': structures.filter(charges_late_fee=True).count(),
-    }
-    
-    return render(request, 'fees/structures/_structure_results.html', {
-        'structures_page': structures_page,
-        'stats': stats,
-    })
-
 
 # =============================================================================
 # FEE INVOICE SEARCH
@@ -477,14 +440,29 @@ def fee_invoice_search(request):
         item_count=Count('items', distinct=True)
     ).order_by('-issue_date', '-created_at')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        invoices = invoices.filter(
-            Q(invoice_number__icontains=query) |
-            Q(student__first_name__icontains=query) |
-            Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(invoice_number__icontains=word) |
+                    Q(student__first_name__icontains=word) |
+                    Q(student__middle_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__admission_number__icontains=word) |
+                    Q(student__national_student_number__icontains=word) |
+                    Q(notes__icontains=word) |
+                    Q(internal_notes__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            invoices = invoices.filter(combined_q)
     
     # Apply filters
     if status:
@@ -756,25 +734,27 @@ def scholarship_program_search(request):
 def scholarship_application_search(request):
     """HTMX-compatible scholarship application search with pagination and stats"""
     
-    # Parse filters
+    # Parse filters - NOTE: Check your parse_filters function to ensure it handles these correctly
     filters = parse_filters(request, [
-        'q', 'status', 'scholarship_program', 'academic_session',
-        'student', 'start_date', 'end_date'
+        'q', 'status', 'scholarship_program', 'student',
+        'academic_session', 'application_date_from', 'application_date_to'
     ])
     
-    query = filters['q']
-    status = filters['status']
-    scholarship_program = filters['scholarship_program']
-    academic_session = filters['academic_session']
-    student = filters['student']
-    start_date = filters['start_date']
-    end_date = filters['end_date']
+    query = filters.get('q', '')
+    status = filters.get('status', '')
+    scholarship_program = filters.get('scholarship_program', '')
+    student = filters.get('student', '')
+    academic_session = filters.get('academic_session', '')
+    date_from = filters.get('application_date_from', '')
+    date_to = filters.get('application_date_to', '')
     
     # Build queryset
     applications = StudentScholarshipApplication.objects.select_related(
         'student',
         'scholarship_program',
         'academic_session'
+    ).prefetch_related(
+        'awarded_scholarship'
     ).order_by('-application_date')
     
     # Apply text search
@@ -783,7 +763,11 @@ def scholarship_application_search(request):
             Q(application_number__icontains=query) |
             Q(student__first_name__icontains=query) |
             Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query)
+            Q(student__admission_number__icontains=query) |
+            Q(scholarship_program__name__icontains=query) |
+            Q(scholarship_program__code__icontains=query) |
+            Q(essay__icontains=query) |
+            Q(special_circumstances__icontains=query)
         )
     
     # Apply filters
@@ -793,17 +777,28 @@ def scholarship_application_search(request):
     if scholarship_program:
         applications = applications.filter(scholarship_program_id=scholarship_program)
     
-    if academic_session:
-        applications = applications.filter(academic_session_id=academic_session)
-    
     if student:
         applications = applications.filter(student_id=student)
     
-    if start_date:
-        applications = applications.filter(application_date__gte=start_date)
+    if academic_session:
+        applications = applications.filter(academic_session_id=academic_session)
     
-    if end_date:
-        applications = applications.filter(application_date__lte=end_date)
+    # Date range filters
+    if date_from:
+        try:
+            from datetime import datetime
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+            applications = applications.filter(application_date__gte=date_from_obj)
+        except (ValueError, TypeError):
+            pass
+    
+    if date_to:
+        try:
+            from datetime import datetime
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+            applications = applications.filter(application_date__lte=date_to_obj)
+        except (ValueError, TypeError):
+            pass
     
     # Paginate
     applications_page, paginator = paginate_queryset(request, applications, per_page=20)
@@ -811,24 +806,45 @@ def scholarship_application_search(request):
     # Calculate stats
     total = applications.count()
     
+    # Status breakdown
+    status_counts = applications.values('status').annotate(
+        count=Count('id')
+    ).order_by('status')
+    
+    status_dict = {item['status']: item['count'] for item in status_counts}
+    
+    # Financial stats (only for approved applications)
+    approved_apps = applications.filter(status='APPROVED')
+    
     stats = {
         'total': total,
-        'submitted': applications.filter(status='SUBMITTED').count(),
-        'under_review': applications.filter(status='UNDER_REVIEW').count(),
-        'approved': applications.filter(status='APPROVED').count(),
-        'rejected': applications.filter(status='REJECTED').count(),
-        'waitlisted': applications.filter(status='WAITLISTED').count(),
+        'submitted': status_dict.get('SUBMITTED', 0),
+        'under_review': status_dict.get('UNDER_REVIEW', 0),
+        'approved': status_dict.get('APPROVED', 0),
+        'rejected': status_dict.get('REJECTED', 0),
+        'waitlisted': status_dict.get('WAITLISTED', 0),
+        'withdrawn': status_dict.get('WITHDRAWN', 0),
+        'draft': status_dict.get('DRAFT', 0),
         'total_requested': applications.aggregate(
             Sum('requested_amount'))['requested_amount__sum'] or 0,
-        'total_approved': applications.filter(status='APPROVED').aggregate(
+        'total_approved_amount': approved_apps.aggregate(
             Sum('approved_amount'))['approved_amount__sum'] or 0,
+        'avg_requested': applications.aggregate(
+            Avg('requested_amount'))['requested_amount__avg'] or 0,
+        'avg_approved': approved_apps.aggregate(
+            Avg('approved_amount'))['approved_amount__avg'] or 0,
+        'approval_rate': round(
+            (status_dict.get('APPROVED', 0) / total * 100) if total > 0 else 0, 2
+        ),
+        'pending_review': applications.filter(
+            status__in=['SUBMITTED', 'UNDER_REVIEW']
+        ).count(),
     }
     
     return render(request, 'fees/scholarships/_application_results.html', {
         'applications_page': applications_page,
         'stats': stats,
     })
-
 
 # =============================================================================
 # STUDENT SCHOLARSHIP SEARCH
@@ -1170,3 +1186,6 @@ def scholarship_quick_stats(request):
     }
     
     return JsonResponse(stats)
+
+# fees/htmx_views.py - FIXED invoice_bulk_preview_search function
+

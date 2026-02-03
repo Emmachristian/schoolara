@@ -1,0 +1,547 @@
+<!-- uniforms/templates/uniforms/sales/list.html -->
+
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.sale-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS SUMMARY
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   SALE SPECIFIC STYLING
+   ============================================================================ */
+
+.category-code {
+    font-family: 'Courier New', monospace;
+    background-color: #f8f9fa;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    border: 1px solid #dee2e6;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .sale-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        padding: 15px;
+    }
+    
+    .stats-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-shopbag icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Uniform Sales
+                <div class="page-title-subheading">
+                    Manage uniform sales, issuances, and student transactions
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'uniforms:uniform_sale_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i>Create Sale
+                </a>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+                <a href="{% url 'uniforms:export_uniform_sales_excel' %}" class="btn btn-outline-success">
+                    <i class="fa fa-file-excel me-1"></i>Export Excel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-cart"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Sales</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-hourglass"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Pending</div>
+                <h3>{{ stats.pending|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Paid</div>
+                <h3>{{ stats.paid|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Revenue</div>
+                <h3>{{ stats.total_revenue|floatformat:0|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-shopbag me-2 text-primary"></i>
+                                Uniform Sales Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i>Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="sale-filters">
+                        <form id="searchForm" 
+                            class="row g-3"
+                            hx-get="{% url 'uniforms:uniform_sale_list' %}"
+                            hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+                            hx-target="#sale-results"
+                            hx-swap="innerHTML">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Search Sales
+                                </label>
+                                {% render_field filter_form.q class="form-control" placeholder="Search by sale number, student..." %}
+                            </div>
+                            
+                            <!-- Student Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.student.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Student
+                                </label>
+                                {% render_field filter_form.student class="form-select" %}
+                            </div>
+
+                            <!-- Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.status.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Status
+                                </label>
+                                {% render_field filter_form.status class="form-select" %}
+                            </div>
+                            
+                            <!-- Sale Type Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.sale_type.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Sale Type
+                                </label>
+                                {% render_field filter_form.sale_type class="form-select" %}
+                            </div>
+
+                            <!-- Academic Session Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.academic_session.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Academic Session
+                                </label>
+                                {% render_field filter_form.academic_session class="form-select" %}
+                            </div>
+
+                            <!-- Fiscal Period Filter -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.fiscal_period.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Fiscal Period
+                                </label>
+                                {% render_field filter_form.fiscal_period class="form-select" %}
+                            </div>
+                            
+                            <!-- Date Range -->
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.sale_date_from.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Sale Date From
+                                </label>
+                                {% render_field filter_form.sale_date_from class="form-control" %}
+                            </div>
+
+                            <div class="col-md-3">
+                                <label for="{{ filter_form.sale_date_to.id_for_label }}" class="form-label small text-muted mb-1">
+                                    Sale Date To
+                                </label>
+                                {% render_field filter_form.sale_date_to class="form-control" %}
+                            </div>
+
+                            <!-- Reset Button -->
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="sale-results">
+                        {% include 'uniforms/sales/partials/_sale_results.html' %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========================================== -->
+<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;">
+    <!-- Modal content loaded here via HTMX -->
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// PAGE-SPECIFIC HTMX MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            // Create a proper Bootstrap modal structure
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            // Remove existing modal wrapper if it exists
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            // Create new modal wrapper
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            // Move the modal-dialog into the wrapper
+            modalWrapper.appendChild(modalDialog);
+            
+            // Append to body (outside app-container)
+            document.body.appendChild(modalWrapper);
+            
+            // Initialize and show modal
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            // Clean up when hidden
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+    
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' : 
+                                   type === 'error' ? '#dc3545' : 
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+    
+    // Close modal if instructed
+    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
+    if (closeModal === 'true') {
+        if (currentModal) {
+            currentModal.hide();
+        }
+    }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'uniforms:uniform_sale_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

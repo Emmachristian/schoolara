@@ -86,11 +86,12 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
-    # School database middleware - sets current_db based on user's school
-    'schoolara.middleware.SchoolDatabaseMiddleware',
+    # ✅ School Management System Middlewares (ORDER MATTERS!)
+    'schoolara.middleware.SchoolDatabaseMiddleware',           # 1️⃣ Sets request.school_timezone
+    'schoolara.timezone_middleware.SchoolTimezoneMiddleware',  # 2️⃣ Activates timezone
     
-    # Audit context middleware - captures user info for audit logs
-    'utils.middleware.AuditContextMiddleware',  
+    # ✅ Audit middleware - NOW can capture school timezone
+    'utils.middleware.AuditContextMiddleware',  # 3️⃣ Captures context after timezone is set
 ]
 
 # Logging configuration for debugging
@@ -157,16 +158,34 @@ TEMPLATES = [
         'APP_DIRS': True,            # ← enables app templates
         'OPTIONS': {
             'context_processors': [
+                # Django defaults
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'core.context_processors.active_school',
-                'core.context_processors.user_context',
-                'core.context_processors.theme_colors',
+                
+                # Accounts context processors (user, school, theme)
+                'accounts.context_processors.active_school',
+                'accounts.context_processors.user_context',
+                'accounts.context_processors.user_theme_preferences',
+                'accounts.context_processors.theme_colors',
+                'accounts.context_processors.user_security_context',
+                'accounts.context_processors.navigation_permissions',
+                'accounts.context_processors.user_notifications_count',
+                
+                # Core context processors (financial, configuration, fiscal)
+                'core.context_processors.school_configuration',      # ✅ Exists
+                'core.context_processors.active_academic_session',   # ✅ Exists
+                'core.context_processors.active_fiscal_period',      # ✅ Exists
+                'core.context_processors.payment_methods_context',   # ✅ Exists
             ],
-            'libraries': {  # ← ADD THIS
+            'libraries': {
+                # Custom template tag libraries
                 'custom_filters': 'utils.templatetags.custom_filters',
+                'currency_filters': 'core.templatetags.currency_filters',
+                'hr_filters': 'hr.templatetags.hr_filters',
+                'exam_filters': 'exams.templatetags.exam_filters',
+                'fees_tags': 'fees.templatetags.fees_tags',
             },
         },
     },
@@ -211,7 +230,7 @@ DATABASES = {
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
-    }
+    },
 }
 
 DATABASE_ROUTERS = ['schoolara.routers.SchoolRouter']

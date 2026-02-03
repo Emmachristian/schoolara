@@ -1,0 +1,453 @@
+{# finance/templates/finance/expenses/partials/_expense_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Expenses Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="140">Expense No.</th>
+                <th width="130">Expense Date</th>
+                <th width="250">Description</th>
+                <th width="150">Category</th>
+                <th width="150">Vendor</th>
+                <th width="130" class="text-end">Amount</th>
+                <th width="120" class="text-center">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="expenseTableBody">
+            {% if expenses_page %}
+                {% for expense in expenses_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:expenses_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Expense Number -->
+                    <td>
+                        <div>
+                            <a href="{% url 'finance:expense_detail' expense.pk %}" class="text-primary fw-bold">
+                                {{ expense.expense_number }}
+                            </a>
+                        </div>
+                    </td>
+                    
+                    <!-- Expense Date -->
+                    <td>
+                        <div class="text-dark">{{ expense.expense_date|date:"M d, Y" }}</div>
+                        {% if expense.fiscal_period %}
+                            <small class="text-muted">{{ expense.fiscal_period.name }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Description -->
+                    <td>
+                        <div class="text-dark">{{ expense.description|truncatewords:10 }}</div>
+                        {% if expense.expense_lines.count > 0 %}
+                            <small class="text-muted">
+                                <i class="fa fa-list me-1"></i>{{ expense.expense_lines.count }} line{{ expense.expense_lines.count|pluralize }}
+                            </small>
+                        {% endif %}
+                        {% if expense.academic_session %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-calendar me-1"></i>{{ expense.academic_session.year_name }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Category -->
+                    <td>
+                        <div class="fw-bold text-dark">{{ expense.category.name }}</div>
+                        <small class="text-muted">{{ expense.category.get_category_type_display }}</small>
+                    </td>
+                    
+                    <!-- Vendor -->
+                    <td>
+                        {% if expense.vendor_name %}
+                            <div class="text-dark">{{ expense.vendor_name|truncatewords:3 }}</div>
+                            {% if expense.vendor_reference %}
+                                <small class="text-muted">Ref: {{ expense.vendor_reference }}</small>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Amount -->
+                    <td class="text-end">
+                        <strong>{{ expense.total_amount|money }}</strong>
+                        {% if expense.tax_amount > 0 %}
+                            <div class="mt-1">
+                                <small class="text-muted">Tax: {{ expense.tax_amount|money }}</small>
+                            </div>
+                        {% endif %}
+                        {% if expense.payments.count > 0 %}
+                            <div class="mt-1">
+                                <small class="badge bg-success">
+                                    {{ expense.payments.count }} payment{{ expense.payments.count|pluralize }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- ✅ STATUS COLUMN - SIMPLIFIED BADGES -->
+                    <td class="text-center status-cell">
+                        {% if expense.status == 'DRAFT' %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="fa fa-file me-1"></i>Draft
+                            </span>
+                        {% elif expense.status == 'PENDING_APPROVAL' %}
+                            <span class="badge bg-warning status-badge">
+                                <i class="fa fa-clock me-1"></i>Pending
+                            </span>
+                        {% elif expense.status == 'APPROVED' %}
+                            <span class="badge bg-info status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Approved
+                            </span>
+                        {% elif expense.status == 'PAID' %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-double me-1"></i>Paid
+                            </span>
+                        {% elif expense.status == 'REJECTED' %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Rejected
+                            </span>
+                        {% elif expense.status == 'CANCELLED' %}
+                            <span class="badge bg-dark status-badge">
+                                <i class="fa fa-ban me-1"></i>Cancelled
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary status-badge">
+                                {{ expense.status|title }}
+                            </span>
+                        {% endif %}
+                        {% if expense.is_recurring %}
+                            <div class="mt-1">
+                                <small class="badge bg-purple">
+                                    <i class="fa fa-sync me-1"></i>Recurring
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'finance:expense_detail' expense.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'finance:expense_quick_view_modal' expense.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-bolt me-2"></i> Quick View
+                                </button>
+                                
+                                <!-- Edit (if draft or pending) -->
+                                {% if expense.status in 'DRAFT,PENDING_APPROVAL' %}
+                                    <a class="dropdown-item text-warning" href="{% url 'finance:expense_edit' expense.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit
+                                    </a>
+                                {% endif %}
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item" href="{% url 'finance:expense_print_view' expense.pk %}" target="_blank">
+                                    <i class="fa fa-print me-2"></i> Print Expense
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ✅ EXPENSE STATUS ACTIONS -->
+                                <h6 class="dropdown-header">Expense Status</h6>
+                                
+                                <!-- Submit for Approval (if DRAFT) -->
+                                {% if expense.status == 'DRAFT' %}
+                                    <button type="button" class="dropdown-item text-primary"
+                                            hx-get="{% url 'finance:expense_submit_modal' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-paper-plane me-2"></i> Submit for Approval
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Approve/Reject (if PENDING_APPROVAL) -->
+                                {% if expense.status == 'PENDING_APPROVAL' %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'finance:expense_approve_modal' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i> Approve Expense
+                                    </button>
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'finance:expense_reject_modal' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-times-circle me-2"></i> Reject Expense
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- Record Payment (if APPROVED) -->
+                                {% if expense.status == 'APPROVED' %}
+                                    <button type="button" class="dropdown-item text-primary"
+                                            hx-get="{% url 'finance:expense_payment_add_modal_for_expense' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-money-bill me-2"></i> Record Payment
+                                    </button>
+                                {% elif expense.status == 'DRAFT' %}
+                                    <span class="dropdown-item text-muted disabled" title="Submit and approve first">
+                                        <i class="fa fa-money-bill me-2"></i> Record Payment
+                                        <small class="d-block text-muted">Approve first</small>
+                                    </span>
+                                {% endif %}
+                                
+                                <!-- View Payments -->
+                                {% if expense.payments.count > 0 %}
+                                    <a class="dropdown-item" href="{% url 'finance:expense_payment_list' %}?expense={{ expense.id }}">
+                                        <i class="fa fa-list me-2"></i> View Payments ({{ expense.payments.count }})
+                                    </a>
+                                {% endif %}
+                                
+                                <!-- View Journal Entry -->
+                                {% if expense.journal_entry %}
+                                    <a class="dropdown-item" href="{% url 'finance:journal_entry_detail' expense.journal_entry.pk %}">
+                                        <i class="fa fa-book me-2"></i> View Journal Entry
+                                        {% if expense.journal_entry.status == 'DRAFT' %}
+                                            <span class="badge bg-warning ms-1">Draft</span>
+                                        {% else %}
+                                            <span class="badge bg-success ms-1">Posted</span>
+                                        {% endif %}
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Cancel Expense -->
+                                {% if expense.status not in 'PAID,CANCELLED' %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'finance:expense_cancel_modal' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-ban me-2"></i> Cancel Expense
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Delete Action (only DRAFT) -->
+                                {% if expense.status == 'DRAFT' %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'finance:expense_delete_modal' expense.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i> Delete
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Expenses Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new expense.</p>
+                            <a href="{% url 'finance:expense_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Expense
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if expenses_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ expenses_page.start_index }} - {{ expenses_page.end_index }} of {{ expenses_page.paginator.count|format_number }} expenses
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Expense pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if expenses_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_list' %}"
+                                hx-target="#expense-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ expenses_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in expenses_page.paginator.page_range %}
+                    {% if page_num == expenses_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > expenses_page.number|add:"-3" and page_num < expenses_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'finance:expense_list' %}"
+                                    hx-target="#expense-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if expenses_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_list' %}"
+                                hx-target="#expense-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ expenses_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Simplified Status Badge Styling - Matching Pattern */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.status-cell {
+    min-width: 100px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown {
+    position: static !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Expenses</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Pending</div>
+                <h3>{{ stats.pending|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Approved</div>
+                <h3>{{ stats.approved|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Paid</div>
+                <h3>{{ stats.paid|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

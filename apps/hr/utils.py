@@ -757,3 +757,213 @@ def validate_contract_data(contract_data):
         'errors': errors,
         'warnings': warnings
     }
+
+# =============================================================================
+# PAYMENT REVERSAL UTILITIES
+# =============================================================================
+
+from django.db import transaction
+from django.utils import timezone
+from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@transaction.atomic
+def reverse_payroll(payroll, user, reason, approved_by=None, statutory_notes=''):
+    """
+    Reverse a staff payroll (complex operation affecting multiple models).
+    
+    CRITICAL DIFFERENCES FROM PAYMENT REVERSAL:
+    1. Must reverse related records: allowances, deductions, bonuses
+    2. May require statutory adjustments (tax/NSSF filings)
+    3. Requires higher-level approval if already paid
+    4. Cannot reverse if period is closed
+    
+    Args:
+        payroll: Payroll instance
+        user: User initiating reversal
+        reason: Detailed reason for reversal
+        approved_by: User who approved reversal (required for PAID payrolls)
+        statutory_notes: Notes on tax/NSSF adjustments needed
+    
+    Returns:
+        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
+    """
+    if payroll.reversed:
+        return False, "Payroll already reversed", None
+    
+    # Validation
+    can_reverse, msg = payroll.can_be_reversed()
+    if not can_reverse:
+        return False, msg, None
+    
+    # Special check for paid payrolls
+    if payroll.status == 'PAID' and not approved_by:
+        return False, "Finance/HR Director approval required for paid payroll reversal", None
+    
+    try:
+        from finance.models import JournalEntry, JournalTransaction, Journal
+        from core.models import FiscalPeriod
+        
+        # ====================================================================
+        # STEP 1: Mark payroll as reversed
+        # ====================================================================
+        payroll.reversed = True
+        payroll.reversed_on = timezone.now()
+        payroll.reversed_by_id = str(user.id)
+        payroll.reversal_reason = reason
+        payroll.status = 'REVERSED'
+        
+        if approved_by:
+            payroll.reversal_approved_by_id = str(approved_by.id)
+            payroll.reversal_approved_on = timezone.now()
+        
+        if payroll.requires_statutory_adjustments():
+            payroll.statutory_reversals_required = True
+            payroll.statutory_adjustments_notes = statutory_notes
+        
+        # ====================================================================
+        # STEP 2: Create reversal journal entry
+        # ====================================================================
+        fiscal_period = FiscalPeriod.get_current_fiscal_period()
+        
+        general_journal = Journal.objects.filter(
+            journal_type='PAYROLL',
+            is_active=True
+        ).first()
+        
+        if not general_journal:
+            general_journal = Journal.objects.filter(
+                journal_type='GENERAL',
+                is_active=True
+            ).first()
+        
+        if not general_journal:
+            return False, "No active journal found for reversal", None
+        
+        reversal_entry = JournalEntry.objects.create(
+            journal=general_journal,
+            entry_date=timezone.now().date(),
+            fiscal_period=fiscal_period,
+            reference_number=f"PAY-{payroll.period.name}-{payroll.staff.employee_id}",
+            description=f"REVERSAL: Payroll {payroll.staff.full_name()} - {payroll.period.name} - {reason}",
+            status='POSTED'
+        )
+        
+        # ====================================================================
+        # STEP 3: Create reversal journal transactions
+        # ====================================================================
+        # Get accounts
+        salary_expense = payroll.get_salary_expense_account()
+        salary_payable = payroll.get_salary_payable_account()
+        cash_account = payroll.get_cash_account()
+        
+        if not all([salary_expense, salary_payable]):
+            return False, "Required payroll accounts not configured", None
+        
+        # REVERSAL ENTRIES (opposite of original payroll entries):
+        
+        # If payroll was APPROVED but not PAID:
+        # Original: DR: Salary Expense, CR: Salary Payable
+        # Reversal: DR: Salary Payable, CR: Salary Expense
+        
+        if payroll.status in ['APPROVED', 'PROCESSING']:
+            # Reverse accrual
+            JournalTransaction.objects.create(
+                journal_entry=reversal_entry,
+                account=salary_payable,
+                amount=payroll.gross_pay,
+                is_debit=True,
+                description="Reversal: Salary payable"
+            )
+            
+            JournalTransaction.objects.create(
+                journal_entry=reversal_entry,
+                account=salary_expense,
+                amount=payroll.gross_pay,
+                is_debit=False,
+                description="Reversal: Salary expense"
+            )
+            
+            # Update balances
+            salary_payable.current_balance -= payroll.gross_pay
+            salary_payable.save()
+            
+            salary_expense.current_balance -= payroll.gross_pay
+            salary_expense.save()
+        
+        # If payroll was PAID:
+        # Original payment: DR: Salary Payable, CR: Cash/Bank
+        # Reversal: DR: Cash/Bank, CR: Salary Payable (money back from employee)
+        
+        elif payroll.status == 'PAID':
+            if not cash_account:
+                return False, "Cash account not configured for paid payroll reversal", None
+            
+            # Reverse payment
+            JournalTransaction.objects.create(
+                journal_entry=reversal_entry,
+                account=cash_account,
+                amount=payroll.net_pay,
+                is_debit=True,
+                description="Reversal: Cash recovered from employee"
+            )
+            
+            JournalTransaction.objects.create(
+                journal_entry=reversal_entry,
+                account=salary_payable,
+                amount=payroll.net_pay,
+                is_debit=False,
+                description="Reversal: Salary payable restored"
+            )
+            
+            # Reverse statutory deductions (if already remitted, flag for adjustment)
+            for deduction in payroll.deductions.filter(
+                deduction_type__in=['PAYE', 'SOCIAL_SECURITY', 'LOCAL_TAX']
+            ):
+                deduction_account = payroll.get_deduction_account(deduction.deduction_type)
+                if deduction_account:
+                    # DR: Deduction Payable (we no longer owe this)
+                    JournalTransaction.objects.create(
+                        journal_entry=reversal_entry,
+                        account=deduction_account,
+                        amount=deduction.amount,
+                        is_debit=True,
+                        description=f"Reversal: {deduction.get_deduction_type_display()}"
+                    )
+                    
+                    deduction_account.current_balance -= deduction.amount
+                    deduction_account.save()
+            
+            # Update balances
+            cash_account.current_balance += payroll.net_pay
+            cash_account.save()
+            
+            salary_payable.current_balance += payroll.net_pay
+            salary_payable.save()
+        
+        # Link reversal entry
+        payroll.reversal_journal_entry = reversal_entry
+        payroll.save()
+        
+        logger.info(
+            f"Payroll reversed: {payroll.staff.full_name()} - {payroll.period.name} - "
+            f"Journal: {reversal_entry.entry_number}"
+        )
+        
+        # ====================================================================
+        # STEP 4: Log statutory warning if needed
+        # ====================================================================
+        if payroll.statutory_reversals_required:
+            logger.warning(
+                f"STATUTORY ADJUSTMENT REQUIRED: Payroll {payroll.id} reversal "
+                f"affects tax/NSSF filings. Notes: {statutory_notes}"
+            )
+        
+        return True, f"Payroll reversed. Journal: {reversal_entry.entry_number}", reversal_entry
+    
+    except Exception as e:
+        logger.error(f"Error reversing payroll: {e}", exc_info=True)
+        return False, f"Error: {str(e)}", None

@@ -1,0 +1,455 @@
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+<!-- Designations Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Designation</th>
+                <th>Code</th>
+                <th>Department</th>
+                <th>Rank</th>
+                <th>Staff Count</th>
+                <th>Salary Range</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="designationTableBody">
+            {% if designations_page %}
+                {% for designation in designations_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:designations_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Designation Info with Icon -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="designation-icon {% if designation.is_management %}management{% elif designation.is_teaching %}teaching{% else %}other{% endif %}">
+                                {% if designation.is_management %}
+                                    <i class="pe-7s-users"></i>
+                                {% elif designation.is_teaching %}
+                                    <i class="pe-7s-study"></i>
+                                {% else %}
+                                    <i class="pe-7s-portfolio"></i>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <h6 class="mb-0">{{ designation.name }}</h6>
+                                <div class="mt-1">
+                                    {% if designation.is_teaching %}
+                                        <span class="badge badge-teaching me-1">
+                                            <i class="fa fa-chalkboard-teacher me-1"></i>Teaching
+                                        </span>
+                                    {% endif %}
+                                    {% if designation.is_management %}
+                                        <span class="badge badge-management">
+                                            <i class="fa fa-user-tie me-1"></i>Management
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                {% if designation.description %}
+                                    <small class="text-muted d-block mt-1">{{ designation.description|truncatewords:10 }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Code -->
+                    <td>
+                        {% if designation.code %}
+                            <code class="text-primary">{{ designation.code }}</code>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Department -->
+                    <td>
+                        <a href="{% url 'hr:department_edit' designation.department.pk %}" 
+                           class="text-decoration-none">
+                            <i class="pe-7s-culture text-primary me-1"></i>
+                            {{ designation.department.name }}
+                        </a>
+                    </td>
+                    
+                    <!-- Rank Order -->
+                    <td class="text-center">
+                        <span class="badge bg-secondary">
+                            Rank {{ designation.rank_order }}
+                        </span>
+                        {% if designation.reports_to %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-arrow-up me-1"></i>{{ designation.reports_to.name }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Staff Count -->
+                    <td class="text-center">
+                        {% if designation.staff_count > 0 %}
+                            <a href="{% url 'hr:staff_list' %}?designation={{ designation.id }}" 
+                               class="badge bg-primary" 
+                               style="text-decoration: none;">
+                                <i class="fa fa-users me-1"></i>
+                                {{ designation.staff_count }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Salary Range -->
+                    <td class="text-end">
+                        {% if designation.min_salary and designation.max_salary %}
+                            <div class="salary-range">
+                                <small class="text-muted d-block">Min:</small>
+                                <strong class="text-success">{{ designation.min_salary|floatformat:0|intcomma }}</strong>
+                                <small class="text-muted d-block mt-1">Max:</small>
+                                <strong class="text-success">{{ designation.max_salary|floatformat:0|intcomma }}</strong>
+                            </div>
+                        {% elif designation.min_salary %}
+                            <strong class="text-success">{{ designation.min_salary|floatformat:0|intcomma }}</strong>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td class="text-center">
+                        {% if designation.is_active %}
+                            <span class="badge status-badge active">Active</span>
+                        {% else %}
+                            <span class="badge status-badge inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'hr:designation_detail' designation.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'hr:designation_edit' designation.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Manage Section -->
+                                <h6 class="dropdown-header">Quick Links</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'hr:staff_list' %}?designation={{ designation.id }}">
+                                    <i class="fa fa-users me-2"></i> View Staff ({{ designation.staff_count|default:0 }})
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'hr:designation_list' %}?department={{ designation.department.id }}">
+                                    <i class="fa fa-sitemap me-2"></i> Department Designations
+                                </a>
+                                
+                                {% if designation.subordinate_count > 0 %}
+                                    <a class="dropdown-item" href="{% url 'hr:designation_list' %}?reports_to={{ designation.id }}">
+                                        <i class="fa fa-level-down-alt me-2"></i> Subordinates ({{ designation.subordinate_count }})
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <a class="dropdown-item text-danger" 
+                                   href="{% url 'hr:designation_delete_modal' designation.pk %}"
+                                   hx-get="{% url 'hr:designation_delete_modal' designation.pk %}"
+                                   hx-target="#modal-content"
+                                   hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="pe-7s-search"></i>
+                            </div>
+                            <h4 class="text-muted mb-2">No Designations Found</h4>
+                            <p class="text-muted">
+                                Try adjusting your search filters or 
+                                <a href="{% url 'hr:designation_create' %}" class="text-primary">add a new designation</a>.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if designations_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ designations_page.start_index }} - {{ designations_page.end_index }} of {{ designations_page.paginator.count }} designations
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Designation pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if designations_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'hr:designation_search' %}" 
+                           hx-target="#designation-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ designations_page.previous_page_number }}"}'
+                           aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in designations_page.paginator.page_range %}
+                    {% if page_num == designations_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > designations_page.number|add:"-3" and page_num < designations_page.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'hr:designation_search' %}"
+                               hx-target="#designation-results"
+                               hx-include="#searchForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if designations_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'hr:designation_search' %}"
+                           hx-target="#designation-results"
+                           hx-include="#searchForm"
+                           hx-vals='{"page": "{{ designations_page.next_page_number }}"}'
+                           aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Designation Icon Styles */
+.designation-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: white;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.designation-icon.management {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.designation-icon.teaching {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.designation-icon.other {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+/* Badge Styles */
+.badge-teaching {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+.badge-management {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* Salary Range Display */
+.salary-range {
+    font-size: 0.85rem;
+}
+
+/* Fix for table responsive overflow with dropdowns */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* Empty State */
+.empty-state {
+    padding: 60px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+/* Table Improvements */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Responsive handling for mobile devices */
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- OUT OF BAND UPDATE FOR STATS (at the very end) -->
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-id"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Designations</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Teaching Roles</div>
+                <h3>{{ stats.teaching|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Staff</div>
+                <h3>{{ stats.total_staff|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>

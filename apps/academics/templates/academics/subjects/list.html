@@ -237,6 +237,31 @@
 }
 
 /* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
    RESPONSIVE DESIGN
    ============================================================================ */
 
@@ -279,7 +304,7 @@
                 <a href="{% url 'academics:subject_create' %}" class="btn btn-primary">
                     <i class="fa fa-plus me-1"></i> Create New Subject
                 </a>
-                <a href="{% url 'academics:subject_print_view' %}" class="btn btn-outline-secondary" target="_blank">
+                <a href="{% url 'academics:subjects_print_view' %}" class="btn btn-outline-secondary" target="_blank">
                     <i class="fa fa-print me-1"></i> Print
                 </a>
             </div>
@@ -314,7 +339,7 @@
             </div>
             <div class="stats-content">
                 <div class="stats-label">Total Subjects</div>
-                <h3 id="statTotal">{{ stats.total_subjects|default:0 }}</h3>
+                <h3>{{ stats.total|default:0 }}</h3>
             </div>
         </div>
     </div>
@@ -326,7 +351,7 @@
             </div>
             <div class="stats-content">
                 <div class="stats-label">Active Subjects</div>
-                <h3 id="statActive">{{ stats.active_subjects|default:0 }}</h3>
+                <h3>{{ stats.active|default:0 }}</h3>
             </div>
         </div>
     </div>
@@ -338,7 +363,7 @@
             </div>
             <div class="stats-content">
                 <div class="stats-label">Compulsory</div>
-                <h3 id="statCompulsory">{{ stats.compulsory_subjects|default:0 }}</h3>
+                <h3>{{ stats.compulsory|default:0 }}</h3>
             </div>
         </div>
     </div>
@@ -349,8 +374,8 @@
                 <i class="pe-7s-book"></i>
             </div>
             <div class="stats-content">
-                <div class="stats-label">Avg Credit Hours</div>
-                <h3 id="statCreditHours">{{ stats.credit_analysis.average_credit_hours|default:0|floatformat:1 }}</h3>
+                <div class="stats-label">Optional</div>
+                <h3>{{ stats.optional|default:0 }}</h3>
             </div>
         </div>
     </div>
@@ -385,9 +410,9 @@
                     <!-- Search & Filters with HTMX -->
                     <div class="subject-filters">
                         <form id="searchForm" class="row g-3"
-                              hx-get="{% url 'academics:subject_search' %}"
-                              hx-target="#subject-results"
-                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                              hx-get="{% url 'academics:subject_list' %}"
+                              hx-target="#subject-list"
+                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
                             
                             <!-- Search Input -->
                             <div class="col-md-4">
@@ -448,8 +473,8 @@
                     </div>
 
                     <!-- Results Container -->
-                    <div id="subject-results"
-                         hx-get="{% url 'academics:subject_search' %}"
+                    <div id="subject-list"
+                         hx-get="{% url 'academics:subject_list' %}"
                          hx-trigger="load"
                          hx-swap="innerHTML">
                         <!-- Initial loading state -->
@@ -467,10 +492,102 @@
     </div>
 </section>
 
+<!-- ========================================== -->
+<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;">
+    <!-- Modal content loaded here via HTMX -->
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+// ============================================================================
+// HTMX EVENT LISTENERS
+// ============================================================================
+
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+    
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' : 
+                                   type === 'error' ? '#dc3545' : 
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+});
+
+// ============================================================================
+// DYNAMIC MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            // Create a proper Bootstrap modal structure
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            // Remove existing modal wrapper if it exists
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            // Create new modal wrapper
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            // Move the modal-dialog into the wrapper
+            modalWrapper.appendChild(modalDialog);
+            
+            // Append to body (outside app-container)
+            document.body.appendChild(modalWrapper);
+            
+            // Initialize and show modal
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            // Clean up when hidden
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================

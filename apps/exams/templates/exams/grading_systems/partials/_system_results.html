@@ -1,0 +1,388 @@
+{# exams/templates/exams/grading_systems/partials/_system_results.html #}
+
+{% load static %}
+
+<!-- Grading Systems Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Code</th>
+                <th>System Name</th>
+                <th>Type / Scale</th>
+                <th>Score Range</th>
+                <th>Pass Mark</th>
+                <th>Grade Ranges</th>
+                <th>Features</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if systems_page %}
+                {% for system in systems_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:systems_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- System Code -->
+                    <td>
+                        <span class="system-code">{{ system.code }}</span>
+                    </td>
+                    
+                    <!-- System Name & Description -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">
+                                {{ system.name }}
+                                {% if system.is_default %}
+                                    <span class="status-badge default ms-1">Default</span>
+                                {% endif %}
+                            </h6>
+                            {% if system.description %}
+                                <small class="text-muted">{{ system.description|truncatewords:10 }}</small>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Grading Type & Scale -->
+                    <td>
+                        <span class="grading-type-badge {{ system.grading_type|lower }}">
+                            {{ system.get_grading_type_display }}
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                {{ system.get_scale_type_display }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Score Range -->
+                    <td>
+                        <span class="score-range-badge">
+                            {{ system.minimum_score }} - {{ system.maximum_score }}
+                        </span>
+                    </td>
+                    
+                    <!-- Pass Mark -->
+                    <td>
+                        <strong>{{ system.pass_mark }}</strong>
+                    </td>
+                    
+                    <!-- Grade Ranges Count -->
+                    <td>
+                        <span class="range-count-badge">
+                            <i class="fa fa-list me-1"></i>
+                            {{ system.ranges.count }} ranges
+                        </span>
+                    </td>
+                    
+                    <!-- Features -->
+                    <td>
+                        {% if system.uses_gpa %}
+                            <span class="feature-badge gpa" data-bs-toggle="tooltip" title="Uses GPA calculation">
+                                <i class="fa fa-calculator me-1"></i>GPA
+                            </span>
+                        {% endif %}
+                        
+                        {% if system.uses_letter_grades %}
+                            <span class="feature-badge letter" data-bs-toggle="tooltip" title="Uses letter grades">
+                                <i class="fa fa-font me-1"></i>Letters
+                            </span>
+                        {% endif %}
+                        
+                        {% if system.include_positions %}
+                            <span class="feature-badge positions" data-bs-toggle="tooltip" title="Includes class positions">
+                                <i class="fa fa-trophy me-1"></i>Ranks
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td>
+                        {% if system.is_active %}
+                            <span class="status-badge active">Active</span>
+                        {% else %}
+                            <span class="status-badge inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'exams:grading_system_detail' system.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'exams:grading_system_quick_view_modal' system.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'exams:grading_system_edit' system.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Manage Grade Ranges -->
+                                <h6 class="dropdown-header">Grade Ranges</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:grading_range_create' system.pk %}">
+                                    <i class="fa fa-plus-circle me-2"></i>Add Grade Range
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                {% if not system.is_default %}
+                                    <button type="button" class="dropdown-item text-primary"
+                                            hx-get="{% url 'exams:grading_system_set_default_modal' system.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-star me-2"></i>Set as Default
+                                    </button>
+                                {% endif %}
+                                
+                                {% if system.is_active %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'exams:grading_system_toggle_active_modal' system.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i>Deactivate
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'exams:grading_system_toggle_active_modal' system.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Activate
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- System Features -->
+                                <h6 class="dropdown-header">Configuration</h6>
+                                
+                                <div class="dropdown-item-text">
+                                    <small class="text-muted">
+                                        <i class="fa fa-info-circle me-1"></i>
+                                        Min Subjects: {{ system.minimum_subjects_required }}
+                                    </small>
+                                </div>
+                                
+                                {% if system.maximum_subjects_considered %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-info-circle me-1"></i>
+                                            Max Subjects: {{ system.maximum_subjects_considered }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <div class="dropdown-item-text">
+                                    <small class="text-muted">
+                                        <i class="fa fa-info-circle me-1"></i>
+                                        Method: {{ system.get_subject_selection_method_display }}
+                                    </small>
+                                </div>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'exams:grading_system_print_detail' system.pk %}" 
+                                   target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print Details
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                {% if not system.is_default %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'exams:grading_system_delete_modal' system.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i>Delete
+                                    </button>
+                                {% else %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-lock me-1"></i>Cannot delete default system
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No grading systems found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or create a new system.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if systems_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ systems_page.start_index }} - {{ systems_page.end_index }} of {{ systems_page.paginator.count }} systems
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="System pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if systems_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'exams:grading_system_list' %}" 
+                                hx-target="#system-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ systems_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in systems_page.paginator.page_range %}
+                    {% if page_num == systems_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > systems_page.number|add:"-3" and page_num < systems_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'exams:grading_system_list' %}"
+                                    hx-target="#system-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if systems_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:grading_system_list' %}"
+                                hx-target="#system-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ systems_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-graph2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Systems</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Systems</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Default System</div>
+                <h3>{{ stats.default|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-calculator"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">With GPA</div>
+                <h3>{{ stats.with_gpa|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'system-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

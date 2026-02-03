@@ -264,6 +264,7 @@ def get_department_statistics(filters=None):
         dict: Department statistics and analysis
     """
     from .models import Department, Staff
+    from django.db.models import Q
     
     departments = Department.objects.all()
     
@@ -319,10 +320,10 @@ def get_department_statistics(filters=None):
             )['avg'] or 0,
         },
         
-        # Departments with heads
+        # Departments with heads - FIXED: Use head_id instead of head
         'leadership': {
-            'departments_with_head': departments.exclude(head__isnull=True).count(),
-            'departments_without_head': departments.filter(head__isnull=True).count(),
+            'departments_with_head': departments.exclude(head_id__isnull=True).exclude(head_id='').count(),
+            'departments_without_head': departments.filter(Q(head_id__isnull=True) | Q(head_id='')).count(),
         },
     }
     
@@ -364,17 +365,17 @@ def get_department_statistics(filters=None):
         
         stats['budget_analysis'] = {
             'departments_with_budget': departments_with_budget.count(),
-            'total_budget': float(budget_data['total_budget'].amount) if budget_data['total_budget'] else 0,
-            'average_budget': float(budget_data['avg_budget'].amount) if budget_data['avg_budget'] else 0,
-            'smallest_budget': float(budget_data['min_budget'].amount) if budget_data['min_budget'] else 0,
-            'largest_budget': float(budget_data['max_budget'].amount) if budget_data['max_budget'] else 0,
+            'total_budget': float(budget_data['total_budget']) if budget_data['total_budget'] else 0,
+            'average_budget': float(budget_data['avg_budget']) if budget_data['avg_budget'] else 0,
+            'smallest_budget': float(budget_data['min_budget']) if budget_data['min_budget'] else 0,
+            'largest_budget': float(budget_data['max_budget']) if budget_data['max_budget'] else 0,
         }
     
     # Largest departments
     largest = departments.order_by('-staff_count')[:10]
     stats['largest_departments'] = [
         {
-            'id': d.id,
+            'id': str(d.id),
             'name': d.name,
             'department_type': d.get_department_type_display(),
             'staff_count': d.staff_count,
@@ -384,9 +385,11 @@ def get_department_statistics(filters=None):
         for d in largest
     ]
     
-    # Departments needing attention
+    # Departments needing attention - FIXED: Use head_id
     stats['departments_needing_attention'] = {
-        'no_head': departments.filter(is_active=True, head__isnull=True).count(),
+        'no_head': departments.filter(
+            is_active=True
+        ).filter(Q(head_id__isnull=True) | Q(head_id='')).count(),
         'no_staff': departments.filter(is_active=True, staff_count=0).count(),
         'over_capacity': departments.filter(
             is_active=True,

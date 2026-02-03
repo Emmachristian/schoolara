@@ -4,8 +4,10 @@ from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
-from django.urls import reverse
+from django.urls import reverse, path
+from django.shortcuts import render, redirect
 from django.utils.safestring import mark_safe
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from django.contrib import messages
@@ -325,25 +327,27 @@ class CustomUserAdmin(BaseUserAdmin):
         )
     force_password_change_action.short_description = 'Force password change on next login'
 
-
 # =============================================================================
-# SCHOOL ADMIN
+# SCHOOL ADMIN (ENHANCED WITH INITIALIZATION) ⭐
 # =============================================================================
 
 @admin.register(School)
 class SchoolAdmin(admin.ModelAdmin):
-    """Admin interface for School model"""
+    """Admin interface for School model with initialization functionality"""
     
     list_display = (
         'full_name', 'short_name', 'school_type', 'boarding_type',
         'gender_type', 'country', 'subscription_status_display',
         'active_subscription_badge', 'user_count', 'student_count',
+        'setup_status_display',  # ⭐ NEW
     )
     
     list_filter = (
         'school_type', 'boarding_type', 'gender_type',
         'country', 'is_active_subscription', 'subscription_plan',
         'established_date',
+        'is_initial_setup_complete',  # ⭐ NEW
+        'accounting_complexity',  # ⭐ NEW
     )
     
     search_fields = (
@@ -354,6 +358,9 @@ class SchoolAdmin(admin.ModelAdmin):
     readonly_fields = (
         'created_at', 'updated_at', 'subscription_status',
         'user_count', 'student_count', 'active_teachers_count',
+        'setup_completed_at', 'setup_completed_by',  # ⭐ NEW
+        'recommended_complexity',  # ⭐ NEW
+        'recommended_accounts_count',  # ⭐ NEW
     )
     
     fieldsets = (
@@ -413,6 +420,29 @@ class SchoolAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',)
         }),
+        # ⭐ NEW SECTION
+        ('Financial Configuration', {
+            'fields': (
+                'accounting_complexity',
+                'recommended_complexity',
+                'recommended_accounts_count',
+            ),
+            'description': (
+                'Configure accounting complexity based on school size and type. '
+                'This determines how many accounts are created during initialization.'
+            )
+        }),
+        # ⭐ NEW SECTION
+        ('Initialization Status', {
+            'fields': (
+                'is_financial_setup_complete',
+                'is_academic_setup_complete',
+                'is_initial_setup_complete',
+                'setup_completed_at',
+                'setup_completed_by',
+            ),
+            'description': 'Track school initialization progress'
+        }),
         ('Statistics', {
             'fields': (
                 'user_count', 'student_count', 'active_teachers_count',
@@ -427,9 +457,62 @@ class SchoolAdmin(admin.ModelAdmin):
         }),
     )
     
-    # -------------------------------------------------------------------------
-    # CUSTOM DISPLAY METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # CUSTOM DISPLAY METHODS ⭐ NEW
+    # =========================================================================
+    
+    def setup_status_display(self, obj):
+        """Display setup completion status"""
+        if obj.is_initial_setup_complete:
+            return format_html(
+                '<span style="background-color: #27ae60; color: white; '
+                'padding: 3px 10px; border-radius: 3px;">✓ Complete</span>'
+            )
+        else:
+            return format_html(
+                '<span style="background-color: #e74c3c; color: white; '
+                'padding: 3px 10px; border-radius: 3px;">⚠ Pending</span>'
+            )
+    setup_status_display.short_description = 'Setup'
+    setup_status_display.admin_order_field = 'is_initial_setup_complete'
+    
+    def recommended_complexity(self, obj):
+        """Display recommended accounting complexity"""
+        complexity = obj.get_accounting_complexity_level()
+        colors = {
+            'BASIC': '#3498db',
+            'STANDARD': '#27ae60',
+            'ADVANCED': '#e67e22',
+        }
+        color = colors.get(complexity, '#95a5a6')
+        
+        descriptions = {
+            'BASIC': '10-12 accounts (small schools)',
+            'STANDARD': '20-30 accounts (medium schools)',
+            'ADVANCED': '50-60 accounts (large schools)',
+        }
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span><br>'
+            '<small style="color: #7f8c8d;">{}</small>',
+            color,
+            complexity,
+            descriptions.get(complexity, '')
+        )
+    recommended_complexity.short_description = 'Recommended Complexity'
+    
+    def recommended_accounts_count(self, obj):
+        """Display recommended number of accounts"""
+        count = obj.get_recommended_accounts_count()
+        return format_html(
+            '<strong>{}</strong> accounts',
+            count
+        )
+    recommended_accounts_count.short_description = 'Recommended Accounts'
+    
+    # =========================================================================
+    # EXISTING DISPLAY METHODS (keep all your existing ones)
+    # =========================================================================
     
     def subscription_status_display(self, obj):
         """Display subscription status with color coding"""
@@ -496,16 +579,277 @@ class SchoolAdmin(admin.ModelAdmin):
         return obj.subscription_status
     subscription_status.short_description = 'Current Status'
     
-    # -------------------------------------------------------------------------
-    # ACTIONS
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # CUSTOM URLS ⭐ NEW
+    # =========================================================================
+    
+    def get_urls(self):
+        """Add custom URLs for school initialization"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:school_id>/initialize/',
+                self.admin_site.admin_view(self.initialize_school_view),
+                name='accounts_school_initialize',
+            ),
+            path(
+                '<int:school_id>/reinitialize/',
+                self.admin_site.admin_view(self.reinitialize_school_view),
+                name='accounts_school_reinitialize',
+            ),
+        ]
+        return custom_urls + urls
+    
+    # =========================================================================
+    # INITIALIZATION VIEWS ⭐ NEW
+    # =========================================================================
+    
+    def initialize_school_view(self, request, school_id):
+        """
+        View to initialize a school with configuration.
+        Shows a form to select accounting complexity and confirm initialization.
+        """
+        school = self.get_object(request, school_id)
+        
+        if school is None:
+            messages.error(request, "School not found.")
+            return redirect('admin:accounts_school_changelist')
+        
+        # Check if already initialized
+        if school.is_initial_setup_complete:
+            messages.warning(
+                request,
+                f"{school.full_name} is already initialized. "
+                "Use 'Re-initialize' if you want to reset it."
+            )
+            return redirect('admin:accounts_school_change', school_id)
+        
+        if request.method == 'POST':
+            # Get user's choices
+            accounting_complexity = request.POST.get('accounting_complexity')
+            confirm = request.POST.get('confirm')
+            
+            if not confirm:
+                messages.error(request, "Please confirm initialization.")
+                return redirect(request.path)
+            
+            # Update school's accounting complexity if specified
+            if accounting_complexity:
+                school.accounting_complexity = accounting_complexity
+                school.save(update_fields=['accounting_complexity'])
+            
+            # Perform initialization
+            try:
+                from apps.core.services.school_init_config import initialize_school
+                
+                with transaction.atomic():
+                    result = initialize_school(school, user=request.user)
+                
+                if result['success']:
+                    messages.success(
+                        request,
+                        format_html(
+                            '<strong>✓ Initialization Successful!</strong><br>'
+                            'Created: {} accounts, {} fee categories, {} expense categories<br>'
+                            'Complexity: {}',
+                            result['created'].get('accounts', 0),
+                            result['created'].get('fee_categories', 0),
+                            result['created'].get('expense_categories', 0),
+                            result['complexity']
+                        )
+                    )
+                    logger.info(f"School {school.full_name} initialized by {request.user.username}")
+                    return redirect('admin:accounts_school_change', school_id)
+                else:
+                    messages.error(
+                        request,
+                        f"Initialization failed: {', '.join(result['errors'])}"
+                    )
+                    logger.error(f"Failed to initialize {school.full_name}: {result['errors']}")
+                    
+            except Exception as e:
+                messages.error(request, f"Initialization error: {str(e)}")
+                logger.exception(f"Error initializing school {school.full_name}")
+        
+        # GET request - show confirmation form
+        context = {
+            'title': f'Initialize {school.full_name}',
+            'school': school,
+            'opts': self.model._meta,
+            'has_view_permission': self.has_view_permission(request, school),
+            'site_header': 'Schoolara Administration',
+            'site_title': 'School Initialization',
+            'recommended_complexity': school.get_accounting_complexity_level(),
+            'recommended_accounts': school.get_recommended_accounts_count(),
+            'needs_boarding': school.needs_boarding_accounts(),
+            'complexity_choices': [
+                ('BASIC', 'Basic (10-12 accounts)', 'Small schools, simple tracking'),
+                ('STANDARD', 'Standard (20-30 accounts)', 'Medium schools, balanced features'),
+                ('ADVANCED', 'Advanced (50-60 accounts)', 'Large schools, detailed tracking'),
+            ],
+        }
+        
+        return render(request, 'admin/accounts/school/initialize.html', context)
+    
+    def reinitialize_school_view(self, request, school_id):
+        """
+        View to re-initialize a school (wipes and recreates).
+        WARNING: This deletes all existing financial data!
+        """
+        school = self.get_object(request, school_id)
+        
+        if school is None:
+            messages.error(request, "School not found.")
+            return redirect('admin:accounts_school_changelist')
+        
+        if request.method == 'POST':
+            confirm_text = request.POST.get('confirm_text', '').strip()
+            accounting_complexity = request.POST.get('accounting_complexity')
+            
+            # Require typing school name for confirmation
+            if confirm_text != school.full_name:
+                messages.error(
+                    request,
+                    f"Please type the school name exactly: {school.full_name}"
+                )
+                return redirect(request.path)
+            
+            try:
+                from finance.models import Account
+                from fees.models import FeesCategory
+                from core.models import FinancialSettings, CoreAccountMappings
+                
+                with transaction.atomic():
+                    # Delete existing data
+                    Account.objects.filter(school=school).delete()
+                    FeesCategory.objects.filter(school=school).delete()
+                    
+                    # Delete financial settings and mappings
+                    if hasattr(school, 'financial_settings'):
+                        if hasattr(school.financial_settings, 'account_mappings'):
+                            school.financial_settings.account_mappings.delete()
+                        school.financial_settings.delete()
+                    
+                    # Reset initialization flags
+                    school.is_financial_setup_complete = False
+                    school.is_academic_setup_complete = False
+                    school.is_initial_setup_complete = False
+                    school.setup_completed_at = None
+                    school.setup_completed_by = None
+                    
+                    # Update complexity if specified
+                    if accounting_complexity:
+                        school.accounting_complexity = accounting_complexity
+                    
+                    school.save()
+                    
+                    # Re-initialize
+                    from apps.core.services.school_init_config import initialize_school
+                    result = initialize_school(school, user=request.user)
+                    
+                    if result['success']:
+                        messages.success(
+                            request,
+                            format_html(
+                                '<strong>✓ Re-initialization Successful!</strong><br>'
+                                'All previous data deleted and recreated<br>'
+                                'Created: {} accounts, {} fee categories',
+                                result['created'].get('accounts', 0),
+                                result['created'].get('fee_categories', 0)
+                            )
+                        )
+                        logger.warning(
+                            f"School {school.full_name} re-initialized by {request.user.username}"
+                        )
+                        return redirect('admin:accounts_school_change', school_id)
+                    else:
+                        messages.error(
+                            request,
+                            f"Re-initialization failed: {', '.join(result['errors'])}"
+                        )
+                        
+            except Exception as e:
+                messages.error(request, f"Re-initialization error: {str(e)}")
+                logger.exception(f"Error re-initializing school {school.full_name}")
+        
+        # GET request - show confirmation form
+        context = {
+            'title': f'Re-initialize {school.full_name}',
+            'school': school,
+            'opts': self.model._meta,
+            'has_view_permission': self.has_view_permission(request, school),
+            'site_header': 'Schoolara Administration',
+            'site_title': 'School Re-initialization',
+            'warning': 'This will DELETE ALL existing accounts, fee categories, and financial settings!',
+            'recommended_complexity': school.get_accounting_complexity_level(),
+            'complexity_choices': [
+                ('BASIC', 'Basic (10-12 accounts)'),
+                ('STANDARD', 'Standard (20-30 accounts)'),
+                ('ADVANCED', 'Advanced (50-60 accounts)'),
+            ],
+        }
+        
+        return render(request, 'admin/accounts/school/reinitialize.html', context)
+    
+    # =========================================================================
+    # CUSTOM ACTIONS ⭐ NEW
+    # =========================================================================
     
     actions = [
         'activate_subscriptions',
         'deactivate_subscriptions',
         'enable_all_portals',
+        'initialize_selected_schools',  # ⭐ NEW
     ]
     
+    def initialize_selected_schools(self, request, queryset):
+        """
+        Bulk initialize selected schools.
+        Only initializes schools that haven't been initialized yet.
+        """
+        from apps.core.services.school_init_config import initialize_school
+        
+        # Filter to only non-initialized schools
+        schools_to_init = queryset.filter(is_initial_setup_complete=False)
+        
+        if not schools_to_init.exists():
+            messages.warning(request, "All selected schools are already initialized.")
+            return
+        
+        success_count = 0
+        error_count = 0
+        
+        for school in schools_to_init:
+            try:
+                with transaction.atomic():
+                    result = initialize_school(school, user=request.user)
+                    
+                    if result['success']:
+                        success_count += 1
+                        logger.info(f"Bulk initialized {school.full_name}")
+                    else:
+                        error_count += 1
+                        logger.error(f"Failed to bulk initialize {school.full_name}")
+                        
+            except Exception as e:
+                error_count += 1
+                logger.exception(f"Error bulk initializing {school.full_name}")
+        
+        if success_count > 0:
+            messages.success(
+                request,
+                f"✓ Successfully initialized {success_count} school(s)."
+            )
+        
+        if error_count > 0:
+            messages.error(
+                request,
+                f"✗ Failed to initialize {error_count} school(s). Check logs."
+            )
+    
+    initialize_selected_schools.short_description = "Initialize selected schools"
+    
+    # Your existing actions
     def activate_subscriptions(self, request, queryset):
         """Activate subscriptions for selected schools"""
         updated = queryset.update(is_active_subscription=True)
@@ -539,6 +883,21 @@ class SchoolAdmin(admin.ModelAdmin):
             messages.SUCCESS
         )
     enable_all_portals.short_description = 'Enable all portals'
+    
+    # =========================================================================
+    # CHANGE FORM TEMPLATE ⭐ NEW
+    # =========================================================================
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """Add initialize button to change form"""
+        extra_context = extra_context or {}
+        
+        obj = self.get_object(request, object_id)
+        if obj:
+            extra_context['show_initialize_button'] = not obj.is_initial_setup_complete
+            extra_context['show_reinitialize_button'] = obj.is_initial_setup_complete
+        
+        return super().change_view(request, object_id, form_url, extra_context)
 
 
 # =============================================================================

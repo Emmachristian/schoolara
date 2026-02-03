@@ -1,0 +1,507 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   FEE CATEGORY STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.category-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS CARDS
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+    position: relative;
+    overflow: visible;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   DROPDOWN MENU FIX
+   ============================================================================ */
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .category-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        margin-bottom: 15px;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-wallet icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Fee Categories
+                <div class="page-title-subheading">
+                    Manage fee categories for student billing and financial tracking
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'fees:category_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Create Category
+                </a>
+                <a href="{% url 'fees:category_list_print_view' %}" target="_blank" class="btn btn-outline-secondary">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-wallet"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Categories</div>
+                <h3>{{ stats.total_categories|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Categories</div>
+                <h3>{{ stats.active_categories|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Mandatory</div>
+                <h3>{{ stats.configuration.mandatory|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Taxable</div>
+                <h3>{{ stats.configuration.taxable|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-wallet me-2 text-primary"></i>
+                                Fee Categories Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="category-filters">
+                        <form id="searchForm" class="row g-3"
+                              hx-get="{% url 'fees:category_search' %}"
+                              hx-target="#fee-category-list"
+                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.q.label }}
+                                </label>
+                                {{ filter_form.q }}
+                            </div>
+                            
+                            <!-- Category Type Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.category_type.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.category_type.label }}
+                                </label>
+                                {{ filter_form.category_type }}
+                            </div>
+
+                            <!-- Display Group Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.display_group.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.display_group.label }}
+                                </label>
+                                {{ filter_form.display_group }}
+                            </div>
+
+                            <!-- Applicability Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.applicability.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.applicability.label }}
+                                </label>
+                                {{ filter_form.applicability }}
+                            </div>
+
+                            <!-- Active Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">
+                                    {{ filter_form.is_active.label }}
+                                </label>
+                                {{ filter_form.is_active }}
+                            </div>
+
+                            <!-- Advanced Filters Toggle -->
+                            <div class="col-12">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#advancedFilters">
+                                    <i class="fa fa-filter me-1"></i> Advanced Filters
+                                </button>
+                            </div>
+
+                            <!-- Advanced Filters (Collapsed) -->
+                            <div class="collapse" id="advancedFilters">
+                                <div class="row g-3 mt-2 pt-3 border-top">
+                                    <div class="col-md-3">
+                                        <label for="{{ filter_form.is_mandatory.id_for_label }}" class="form-label small text-muted mb-1">
+                                            {{ filter_form.is_mandatory.label }}
+                                        </label>
+                                        {{ filter_form.is_mandatory }}
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label for="{{ filter_form.is_refundable.id_for_label }}" class="form-label small text-muted mb-1">
+                                            {{ filter_form.is_refundable.label }}
+                                        </label>
+                                        {{ filter_form.is_refundable }}
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label for="{{ filter_form.is_taxable.id_for_label }}" class="form-label small text-muted mb-1">
+                                            {{ filter_form.is_taxable.label }}
+                                        </label>
+                                        {{ filter_form.is_taxable }}
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label for="{{ filter_form.frequency.id_for_label }}" class="form-label small text-muted mb-1">
+                                            {{ filter_form.frequency.label }}
+                                        </label>
+                                        {{ filter_form.frequency }}
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="fee-category-list"
+                         hx-get="{% url 'fees:category_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <!-- Initial loading state -->
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading fee categories...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// HTMX EVENT LISTENERS - UPDATE STATS
+// ============================================================================
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'fee-category-list') {
+        console.log('Fee category results updated');
+        
+        // Reinitialize tooltips after HTMX swap
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'fees:category_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

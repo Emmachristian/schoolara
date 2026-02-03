@@ -1,0 +1,166 @@
+{# fees/templates/fees/discounts/modals/apply_to_invoice.html #}
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-tags me-2"></i>Apply Discount to Invoice
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_apply %}
+                <div class="text-center mb-4">
+                    <i class="fa fa-tags text-primary" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3">Apply Discount</h4>
+                
+                <!-- Invoice Details -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title"><strong>Invoice Details</strong></h6>
+                                <small><strong>Invoice:</strong> {{ invoice.invoice_number }}</small><br>
+                                <small><strong>Student:</strong> {{ invoice.student.get_full_name }}</small><br>
+                                <small><strong>Total:</strong> {{ invoice.total_amount|money }}</small><br>
+                                <small><strong>Balance:</strong> {{ invoice.balance|money }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        {% if discount %}
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title"><strong>Discount Details</strong></h6>
+                                    <small><strong>Name:</strong> {{ discount.name }}</small><br>
+                                    <small><strong>Code:</strong> {{ discount.code }}</small><br>
+                                    <small><strong>Type:</strong> {{ discount.get_discount_type_display }}</small><br>
+                                    <small><strong>Value:</strong> 
+                                        {% if discount.discount_type == 'PERCENTAGE' %}
+                                            {{ discount.discount_value|percentage }}
+                                        {% else %}
+                                            {{ discount.discount_value|money }}
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Discount Selection (if no specific discount provided) -->
+                {% if not discount %}
+                    <div class="mb-3">
+                        <label for="discount_select" class="form-label">
+                            <strong>Select Discount <span class="text-danger">*</span></strong>
+                        </label>
+                        <select class="form-select" id="discount_select" name="discount_id" required>
+                            <option value="">Choose a discount...</option>
+                            {% for avail_discount in available_discounts %}
+                                <option value="{{ avail_discount.pk }}" 
+                                        data-type="{{ avail_discount.discount_type }}"
+                                        data-value="{{ avail_discount.discount_value }}">
+                                    {{ avail_discount.name }} - 
+                                    {% if avail_discount.discount_type == 'PERCENTAGE' %}
+                                        {{ avail_discount.discount_value }}%
+                                    {% else %}
+                                        {{ avail_discount.discount_value|money }}
+                                    {% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+                
+                <!-- Discount Amount Preview -->
+                {% if discount_amount %}
+                    <div class="alert alert-success">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <strong>Discount Amount:</strong>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <h4 class="mb-0 text-success">{{ discount_amount|money }}</h4>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <strong>New Balance:</strong>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <h4 class="mb-0 text-primary">{{ invoice.balance|subtract_money:discount_amount }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Notes -->
+                <div class="mb-3">
+                    <label for="discount_notes" class="form-label">
+                        <strong>Notes</strong>
+                    </label>
+                    <textarea class="form-control" 
+                              id="discount_notes" 
+                              name="notes" 
+                              rows="2"
+                              placeholder="Optional notes about this discount application..."></textarea>
+                </div>
+                
+                {% if warnings %}
+                    <div class="alert alert-warning">
+                        <strong><i class="fa fa-exclamation-circle me-2"></i>Warnings:</strong>
+                        {% for warning in warnings %}
+                            <div class="mt-2">{{ warning }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Apply Discount</h4>
+                <div class="alert alert-danger">
+                    <strong><i class="fa fa-exclamation-circle me-2"></i>Issues:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for warning in warnings %}
+                            <li>{{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+        {% if can_apply %}
+            <form hx-post="{% url 'fees:discount_apply' invoice.pk %}"
+                  hx-target="#invoice-list"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                {% if discount %}
+                    <input type="hidden" name="discount_id" value="{{ discount.pk }}">
+                {% else %}
+                    <input type="hidden" name="discount_id" id="hidden_discount_id">
+                {% endif %}
+                <input type="hidden" name="notes" id="hidden_discount_notes">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary" onclick="
+                        {% if not discount %}
+                        document.getElementById('hidden_discount_id').value = document.getElementById('discount_select').value;
+                        {% endif %}
+                        document.getElementById('hidden_discount_notes').value = document.getElementById('discount_notes').value;
+                    ">
+                        <i class="fa fa-tags me-1"></i>Apply Discount
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

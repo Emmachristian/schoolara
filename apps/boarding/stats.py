@@ -2,8 +2,14 @@
 
 from django.db.models import Count, Avg, Q, Max, Min, Sum, F
 from django.db.models.functions import TruncMonth
-from django.utils import timezone
-from datetime import date, timedelta
+from datetime import timedelta
+
+# Import centralized utilities
+from core.utils import (
+    get_school_today,
+    get_school_current_time,
+    get_active_academic_session,
+)
 
 # =============================================================================
 # BOARDING STATISTICS UTILITIES
@@ -249,7 +255,9 @@ def get_boarding_enrollment_trends(months=6):
     """
     from .models import BoardingEnrollment
     
-    start_date = timezone.now() - timedelta(days=months * 30)
+    # Use school timezone for date calculations
+    today = get_school_today()
+    start_date = today - timedelta(days=months * 30)
     
     trends = BoardingEnrollment.objects.filter(
         enrollment_date__gte=start_date
@@ -296,21 +304,32 @@ def get_dormitory_gender_distribution(dormitory_id):
     }
 
 
-def get_boarding_statistics_by_session(academic_session_id):
+def get_boarding_statistics_by_session(academic_session=None):
     """
     Get boarding statistics for a specific academic session
     
     Args:
-        academic_session_id (int): ID of the academic session
+        academic_session: AcademicSession instance or ID (defaults to current session)
         
     Returns:
         dict: Dictionary containing session-specific boarding statistics
     """
     from .models import BoardingEnrollment
     
-    enrollments = BoardingEnrollment.objects.filter(
-        academic_session_id=academic_session_id
-    )
+    # Default to current session if not provided
+    if academic_session is None:
+        academic_session = get_active_academic_session()
+        if academic_session is None:
+            return {
+                'error': 'No academic session provided and no active session found',
+                'total_enrollments': 0,
+            }
+    
+    # Get enrollments for the session
+    if hasattr(academic_session, 'id'):
+        enrollments = BoardingEnrollment.objects.filter(academic_session=academic_session)
+    else:
+        enrollments = BoardingEnrollment.objects.filter(academic_session_id=academic_session)
     
     active_enrollments = enrollments.filter(status='ACTIVE')
     
@@ -339,14 +358,15 @@ def get_boarding_statistics_by_session(academic_session_id):
 
 def get_dormitories_needing_maintenance():
     """
-    Get list of dormitories that need maintenance
+    Get list of dormitories that need maintenance (using school timezone)
     
     Returns:
         QuerySet: Dormitories with maintenance due or in poor condition
     """
     from .models import Dormitory
     
-    today = timezone.now().date()
+    # Use school timezone to determine "today"
+    today = get_school_today()
     
     return Dormitory.objects.filter(
         Q(next_maintenance_due__lte=today) |
@@ -459,4 +479,155 @@ def get_boarding_consent_status():
         'without_consent': without_consent,
         'total_active': total,
         'consent_rate': round(consent_rate, 1),
+    }
+
+
+def get_boarding_enrollment_by_date_range(start_date=None, end_date=None):
+    """
+    Get boarding enrollments within a date range
+    
+    Args:
+        start_date: Start date (defaults to 30 days ago)
+        end_date: End date (defaults to today)
+        
+    Returns:
+        QuerySet: Enrollments within the date range
+    """
+    from .models import BoardingEnrollment
+    
+    # Use school timezone for date calculations
+    if end_date is None:
+        end_date = get_school_today()
+    
+    if start_date is None:
+        start_date = end_date - timedelta(days=30)
+    
+    return BoardingEnrollment.objects.filter(
+        enrollment_date__gte=start_date,
+        enrollment_date__lte=end_date
+    )
+
+
+def get_recent_boarding_enrollments(days=7):
+    """
+    Get recent boarding enrollments
+    
+    Args:
+        days (int): Number of days to look back (default: 7)
+        
+    Returns:
+        QuerySet: Recent enrollments
+    """
+    from .models import BoardingEnrollment
+    
+    # Use school timezone for date calculations
+    today = get_school_today()
+    cutoff_date = today - timedelta(days=days)
+    
+    return BoardingEnrollment.objects.filter(
+        enrollment_date__gte=cutoff_date
+    ).order_by('-enrollment_date')
+
+
+def get_expiring_boarding_enrollments(days=30):
+    """
+    Get boarding enrollments expiring soon
+    
+    Args:
+        days (int): Number of days to look ahead (default: 30)
+        
+    Returns:
+        QuerySet: Enrollments expiring within the specified days
+    """
+    from .models import BoardingEnrollment
+    
+    # Use school timezone for date calculations
+    today = get_school_today()
+    future_date = today + timedelta(days=days)
+    
+    return BoardingEnrollment.objects.filter(
+        status='ACTIVE',
+        expected_end_date__gte=today,
+        expected_end_date__lte=future_date
+    ).order_by('expected_end_date')
+
+
+def get_overdue_boarding_enrollments():
+    """
+    Get boarding enrollments that have passed their expected end date but are still active
+    
+    Returns:
+        QuerySet: Overdue enrollments
+    """
+    from .models import BoardingEnrollment
+    
+    # Use school timezone for date calculations
+    today = get_school_today()
+    
+    return BoardingEnrollment.objects.filter(
+        status='ACTIVE',
+        expected_end_date__lt=today
+    ).order_by('expected_end_date')
+
+
+def get_boarding_occupancy_trends(months=6):
+    """
+    Get boarding occupancy trends over specified months
+    
+    Args:
+        months (int): Number of months to analyze (default: 6)
+        
+    Returns:
+        list: List of dictionaries with month and occupancy data
+    """
+    from .models import BoardingEnrollment
+    
+    # Use school timezone for date calculations
+    today = get_school_today()
+    start_date = today - timedelta(days=months * 30)
+    
+    # Get enrollments that were active during this period
+    trends = []
+    
+    for i in range(months):
+        month_date = start_date + timedelta(days=i * 30)
+        
+        # Count enrollments active on this date
+        active_count = BoardingEnrollment.objects.filter(
+            effective_start_date__lte=month_date,
+            status='ACTIVE'
+        ).filter(
+            Q(effective_end_date__gte=month_date) | Q(effective_end_date__isnull=True)
+        ).count()
+        
+        trends.append({
+            'date': month_date,
+            'active_boarders': active_count,
+        })
+    
+    return trends
+
+
+def get_boarding_statistics_summary():
+    """
+    Get a comprehensive summary of all boarding statistics
+    
+    Returns:
+        dict: Dictionary with all key boarding statistics
+    """
+    # Use school timezone for date calculations
+    today = get_school_today()
+    
+    return {
+        'general_stats': get_boarding_statistics(),
+        'dormitory_stats': get_dormitory_statistics(),
+        'active_boarders': get_active_boarders_count(),
+        'pending_approvals': get_pending_approvals_count(),
+        'students_without_boarding': get_students_without_boarding(),
+        'consent_status': get_boarding_consent_status(),
+        'dormitories_needing_maintenance': get_dormitories_needing_maintenance().count(),
+        'recent_enrollments_7days': get_recent_boarding_enrollments(7).count(),
+        'expiring_enrollments_30days': get_expiring_boarding_enrollments(30).count(),
+        'overdue_enrollments': get_overdue_boarding_enrollments().count(),
+        'current_date': today,
     }

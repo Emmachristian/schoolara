@@ -1,0 +1,974 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .form-section-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .form-section-header i {
+        font-size: 1.5rem;
+        color: #007bff;
+        margin-right: 12px;
+    }
+    
+    .form-section-header h5 {
+        margin: 0;
+        color: #495057;
+        font-weight: 600;
+    }
+    
+    .form-section-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+        padding: 12px;
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+        border-radius: 4px;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .form-help-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .conditional-field {
+        display: none;
+        margin-top: 15px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-left: 3px solid #17a2b8;
+        border-radius: 4px;
+    }
+    
+    .conditional-field.show {
+        display: block;
+    }
+    
+    .staff-highlight-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 25px;
+    }
+    
+    .staff-highlight-card h4 {
+        color: white;
+        font-weight: 700;
+        margin-bottom: 15px;
+    }
+    
+    .staff-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+    }
+    
+    .staff-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .staff-info-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-bottom: 3px;
+    }
+    
+    .staff-info-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    
+    .select2-container {
+        width: 100% !important;
+    }
+    
+    .errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 5px 0 0 0;
+    }
+    
+    .errorlist li {
+        color: #dc3545;
+        font-size: 0.875rem;
+        padding: 5px 10px;
+        background-color: #f8d7da;
+        border-radius: 4px;
+        margin-top: 5px;
+    }
+    
+    .field-with-icon {
+        position: relative;
+    }
+    
+    .field-with-icon i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .field-with-icon input,
+    .field-with-icon select {
+        padding-left: 38px;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+    }
+    
+    .sidebar-sticky {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    
+    .sidebar-sticky::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .sidebar-sticky::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .sidebar-sticky::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 4px;
+    }
+    
+    .sidebar-sticky::-webkit-scrollbar-thumb:hover {
+        background: #999;
+    }
+    
+    .info-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .info-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .alert-info-custom {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+        border-left: 4px solid #17a2b8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-file icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ title|default:"Create Contract" }}
+                <div class="page-title-subheading">
+                    {% if contract %}
+                        Update employment contract details and terms
+                    {% else %}
+                        Create a new employment contract for a staff member
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            {% if contract %}
+                <a href="{% url 'hr:contract_detail' contract.pk %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to Detail
+                </a>
+            {% else %}
+                <a href="{% url 'hr:contract_list' %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to List
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Form Errors -->
+{% if form.non_field_errors %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Form Errors</h5>
+    <ul class="mb-0">
+        {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<form method="post" id="contract-form" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            
+            <!-- Staff & Basic Info -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-user"></i>
+                    <h5>Staff & Basic Information</h5>
+                </div>
+                
+                {% if contract %}
+                <!-- Pre-filled for existing contract -->
+                <div class="staff-highlight-card">
+                    <h4><i class="fa fa-user"></i> {{ contract.staff.full_name }}</h4>
+                    <div class="staff-info-grid">
+                        <div class="staff-info-item">
+                            <span class="staff-info-label">Staff ID</span>
+                            <span class="staff-info-value">{{ contract.staff.staff_id }}</span>
+                        </div>
+                        <div class="staff-info-item">
+                            <span class="staff-info-label">Department</span>
+                            <span class="staff-info-value">{{ contract.staff.primary_department|default:"Not Assigned" }}</span>
+                        </div>
+                        <div class="staff-info-item">
+                            <span class="staff-info-label">Contract Number</span>
+                            <span class="staff-info-value">{{ contract.contract_number }}</span>
+                        </div>
+                        <div class="staff-info-item">
+                            <span class="staff-info-label">Status</span>
+                            <span class="staff-info-value">{{ contract.get_status_display }}</span>
+                        </div>
+                    </div>
+                </div>
+                {{ form.staff.as_hidden }}
+                {{ form.contract_number.as_hidden }}
+                {% else %}
+                <!-- Staff selection for new contract -->
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="{{ form.staff.id_for_label }}" class="form-label required-field">
+                            {{ form.staff.label }}
+                        </label>
+                        {% render_field form.staff class="form-select select2-single" %}
+                        {% if form.staff.help_text %}
+                            <small class="form-help-text">{{ form.staff.help_text }}</small>
+                        {% endif %}
+                        {{ form.staff.errors }}
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.contract_number.id_for_label }}" class="form-label">
+                            {{ form.contract_number.label }}
+                        </label>
+                        {% render_field form.contract_number %}
+                        <small class="form-help-text">Auto-generated</small>
+                        {{ form.contract_number.errors }}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.contract_type.id_for_label }}" class="form-label required-field">
+                            {{ form.contract_type.label }}
+                        </label>
+                        {% render_field form.contract_type id="id_contract_type" %}
+                        {% if form.contract_type.help_text %}
+                            <small class="form-help-text">{{ form.contract_type.help_text }}</small>
+                        {% endif %}
+                        {{ form.contract_type.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">
+                            {{ form.status.label }}
+                        </label>
+                        {% render_field form.status %}
+                        {% if form.status.help_text %}
+                            <small class="form-help-text">{{ form.status.help_text }}</small>
+                        {% endif %}
+                        {{ form.status.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.job_title.id_for_label }}" class="form-label required-field">
+                            {{ form.job_title.label }}
+                        </label>
+                        {% render_field form.job_title %}
+                        {% if form.job_title.help_text %}
+                            <small class="form-help-text">{{ form.job_title.help_text }}</small>
+                        {% endif %}
+                        {{ form.job_title.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.job_description.id_for_label }}" class="form-label">
+                            {{ form.job_description.label }}
+                        </label>
+                        {% render_field form.job_description %}
+                        {% if form.job_description.help_text %}
+                            <small class="form-help-text">{{ form.job_description.help_text }}</small>
+                        {% endif %}
+                        {{ form.job_description.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.reporting_to_id.id_for_label }}" class="form-label">
+                            {{ form.reporting_to_id.label }}
+                        </label>
+                        {% render_field form.reporting_to_id %}
+                        <small class="form-help-text">Staff ID of supervisor/manager</small>
+                        {{ form.reporting_to_id.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contract Period -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-date"></i>
+                    <h5>Contract Period</h5>
+                </div>
+                
+                <div class="form-section-description">
+                    <i class="fa fa-info-circle"></i>
+                    Define the validity period of this employment contract
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.start_date.id_for_label }}" class="form-label required-field">
+                            {{ form.start_date.label }}
+                        </label>
+                        {% render_field form.start_date %}
+                        {% if form.start_date.help_text %}
+                            <small class="form-help-text">{{ form.start_date.help_text }}</small>
+                        {% endif %}
+                        {{ form.start_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3" id="end-date-field">
+                        <label for="{{ form.end_date.id_for_label }}" class="form-label">
+                            {{ form.end_date.label }}
+                        </label>
+                        {% render_field form.end_date %}
+                        <small class="form-help-text">
+                            Leave blank for permanent contracts
+                        </small>
+                        {{ form.end_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.signed_date.id_for_label }}" class="form-label">
+                            {{ form.signed_date.label }}
+                        </label>
+                        {% render_field form.signed_date %}
+                        {% if form.signed_date.help_text %}
+                            <small class="form-help-text">{{ form.signed_date.help_text }}</small>
+                        {% endif %}
+                        {{ form.signed_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.probation_period_months.id_for_label }}" class="form-label">
+                            {{ form.probation_period_months.label }}
+                        </label>
+                        {% render_field form.probation_period_months %}
+                        {% if form.probation_period_months.help_text %}
+                            <small class="form-help-text">{{ form.probation_period_months.help_text }}</small>
+                        {% endif %}
+                        {{ form.probation_period_months.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Compensation & Work Terms -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-cash"></i>
+                    <h5>Compensation & Work Terms</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.basic_salary.id_for_label }}" class="form-label required-field">
+                            {{ form.basic_salary.label }}
+                        </label>
+                        <div class="field-with-icon">
+                            <i class="fa fa-money-bill-wave"></i>
+                            {% render_field form.basic_salary id="id_basic_salary" %}
+                        </div>
+                        {% if form.basic_salary.help_text %}
+                            <small class="form-help-text">{{ form.basic_salary.help_text }}</small>
+                        {% endif %}
+                        {{ form.basic_salary.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.salary_frequency.id_for_label }}" class="form-label">
+                            {{ form.salary_frequency.label }}
+                        </label>
+                        {% render_field form.salary_frequency %}
+                        {% if form.salary_frequency.help_text %}
+                            <small class="form-help-text">{{ form.salary_frequency.help_text }}</small>
+                        {% endif %}
+                        {{ form.salary_frequency.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.working_hours_per_week.id_for_label }}" class="form-label">
+                            {{ form.working_hours_per_week.label }}
+                        </label>
+                        {% render_field form.working_hours_per_week %}
+                        {% if form.working_hours_per_week.help_text %}
+                            <small class="form-help-text">{{ form.working_hours_per_week.help_text }}</small>
+                        {% endif %}
+                        {{ form.working_hours_per_week.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.annual_leave_days.id_for_label }}" class="form-label">
+                            {{ form.annual_leave_days.label }}
+                        </label>
+                        {% render_field form.annual_leave_days %}
+                        {% if form.annual_leave_days.help_text %}
+                            <small class="form-help-text">{{ form.annual_leave_days.help_text }}</small>
+                        {% endif %}
+                        {{ form.annual_leave_days.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.benefits_package.id_for_label }}" class="form-label">
+                            {{ form.benefits_package.label }}
+                        </label>
+                        {% render_field form.benefits_package %}
+                        <small class="form-help-text">
+                            JSON format: {"health_insurance": true, "housing": 500000, "transport": 200000}
+                        </small>
+                        {{ form.benefits_package.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Renewal Settings -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-refresh-2"></i>
+                    <h5>Renewal Settings</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="form-check form-switch">
+                            {% render_field form.auto_renew class="form-check-input" id="id_auto_renew" role="switch" %}
+                            <label class="form-check-label" for="id_auto_renew">
+                                {{ form.auto_renew.label }}
+                            </label>
+                        </div>
+                        {% if form.auto_renew.help_text %}
+                            <small class="form-help-text">{{ form.auto_renew.help_text }}</small>
+                        {% endif %}
+                        {{ form.auto_renew.errors }}
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="form-check form-switch">
+                            {% render_field form.requires_renewal_approval class="form-check-input" id="id_requires_renewal_approval" role="switch" %}
+                            <label class="form-check-label" for="id_requires_renewal_approval">
+                                {{ form.requires_renewal_approval.label }}
+                            </label>
+                        </div>
+                        {% if form.requires_renewal_approval.help_text %}
+                            <small class="form-help-text">{{ form.requires_renewal_approval.help_text }}</small>
+                        {% endif %}
+                        {{ form.requires_renewal_approval.errors }}
+                    </div>
+                    
+                    <div class="col-md-4 mb-3" id="renewal-period-field" style="display: none;">
+                        <label for="{{ form.renewal_period_months.id_for_label }}" class="form-label">
+                            {{ form.renewal_period_months.label }}
+                        </label>
+                        {% render_field form.renewal_period_months %}
+                        {% if form.renewal_period_months.help_text %}
+                            <small class="form-help-text">{{ form.renewal_period_months.help_text }}</small>
+                        {% endif %}
+                        {{ form.renewal_period_months.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.renewal_due_date.id_for_label }}" class="form-label">
+                            {{ form.renewal_due_date.label }}
+                        </label>
+                        {% render_field form.renewal_due_date %}
+                        {% if form.renewal_due_date.help_text %}
+                            <small class="form-help-text">{{ form.renewal_due_date.help_text }}</small>
+                        {% endif %}
+                        {{ form.renewal_due_date.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Termination Settings (Conditional) -->
+            <div class="form-section" id="termination-section" style="display: none;">
+                <div class="form-section-header">
+                    <i class="pe-7s-close-circle"></i>
+                    <h5>Termination Details</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.termination_date.id_for_label }}" class="form-label">
+                            {{ form.termination_date.label }}
+                        </label>
+                        {% render_field form.termination_date %}
+                        {% if form.termination_date.help_text %}
+                            <small class="form-help-text">{{ form.termination_date.help_text }}</small>
+                        {% endif %}
+                        {{ form.termination_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.termination_reason.id_for_label }}" class="form-label">
+                            {{ form.termination_reason.label }}
+                        </label>
+                        {% render_field form.termination_reason %}
+                        {% if form.termination_reason.help_text %}
+                            <small class="form-help-text">{{ form.termination_reason.help_text }}</small>
+                        {% endif %}
+                        {{ form.termination_reason.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.termination_notice_period_days.id_for_label }}" class="form-label">
+                            {{ form.termination_notice_period_days.label }}
+                        </label>
+                        {% render_field form.termination_notice_period_days %}
+                        {% if form.termination_notice_period_days.help_text %}
+                            <small class="form-help-text">{{ form.termination_notice_period_days.help_text }}</small>
+                        {% endif %}
+                        {{ form.termination_notice_period_days.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.termination_notes.id_for_label }}" class="form-label">
+                            {{ form.termination_notes.label }}
+                        </label>
+                        {% render_field form.termination_notes %}
+                        {% if form.termination_notes.help_text %}
+                            <small class="form-help-text">{{ form.termination_notes.help_text }}</small>
+                        {% endif %}
+                        {{ form.termination_notes.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Additional Information -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-note2"></i>
+                    <h5>Additional Information</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.special_terms.id_for_label }}" class="form-label">
+                            {{ form.special_terms.label }}
+                        </label>
+                        {% render_field form.special_terms %}
+                        <small class="form-help-text">
+                            Special terms and conditions specific to this contract
+                        </small>
+                        {{ form.special_terms.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">
+                            {{ form.notes.label }}
+                        </label>
+                        {% render_field form.notes %}
+                        <small class="form-help-text">
+                            Internal notes (not visible on contract document)
+                        </small>
+                        {{ form.notes.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.contract_document.id_for_label }}" class="form-label">
+                            {{ form.contract_document.label }}
+                        </label>
+                        {% render_field form.contract_document %}
+                        {% if contract and contract.contract_document %}
+                            <small class="form-help-text">
+                                Current file: <a href="{{ contract.contract_document.url }}" target="_blank">{{ contract.contract_document.name }}</a>
+                            </small>
+                        {% endif %}
+                        {{ form.contract_document.errors }}
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Right Column - Guidelines & Information -->
+        <div class="col-lg-4">
+            
+            <!-- Sticky Sidebar Container -->
+            <div class="sidebar-sticky">
+                
+                <!-- Contract Type Guide -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-light"></i> Contract Types</h6>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <strong>PERMANENT:</strong> Indefinite employment with no end date
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <strong>FIXED_TERM:</strong> Employment for a specific period
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <strong>PROBATION:</strong> Trial period before permanent employment
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <strong>TEMPORARY:</strong> Short-term or project-based employment
+                    </div>
+                    
+                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
+                        <strong>PART_TIME:</strong> Less than full-time hours
+                    </div>
+                </div>
+                
+                {% if contract %}
+                <!-- Current Contract Statistics -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-graph"></i> Contract Statistics</h6>
+                    
+                    <div class="alert alert-info-custom mb-2">
+                        <strong>Contract Number:</strong><br>
+                        {{ contract.contract_number }}
+                    </div>
+                    
+                    <div class="alert alert-info-custom mb-2">
+                        <strong>Status:</strong><br>
+                        {{ contract.get_status_display }}
+                    </div>
+                    
+                    {% if contract.approved_at %}
+                        <div class="alert alert-info-custom mb-2">
+                            <strong>Approved:</strong><br>
+                            {{ contract.approved_at|date:"M d, Y" }}
+                        </div>
+                    {% endif %}
+                    
+                    {% if contract.signed_date %}
+                        <div class="alert alert-info-custom mb-0">
+                            <strong>Signed:</strong><br>
+                            {{ contract.signed_date|date:"M d, Y" }}
+                        </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Quick Tips -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-help1"></i> Quick Tips</h6>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Permanent contracts don't require an end date
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Basic salary is required for all contracts
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Salary frequency determines payment schedule
+                    </div>
+                    
+                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Upload signed contract document for records
+                    </div>
+                </div>
+                
+                <!-- Important Notes -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-attention"></i> Important Notes</h6>
+                    
+                    <ul style="font-size: 0.85rem; color: #6c757d;">
+                        <li class="mb-2">Contract becomes active only after approval and signing</li>
+                        <li class="mb-2">Fixed-term contracts must have an end date</li>
+                        <li class="mb-2">Permanent contracts should not have an end date</li>
+                        <li class="mb-0">Contract terms are legally binding once signed</li>
+                    </ul>
+                </div>
+                
+            </div>
+            <!-- End Sticky Sidebar Container -->
+            
+        </div>
+    </div>
+    
+    <!-- Form Actions -->
+    <div class="form-actions">
+        {% if contract %}
+            <a href="{% url 'hr:contract_detail' contract.pk %}" class="btn btn-secondary btn-lg">
+                <i class="fa fa-times"></i> Cancel
+            </a>
+        {% else %}
+            <a href="{% url 'hr:contract_list' %}" class="btn btn-secondary btn-lg">
+                <i class="fa fa-times"></i> Cancel
+            </a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fa fa-save"></i> {% if contract %}Update Contract{% else %}Create Contract{% endif %}
+        </button>
+    </div>
+    
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Select2 for Select Fields -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('='.repeat(80));
+    console.log('CONTRACT FORM INITIALIZATION');
+    console.log('='.repeat(80));
+    
+    // =========================================================================
+    // SELECT2 INITIALIZATION
+    // =========================================================================
+    
+    $('.select2-single').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select...',
+        allowClear: true
+    });
+    
+    console.log('✓ Select2 initialized');
+    
+    // =========================================================================
+    // CONTRACT TYPE LOGIC
+    // =========================================================================
+    
+    function updateContractTypeFields() {
+        const contractType = $('#id_contract_type').val();
+        
+        if (contractType === 'PERMANENT') {
+            $('#end-date-field').hide();
+            $('#id_end_date').val('');
+        } else {
+            $('#end-date-field').show();
+        }
+    }
+    
+    $('#id_contract_type').on('change', updateContractTypeFields);
+    updateContractTypeFields();
+    
+    // =========================================================================
+    // STATUS LOGIC - Show/Hide Termination Section
+    // =========================================================================
+    
+    function updateStatusFields() {
+        const status = $('#id_status').val();
+        
+        if (status === 'TERMINATED') {
+            $('#termination-section').slideDown();
+        } else {
+            $('#termination-section').slideUp();
+        }
+    }
+    
+    $('#id_status').on('change', updateStatusFields);
+    updateStatusFields();
+    
+    // =========================================================================
+    // AUTO RENEWAL LOGIC
+    // =========================================================================
+    
+    function updateRenewalFields() {
+        if ($('#id_auto_renew').is(':checked')) {
+            $('#renewal-period-field').slideDown();
+        } else {
+            $('#renewal-period-field').slideUp();
+        }
+    }
+    
+    $('#id_auto_renew').on('change', updateRenewalFields);
+    updateRenewalFields();
+    
+    // =========================================================================
+    // FORM VALIDATION
+    // =========================================================================
+    
+    $('#contract-form').on('submit', function(e) {
+        console.log('Form submission started');
+        
+        let isValid = true;
+        const errors = [];
+        
+        // Required fields
+        const requiredFields = {
+            {% if not contract %}
+            'staff': 'Staff Member',
+            {% endif %}
+            'contract_type': 'Contract Type',
+            'start_date': 'Start Date',
+            'job_title': 'Job Title',
+            'basic_salary': 'Basic Salary'
+        };
+        
+        $.each(requiredFields, function(fieldId, fieldLabel) {
+            const value = $('[name="' + fieldId + '"]').val();
+            if (!value || value.length === 0) {
+                errors.push(fieldLabel + ' is required');
+                isValid = false;
+            }
+        });
+        
+        // Validate salary
+        const basicSalary = parseFloat($('#id_basic_salary').val()) || 0;
+        
+        if (basicSalary <= 0) {
+            errors.push('Basic salary must be greater than zero');
+            isValid = false;
+        }
+        
+        // Validate dates
+        const startDate = $('#id_start_date').val();
+        const endDate = $('#id_end_date').val();
+        const contractType = $('#id_contract_type').val();
+        
+        if (endDate && new Date(endDate) < new Date(startDate)) {
+            errors.push('End date cannot be before start date');
+            isValid = false;
+        }
+        
+        // Validate contract type vs end date
+        if (contractType === 'PERMANENT' && endDate) {
+            errors.push('Permanent contracts should not have an end date');
+            isValid = false;
+        }
+        
+        if (contractType && ['FIXED_TERM', 'PROBATION', 'TEMPORARY', 'SEASONAL', 'PROJECT_BASED'].includes(contractType) && !endDate) {
+            errors.push('This contract type requires an end date');
+            isValid = false;
+        }
+        
+        // Validate termination fields
+        const status = $('#id_status').val();
+        if (status === 'TERMINATED') {
+            const terminationDate = $('#id_termination_date').val();
+            const terminationReason = $('#id_termination_reason').val();
+            
+            if (!terminationDate) {
+                errors.push('Termination date is required for terminated contracts');
+                isValid = false;
+            }
+            if (!terminationReason) {
+                errors.push('Termination reason is required for terminated contracts');
+                isValid = false;
+            }
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            console.error('❌ Form validation failed:', errors);
+            
+            // Show errors
+            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
+            errorHtml += '<ul class="mb-0">';
+            errors.forEach(function(error) {
+                errorHtml += '<li>' + error + '</li>';
+            });
+            errorHtml += '</ul>';
+            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            errorHtml += '</div>';
+            
+            // Insert at top of form
+            $('#contract-form').prepend(errorHtml);
+            
+            // Scroll to top
+            $('html, body').animate({
+                scrollTop: 0
+            }, 500);
+            
+            return false;
+        }
+        
+        console.log('✅ Form validation passed');
+        console.log('Submitting contract...');
+    });
+    
+    // =========================================================================
+    // TOOLTIPS
+    // =========================================================================
+    
+    $('[data-bs-toggle="tooltip"]').tooltip();
+    
+    console.log('='.repeat(80));
+    console.log('✅ FORM INITIALIZATION COMPLETE');
+    console.log('='.repeat(80));
+});
+</script>
+{% endblock %}

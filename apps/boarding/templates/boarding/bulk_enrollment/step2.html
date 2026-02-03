@@ -1,0 +1,859 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   WIZARD STYLING
+   ============================================================================ */
+
+.wizard-steps {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.wizard-step {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    max-width: 300px;
+}
+
+.step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.wizard-step.active .step-number {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.wizard-step.completed .step-number {
+    background: #28a745;
+    color: white;
+}
+
+.step-text {
+    flex: 1;
+}
+
+.step-title {
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+}
+
+.step-description {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.wizard-step.active .step-title {
+    color: #667eea;
+}
+
+.wizard-step.completed .step-title {
+    color: #28a745;
+}
+
+.step-connector {
+    height: 2px;
+    flex: 1;
+    background: #e9ecef;
+    margin: 0 15px;
+}
+
+.wizard-step.completed + .step-connector {
+    background: #28a745;
+}
+
+/* ============================================================================
+   FORM CARD STYLING
+   ============================================================================ */
+
+.form-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 30px;
+    margin-bottom: 30px;
+}
+
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+}
+
+.form-section-title i {
+    margin-right: 10px;
+    color: #667eea;
+}
+
+/* ============================================================================
+   INFO BOXES
+   ============================================================================ */
+
+.info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0066cc;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.info-box.warning {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
+
+.info-box.success {
+    background: #d4edda;
+    border-left-color: #28a745;
+}
+
+.info-box i {
+    margin-right: 10px;
+}
+
+/* ============================================================================
+   SELECTED STUDENTS LIST
+   ============================================================================ */
+
+.selected-students-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+.student-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.student-item:last-child {
+    border-bottom: none;
+}
+
+.student-avatar-small {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    margin-right: 12px;
+}
+
+.student-details {
+    flex: 1;
+}
+
+.student-name {
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.student-info {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+/* ============================================================================
+   PREVIEW SECTION
+   ============================================================================ */
+
+.preview-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.preview-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.preview-item:last-child {
+    border-bottom: none;
+}
+
+.preview-label {
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.preview-value {
+    color: #495057;
+    font-size: 0.875rem;
+}
+
+/* ============================================================================
+   FORM STYLING
+   ============================================================================ */
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.form-label.required:after {
+    content: " *";
+    color: #dc3545;
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* ============================================================================
+   BUTTON STYLING
+   ============================================================================ */
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    padding-top: 20px;
+    margin-top: 30px;
+    border-top: 2px solid #e9ecef;
+}
+
+.btn-lg {
+    padding: 12px 30px;
+    font-size: 1rem;
+}
+
+/* ============================================================================
+   STICKY PREVIEW
+   ============================================================================ */
+
+.sticky-preview {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+/* ============================================================================
+   BOARDING DAYS SELECTOR
+   ============================================================================ */
+
+.boarding-days-selector {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    display: none;
+}
+
+.boarding-days-selector.show {
+    display: block;
+}
+
+.boarding-days-selector .form-check {
+    display: inline-block;
+    margin-right: 15px;
+    margin-bottom: 10px;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 992px) {
+    .sticky-preview {
+        position: relative;
+        top: 0;
+    }
+    
+    .form-card {
+        padding: 20px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-home icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Bulk Boarding Enrollment - Configure & Confirm
+                <div class="page-title-subheading">
+                    Step 2 of 2: Set boarding enrollment details and confirm
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="javascript:history.back()" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i> Back to Selection
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Wizard Progress -->
+<div class="wizard-steps">
+    <div class="wizard-step completed">
+        <div class="step-number"><i class="fa fa-check"></i></div>
+        <div class="step-text">
+            <div class="step-title">Select Students</div>
+            <div class="step-description">{{ student_count }} student(s) selected</div>
+        </div>
+    </div>
+    <div class="step-connector" style="background: #28a745;"></div>
+    <div class="wizard-step active">
+        <div class="step-number">2</div>
+        <div class="step-text">
+            <div class="step-title">Configure & Confirm</div>
+            <div class="step-description">Set boarding details</div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-8">
+            
+            <!-- Success Info Box -->
+            <div class="info-box success">
+                <i class="fa fa-check-circle"></i>
+                <strong>Students Selected:</strong> 
+                You have selected {{ student_count }} student(s) for boarding enrollment. 
+                Configure the boarding details below and confirm to complete the process.
+            </div>
+            
+            <!-- Warning Box -->
+            <div class="info-box warning">
+                <i class="fa fa-exclamation-triangle"></i>
+                <strong>Important:</strong> 
+                These settings will be applied to ALL selected students. 
+                Individual enrollments can be edited after creation if needed.
+            </div>
+
+            <!-- Form Card -->
+            <div class="form-card">
+                <form method="post" id="bulkBoardingEnrollmentForm" novalidate>
+                    {% csrf_token %}
+                    
+                    <!-- Hidden field for student IDs -->
+                    {{ form.selected_student_ids }}
+                    
+                    <!-- Boarding Configuration Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-clipboard-list"></i>
+                            Boarding Configuration
+                        </h5>
+                        
+                        <div class="row">
+                            <!-- Academic Session -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.academic_session.id_for_label }}" 
+                                       class="form-label {% if form.academic_session.field.required %}required{% endif %}">
+                                    {{ form.academic_session.label }}
+                                </label>
+                                {{ form.academic_session }}
+                                {% if form.academic_session.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.academic_session.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.academic_session.help_text %}
+                                    <div class="form-text">{{ form.academic_session.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Boarding Type -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.boarding_type.id_for_label }}" 
+                                       class="form-label {% if form.boarding_type.field.required %}required{% endif %}">
+                                    {{ form.boarding_type.label }}
+                                </label>
+                                {{ form.boarding_type }}
+                                {% if form.boarding_type.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.boarding_type.errors|first }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    Full Boarder: 7 days/week | Weekly: Mon-Fri | Flexible: Select days below
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Boarding Days (for Flexible Boarders) -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div id="boarding-days-container" class="boarding-days-selector">
+                                    <label for="{{ form.boarding_days.id_for_label }}" class="form-label">
+                                        <i class="fa fa-calendar-check"></i> {{ form.boarding_days.label }}
+                                    </label>
+                                    <div>
+                                        {% for choice in form.boarding_days %}
+                                            {{ choice }}
+                                        {% endfor %}
+                                    </div>
+                                    <small class="form-text d-block mt-2">Select days for flexible boarding</small>
+                                    {{ form.boarding_days.errors }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Dormitory -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.dormitory.id_for_label }}" 
+                                       class="form-label {% if form.dormitory.field.required %}required{% endif %}">
+                                    {{ form.dormitory.label }}
+                                </label>
+                                {{ form.dormitory }}
+                                {% if form.dormitory.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.dormitory.errors|first }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text" id="dormitoryAvailability">
+                                    Select a dormitory to see availability
+                                </div>
+                            </div>
+                            
+                            <!-- Enrollment Date -->
+                            <div class="col-md-3 mb-3">
+                                <label for="{{ form.enrollment_date.id_for_label }}" 
+                                       class="form-label {% if form.enrollment_date.field.required %}required{% endif %}">
+                                    {{ form.enrollment_date.label }}
+                                </label>
+                                {{ form.enrollment_date }}
+                                {% if form.enrollment_date.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.enrollment_date.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Effective Start Date -->
+                            <div class="col-md-3 mb-3">
+                                <label for="{{ form.effective_start_date.id_for_label }}" 
+                                       class="form-label {% if form.effective_start_date.field.required %}required{% endif %}">
+                                    {{ form.effective_start_date.label }}
+                                </label>
+                                {{ form.effective_start_date }}
+                                {% if form.effective_start_date.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.effective_start_date.errors|first }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">When boarding begins</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Guardian Consent Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-user-check"></i>
+                            Guardian Consent
+                        </h5>
+                        
+                        <div class="alert alert-info">
+                            <i class="fa fa-exclamation-circle me-2"></i>
+                            <strong>Note:</strong> 
+                            Guardian consent will need to be recorded individually for each student after enrollment. 
+                            You can mark if consent has been obtained for all students here.
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check">
+                                    {{ form.require_guardian_consent }}
+                                    <label class="form-check-label" for="{{ form.require_guardian_consent.id_for_label }}">
+                                        <strong>{{ form.require_guardian_consent.label }}</strong>
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    {{ form.require_guardian_consent.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Invoice Settings Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-file-invoice"></i>
+                            Invoice Settings
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check form-switch">
+                                    {{ form.auto_create_invoice }}
+                                    <label class="form-check-label" for="{{ form.auto_create_invoice.id_for_label }}">
+                                        <strong>{{ form.auto_create_invoice.label }}</strong>
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    {{ form.auto_create_invoice.help_text|default:"Boarding fees will be automatically added to student invoices when enrollments are approved" }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Information Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-info-circle"></i>
+                            Additional Information
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="{{ form.reason_for_boarding.id_for_label }}" class="form-label">
+                                    {{ form.reason_for_boarding.label }}
+                                </label>
+                                {{ form.reason_for_boarding }}
+                                <div class="form-text">This reason will be applied to all enrollments</div>
+                                {{ form.reason_for_boarding.errors }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Confirmation Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-check-square"></i>
+                            Confirmation
+                        </h5>
+                        
+                        <div class="alert alert-warning">
+                            <i class="fa fa-exclamation-triangle me-2"></i>
+                            <strong>Please confirm:</strong> 
+                            You are about to enroll {{ student_count }} student(s) in boarding with the settings above. 
+                            Enrollments will be created as PENDING and require approval.
+                        </div>
+                    </div>
+                    
+                    <!-- Form Errors -->
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            <strong>Form Errors:</strong>
+                            <ul class="mb-0">
+                                {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <a href="javascript:history.back()" class="btn btn-secondary btn-lg">
+                            <i class="fa fa-arrow-left me-1"></i> Back to Step 1
+                        </a>
+                        <button type="submit" class="btn btn-success btn-lg" id="submitBtn">
+                            <i class="fa fa-check me-1"></i> Complete Enrollment ({{ student_count }} Students)
+                        </button>
+                    </div>
+                    
+                </form>
+            </div>
+            
+        </div>
+        
+        <!-- Preview Panel -->
+        <div class="col-lg-4">
+            <!-- Selected Students Card -->
+            <div class="main-card mb-3 card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fa fa-users me-2"></i>Selected Students ({{ student_count }})
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="selected-students-card" style="max-height: 400px; overflow-y: auto;">
+                        {% for student in selected_students %}
+                        <div class="student-item">
+                            <div class="student-avatar-small">
+                                {{ student.first_name|slice:":1" }}{{ student.last_name|slice:":1" }}
+                            </div>
+                            <div class="student-details">
+                                <p class="student-name">{{ student.get_full_name }}</p>
+                                <p class="student-info">
+                                    <i class="fa fa-id-card me-1"></i>{{ student.admission_number }}
+                                    {% if student.gender %}
+                                        | {% if student.gender == 'M' %}<i class="fa fa-mars text-primary"></i>{% else %}<i class="fa fa-venus text-danger"></i>{% endif %}
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Enrollment Preview Card -->
+            <div class="main-card mb-3 card sticky-preview">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fa fa-eye me-2"></i>Enrollment Preview
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="preview-section" id="enrollmentPreview">
+                        <div class="preview-item">
+                            <span class="preview-label">Session:</span>
+                            <span class="preview-value" id="previewSession">Not selected</span>
+                        </div>
+                        
+                        <div class="preview-item">
+                            <span class="preview-label">Boarding Type:</span>
+                            <span class="preview-value" id="previewBoardingType">Not selected</span>
+                        </div>
+                        
+                        <div class="preview-item">
+                            <span class="preview-label">Dormitory:</span>
+                            <span class="preview-value" id="previewDormitory">Not selected</span>
+                        </div>
+                        
+                        <div class="preview-item">
+                            <span class="preview-label">Enrollment Date:</span>
+                            <span class="preview-value" id="previewDate">Not set</span>
+                        </div>
+                        
+                        <div class="preview-item">
+                            <span class="preview-label">Auto-create Invoice:</span>
+                            <span class="preview-value" id="previewInvoice">
+                                <span class="badge bg-success">Yes</span>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Summary -->
+                    <div class="mt-3">
+                        <h6><i class="fa fa-info-circle me-2"></i>Summary</h6>
+                        <ul class="list-unstyled small">
+                            <li><strong>Students:</strong> {{ student_count }}</li>
+                            <li><strong>Status:</strong> PENDING (requires approval)</li>
+                            <li><strong>Invoices:</strong> <span id="invoiceNote">Will be created when approved</span></li>
+                        </ul>
+                    </div>
+                    
+                    <!-- What Happens Next -->
+                    <div class="mt-3">
+                        <h6><i class="fa fa-tasks me-2"></i>What Happens Next</h6>
+                        <ul class="list-unstyled small">
+                            <li>✓ Boarding enrollments created as PENDING</li>
+                            <li>✓ Students assigned to dormitory</li>
+                            <li>→ Enrollments need approval</li>
+                            <li>→ Invoices created automatically when approved</li>
+                            <li>→ Guardian consent recorded individually</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// BOARDING TYPE HANDLING
+// ============================================================================
+
+function updateBoardingDaysVisibility() {
+    const boardingTypeSelect = document.getElementById('{{ form.boarding_type.id_for_label }}');
+    const daysContainer = document.getElementById('boarding-days-container');
+    
+    if (boardingTypeSelect && daysContainer) {
+        if (boardingTypeSelect.value === 'FLEXI_BOARDER') {
+            daysContainer.classList.add('show');
+        } else {
+            daysContainer.classList.remove('show');
+        }
+    }
+}
+
+// ============================================================================
+// PREVIEW UPDATE
+// ============================================================================
+
+function updatePreview() {
+    const sessionSelect = document.getElementById('{{ form.academic_session.id_for_label }}');
+    const boardingTypeSelect = document.getElementById('{{ form.boarding_type.id_for_label }}');
+    const dormitorySelect = document.getElementById('{{ form.dormitory.id_for_label }}');
+    const dateInput = document.getElementById('{{ form.enrollment_date.id_for_label }}');
+    const autoInvoiceCheckbox = document.getElementById('{{ form.auto_create_invoice.id_for_label }}');
+    
+    // Update session
+    if (sessionSelect && sessionSelect.selectedIndex > 0) {
+        document.getElementById('previewSession').textContent = 
+            sessionSelect.options[sessionSelect.selectedIndex].text;
+    }
+    
+    // Update boarding type
+    if (boardingTypeSelect && boardingTypeSelect.selectedIndex >= 0) {
+        document.getElementById('previewBoardingType').textContent = 
+            boardingTypeSelect.options[boardingTypeSelect.selectedIndex].text;
+    }
+    
+    // Update dormitory
+    if (dormitorySelect && dormitorySelect.selectedIndex > 0) {
+        document.getElementById('previewDormitory').textContent = 
+            dormitorySelect.options[dormitorySelect.selectedIndex].text;
+    }
+    
+    // Update date
+    if (dateInput && dateInput.value) {
+        const date = new Date(dateInput.value);
+        const options = { year: 'numeric', month: 'short', day: 'numeric' };
+        document.getElementById('previewDate').textContent = 
+            date.toLocaleDateString('en-US', options);
+    }
+    
+    // Update invoice setting
+    if (autoInvoiceCheckbox) {
+        const previewInvoice = document.getElementById('previewInvoice');
+        const invoiceNote = document.getElementById('invoiceNote');
+        
+        if (autoInvoiceCheckbox.checked) {
+            previewInvoice.innerHTML = '<span class="badge bg-success">Yes</span>';
+            invoiceNote.textContent = 'Will be created when approved';
+        } else {
+            previewInvoice.innerHTML = '<span class="badge bg-secondary">No</span>';
+            invoiceNote.textContent = 'Must be created manually';
+        }
+    }
+    
+    // Update boarding days visibility
+    updateBoardingDaysVisibility();
+}
+
+// ============================================================================
+// EVENT LISTENERS
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to all form inputs
+    const formInputs = document.querySelectorAll('#bulkBoardingEnrollmentForm select, #bulkBoardingEnrollmentForm input');
+    formInputs.forEach(input => {
+        input.addEventListener('change', updatePreview);
+        if (input.type !== 'checkbox' && input.tagName !== 'SELECT') {
+            input.addEventListener('input', updatePreview);
+        }
+    });
+    
+    // Boarding type change listener
+    const boardingTypeSelect = document.getElementById('{{ form.boarding_type.id_for_label }}');
+    if (boardingTypeSelect) {
+        boardingTypeSelect.addEventListener('change', updateBoardingDaysVisibility);
+    }
+    
+    // Initial preview update
+    updatePreview();
+});
+
+// ============================================================================
+// FORM VALIDATION
+// ============================================================================
+
+document.getElementById('bulkBoardingEnrollmentForm').addEventListener('submit', function(e) {
+    const boardingType = document.getElementById('{{ form.boarding_type.id_for_label }}').value;
+    
+    // Validate boarding days for flexible boarders
+    if (boardingType === 'FLEXI_BOARDER') {
+        const checkedDays = document.querySelectorAll('#boarding-days-container input[type="checkbox"]:checked').length;
+        
+        if (checkedDays === 0) {
+            e.preventDefault();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Boarding Days Required',
+                    text: 'Please select at least one boarding day for flexible boarders.',
+                    confirmButtonColor: '#ffc107'
+                });
+            } else {
+                alert('Please select at least one boarding day for flexible boarders.');
+            }
+            return false;
+        }
+    }
+    
+    // Show loading state
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Enrolling {{ student_count }} Students...';
+});
+</script>
+{% endblock %}

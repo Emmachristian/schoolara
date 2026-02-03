@@ -1,0 +1,775 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   FORM CARD STYLING
+   ============================================================================ */
+
+.form-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 30px;
+    margin-bottom: 30px;
+}
+
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+}
+
+.form-section-title i {
+    margin-right: 10px;
+    color: #667eea;
+}
+
+/* ============================================================================
+   FORM FIELD STYLING
+   ============================================================================ */
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.form-label.required:after {
+    content: " *";
+    color: #dc3545;
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* ============================================================================
+   INFO BOXES
+   ============================================================================ */
+
+.info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0066cc;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.info-box.warning {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
+
+.info-box i {
+    margin-right: 10px;
+}
+
+/* ============================================================================
+   BUTTON STYLING
+   ============================================================================ */
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 20px;
+    margin-top: 30px;
+    border-top: 2px solid #e9ecef;
+}
+
+.btn-lg {
+    padding: 12px 30px;
+    font-size: 1rem;
+}
+
+/* ============================================================================
+   VALIDATION STYLING
+   ============================================================================ */
+
+.invalid-feedback {
+    display: block;
+    margin-top: 5px;
+}
+
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.is-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+/* Sticky preview panel */
+.sticky-preview {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+@media (max-width: 992px) {
+    .sticky-preview {
+        position: relative;
+        top: 0;
+    }
+    
+    .form-card {
+        padding: 20px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ title|default:"Class Subject Assignment" }}
+                <div class="page-title-subheading">
+                    {% if class_subject %}
+                        Update subject assignment details and configuration
+                    {% else %}
+                        Assign a subject to a class with custom settings
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:class_subject_list' %}" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i> Back to List
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Main Form Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-8">
+            
+            <!-- Information Box -->
+            <div class="info-box">
+                <i class="fa fa-info-circle"></i>
+                <strong>Note:</strong> 
+                {% if class_subject %}
+                    You are editing an existing subject assignment. Changes will affect all related records.
+                {% else %}
+                    You are creating a new subject assignment. Teacher assignment is optional and can be done later.
+                {% endif %}
+            </div>
+
+            <!-- Form Card -->
+            <div class="form-card">
+                <form method="post" id="classSubjectForm" novalidate>
+                    {% csrf_token %}
+                    
+                    <!-- Basic Assignment Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-clipboard-list"></i>
+                            Basic Assignment Details
+                        </h5>
+                        
+                        <div class="row">
+                            <!-- Class Instance -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.class_instance.id_for_label }}" 
+                                       class="form-label {% if form.class_instance.field.required %}required{% endif %}">
+                                    {{ form.class_instance.label }}
+                                </label>
+                                {{ form.class_instance }}
+                                {% if form.class_instance.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.class_instance.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.class_instance.help_text %}
+                                    <div class="form-text">{{ form.class_instance.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Subject -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.subject.id_for_label }}" 
+                                       class="form-label {% if form.subject.field.required %}required{% endif %}">
+                                    {{ form.subject.label }}
+                                </label>
+                                {{ form.subject }}
+                                {% if form.subject.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.subject.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.subject.help_text %}
+                                    <div class="form-text">{{ form.subject.help_text }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Teacher (Optional) -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.teacher.id_for_label }}" class="form-label">
+                                    {{ form.teacher.label }}
+                                    <span class="badge bg-secondary ms-2">Optional</span>
+                                </label>
+                                {{ form.teacher }}
+                                {% if form.teacher.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.teacher.errors|first }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    Teacher can be assigned now or later through bulk assignment
+                                </div>
+                            </div>
+                            
+                            <!-- Is Optional -->
+                            <div class="col-md-3 mb-3">
+                                <label for="{{ form.is_optional.id_for_label }}" class="form-label">
+                                    {{ form.is_optional.label }}
+                                </label>
+                                <div class="form-check form-switch">
+                                    {{ form.is_optional }}
+                                    <label class="form-check-label" for="{{ form.is_optional.id_for_label }}">
+                                        Mark as optional subject
+                                    </label>
+                                </div>
+                                {% if form.is_optional.help_text %}
+                                    <div class="form-text">{{ form.is_optional.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Is Active -->
+                            <div class="col-md-3 mb-3">
+                                <label for="{{ form.is_active.id_for_label }}" class="form-label">
+                                    {{ form.is_active.label }}
+                                </label>
+                                <div class="form-check form-switch">
+                                    {{ form.is_active }}
+                                    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                        Assignment is active
+                                    </label>
+                                </div>
+                                {% if form.is_active.help_text %}
+                                    <div class="form-text">{{ form.is_active.help_text }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Teaching Configuration Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-clock"></i>
+                            Teaching Configuration
+                        </h5>
+                        
+                        <div class="row">
+                            <!-- Hours Per Week -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.hours_per_week.id_for_label }}" 
+                                       class="form-label {% if form.hours_per_week.field.required %}required{% endif %}">
+                                    {{ form.hours_per_week.label }}
+                                </label>
+                                {{ form.hours_per_week }}
+                                {% if form.hours_per_week.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.hours_per_week.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.hours_per_week.help_text %}
+                                    <div class="form-text">{{ form.hours_per_week.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Total Hours -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.total_hours.id_for_label }}" class="form-label">
+                                    {{ form.total_hours.label }}
+                                </label>
+                                {{ form.total_hours }}
+                                {% if form.total_hours.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.total_hours.errors|first }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    Total course hours for the academic session (leave 0 if not applicable)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Assessment Weights Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-balance-scale"></i>
+                            Assessment Configuration
+                        </h5>
+                        
+                        <div class="alert alert-info">
+                            <i class="fa fa-exclamation-circle me-2"></i>
+                            <strong>Important:</strong> Continuous Assessment and Final Exam weights must total exactly 100%
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Continuous Assessment Weight -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.continuous_assessment_weight.id_for_label }}" 
+                                       class="form-label {% if form.continuous_assessment_weight.field.required %}required{% endif %}">
+                                    {{ form.continuous_assessment_weight.label }}
+                                </label>
+                                <div class="input-group">
+                                    {{ form.continuous_assessment_weight }}
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                {% if form.continuous_assessment_weight.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.continuous_assessment_weight.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.continuous_assessment_weight.help_text %}
+                                    <div class="form-text">{{ form.continuous_assessment_weight.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Final Exam Weight -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.final_exam_weight.id_for_label }}" 
+                                       class="form-label {% if form.final_exam_weight.field.required %}required{% endif %}">
+                                    {{ form.final_exam_weight.label }}
+                                </label>
+                                <div class="input-group">
+                                    {{ form.final_exam_weight }}
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                {% if form.final_exam_weight.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.final_exam_weight.errors|first }}
+                                    </div>
+                                {% endif %}
+                                {% if form.final_exam_weight.help_text %}
+                                    <div class="form-text">{{ form.final_exam_weight.help_text }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Weight Total Display -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="alert alert-secondary" id="weightTotal">
+                                    <strong>Total Weight:</strong> 
+                                    <span id="totalWeightValue">100</span>%
+                                    <span id="weightStatus" class="ms-2"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Resources Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-book"></i>
+                            Learning Resources
+                        </h5>
+                        
+                        <div class="row">
+                            <!-- Textbook -->
+                            <div class="col-md-12 mb-3">
+                                <label for="{{ form.textbook.id_for_label }}" class="form-label">
+                                    {{ form.textbook.label }}
+                                </label>
+                                {{ form.textbook }}
+                                {% if form.textbook.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.textbook.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Reference Materials -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.reference_materials.id_for_label }}" class="form-label">
+                                    {{ form.reference_materials.label }}
+                                </label>
+                                {{ form.reference_materials }}
+                                {% if form.reference_materials.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.reference_materials.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Required Equipment -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.required_equipment.id_for_label }}" class="form-label">
+                                    {{ form.required_equipment.label }}
+                                </label>
+                                {{ form.required_equipment }}
+                                {% if form.required_equipment.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.required_equipment.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Academic Content Section -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="fa fa-graduation-cap"></i>
+                            Academic Content
+                        </h5>
+                        
+                        <div class="row">
+                            <!-- Syllabus -->
+                            <div class="col-md-12 mb-3">
+                                <label for="{{ form.syllabus.id_for_label }}" class="form-label">
+                                    {{ form.syllabus.label }}
+                                </label>
+                                {{ form.syllabus }}
+                                {% if form.syllabus.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.syllabus.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Learning Objectives -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.learning_objectives.id_for_label }}" class="form-label">
+                                    {{ form.learning_objectives.label }}
+                                </label>
+                                {{ form.learning_objectives }}
+                                {% if form.learning_objectives.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.learning_objectives.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Assessment Criteria -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.assessment_criteria.id_for_label }}" class="form-label">
+                                    {{ form.assessment_criteria.label }}
+                                </label>
+                                {{ form.assessment_criteria }}
+                                {% if form.assessment_criteria.errors %}
+                                    <div class="invalid-feedback">
+                                        {{ form.assessment_criteria.errors|first }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Errors -->
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            <strong>Form Errors:</strong>
+                            <ul class="mb-0">
+                                {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <a href="{% url 'academics:class_subject_list' %}" class="btn btn-secondary btn-lg">
+                            <i class="fa fa-times me-1"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fa fa-save me-1"></i> {{ submit_text|default:"Save Assignment" }}
+                        </button>
+                    </div>
+                    
+                </form>
+            </div>
+            
+        </div>
+        
+        <!-- Preview Panel -->
+        <div class="col-lg-4">
+            <div class="main-card mb-3 card sticky-preview">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fa fa-eye me-2"></i>Assignment Preview
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="level-type-preview" id="assignmentPreview">
+                        <div class="text-center mb-3">
+                            <i class="pe-7s-study" style="font-size: 3rem; color: #667eea;"></i>
+                        </div>
+                        <h6 id="previewSubject" class="mb-2">
+                            {% if class_subject %}{{ class_subject.subject.name }}{% else %}Select Subject{% endif %}
+                        </h6>
+                        <p id="previewClass" class="text-muted mb-3">
+                            {% if class_subject %}{{ class_subject.class_instance }}{% else %}Select Class{% endif %}
+                        </p>
+                        
+                        <!-- Teacher Info -->
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1">Teacher:</small>
+                            <div id="previewTeacher" class="teacher-badge {% if not class_subject.teacher %}unassigned{% endif %}">
+                                <i class="fa fa-user me-1"></i>
+                                {% if class_subject and class_subject.teacher %}
+                                    {{ class_subject.teacher.staff.full_name }}
+                                {% else %}
+                                    Unassigned
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Hours & Type -->
+                        <div class="row text-center mb-3">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Hours/Week</small>
+                                <strong id="previewHours">
+                                    {% if class_subject %}{{ class_subject.hours_per_week }}{% else %}3{% endif %}
+                                </strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Type</small>
+                                <span id="previewType" class="status-badge {% if class_subject.is_optional %}optional{% else %}compulsory{% endif %}">
+                                    {% if class_subject and class_subject.is_optional %}Optional{% else %}Compulsory{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Assessment Weights -->
+                        <div class="preview-item">
+                            <span class="preview-label">CA Weight:</span>
+                            <span class="preview-value"><strong id="previewCA">
+                                {% if class_subject %}{{ class_subject.continuous_assessment_weight }}{% else %}40{% endif %}
+                            </strong>%</span>
+                        </div>
+                        <div class="preview-item">
+                            <span class="preview-label">Exam Weight:</span>
+                            <span class="preview-value"><strong id="previewExam">
+                                {% if class_subject %}{{ class_subject.final_exam_weight }}{% else %}60{% endif %}
+                            </strong>%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Info -->
+                    <div class="mt-3">
+                        <h6><i class="fa fa-info-circle me-2"></i>Quick Guide</h6>
+                        <ul class="list-unstyled small">
+                            <li><strong>Teacher:</strong> Can be assigned now or later</li>
+                            <li><strong>Weights:</strong> Must total exactly 100%</li>
+                            <li><strong>Optional:</strong> Marks if subject is not compulsory</li>
+                            <li><strong>Resources:</strong> Textbooks and materials are optional</li>
+                        </ul>
+                    </div>
+
+                    {% if class_subject %}
+                    <!-- Current Values -->
+                    <div class="mt-3">
+                        <h6><i class="fa fa-tags me-2"></i>Current Settings</h6>
+                        <ul class="list-unstyled small">
+                            <li><strong>Hours/Week:</strong> {{ class_subject.hours_per_week }}</li>
+                            <li><strong>Total Hours:</strong> {{ class_subject.total_hours|default:"Not set" }}</li>
+                            <li><strong>Active:</strong> {% if class_subject.is_active %}Yes{% else %}No{% endif %}</li>
+                            <li><strong>Textbook:</strong> {{ class_subject.textbook|default:"Not specified" }}</li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// WEIGHT CALCULATION
+// ============================================================================
+
+function updateWeightTotal() {
+    const caWeight = parseFloat(document.getElementById('{{ form.continuous_assessment_weight.id_for_label }}').value) || 0;
+    const examWeight = parseFloat(document.getElementById('{{ form.final_exam_weight.id_for_label }}').value) || 0;
+    const total = caWeight + examWeight;
+    
+    const totalElement = document.getElementById('totalWeightValue');
+    const statusElement = document.getElementById('weightStatus');
+    const alertElement = document.getElementById('weightTotal');
+    
+    totalElement.textContent = total.toFixed(2);
+    
+    if (total === 100) {
+        statusElement.innerHTML = '<span class="badge bg-success"><i class="fa fa-check me-1"></i>Valid</span>';
+        alertElement.className = 'alert alert-success';
+    } else {
+        statusElement.innerHTML = '<span class="badge bg-danger"><i class="fa fa-exclamation-triangle me-1"></i>Must equal 100%</span>';
+        alertElement.className = 'alert alert-danger';
+    }
+}
+
+// Add event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    const caInput = document.getElementById('{{ form.continuous_assessment_weight.id_for_label }}');
+    const examInput = document.getElementById('{{ form.final_exam_weight.id_for_label }}');
+    
+    if (caInput && examInput) {
+        caInput.addEventListener('input', updateWeightTotal);
+        examInput.addEventListener('input', updateWeightTotal);
+        
+        // Initial calculation
+        updateWeightTotal();
+    }
+});
+
+// ============================================================================
+// FORM VALIDATION
+// ============================================================================
+
+document.getElementById('classSubjectForm').addEventListener('submit', function(e) {
+    const caWeight = parseFloat(document.getElementById('{{ form.continuous_assessment_weight.id_for_label }}').value) || 0;
+    const examWeight = parseFloat(document.getElementById('{{ form.final_exam_weight.id_for_label }}').value) || 0;
+    const total = caWeight + examWeight;
+    
+    if (total !== 100) {
+        e.preventDefault();
+        showError('Assessment weights must total exactly 100%. Current total: ' + total.toFixed(2) + '%');
+        return false;
+    }
+});
+
+// ============================================================================
+// PREVIEW UPDATE
+// ============================================================================
+
+function updatePreview() {
+    const classSelect = document.getElementById('{{ form.class_instance.id_for_label }}');
+    const subjectSelect = document.getElementById('{{ form.subject.id_for_label }}');
+    const teacherSelect = document.getElementById('{{ form.teacher.id_for_label }}');
+    const hoursInput = document.getElementById('{{ form.hours_per_week.id_for_label }}');
+    const caInput = document.getElementById('{{ form.continuous_assessment_weight.id_for_label }}');
+    const examInput = document.getElementById('{{ form.final_exam_weight.id_for_label }}');
+    const optionalCheckbox = document.getElementById('{{ form.is_optional.id_for_label }}');
+    
+    // Update class
+    if (classSelect && classSelect.selectedIndex > 0) {
+        document.getElementById('previewClass').textContent = classSelect.options[classSelect.selectedIndex].text;
+    }
+    
+    // Update subject
+    if (subjectSelect && subjectSelect.selectedIndex > 0) {
+        document.getElementById('previewSubject').textContent = subjectSelect.options[subjectSelect.selectedIndex].text;
+    }
+    
+    // Update teacher
+    const previewTeacher = document.getElementById('previewTeacher');
+    if (teacherSelect && teacherSelect.selectedIndex > 0) {
+        previewTeacher.innerHTML = '<i class="fa fa-user me-1"></i>' + teacherSelect.options[teacherSelect.selectedIndex].text;
+        previewTeacher.className = 'teacher-badge';
+    } else {
+        previewTeacher.innerHTML = '<i class="fa fa-user-slash me-1"></i>Unassigned';
+        previewTeacher.className = 'teacher-badge unassigned';
+    }
+    
+    // Update hours
+    if (hoursInput) {
+        document.getElementById('previewHours').textContent = hoursInput.value || '3';
+    }
+    
+    // Update type
+    const previewType = document.getElementById('previewType');
+    if (optionalCheckbox && optionalCheckbox.checked) {
+        previewType.textContent = 'Optional';
+        previewType.className = 'status-badge optional';
+    } else {
+        previewType.textContent = 'Compulsory';
+        previewType.className = 'status-badge compulsory';
+    }
+    
+    // Update weights
+    if (caInput) {
+        document.getElementById('previewCA').textContent = caInput.value || '40';
+    }
+    if (examInput) {
+        document.getElementById('previewExam').textContent = examInput.value || '60';
+    }
+}
+
+// Add event listeners for preview updates
+const formInputs = document.querySelectorAll('#classSubjectForm select, #classSubjectForm input');
+formInputs.forEach(input => {
+    input.addEventListener('change', updatePreview);
+    if (input.type !== 'checkbox') {
+        input.addEventListener('input', updatePreview);
+    }
+});
+
+// Initial update
+updatePreview();
+</script>
+{% endblock %}

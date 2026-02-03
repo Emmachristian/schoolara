@@ -18,9 +18,11 @@ Preserves SessionWizardView for student registration
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.contrib import messages
-from django.db.models import Q, Count, Sum, Avg, Prefetch
+from django.db.models import Q, Count, Sum, Avg, Prefetch, F
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db import transaction
@@ -40,6 +42,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
+
+from core.utils import get_school_today, format_money
 
 from .models import (
     Student,
@@ -62,8 +66,6 @@ from .forms import (
 # Import stats functions
 from . import stats as student_stats
 
-from core.utils import format_money, get_school_today
-
 logger = logging.getLogger(__name__)
 
 
@@ -76,7 +78,10 @@ def students_dashboard(request):
     """Main students dashboard with overview statistics - USES stats.py"""
     
     try:
-        # Get comprehensive statistics
+        # Get comprehensive statistics using SCHOOL timezone
+        today = get_school_today()
+        thirty_days_ago = today - timedelta(days=30)
+        
         student_statistics = student_stats.get_student_statistics()
         guardian_statistics = student_stats.get_guardian_statistics()
         sibling_statistics = student_stats.get_sibling_statistics()
@@ -113,7 +118,7 @@ def students_dashboard(request):
         Q(has_special_needs=True)
     ).order_by('-updated_at')[:10]
     
-    # Get birthdays this week
+    # Get birthdays this week using SCHOOL timezone
     today = get_school_today()
     week_from_now = today + timedelta(days=7)
     
@@ -146,31 +151,329 @@ def students_dashboard(request):
 
 
 # =============================================================================
+# HELPER FUNCTIONS FOR FILTERING
+# =============================================================================
+
+def get_filtered_students(request):
+    """
+    Helper function to get filtered student queryset
+    Reusable across student_list, exports, and print views
+    """
+    students = Student.objects.select_related(
+        'current_academic_level',
+        'admission_academic_level'
+    ).prefetch_related(
+        'guardians',
+        'guardian_relationships'
+    ).annotate(
+        guardian_count=Count('guardians', distinct=True),
+        sibling_count=Count('sibling_relationships', distinct=True)
+    ).order_by('-admission_date', 'admission_number')
+    
+    # Get filter parameters
+    query = request.GET.get('q', '').strip()
+    enrollment_status = request.GET.get('enrollment_status', '')
+    gender = request.GET.get('gender', '')
+    current_academic_level = request.GET.get('current_academic_level', '')
+    admission_academic_level = request.GET.get('admission_academic_level', '')
+    nationality = request.GET.get('nationality', '')
+    religious_affiliation = request.GET.get('religious_affiliation', '')
+    health_condition = request.GET.get('health_condition', '')
+    blood_type = request.GET.get('blood_type', '')
+    has_special_needs = request.GET.get('has_special_needs', '')
+    transportation_required = request.GET.get('transportation_required', '')
+    
+    # Date filters
+    admission_date_from = request.GET.get('admission_date_from', '')
+    admission_date_to = request.GET.get('admission_date_to', '')
+    
+    # Age filters
+    min_age = request.GET.get('age_min', '')
+    max_age = request.GET.get('age_max', '')
+    
+    # Apply text search with multi-word support
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(admission_number__icontains=word) |
+                    Q(national_student_number__icontains=word) |
+                    Q(first_name__icontains=word) |
+                    Q(middle_name__icontains=word) |
+                    Q(last_name__icontains=word) |
+                    Q(phone_number__icontains=word) |
+                    Q(personal_email__icontains=word) |
+                    Q(birth_certificate_number__icontains=word)
+                )
+                combined_q &= word_q
+            students = students.filter(combined_q)
+    
+    # Apply choice filters
+    if enrollment_status:
+        students = students.filter(enrollment_status=enrollment_status)
+    if gender:
+        students = students.filter(gender=gender)
+    if current_academic_level:
+        students = students.filter(current_academic_level_id=current_academic_level)
+    if admission_academic_level:
+        students = students.filter(admission_academic_level_id=admission_academic_level)
+    if nationality:
+        students = students.filter(nationality=nationality)
+    if religious_affiliation:
+        students = students.filter(religious_affiliation=religious_affiliation)
+    if health_condition:
+        students = students.filter(health_condition=health_condition)
+    if blood_type:
+        students = students.filter(blood_type=blood_type)
+    
+    # Apply boolean filters
+    if has_special_needs:
+        students = students.filter(has_special_needs=(has_special_needs.lower() == 'true'))
+    if transportation_required:
+        students = students.filter(transportation_required=(transportation_required.lower() == 'true'))
+    
+    # Apply date filters
+    if admission_date_from:
+        students = students.filter(admission_date__gte=admission_date_from)
+    if admission_date_to:
+        students = students.filter(admission_date__lte=admission_date_to)
+    
+    # Apply age filters using SCHOOL timezone
+    if min_age or max_age:
+        today = get_school_today()
+        
+        if max_age:
+            try:
+                min_birth_date = date(today.year - int(max_age) - 1, today.month, today.day)
+                students = students.filter(date_of_birth__gte=min_birth_date)
+            except (ValueError, TypeError):
+                pass
+        
+        if min_age:
+            try:
+                max_birth_date = date(today.year - int(min_age), today.month, today.day)
+                students = students.filter(date_of_birth__lte=max_birth_date)
+            except (ValueError, TypeError):
+                pass
+    
+    return students
+
+
+def get_filtered_guardians(request):
+    """Helper function to get filtered guardian queryset"""
+    guardians = Guardian.objects.annotate(
+        student_count=Count('students', distinct=True),
+        primary_student_count=Count(
+            'student_relationships',
+            filter=Q(student_relationships__is_primary=True),
+            distinct=True
+        ),
+        financial_responsibility_count=Count(
+            'student_relationships',
+            filter=Q(student_relationships__is_financial_responsible=True),
+            distinct=True
+        )
+    ).order_by('last_name', 'first_name')
+    
+    query = request.GET.get('q', '').strip()
+    guardian_type = request.GET.get('guardian_type', '')
+    gender = request.GET.get('gender', '')
+    is_active = request.GET.get('is_active', '')
+    country = request.GET.get('country', '')
+    occupation = request.GET.get('occupation', '')
+    
+    # Apply text search
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(first_name__icontains=word) |
+                    Q(middle_name__icontains=word) |
+                    Q(last_name__icontains=word) |
+                    Q(primary_phone__icontains=word) |
+                    Q(secondary_phone__icontains=word) |
+                    Q(email__icontains=word) |
+                    Q(national_id__icontains=word) |
+                    Q(employer__icontains=word)
+                )
+                combined_q &= word_q
+            guardians = guardians.filter(combined_q)
+    
+    # Apply filters
+    if guardian_type:
+        guardians = guardians.filter(guardian_type=guardian_type)
+    if gender:
+        guardians = guardians.filter(gender=gender)
+    if occupation:
+        guardians = guardians.filter(occupation__icontains=occupation)
+    if country:
+        guardians = guardians.filter(country=country)
+    if is_active is not None and is_active:
+        guardians = guardians.filter(is_active=(is_active.lower() == 'true'))
+    
+    return guardians
+
+
+def get_filtered_student_guardians(request):
+    """Helper function to get filtered student-guardian relationship queryset"""
+    relationships = StudentGuardian.objects.select_related(
+        'student__current_academic_level',
+        'guardian'
+    ).order_by('student__admission_number', 'emergency_contact_priority')
+    
+    query = request.GET.get('q', '').strip()
+    student = request.GET.get('student', '')
+    guardian = request.GET.get('guardian', '')
+    relationship = request.GET.get('relationship', '')
+    is_primary = request.GET.get('is_primary', '')
+    is_financial_responsible = request.GET.get('is_financial_responsible', '')
+    is_active = request.GET.get('is_active', '')
+    
+    # Apply text search
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(student__first_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__admission_number__icontains=word) |
+                    Q(guardian__first_name__icontains=word) |
+                    Q(guardian__last_name__icontains=word) |
+                    Q(guardian__primary_phone__icontains=word)
+                )
+                combined_q &= word_q
+            relationships = relationships.filter(combined_q)
+    
+    # Apply filters
+    if student:
+        relationships = relationships.filter(student_id=student)
+    if guardian:
+        relationships = relationships.filter(guardian_id=guardian)
+    if relationship:
+        relationships = relationships.filter(relationship=relationship)
+    if is_primary:
+        relationships = relationships.filter(is_primary=(is_primary.lower() == 'true'))
+    if is_financial_responsible:
+        relationships = relationships.filter(
+            is_financial_responsible=(is_financial_responsible.lower() == 'true')
+        )
+    if is_active:
+        relationships = relationships.filter(is_active=(is_active.lower() == 'true'))
+    
+    return relationships
+
+
+def get_filtered_siblings(request):
+    """Helper function to get filtered sibling relationship queryset"""
+    siblings = SiblingRelationship.objects.select_related(
+        'from_student__current_academic_level',
+        'to_student__current_academic_level'
+    ).order_by('from_student__admission_number')
+    
+    query = request.GET.get('q', '').strip()
+    from_student = request.GET.get('from_student', '')
+    to_student = request.GET.get('to_student', '')
+    relationship_type = request.GET.get('relationship_type', '')
+    is_verified = request.GET.get('is_verified', '')
+    
+    # Apply text search
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(from_student__first_name__icontains=word) |
+                    Q(from_student__last_name__icontains=word) |
+                    Q(from_student__admission_number__icontains=word) |
+                    Q(to_student__first_name__icontains=word) |
+                    Q(to_student__last_name__icontains=word) |
+                    Q(to_student__admission_number__icontains=word)
+                )
+                combined_q &= word_q
+            siblings = siblings.filter(combined_q)
+    
+    # Apply filters
+    if from_student:
+        siblings = siblings.filter(from_student_id=from_student)
+    if to_student:
+        siblings = siblings.filter(to_student_id=to_student)
+    if relationship_type:
+        siblings = siblings.filter(relationship_type=relationship_type)
+    if is_verified:
+        siblings = siblings.filter(is_verified=(is_verified.lower() == 'true'))
+    
+    return siblings
+
+
+# =============================================================================
 # STUDENT VIEWS
 # =============================================================================
 
 @login_required
 def student_list(request):
-    """List all students - HTMX loads data on page load"""
+    """
+    Handle BOTH full page loads AND HTMX search/filter requests
+    This is the ONLY view needed for student listing and searching
+    """
+    filter_form = StudentFilterForm(request.GET or None)
+    students = get_filtered_students(request)
     
-    # Initialize filter form
-    filter_form = StudentFilterForm()
+    # Calculate statistics (always in sync with current filters!)
+    stats = students.aggregate(
+        total=Count('id'),
+        active=Count('id', filter=Q(enrollment_status='ACTIVE')),
+        suspended=Count('id', filter=Q(enrollment_status='SUSPENDED')),
+        graduated=Count('id', filter=Q(enrollment_status='GRADUATED')),
+        transferred=Count('id', filter=Q(enrollment_status='TRANSFERRED')),
+        withdrawn=Count('id', filter=Q(enrollment_status='WITHDRAWN')),
+        male=Count('id', filter=Q(gender='M')),
+        female=Count('id', filter=Q(gender='F')),
+        special_needs=Count('id', filter=Q(has_special_needs=True)),
+        transportation=Count('id', filter=Q(transportation_required=True)),
+        medical_alerts=Count('id', filter=(
+            Q(medical_conditions__isnull=False) & ~Q(medical_conditions='') |
+            Q(allergies__isnull=False) & ~Q(allergies='') |
+            Q(medications__isnull=False) & ~Q(medications='')
+        )),
+    )
     
-    # Get initial stats from stats.py
-    try:
-        initial_stats = student_stats.get_student_statistics()
-    except Exception as e:
-        logger.error(f"Error getting student statistics: {e}")
-        initial_stats = {}
+    # Calculate average age
+    today = get_school_today()
+    students_with_dob = students.exclude(date_of_birth__isnull=True)
+    if students_with_dob.exists():
+        ages = [(today - s.date_of_birth).days // 365 for s in students_with_dob]
+        stats['avg_age'] = round(sum(ages) / len(ages), 1) if ages else 0
+    else:
+        stats['avg_age'] = 0
+    
+    # Pagination
+    paginator = Paginator(students, 20)
+    page_number = request.GET.get('page', 1)
+    students_page = paginator.get_page(page_number)
+    
+    # Detect HTMX request
+    is_htmx = request.headers.get('HX-Request') == 'true'
     
     context = {
+        'students_page': students_page,
+        'paginator': paginator,
+        'stats': stats,
         'filter_form': filter_form,
-        'stats': initial_stats,
-        'Student': Student,
+        'is_htmx': is_htmx,
     }
     
-    return render(request, 'students/list.html', context)
-
+    # Return appropriate template
+    if is_htmx:
+        return render(request, 'students/partials/_student_results.html', context)
+    else:
+        return render(request, 'students/list.html', context)
 
 @login_required
 def student_print_view(request):
@@ -189,55 +492,19 @@ def student_print_view(request):
     include_stats = request.GET.get('include_stats') == 'true'
     landscape_mode = request.GET.get('landscape') == 'true'
     
-    # Get filter parameters from URL
-    query = request.GET.get('q', '')
-    enrollment_status = request.GET.get('enrollment_status', '')
-    gender = request.GET.get('gender', '')
-    current_academic_level = request.GET.get('current_academic_level', '')
-    has_special_needs = request.GET.get('has_special_needs', '')
-    
-    # Build queryset
-    students = Student.objects.select_related(
-        'current_academic_level',
-        'admission_academic_level'
-    ).order_by('admission_number')
-    
-    # Apply filters (same as student_search in htmx_views.py)
-    if query:
-        students = students.filter(
-            Q(admission_number__icontains=query) |
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(phone_number__icontains=query) |
-            Q(personal_email__icontains=query)
-        )
-    
-    if enrollment_status:
-        students = students.filter(enrollment_status=enrollment_status)
-    
-    if gender:
-        students = students.filter(gender=gender)
-    
-    if current_academic_level:
-        students = students.filter(current_academic_level_id=current_academic_level)
-    
-    if has_special_needs:
-        students = students.filter(has_special_needs=(has_special_needs.lower() == 'true'))
+    # Use the same helper function to get filtered students
+    students = get_filtered_students(request)
     
     # Calculate stats only if requested
     stats = None
     if include_stats:
-        total = students.count()
-        active_count = students.filter(enrollment_status='ACTIVE').count()
-        
-        stats = {
-            'total': total,
-            'active': active_count,
-            'active_percentage': round((active_count / total * 100), 1) if total > 0 else 0,
-            'male': students.filter(gender='M').count(),
-            'female': students.filter(gender='F').count(),
-            'special_needs': students.filter(has_special_needs=True).count(),
-        }
+        stats = students.aggregate(
+            total=Count('id'),
+            active=Count('id', filter=Q(enrollment_status='ACTIVE')),
+            male=Count('id', filter=Q(gender='M')),
+            female=Count('id', filter=Q(gender='F')),
+            special_needs=Count('id', filter=Q(has_special_needs=True)),
+        )
     
     # Field display names mapping
     field_names = {
@@ -269,6 +536,11 @@ def student_print_view(request):
         for field in selected_fields
     ]
     
+    # Get school context explicitly for print view
+    school = None
+    if hasattr(request.user, 'profile') and hasattr(request.user.profile, 'school'):
+        school = request.user.profile.school
+    
     context = {
         'students': students,
         'stats': stats,
@@ -277,6 +549,12 @@ def student_print_view(request):
         'selected_field_names': selected_field_names,
         'field_names': field_names,
         'landscape': landscape_mode,
+        
+        # Add school context explicitly
+        'school_name': school.name if school else 'School',
+        'school_logo': school.logo.url if (school and school.logo) else None,
+        'school_address': school.address if school else '',
+        'school_contact': school.phone if school else '',
     }
     
     return render(request, 'students/print.html', context)
@@ -340,13 +618,6 @@ class StudentCreateWizard(SessionWizardView):
             context['guardian_data'] = self.get_cleaned_data_for_step('guardian_info')
 
         return context
-
-    def get_form_kwargs(self, step=None):
-        """Pass additional kwargs to forms if needed"""
-        kwargs = super().get_form_kwargs(step)
-        # Don't pass user/request to avoid compatibility issues with BaseModelForm
-        # Forms can access these via self.request if needed in done() method
-        return kwargs
 
     @transaction.atomic
     def done(self, form_list, **kwargs):
@@ -600,6 +871,80 @@ def student_profile(request, pk):
 
 
 @login_required
+def student_delete(request, pk):
+    """Delete student with HTMX support"""
+    student = get_object_or_404(Student, pk=pk)
+    
+    if request.method == 'POST':
+        # Check if deletion is allowed
+        can_delete = True
+        errors = []
+        
+        if student.enrollment_status == 'ACTIVE':
+            can_delete = False
+            errors.append("Cannot delete active students")
+        
+        if hasattr(student, 'class_enrollments') and student.class_enrollments.exists():
+            can_delete = False
+            errors.append("Student has class enrollments")
+        
+        if hasattr(student, 'invoices') and student.invoices.exists():
+            can_delete = False
+            errors.append("Student has financial records")
+        
+        if not can_delete:
+            is_htmx = request.headers.get('HX-Request') == 'true'
+            
+            if is_htmx:
+                response = HttpResponse()
+                response['HX-Alert-Message'] = '; '.join(errors)
+                response['HX-Alert-Type'] = 'error'
+                response['HX-Alert-Title'] = 'Cannot Delete'
+                response['HX-Close-Modal'] = 'true'
+                return response
+            else:
+                messages.error(request, '; '.join(errors), extra_tags='sweetalert-error')
+                return redirect('students:student_list')
+        
+        student_name = student.get_full_name()
+        student.delete()
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            # Return updated student list
+            filter_form = StudentFilterForm(request.GET or None)
+            students = get_filtered_students(request)
+            
+            stats = students.aggregate(
+                total=Count('id'),
+                active=Count('id', filter=Q(enrollment_status='ACTIVE')),
+            )
+            
+            paginator = Paginator(students, 20)
+            page_number = request.GET.get('page', 1)
+            students_page = paginator.get_page(page_number)
+            
+            response = render(request, 'students/_student_results.html', {
+                'students_page': students_page,
+                'paginator': paginator,
+                'stats': stats,
+                'filter_form': filter_form,
+                'is_htmx': True,
+            })
+            
+            response['HX-Alert-Message'] = f'Student "{student_name}" deleted successfully'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Alert-Title'] = 'Deleted!'
+            response['HX-Close-Modal'] = 'true'
+            
+            return response
+        else:
+            messages.success(request, f"Student {student_name} deleted successfully", extra_tags='sweetalert')
+            return redirect('students:student_list')
+
+
+@login_required
 def student_activate(request, pk):
     """Activate a student"""
     student = get_object_or_404(Student, pk=pk)
@@ -647,24 +992,46 @@ def student_suspend(request, pk):
 
 @login_required
 def guardian_list(request):
-    """List all guardians - HTMX loads data on page load"""
+    """
+    Handle BOTH full page loads AND HTMX search/filter requests
+    """
+    filter_form = GuardianFilterForm(request.GET or None)
+    guardians = get_filtered_guardians(request)
     
-    filter_form = GuardianFilterForm()
+    # Calculate statistics
+    stats = guardians.aggregate(
+        total=Count('id'),
+        active=Count('id', filter=Q(is_active=True)),
+        primary=Count('id', filter=Q(guardian_type='PRIMARY')),
+        secondary=Count('id', filter=Q(guardian_type='SECONDARY')),
+        emergency=Count('id', filter=Q(guardian_type='EMERGENCY')),
+        financial=Count('id', filter=Q(guardian_type='FINANCIAL')),
+        male=Count('id', filter=Q(gender='M')),
+        female=Count('id', filter=Q(gender='F')),
+        with_email=Count('id', filter=~Q(email='') & ~Q(email__isnull=True)),
+    )
     
-    try:
-        initial_stats = student_stats.get_guardian_statistics()
-    except Exception as e:
-        logger.error(f"Error getting guardian statistics: {e}")
-        initial_stats = {}
+    # Pagination
+    paginator = Paginator(guardians, 20)
+    page_number = request.GET.get('page', 1)
+    guardians_page = paginator.get_page(page_number)
+    
+    # Detect HTMX request
+    is_htmx = request.headers.get('HX-Request') == 'true'
     
     context = {
+        'guardians_page': guardians_page,
+        'paginator': paginator,
+        'stats': stats,
         'filter_form': filter_form,
-        'stats': initial_stats,
-        'Guardian': Guardian,
+        'is_htmx': is_htmx,
     }
     
-    return render(request, 'students/guardians/list.html', context)
-
+    # Return appropriate template
+    if is_htmx:
+        return render(request, 'guardians/partials/_guardian_results.html', context)
+    else:
+        return render(request, 'guardians/list.html', context)
 
 @login_required
 def guardian_create(request):
@@ -694,7 +1061,7 @@ def guardian_create(request):
         'title': 'Create Guardian',
     }
     
-    return render(request, 'students/guardians/form.html', context)
+    return render(request, 'guardians/form.html', context)
 
 
 @login_required
@@ -728,7 +1095,7 @@ def guardian_edit(request, pk):
         'title': 'Update Guardian',
     }
     
-    return render(request, 'students/guardians/form.html', context)
+    return render(request, 'guardians/form.html', context)
 
 
 @login_required
@@ -758,7 +1125,65 @@ def guardian_profile(request, pk):
         'financial_students': financial_students,
     }
     
-    return render(request, 'students/guardians/profile.html', context)
+    return render(request, 'guardians/profile.html', context)
+
+
+@login_required
+def guardian_delete(request, pk):
+    """Delete guardian with HTMX support"""
+    guardian = get_object_or_404(Guardian, pk=pk)
+    
+    if request.method == 'POST':
+        # Check if deletion is allowed
+        if guardian.students.exists():
+            is_htmx = request.headers.get('HX-Request') == 'true'
+            
+            if is_htmx:
+                response = HttpResponse()
+                response['HX-Alert-Message'] = "Cannot delete guardian with active student relationships"
+                response['HX-Alert-Type'] = 'error'
+                response['HX-Alert-Title'] = 'Cannot Delete'
+                response['HX-Close-Modal'] = 'true'
+                return response
+            else:
+                messages.error(request, "Cannot delete guardian with active student relationships", extra_tags='sweetalert-error')
+                return redirect('students:guardian_list')
+        
+        guardian_name = guardian.get_full_name()
+        guardian.delete()
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            filter_form = GuardianFilterForm(request.GET or None)
+            guardians = get_filtered_guardians(request)
+            
+            stats = guardians.aggregate(
+                total=Count('id'),
+                active=Count('id', filter=Q(is_active=True)),
+            )
+            
+            paginator = Paginator(guardians, 20)
+            page_number = request.GET.get('page', 1)
+            guardians_page = paginator.get_page(page_number)
+            
+            response = render(request, 'students/guardians/_guardian_results.html', {
+                'guardians_page': guardians_page,
+                'paginator': paginator,
+                'stats': stats,
+                'filter_form': filter_form,
+                'is_htmx': True,
+            })
+            
+            response['HX-Alert-Message'] = f'Guardian "{guardian_name}" deleted successfully'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Alert-Title'] = 'Deleted!'
+            response['HX-Close-Modal'] = 'true'
+            
+            return response
+        else:
+            messages.success(request, f"Guardian {guardian_name} deleted successfully", extra_tags='sweetalert')
+            return redirect('students:guardian_list')
 
 
 @login_required
@@ -775,43 +1200,16 @@ def guardian_print_view(request):
     include_stats = request.GET.get('include_stats') == 'true'
     landscape_mode = request.GET.get('landscape') == 'true'
     
-    # Get filter parameters
-    query = request.GET.get('q', '')
-    guardian_type = request.GET.get('guardian_type', '')
-    is_active = request.GET.get('is_active', '')
+    guardians = get_filtered_guardians(request)
     
-    # Build queryset
-    guardians = Guardian.objects.annotate(
-        student_count=Count('students', distinct=True)
-    ).order_by('last_name', 'first_name')
-    
-    # Apply filters
-    if query:
-        guardians = guardians.filter(
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(primary_phone__icontains=query) |
-            Q(email__icontains=query)
-        )
-    
-    if guardian_type:
-        guardians = guardians.filter(guardian_type=guardian_type)
-    
-    if is_active:
-        guardians = guardians.filter(is_active=(is_active.lower() == 'true'))
-    
-    # Calculate stats
     stats = None
     if include_stats:
-        total = guardians.count()
-        active = guardians.filter(is_active=True).count()
-        
-        stats = {
-            'total': total,
-            'active': active,
-            'primary': guardians.filter(guardian_type='PRIMARY').count(),
-            'with_email': guardians.exclude(Q(email='') | Q(email__isnull=True)).count(),
-        }
+        stats = guardians.aggregate(
+            total=Count('id'),
+            active=Count('id', filter=Q(is_active=True)),
+            primary=Count('id', filter=Q(guardian_type='PRIMARY')),
+            with_email=Count('id', filter=~Q(email='') & ~Q(email__isnull=True)),
+        )
     
     field_names = {
         'full_name': 'Full Name',
@@ -849,97 +1247,138 @@ def guardian_print_view(request):
 # =============================================================================
 
 @login_required
-def student_guardian_list(request):
-    """List all student-guardian relationships"""
-    
-    context = {
-        'title': 'Student-Guardian Relationships',
-    }
-    
-    return render(request, 'students/relationships/list.html', context)
-
-
-@login_required
-def student_guardian_create(request):
-    """Create new student-guardian relationship"""
+def student_guardian_save(request, student_pk, relationship_pk=None):
+    """
+    Unified save handler for creating or updating student-guardian relationship
+    """
+    student = get_object_or_404(Student, pk=student_pk)
+    relationship = get_object_or_404(StudentGuardian, pk=relationship_pk) if relationship_pk else None
     
     if request.method == 'POST':
-        form = StudentGuardianForm(request.POST)
-        if form.is_valid():
-            relationship = form.save()
+        guardian_id = request.POST.get('guardian_id', '').strip()
+        relation = request.POST.get('relationship', '').strip()
+        
+        if not all([guardian_id, relation]):
+            return render(request, 'students/partials/modals/_student_guardian_form.html', {
+                'student': student,
+                'relationship': relationship,
+                'relationship_choices': StudentGuardian.RELATIONSHIP_CHOICES,
+                'available_guardians': Guardian.objects.filter(is_active=True).order_by('last_name', 'first_name'),
+                'error_message': 'Guardian and relationship type are required',
+            })
+        
+        try:
+            guardian = Guardian.objects.get(pk=guardian_id)
             
-            messages.success(
-                request,
-                f"Relationship created: {relationship.guardian.get_full_name()} - {relationship.student.get_full_name()}",
-                extra_tags='sweetalert'
-            )
-            return redirect('students:student_profile', pk=relationship.student.pk)
-        else:
-            messages.error(
-                request,
-                "Please correct the errors in the form",
-                extra_tags='sweetalert-error'
-            )
-    else:
-        form = StudentGuardianForm()
+            # Common fields
+            common_data = {
+                'relationship': relation,
+                'is_primary': request.POST.get('is_primary') == 'on',
+                'is_financial_responsible': request.POST.get('is_financial_responsible') == 'on',
+                'can_pickup': request.POST.get('can_pickup') == 'on',
+                'can_authorize_medical': request.POST.get('can_authorize_medical') == 'on',
+                'emergency_contact_priority': int(request.POST.get('emergency_contact_priority', 999)),
+                'has_custody': request.POST.get('has_custody') == 'on',
+                'receives_academic_reports': request.POST.get('receives_academic_reports') == 'on',
+                'receives_financial_statements': request.POST.get('receives_financial_statements') == 'on',
+                'receives_emergency_notifications': request.POST.get('receives_emergency_notifications') == 'on',
+                'is_active': request.POST.get('is_active') == 'on',
+                'notes': request.POST.get('notes', '').strip() or None,
+            }
+            
+            if relationship:
+                # UPDATE
+                for key, value in common_data.items():
+                    setattr(relationship, key, value)
+                relationship.save()
+                message = 'Relationship updated successfully'
+            else:
+                # CREATE
+                relationship = StudentGuardian.objects.create(
+                    student=student,
+                    guardian=guardian,
+                    **common_data
+                )
+                message = 'Relationship created successfully'
+            
+            # If setting as primary, unset others
+            if relationship.is_primary:
+                StudentGuardian.objects.filter(student=student).exclude(pk=relationship.pk).update(is_primary=False)
+            
+            is_htmx = request.headers.get('HX-Request') == 'true'
+            
+            if is_htmx:
+                response = HttpResponse('')
+                response['HX-Alert-Message'] = message
+                response['HX-Alert-Type'] = 'success'
+                response['HX-Close-Modal'] = 'true'
+                response['HX-Redirect'] = reverse('students:student_profile', kwargs={'pk': student.pk})
+                return response
+            else:
+                messages.success(request, message)
+                return redirect('students:student_profile', pk=student.pk)
+                
+        except Guardian.DoesNotExist:
+            return render(request, 'students/partials/modals/_student_guardian_form.html', {
+                'student': student,
+                'relationship': relationship,
+                'error_message': 'Guardian not found',
+            })
     
-    context = {
-        'form': form,
-        'title': 'Create Relationship',
-    }
-    
-    return render(request, 'students/relationships/form.html', context)
+    return redirect('students:student_profile', pk=student.pk)
 
 
 @login_required
-def student_guardian_detail(request, pk):
-    """View student-guardian relationship details"""
-    
-    relationship = get_object_or_404(
-        StudentGuardian.objects.select_related('student', 'guardian'),
-        pk=pk
-    )
-    
-    context = {
-        'relationship': relationship,
-    }
-    
-    return render(request, 'students/relationships/detail.html', context)
-
-
-@login_required
-def student_guardian_edit(request, pk):
-    """Edit student-guardian relationship"""
-    
+def student_guardian_delete(request, pk):
+    """Delete student-guardian relationship with HTMX support"""
     relationship = get_object_or_404(StudentGuardian, pk=pk)
+    student = relationship.student
     
     if request.method == 'POST':
-        form = StudentGuardianForm(request.POST, instance=relationship)
-        if form.is_valid():
-            relationship = form.save()
-            
-            messages.success(
-                request,
-                "Relationship updated successfully",
-                extra_tags='sweetalert'
-            )
-            return redirect('students:relationship_detail', pk=relationship.pk)
+        relationship.delete()
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            response = HttpResponse('')
+            response['HX-Alert-Message'] = 'Guardian relationship removed successfully'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Close-Modal'] = 'true'
+            response['HX-Redirect'] = reverse('students:student_profile', kwargs={'pk': student.pk})
+            return response
         else:
-            messages.error(
-                request,
-                "Please correct the errors in the form",
-                extra_tags='sweetalert-error'
-            )
-    else:
-        form = StudentGuardianForm(instance=relationship)
+            messages.success(request, "Guardian relationship removed successfully", extra_tags='sweetalert')
+            return redirect('students:student_profile', pk=student.pk)
     
-    context = {
-        'form': form,
-        'relationship': relationship,
-        'title': 'Update Relationship',
-    }
+    return redirect('students:student_profile', pk=student.pk)
+
+
+@login_required
+def student_guardian_set_primary(request, pk):
+    """Set student-guardian relationship as primary with HTMX support"""
+    relationship = get_object_or_404(StudentGuardian, pk=pk)
+    student = relationship.student
     
-    return render(request, 'students/relationships/form.html', context)
+    if request.method == 'POST':
+        # Make this relationship primary
+        StudentGuardian.objects.filter(student=student).update(is_primary=False)
+        relationship.is_primary = True
+        relationship.save()
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            response = HttpResponse('')
+            response['HX-Alert-Message'] = 'Primary guardian updated successfully'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Close-Modal'] = 'true'
+            response['HX-Redirect'] = reverse('students:student_profile', kwargs={'pk': student.pk})
+            return response
+        else:
+            messages.success(request, "Primary guardian updated successfully", extra_tags='sweetalert')
+            return redirect('students:student_profile', pk=student.pk)
+    
+    return redirect('students:student_profile', pk=student.pk)
 
 
 # =============================================================================
@@ -947,128 +1386,90 @@ def student_guardian_edit(request, pk):
 # =============================================================================
 
 @login_required
-def sibling_list(request):
-    """List all sibling relationships"""
-    
-    context = {
-        'title': 'Sibling Relationships',
-    }
-    
-    return render(request, 'students/siblings/list.html', context)
-
-
-@login_required
-def sibling_create(request):
-    """Create new sibling relationship"""
+def sibling_save(request, student_pk, sibling_pk=None):
+    """
+    Unified save handler for creating or updating sibling relationship
+    """
+    student = get_object_or_404(Student, pk=student_pk)
+    sibling_rel = get_object_or_404(SiblingRelationship, pk=sibling_pk) if sibling_pk else None
     
     if request.method == 'POST':
-        from_student_id = request.POST.get('from_student')
-        to_student_id = request.POST.get('to_student')
+        to_student_id = request.POST.get('to_student_id', '').strip()
         relationship_type = request.POST.get('relationship_type', 'FULL')
         
+        if not to_student_id:
+            return render(request, 'students/partials/modals/_sibling_form.html', {
+                'student': student,
+                'sibling_rel': sibling_rel,
+                'relationship_types': SiblingRelationship.RELATIONSHIP_TYPES,
+                'error_message': 'Sibling student is required',
+            })
+        
         try:
-            from_student = Student.objects.get(pk=from_student_id)
             to_student = Student.objects.get(pk=to_student_id)
             
-            # Check if already exists
-            if SiblingRelationship.objects.filter(
-                Q(from_student=from_student, to_student=to_student) |
-                Q(from_student=to_student, to_student=from_student)
-            ).exists():
-                messages.error(
-                    request,
-                    "This sibling relationship already exists",
-                    extra_tags='sweetalert-error'
-                )
+            if sibling_rel:
+                # UPDATE
+                sibling_rel.relationship_type = relationship_type
+                sibling_rel.is_verified = request.POST.get('is_verified') == 'on'
+                sibling_rel.notes = request.POST.get('notes', '').strip() or None
+                sibling_rel.save()
+                message = 'Sibling relationship updated successfully'
             else:
-                # Create relationship (signal will create reciprocal)
-                relationship = SiblingRelationship.objects.create(
-                    from_student=from_student,
+                # CREATE
+                SiblingRelationship.objects.create(
+                    from_student=student,
                     to_student=to_student,
                     relationship_type=relationship_type,
                 )
-                
-                messages.success(
-                    request,
-                    f"Sibling relationship created: {from_student.get_full_name()} - {to_student.get_full_name()}",
-                    extra_tags='sweetalert'
-                )
-                return redirect('students:student_profile', pk=from_student.pk)
+                message = 'Sibling relationship created successfully'
+            
+            is_htmx = request.headers.get('HX-Request') == 'true'
+            
+            if is_htmx:
+                response = HttpResponse('')
+                response['HX-Alert-Message'] = message
+                response['HX-Alert-Type'] = 'success'
+                response['HX-Close-Modal'] = 'true'
+                response['HX-Redirect'] = reverse('students:student_profile', kwargs={'pk': student.pk})
+                return response
+            else:
+                messages.success(request, message)
+                return redirect('students:student_profile', pk=student.pk)
                 
         except Student.DoesNotExist:
-            messages.error(
-                request,
-                "Student not found",
-                extra_tags='sweetalert-error'
-            )
+            return render(request, 'students/partials/modals/_sibling_form.html', {
+                'student': student,
+                'sibling_rel': sibling_rel,
+                'error_message': 'Student not found',
+            })
     
-    # Get all active students for the form
-    students = Student.objects.filter(
-        enrollment_status='ACTIVE'
-    ).order_by('admission_number')
-    
-    context = {
-        'students': students,
-        'relationship_types': SiblingRelationship.RELATIONSHIP_TYPES,
-        'title': 'Create Sibling Relationship',
-    }
-    
-    return render(request, 'students/siblings/form.html', context)
+    return redirect('students:student_profile', pk=student.pk)
 
 
 @login_required
-def sibling_detail(request, pk):
-    """View sibling relationship details"""
-    
-    relationship = get_object_or_404(
-        SiblingRelationship.objects.select_related(
-            'from_student__current_academic_level',
-            'to_student__current_academic_level'
-        ),
-        pk=pk
-    )
-    
-    context = {
-        'relationship': relationship,
-    }
-    
-    return render(request, 'students/siblings/detail.html', context)
-
-
-@login_required
-def sibling_edit(request, pk):
-    """Edit sibling relationship"""
-    
-    relationship = get_object_or_404(SiblingRelationship, pk=pk)
+def sibling_delete(request, pk):
+    """Delete sibling relationship with HTMX support"""
+    sibling_rel = get_object_or_404(SiblingRelationship, pk=pk)
+    student = sibling_rel.from_student
     
     if request.method == 'POST':
-        relationship_type = request.POST.get('relationship_type')
-        is_verified = request.POST.get('is_verified') == 'on'
-        notes = request.POST.get('notes', '')
+        sibling_rel.delete()
         
-        relationship.relationship_type = relationship_type
-        relationship.is_verified = is_verified
-        relationship.notes = notes
+        is_htmx = request.headers.get('HX-Request') == 'true'
         
-        if is_verified and not relationship.verification_date:
-            relationship.verification_date = timezone.now()
-        
-        relationship.save()
-        
-        messages.success(
-            request,
-            "Sibling relationship updated successfully",
-            extra_tags='sweetalert'
-        )
-        return redirect('students:sibling_detail', pk=relationship.pk)
+        if is_htmx:
+            response = HttpResponse('')
+            response['HX-Alert-Message'] = 'Sibling relationship removed successfully'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Close-Modal'] = 'true'
+            response['HX-Redirect'] = reverse('students:student_profile', kwargs={'pk': student.pk})
+            return response
+        else:
+            messages.success(request, "Sibling relationship removed successfully", extra_tags='sweetalert')
+            return redirect('students:student_profile', pk=student.pk)
     
-    context = {
-        'relationship': relationship,
-        'relationship_types': SiblingRelationship.RELATIONSHIP_TYPES,
-        'title': 'Update Sibling Relationship',
-    }
-    
-    return render(request, 'students/siblings/form.html', context)
+    return redirect('students:student_profile', pk=student.pk)
 
 
 # =============================================================================
@@ -1079,7 +1480,35 @@ def sibling_edit(request, pk):
 def enrollment_history_list(request):
     """List enrollment status history"""
     
+    # Get all status history with related data
+    history = EnrollmentStatusHistory.objects.select_related(
+        'student__current_academic_level',
+        'academic_session'
+    ).order_by('-effective_date', 'student__admission_number')
+    
+    # Apply filters if any
+    student_id = request.GET.get('student')
+    status = request.GET.get('status')
+    from_date = request.GET.get('from_date')
+    to_date = request.GET.get('to_date')
+    
+    if student_id:
+        history = history.filter(student_id=student_id)
+    if status:
+        history = history.filter(new_status=status)
+    if from_date:
+        history = history.filter(effective_date__gte=from_date)
+    if to_date:
+        history = history.filter(effective_date__lte=to_date)
+    
+    # Pagination
+    paginator = Paginator(history, 50)
+    page_number = request.GET.get('page', 1)
+    history_page = paginator.get_page(page_number)
+    
     context = {
+        'history_page': history_page,
+        'paginator': paginator,
         'title': 'Enrollment Status History',
     }
     
@@ -1103,6 +1532,217 @@ def enrollment_history_detail(request, pk):
     }
     
     return render(request, 'students/enrollment_history/detail.html', context)
+
+
+# =============================================================================
+# BULK ACTION VIEWS
+# =============================================================================
+
+@login_required
+def bulk_status_change(request):
+    """Bulk change student enrollment status"""
+    
+    if request.method != 'POST':
+        return redirect('students:student_list')
+    
+    student_ids = request.POST.getlist('student_ids')
+    new_status = request.POST.get('new_status')
+    reason = request.POST.get('reason', 'Bulk status change')
+    
+    if not student_ids or not new_status:
+        messages.error(
+            request,
+            'Invalid request: missing student IDs or status',
+            extra_tags='sweetalert-error'
+        )
+        return redirect('students:student_list')
+    
+    try:
+        with transaction.atomic():
+            students = Student.objects.filter(pk__in=student_ids)
+            count = 0
+            
+            for student in students:
+                old_status = student.enrollment_status
+                
+                # Skip if already at this status
+                if old_status == new_status:
+                    continue
+                
+                student.enrollment_status = new_status
+                student.save()
+                
+                # Create status history record
+                EnrollmentStatusHistory.objects.create(
+                    student=student,
+                    previous_status=old_status,
+                    new_status=new_status,
+                    effective_date=get_school_today(),
+                    reason=reason
+                )
+                
+                count += 1
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            # Return updated student list
+            filter_form = StudentFilterForm(request.GET or None)
+            students = get_filtered_students(request)
+            
+            stats = students.aggregate(
+                total=Count('id'),
+                active=Count('id', filter=Q(enrollment_status='ACTIVE')),
+            )
+            
+            paginator = Paginator(students, 20)
+            page_number = request.GET.get('page', 1)
+            students_page = paginator.get_page(page_number)
+            
+            response = render(request, 'students/_student_results.html', {
+                'students_page': students_page,
+                'paginator': paginator,
+                'stats': stats,
+                'filter_form': filter_form,
+                'is_htmx': True,
+            })
+            
+            response['HX-Alert-Message'] = f'Successfully changed status for {count} student(s)'
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Alert-Title'] = 'Bulk Update Complete'
+            response['HX-Close-Modal'] = 'true'
+            
+            return response
+        else:
+            messages.success(
+                request,
+                f"Successfully changed status for {count} student(s)",
+                extra_tags='sweetalert'
+            )
+            return redirect('students:student_list')
+        
+    except Exception as e:
+        logger.error(f"Error in bulk status change: {e}")
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            response = HttpResponse()
+            response['HX-Alert-Message'] = f'Error: {str(e)}'
+            response['HX-Alert-Type'] = 'error'
+            response['HX-Alert-Title'] = 'Bulk Update Failed'
+            response['HX-Close-Modal'] = 'true'
+            return response
+        else:
+            messages.error(request, f'Error: {str(e)}', extra_tags='sweetalert-error')
+            return redirect('students:student_list')
+
+
+@login_required
+def bulk_assign_guardian(request):
+    """Bulk assign guardian to multiple students"""
+    
+    if request.method != 'POST':
+        return redirect('students:student_list')
+    
+    student_ids = request.POST.getlist('student_ids')
+    guardian_id = request.POST.get('guardian_id')
+    relationship = request.POST.get('relationship')
+    is_primary = request.POST.get('is_primary') == 'on'
+    is_financial = request.POST.get('is_financial_responsible') == 'on'
+    
+    if not student_ids or not guardian_id or not relationship:
+        messages.error(
+            request,
+            'Invalid request: missing required fields',
+            extra_tags='sweetalert-error'
+        )
+        return redirect('students:student_list')
+    
+    try:
+        guardian = Guardian.objects.get(pk=guardian_id)
+        
+        with transaction.atomic():
+            students = Student.objects.filter(pk__in=student_ids)
+            count = 0
+            skipped = 0
+            
+            for student in students:
+                # Check if relationship already exists
+                if StudentGuardian.objects.filter(
+                    student=student,
+                    guardian=guardian
+                ).exists():
+                    skipped += 1
+                    continue
+                
+                # Create relationship
+                StudentGuardian.objects.create(
+                    student=student,
+                    guardian=guardian,
+                    relationship=relationship,
+                    is_primary=is_primary,
+                    is_financial_responsible=is_financial,
+                    emergency_contact_priority=1 if is_primary else 999,
+                )
+                count += 1
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        message = f'Successfully linked {count} student(s) to {guardian.get_full_name()}'
+        if skipped > 0:
+            message += f' ({skipped} skipped - already linked)'
+        
+        if is_htmx:
+            # Return updated student list
+            filter_form = StudentFilterForm(request.GET or None)
+            students = get_filtered_students(request)
+            
+            stats = students.aggregate(
+                total=Count('id'),
+                active=Count('id', filter=Q(enrollment_status='ACTIVE')),
+            )
+            
+            paginator = Paginator(students, 20)
+            page_number = request.GET.get('page', 1)
+            students_page = paginator.get_page(page_number)
+            
+            response = render(request, 'students/_student_results.html', {
+                'students_page': students_page,
+                'paginator': paginator,
+                'stats': stats,
+                'filter_form': filter_form,
+                'is_htmx': True,
+            })
+            
+            response['HX-Alert-Message'] = message
+            response['HX-Alert-Type'] = 'success'
+            response['HX-Alert-Title'] = 'Bulk Assignment Complete'
+            response['HX-Close-Modal'] = 'true'
+            
+            return response
+        else:
+            messages.success(request, message, extra_tags='sweetalert')
+            return redirect('students:student_list')
+        
+    except Guardian.DoesNotExist:
+        messages.error(request, 'Guardian not found', extra_tags='sweetalert-error')
+        return redirect('students:student_list')
+    except Exception as e:
+        logger.error(f"Error in bulk assign guardian: {e}")
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        if is_htmx:
+            response = HttpResponse()
+            response['HX-Alert-Message'] = f'Error: {str(e)}'
+            response['HX-Alert-Type'] = 'error'
+            response['HX-Alert-Title'] = 'Bulk Assignment Failed'
+            response['HX-Close-Modal'] = 'true'
+            return response
+        else:
+            messages.error(request, f'Error: {str(e)}', extra_tags='sweetalert-error')
+            return redirect('students:student_list')
 
 
 # =============================================================================
@@ -1272,10 +1912,7 @@ def birthday_report(request):
 def export_students_excel(request):
     """Export students to Excel"""
     
-    # Get filtered students
-    students = Student.objects.select_related(
-        'current_academic_level'
-    ).order_by('admission_number')
+    students = get_filtered_students(request)
     
     # Create workbook
     wb = Workbook()
@@ -1324,9 +1961,7 @@ def export_students_excel(request):
 def export_students_pdf(request):
     """Export students to PDF"""
     
-    students = Student.objects.select_related(
-        'current_academic_level'
-    ).order_by('admission_number')
+    students = get_filtered_students(request)
     
     # Create PDF
     buffer = BytesIO()
@@ -1389,9 +2024,7 @@ def export_students_pdf(request):
 def export_guardians_excel(request):
     """Export guardians to Excel"""
     
-    guardians = Guardian.objects.annotate(
-        student_count=Count('students', distinct=True)
-    ).order_by('last_name', 'first_name')
+    guardians = get_filtered_guardians(request)
     
     # Create workbook
     wb = Workbook()
@@ -1439,9 +2072,7 @@ def export_guardians_excel(request):
 def export_guardians_pdf(request):
     """Export guardians to PDF"""
     
-    guardians = Guardian.objects.annotate(
-        student_count=Count('students', distinct=True)
-    ).order_by('last_name', 'first_name')
+    guardians = get_filtered_guardians(request)
     
     # Create PDF
     buffer = BytesIO()
@@ -1498,3 +2129,117 @@ def export_guardians_pdf(request):
     response['Content-Disposition'] = f'attachment; filename="guardians_{timezone.now().strftime("%Y%m%d")}.pdf"'
     
     return response
+
+
+# =============================================================================
+# QUICK STATS API ENDPOINTS (for dashboard widgets/AJAX)
+# =============================================================================
+
+@login_required
+def student_quick_stats(request):
+    """Get quick statistics for students (JSON API)"""
+    
+    today = get_school_today()
+    
+    # Age calculations
+    age_ranges = {
+        'under_5': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            date_of_birth__gte=today.replace(year=today.year - 5)
+        ).count(),
+        'age_5_10': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            date_of_birth__lt=today.replace(year=today.year - 5),
+            date_of_birth__gte=today.replace(year=today.year - 11)
+        ).count(),
+        'age_11_15': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            date_of_birth__lt=today.replace(year=today.year - 11),
+            date_of_birth__gte=today.replace(year=today.year - 16)
+        ).count(),
+        'age_16_plus': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            date_of_birth__lt=today.replace(year=today.year - 16)
+        ).count(),
+    }
+    
+    stats = {
+        'total': Student.objects.count(),
+        'active': Student.objects.filter(enrollment_status='ACTIVE').count(),
+        'suspended': Student.objects.filter(enrollment_status='SUSPENDED').count(),
+        'graduated': Student.objects.filter(enrollment_status='GRADUATED').count(),
+        'male': Student.objects.filter(enrollment_status='ACTIVE', gender='M').count(),
+        'female': Student.objects.filter(enrollment_status='ACTIVE', gender='F').count(),
+        'special_needs': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            has_special_needs=True
+        ).count(),
+        'transportation': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            transportation_required=True
+        ).count(),
+        **age_ranges
+    }
+    
+    return JsonResponse(stats)
+
+
+@login_required
+def guardian_quick_stats(request):
+    """Get quick statistics for guardians (JSON API)"""
+    
+    stats = {
+        'total': Guardian.objects.filter(is_active=True).count(),
+        'primary': Guardian.objects.filter(
+            guardian_type='PRIMARY',
+            is_active=True
+        ).count(),
+        'secondary': Guardian.objects.filter(
+            guardian_type='SECONDARY',
+            is_active=True
+        ).count(),
+        'financial': Guardian.objects.filter(
+            guardian_type='FINANCIAL',
+            is_active=True
+        ).count(),
+        'with_email': Guardian.objects.filter(
+            is_active=True
+        ).exclude(Q(email='') | Q(email__isnull=True)).count(),
+        'total_students': StudentGuardian.objects.filter(is_active=True).count(),
+    }
+    
+    return JsonResponse(stats)
+
+
+@login_required
+def medical_alerts_quick_stats(request):
+    """Get quick statistics for students with medical alerts (JSON API)"""
+    
+    stats = {
+        'total_medical_alerts': Student.objects.filter(
+            enrollment_status='ACTIVE'
+        ).filter(
+            Q(medical_conditions__isnull=False) & ~Q(medical_conditions='') |
+            Q(allergies__isnull=False) & ~Q(allergies='') |
+            Q(medications__isnull=False) & ~Q(medications='')
+        ).count(),
+        'with_conditions': Student.objects.filter(
+            enrollment_status='ACTIVE'
+        ).exclude(Q(medical_conditions='') | Q(medical_conditions__isnull=True)).count(),
+        'with_allergies': Student.objects.filter(
+            enrollment_status='ACTIVE'
+        ).exclude(Q(allergies='') | Q(allergies__isnull=True)).count(),
+        'on_medications': Student.objects.filter(
+            enrollment_status='ACTIVE'
+        ).exclude(Q(medications='') | Q(medications__isnull=True)).count(),
+        'special_needs': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            has_special_needs=True
+        ).count(),
+        'special_diet': Student.objects.filter(
+            enrollment_status='ACTIVE',
+            requires_special_diet=True
+        ).count(),
+    }
+    
+    return JsonResponse(stats)

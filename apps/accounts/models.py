@@ -26,7 +26,7 @@ phone_validator = RegexValidator(
 
 
 # =============================================================================
-# SCHOOL MODEL
+# SCHOOL MODEL (ENHANCED WITH INITIALIZATION CONFIG) ⭐
 # =============================================================================
 
 class School(DefaultDatabaseModel):
@@ -80,6 +80,13 @@ class School(DefaultDatabaseModel):
         ('BOYS', 'Boys Only'),
         ('GIRLS', 'Girls Only'),
     )
+    
+    # ⭐ NEW: Accounting Complexity Choices
+    ACCOUNTING_COMPLEXITY_CHOICES = [
+        ('BASIC', 'Basic Accounting (10-12 accounts)'),
+        ('STANDARD', 'Standard Accounting (20-30 accounts)'),
+        ('ADVANCED', 'Advanced Accounting (50-60 accounts)'),
+    ]
 
     # -------------------------------------------------------------------------
     # BASIC INFORMATION
@@ -363,6 +370,66 @@ class School(DefaultDatabaseModel):
         default=True,
         help_text="Allow students to access the portal"
     )
+    
+    # =========================================================================
+    # ⭐ NEW: FINANCIAL CONFIGURATION
+    # =========================================================================
+    
+    accounting_complexity = models.CharField(
+        "Accounting Complexity",
+        max_length=20,
+        choices=ACCOUNTING_COMPLEXITY_CHOICES,
+        null=True,
+        blank=True,
+        help_text=(
+            "Determines the complexity of the chart of accounts. "
+            "Leave blank to auto-determine based on school type and size. "
+            "BASIC: 10-12 accounts (small schools). "
+            "STANDARD: 20-30 accounts (medium schools). "
+            "ADVANCED: 50-60 accounts (large schools with auditors)."
+        )
+    )
+    
+    # =========================================================================
+    # ⭐ NEW: INITIALIZATION STATUS
+    # =========================================================================
+    
+    is_financial_setup_complete = models.BooleanField(
+        "Financial Setup Complete",
+        default=False,
+        db_index=True,
+        help_text="Whether initial financial accounts and settings have been created"
+    )
+    
+    is_academic_setup_complete = models.BooleanField(
+        "Academic Setup Complete",
+        default=False,
+        db_index=True,
+        help_text="Whether academic structure (terms, classes, subjects) has been created"
+    )
+    
+    is_initial_setup_complete = models.BooleanField(
+        "Initial Setup Complete",
+        default=False,
+        db_index=True,
+        help_text="Whether all initial setup is complete and school is ready to use"
+    )
+    
+    setup_completed_at = models.DateTimeField(
+        "Setup Completed At",
+        null=True,
+        blank=True,
+        help_text="When the initial setup was completed"
+    )
+    
+    setup_completed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='schools_initialized',
+        help_text="User who completed the initial setup"
+    )
 
     # -------------------------------------------------------------------------
     # META & METHODS
@@ -377,6 +444,9 @@ class School(DefaultDatabaseModel):
             models.Index(fields=['domain']),
             models.Index(fields=['database_alias']),
             models.Index(fields=['is_active_subscription']),
+            models.Index(fields=['is_initial_setup_complete']),  # ⭐ NEW
+            models.Index(fields=['accounting_complexity']),  # ⭐ NEW
+            models.Index(fields=['school_type']),  # ⭐ NEW
         ]
 
     def __str__(self):
@@ -400,7 +470,7 @@ class School(DefaultDatabaseModel):
             raise ValidationError(errors)
 
     # -------------------------------------------------------------------------
-    # PROPERTIES
+    # EXISTING PROPERTIES
     # -------------------------------------------------------------------------
     
     @property
@@ -419,11 +489,15 @@ class School(DefaultDatabaseModel):
     
     @property
     def active_teachers_count(self):
-        from hr.models import Teacher
-        return Teacher.objects.filter(
-            staff__is_active=True,
-            staff__date_of_leaving__isnull=True
-        ).count()
+        """Get count of active teachers in this school"""
+        try:
+            from hr.models import Teacher
+            return Teacher.objects.filter(
+                staff__is_active=True,
+                staff__date_of_leaving__isnull=True
+            ).count()
+        except ImportError:
+            return 0
     
     @property
     def display_name(self):
@@ -453,8 +527,241 @@ class School(DefaultDatabaseModel):
                 return "Expired"
         return "Inactive"
 
+    # =========================================================================
+    # ⭐ NEW: INITIALIZATION HELPER METHODS
+    # =========================================================================
+    
+    def get_accounting_complexity_level(self):
+        """
+        Determine accounting complexity based on school characteristics.
+        
+        Auto-determines if not explicitly set by analyzing:
+        - School type
+        - Student capacity
+        - Educational level
+        
+        Returns:
+            str: 'BASIC', 'STANDARD', or 'ADVANCED'
+        
+        Examples:
+            >>> school = School(school_type='KINDERGARTEN', student_capacity=50)
+            >>> school.get_accounting_complexity_level()
+            'BASIC'
+            
+            >>> school = School(school_type='UNIVERSITY', student_capacity=2000)
+            >>> school.get_accounting_complexity_level()
+            'ADVANCED'
+        """
+        # If explicitly set, use that
+        if self.accounting_complexity:
+            return self.accounting_complexity
+        
+        # Auto-determine based on school characteristics
+        
+        # Universities and Colleges → ADVANCED
+        if self.school_type in ['UNIVERSITY', 'COLLEGE']:
+            return 'ADVANCED'
+        
+        # Large schools (700+ students) → ADVANCED
+        if self.student_capacity >= 700:
+            return 'ADVANCED'
+        
+        # Small schools (200 or fewer students) → BASIC
+        if self.student_capacity <= 200:
+            return 'BASIC'
+        
+        # Kindergarten and Primary only → BASIC
+        if self.school_type in ['KINDERGARTEN', 'PRIMARY', 'KINDERGARTEN_PRIMARY']:
+            return 'BASIC'
+        
+        # Vocational/Technical → STANDARD
+        if self.school_type in ['VOCATIONAL', 'TECHNICAL']:
+            return 'STANDARD'
+        
+        # Default for everything else → STANDARD
+        return 'STANDARD'
+    
+    def get_recommended_accounts_count(self):
+        """
+        Get recommended number of accounts based on complexity level.
+        
+        Returns:
+            int: Recommended number of accounts to create
+        
+        Examples:
+            >>> school = School(accounting_complexity='BASIC')
+            >>> school.get_recommended_accounts_count()
+            10
+        """
+        complexity = self.get_accounting_complexity_level()
+        
+        recommendations = {
+            'BASIC': 10,
+            'STANDARD': 25,
+            'ADVANCED': 60,
+        }
+        
+        return recommendations.get(complexity, 25)
+    
+    def needs_boarding_accounts(self):
+        """
+        Check if school needs boarding-specific accounts.
+        
+        Returns:
+            bool: True if school offers boarding
+        
+        Examples:
+            >>> school = School(boarding_type='MIXED')
+            >>> school.needs_boarding_accounts()
+            True
+            
+            >>> school = School(boarding_type='DAY')
+            >>> school.needs_boarding_accounts()
+            False
+        """
+        return self.boarding_type in ['BOARDING', 'MIXED']
+    
+    def needs_detailed_payroll(self):
+        """
+        Check if school needs detailed payroll accounts.
+        
+        Large schools and advanced complexity levels need separate accounts for:
+        - Teaching salaries
+        - Administrative salaries
+        - Housing allowances
+        - Transport allowances
+        - Medical allowances
+        - etc.
+        
+        Returns:
+            bool: True if school needs detailed payroll tracking
+        
+        Examples:
+            >>> school = School(accounting_complexity='ADVANCED')
+            >>> school.needs_detailed_payroll()
+            True
+            
+            >>> school = School(accounting_complexity='BASIC')
+            >>> school.needs_detailed_payroll()
+            False
+        """
+        complexity = self.get_accounting_complexity_level()
+        return complexity == 'ADVANCED'
+    
+    def get_initialization_config(self):
+        """
+        Get complete initialization configuration for this school.
+        
+        This method returns all the information needed by the SchoolInitializer
+        to properly set up the school's financial system.
+        
+        Returns:
+            dict: Configuration dictionary with keys:
+                - school: School instance
+                - complexity: Accounting complexity level
+                - accounts_count: Recommended number of accounts
+                - needs_boarding: Whether boarding accounts are needed
+                - needs_detailed_payroll: Whether detailed payroll is needed
+                - school_type: Type of school
+                - student_capacity: Maximum student capacity
+                - currency: Default currency
+                - timezone: School timezone
+        
+        Examples:
+            >>> school = School.objects.get(pk=1)
+            >>> config = school.get_initialization_config()
+            >>> print(config['complexity'])
+            'STANDARD'
+            >>> print(config['accounts_count'])
+            25
+        """
+        complexity = self.get_accounting_complexity_level()
+        
+        return {
+            'school': self,
+            'complexity': complexity,
+            'accounts_count': self.get_recommended_accounts_count(),
+            'needs_boarding': self.needs_boarding_accounts(),
+            'needs_detailed_payroll': self.needs_detailed_payroll(),
+            'school_type': self.school_type,
+            'boarding_type': self.boarding_type,
+            'student_capacity': self.student_capacity,
+            'currency': 'UGX',  # Can be made configurable later
+            'timezone': self.timezone,
+            'language': self.language,
+        }
+    
+    def can_be_initialized(self):
+        """
+        Check if school can be initialized.
+        
+        Returns:
+            tuple: (can_initialize: bool, reason: str)
+        
+        Examples:
+            >>> school = School(is_initial_setup_complete=True)
+            >>> can, reason = school.can_be_initialized()
+            >>> print(can)
+            False
+            >>> print(reason)
+            'School is already initialized'
+        """
+        if self.is_initial_setup_complete:
+            return False, "School is already initialized"
+        
+        if not self.is_active_subscription:
+            return False, "School subscription is not active"
+        
+        return True, "School can be initialized"
+    
+    def can_be_reinitialized(self):
+        """
+        Comprehensive safety check for re-initialization.
+        
+        Returns:
+            tuple: (can_reinitialize: bool, reason: str, safety_level: str)
+        """
+        if not self.is_initial_setup_complete:
+            return False, "School has not been initialized yet. Use regular initialization.", "INFO"
+        
+        if not self.is_active_subscription:
+            return False, "School subscription is not active", "ERROR"
+        
+        # Check for real financial data
+        try:
+            from finance.models import JournalEntry
+            from fees.models import Payment, FeeInvoice
+            
+            journal_entries = JournalEntry.objects.filter(school=self).count()
+            payments = Payment.objects.filter(student__school=self).count()
+            invoices = FeeInvoice.objects.filter(student__school=self).count()
+            
+            if journal_entries > 10:
+                return False, f"School has {journal_entries} journal entries. Data would be lost.", "CRITICAL"
+            
+            if payments > 0:
+                return False, f"School has {payments} payments. Data would be lost.", "CRITICAL"
+            
+            if invoices > 5:
+                return False, f"School has {invoices} invoices. Data would be lost.", "CRITICAL"
+        except:
+            pass
+        
+        # Check age of initialization
+        if self.setup_completed_at:
+            from datetime import timedelta
+            from django.utils import timezone
+            
+            days_since_setup = (timezone.now() - self.setup_completed_at).days
+            
+            if days_since_setup > 30:
+                return False, f"School initialized {days_since_setup} days ago. Too old to re-initialize.", "WARNING"
+        
+        # Passed all checks
+        return True, "School can be re-initialized (WARNING: Destructive operation)", "DANGER"
+
     # -------------------------------------------------------------------------
-    # METHODS
+    # EXISTING METHODS
     # -------------------------------------------------------------------------
     
     def get_social_media_links(self):
@@ -482,7 +789,6 @@ class School(DefaultDatabaseModel):
             'city': self.city,
             'country': str(self.country.name) if self.country else None,
         }
-
 
 # =============================================================================
 # USER PROFILE MODEL

@@ -431,7 +431,7 @@ class AcademicSession(BaseModel):
                     if not config.validate_period_number(self.term_number):
                         errors['term_number'] = (
                             f'Period number {self.term_number} is invalid for '
-                            f'{config.get_term_system_display()} system (max: {config.get_period_count()}). '
+                            f'{config.get_term_system_display_name()} system (max: {config.get_period_count()}). '
                             f'To create a session outside the regular term structure, '
                             f'check the "Is Special Session" checkbox.'
                         )
@@ -445,8 +445,9 @@ class AcademicSession(BaseModel):
                         )
             except Exception as e:
                 logger.warning(f"Could not validate against SchoolConfiguration: {e}")
+                # Fallback validation if SchoolConfiguration doesn't exist
                 if self.term_number > 12:
-                    errors['term_number'] = 'Period number cannot exceed 12'
+                    errors['term_number'] = 'Period number cannot exceed 12 without a configured school system'
         else:
             # ✅ For special sessions, be more lenient with term_number
             if self.term_number > 20:
@@ -508,7 +509,7 @@ class AcademicSession(BaseModel):
                     logger.warning("No SchoolConfiguration found, using fallback values")
                     self._set_fallback_values()
             except Exception as e:
-                logger.error(f"Error getting SchoolConfiguration: {e}")
+                logger.error(f"Error getting SchoolConfiguration: {e}", exc_info=True)
                 self._set_fallback_values()
         
         else:
@@ -536,19 +537,20 @@ class AcademicSession(BaseModel):
                 self.term_name = f"{base_name} {self.term_number}"
                 logger.debug(f"Special session: Generated term_name='{self.term_name}'")
         
-        # Validate before saving
-        self.full_clean()
+        # ✅ REMOVED: Don't call full_clean() here - it's already called by the form
         
         # Ensure only one current session
         if self.is_current:
             AcademicSession.objects.filter(is_current=True).exclude(pk=self.pk).update(is_current=False)
         
         super().save(*args, **kwargs)
+        logger.info(f"Academic session saved successfully: {self.name}")
     
     def _set_fallback_values(self):
         """Set fallback values if SchoolConfiguration is not available"""
         if not self.period_type:
             self.period_type = 'term'
+            logger.debug("Using fallback period_type='term'")
         
         if not self.term_name:
             period_types = {
@@ -561,6 +563,7 @@ class AcademicSession(BaseModel):
             }
             period_name = period_types.get(self.period_type, 'Term')
             self.term_name = f"{period_name} {self.term_number}"
+            logger.debug(f"Using fallback term_name='{self.term_name}'")
     
     # -------------------------------------------------------------------------
     # CLOSURE METHODS
@@ -737,6 +740,49 @@ class AcademicSession(BaseModel):
             return 'status-active'
         else:
             return 'status-inactive'
+        
+    @classmethod
+    def get_current_session(cls):
+        """
+        Get the current active session.
+        
+        Returns:
+            AcademicSession or None: The current session if one exists
+        """
+        try:
+            return cls.objects.get(is_current=True, is_active=True)
+        except cls.DoesNotExist:
+            logger.warning("No current session found")
+            return None
+        except cls.MultipleObjectsReturned:
+            logger.error("Multiple current sessions found - data integrity issue")
+            # Return the most recent one
+            return cls.objects.filter(is_current=True, is_active=True).order_by('-start_date').first()
+
+    @classmethod
+    def get_open_for_enrollment(cls):
+        """
+        Get sessions that are open for enrollment.
+        
+        Returns sessions that are:
+        - Active
+        - Not academically closed
+        - Either have no enrollment deadline OR deadline hasn't passed OR late enrollment allowed
+        """
+        from django.db.models import Q
+        from datetime import date
+        
+        today = date.today()
+        
+        return cls.objects.filter(
+            is_active=True,
+            is_academically_closed=False
+        ).filter(
+            Q(enrollment_deadline__isnull=True) |  # No deadline set
+            Q(enrollment_deadline__gte=today) |     # Deadline not passed
+            Q(enrollment_deadline__lt=today, late_enrollment_allowed=True)  # Late enrollment allowed
+        ).order_by('-start_date')
+    
     
     # -------------------------------------------------------------------------
     # META CLASS
@@ -1612,6 +1658,57 @@ class Class(BaseModel):
             return 0
         except Exception:
             return 0
+        
+    @property
+    def active_enrollment_count(self):
+        """Get count of active enrollments for this class"""
+        return self.enrollments.filter(
+            is_active=True,
+            completion_status='ONGOING'
+        ).count()
+    
+    @property
+    def active_subject_count(self):
+        """Get count of active subjects assigned to this class"""
+        return self.subjects.filter(is_active=True).count()
+    
+    @property
+    def subjects_without_teacher_count(self):
+        """Get count of subjects that don't have a teacher assigned"""
+        return self.subjects.filter(
+            is_active=True,
+            teacher__isnull=True
+        ).count()
+    
+    def has_all_teachers_assigned(self):
+        """Check if all subjects have teachers assigned"""
+        return not self.subjects.filter(
+            is_active=True,
+            teacher__isnull=True
+        ).exists()
+    
+    @property
+    def completion_percentage(self):
+        """
+        Calculate what percentage of expected setup is complete.
+        Considers: has subjects, has teachers, has students
+        """
+        score = 0
+        max_score = 3
+        
+        # Has subjects assigned
+        if self.subjects.filter(is_active=True).exists():
+            score += 1
+        
+        # Has teachers for all subjects
+        if self.has_all_teachers_assigned():
+            score += 1
+        
+        # Has students enrolled
+        if self.active_enrollment_count > 0:
+            score += 1
+        
+        return round((score / max_score) * 100)
 
     # -------------------------------------------------------------------------
     # META CLASS

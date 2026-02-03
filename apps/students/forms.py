@@ -47,19 +47,14 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     """
     HTMX-powered student filter form.
     All date validations use school timezone.
-    
-    Usage:
-        form = StudentFilterForm(request.GET)
-        if form.is_valid():
-            # Apply filters to queryset
     """
     
-    # Configuration
+    # Configuration (keep these, but they won't be used in field widgets)
     htmx_get = 'students:student_search'  
     htmx_target = '#student-list'
-    search_delay = 100  # 300ms debounce for search
+    search_delay = 100
     
-    # Search field
+    # ✅ Search field - NO HTMX attributes
     q = forms.CharField(
         label='Search',
         required=False,
@@ -68,7 +63,7 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         })
     )
     
-    # Status filters
+    # ✅ Status filters - NO HTMX attributes
     enrollment_status = forms.ChoiceField(
         label='Enrollment Status',
         choices=[('', 'All Statuses')] + list(Student.ENROLLMENT_STATUS_CHOICES),
@@ -76,15 +71,15 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         widget=SelectWithDefault(default_label="All Statuses")
     )
     
-    # Academic filters
+    # ✅ Academic filters - NO HTMX attributes
     current_academic_level = forms.ModelChoiceField(
         label='Grade/Class',
-        queryset=None,  # Set in __init__
+        queryset=None,
         required=False,
         widget=SelectWithDefault(default_label="All Grades")
     )
     
-    # Demographics
+    # ✅ Demographics - NO HTMX attributes
     gender = forms.ChoiceField(
         label='Gender',
         choices=[('', 'All')] + list(Student.GENDER_CHOICES),
@@ -99,7 +94,7 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         widget=SelectWithDefault(default_label="All")
     )
     
-    # Health filters
+    # ✅ Health filters - NO HTMX attributes
     health_condition = forms.ChoiceField(
         label='Health Condition',
         choices=[('', 'All')] + list(Student.HEALTH_CONDITION_CHOICES),
@@ -110,25 +105,22 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     has_special_needs = forms.NullBooleanField(
         label='Special Needs',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Yes'),
-            ('false', 'No')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Yes'), ('false', 'No')],
+            attrs={'class': 'form-select'}
+        )
     )
     
-    # Transport
     transportation_required = forms.NullBooleanField(
         label='Requires Transport',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Yes'),
-            ('false', 'No')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Yes'), ('false', 'No')],
+            attrs={'class': 'form-select'}
+        )
     )
     
-    # Date range filters (uses school timezone) ⭐
+    # ✅ Date range filters - NO HTMX attributes
     admission_date_from = forms.DateField(
         label='Admitted From',
         required=False,
@@ -141,7 +133,7 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         widget=DatePickerInput()
     )
     
-    # Age range (calculated using school timezone) ⭐
+    # ✅ Age range - NO HTMX attributes
     age_min = forms.IntegerField(
         label='Min Age',
         required=False,
@@ -165,11 +157,7 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     )
     
     def __init__(self, *args, **kwargs):
-        # ⭐ FIX: Extract search URL if provided
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
+        # Remove the search_url pop - not needed
         super().__init__(*args, **kwargs)
         
         # Set academic level queryset
@@ -183,12 +171,10 @@ class StudentFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
             self.fields['current_academic_level'].queryset = AcademicLevel.objects.none()
     
     def clean(self):
-        """
-        Validate filters using school timezone. ⭐
-        """
+        """Validate filters using school timezone."""
         cleaned_data = super().clean()
         
-        # Validate admission date range (uses school timezone)
+        # Validate admission date range
         admission_from = cleaned_data.get('admission_date_from')
         admission_to = cleaned_data.get('admission_date_to')
         

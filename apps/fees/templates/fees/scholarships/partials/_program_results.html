@@ -1,0 +1,532 @@
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Scholarship Programs Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="200">Program Name</th>
+                <th width="120">Code</th>
+                <th width="140">Type & Mode</th>
+                <th width="150">Discount Config</th>
+                <th width="120">Budget</th>
+                <th width="100">Recipients</th>
+                <th width="100">Applications</th>
+                <th width="100">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="programTableBody">
+            {% if programs_page %}
+                {% for program in programs_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:programs_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Program Name -->
+                    <td>
+                        <div>
+                            <h6 class="mb-1">
+                                <a href="{% url 'fees:scholarship_program_detail' program.pk %}" class="text-dark text-decoration-none fw-bold">
+                                    {{ program.name }}
+                                </a>
+                            </h6>
+                            {% if program.sponsor_name %}
+                                <small class="text-muted">
+                                    <i class="fa fa-handshake me-1"></i>{{ program.sponsor_name|truncatewords:3 }}
+                                </small>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Code -->
+                    <td>
+                        <span class="badge bg-dark">{{ program.code }}</span>
+                    </td>
+                    
+                    <!-- Scholarship Type & Program Type -->
+                    <td>
+                        <!-- Scholarship Type -->
+                        <div class="mb-1">
+                            {% if program.scholarship_type == 'ACADEMIC_MERIT' %}
+                                <span class="badge bg-primary badge-scholarship-type">
+                                    <i class="fa fa-trophy me-1"></i>Merit
+                                </span>
+                            {% elif program.scholarship_type == 'NEED_BASED' %}
+                                <span class="badge bg-info badge-scholarship-type">
+                                    <i class="fa fa-heart me-1"></i>Need-Based
+                                </span>
+                            {% elif program.scholarship_type == 'SPORTS_EXCELLENCE' %}
+                                <span class="badge bg-success badge-scholarship-type">
+                                    <i class="fa fa-football-ball me-1"></i>Sports
+                                </span>
+                            {% elif program.scholarship_type == 'FULL_SCHOLARSHIP' %}
+                                <span class="badge bg-danger badge-scholarship-type">
+                                    <i class="fa fa-star me-1"></i>Full
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary badge-scholarship-type">
+                                    {{ program.get_scholarship_type_display|truncatewords:2 }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Program Type -->
+                        <div>
+                            {% if program.program_type == 'BUDGETED' %}
+                                <span class="badge bg-warning text-dark" style="font-size: 0.7rem;">
+                                    <i class="fa fa-calculator me-1"></i>Budgeted
+                                </span>
+                            {% elif program.program_type == 'POLICY_BASED' %}
+                                <span class="badge bg-primary" style="font-size: 0.7rem;">
+                                    <i class="fa fa-file-contract me-1"></i>Policy
+                                </span>
+                            {% elif program.program_type == 'SPONSORED' %}
+                                <span class="badge bg-success" style="font-size: 0.7rem;">
+                                    <i class="fa fa-handshake me-1"></i>Sponsored
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;">
+                                    Discretionary
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Discount Configuration -->
+                    <td>
+                        <!-- Discount Type Badge -->
+                        <div class="mb-2">
+                            {% if program.discount_type == 'PERCENTAGE' %}
+                                <span class="badge badge-discount-type bg-primary">
+                                    <i class="fa fa-percent me-1"></i>Global %
+                                </span>
+                                <div class="mt-1">
+                                    <strong class="text-primary fs-6">{{ program.discount_percentage }}%</strong>
+                                    <small class="text-muted d-block">All categories</small>
+                                </div>
+                            {% elif program.discount_type == 'FIXED_AMOUNT' %}
+                                <span class="badge badge-discount-type bg-success">
+                                    <i class="fa fa-money-bill me-1"></i>Fixed
+                                </span>
+                                <div class="mt-1">
+                                    <strong class="text-success">{{ program.fixed_discount_amount|amount_no_decimals }}</strong>
+                                </div>
+                            {% elif program.discount_type == 'FULL_WAIVER' %}
+                                <span class="badge badge-discount-type bg-danger">
+                                    <i class="fa fa-gift me-1"></i>Full Waiver
+                                </span>
+                                <div class="mt-1">
+                                    <strong class="text-danger">100%</strong>
+                                    <small class="text-muted d-block">All categories</small>
+                                </div>
+                            {% elif program.discount_type == 'CATEGORY_SPECIFIC' %}
+                                <span class="badge badge-discount-type bg-info">
+                                    <i class="fa fa-list-ul me-1"></i>Per Category
+                                </span>
+                                <div class="mt-1">
+                                    {% with program.default_category_discounts|length as cat_count %}
+                                        {% if cat_count > 0 %}
+                                            <small class="text-info fw-bold">{{ cat_count }} {% if cat_count == 1 %}category{% else %}categories{% endif %}</small>
+                                            {% if program.allows_category_customization %}
+                                                <small class="text-muted d-block">
+                                                    <i class="fa fa-user-edit" style="font-size: 0.7rem;"></i> Customizable
+                                                </small>
+                                            {% else %}
+                                                <small class="text-muted d-block">
+                                                    <i class="fa fa-lock" style="font-size: 0.7rem;"></i> Fixed
+                                                </small>
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-warning">Not configured</small>
+                                        {% endif %}
+                                    {% endwith %}
+                                </div>
+                            {% else %}
+                                <span class="badge badge-discount-type bg-secondary">
+                                    Variable
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Maximum Award (if set) -->
+                        {% if program.maximum_award_amount %}
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fa fa-shield-alt me-1"></i>Cap: {{ program.maximum_award_amount|amount_no_decimals }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Budget - FIXED TO HANDLE NONE VALUES -->
+                    <td>
+                        {% if program.total_budget_amount %}
+                            <div>
+                                <strong>{{ program.total_budget_amount|amount_no_decimals }}</strong>
+                            </div>
+                            {% if program.current_budget_used and program.current_budget_used > 0 %}
+                                <div class="progress mt-2" style="height: 8px;">
+                                    {% widthratio program.current_budget_used program.total_budget_amount 100 as budget_percent %}
+                                    <div class="progress-bar {% if budget_percent >= 90 %}bg-danger{% elif budget_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}" 
+                                         role="progressbar" 
+                                         style="width: {{ budget_percent }}%"
+                                         aria-valuenow="{{ budget_percent }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                    </div>
+                                </div>
+                                <small class="text-muted">Used: {{ program.current_budget_used|amount_no_decimals }}</small>
+                            {% endif %}
+                        {% else %}
+                            <!-- No Budget Limit - For POLICY_BASED and DISCRETIONARY -->
+                            <div class="text-center">
+                                <span class="badge bg-info" style="font-size: 0.75rem;">
+                                    <i class="fa fa-infinity me-1"></i>Unlimited
+                                </span>
+                                <div class="mt-1">
+                                    <small class="text-muted">No Limit</small>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Recipients -->
+                    <td class="text-center">
+                        {% if program.active_scholarship_count > 0 %}
+                            <a href="{% url 'fees:student_scholarship_list' %}?scholarship_program={{ program.id }}" 
+                               class="badge bg-success" 
+                               style="text-decoration: none;">
+                                {{ program.active_scholarship_count }} active
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No recipients</span>
+                        {% endif %}
+                        {% if program.maximum_recipients %}
+                            <div class="mt-1">
+                                <small class="text-muted">Max: {{ program.maximum_recipients }}</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Applications -->
+                    <td class="text-center">
+                        {% if program.application_count > 0 %}
+                            <a href="{% url 'fees:scholarship_application_list' %}?scholarship_program={{ program.id }}" 
+                               class="badge bg-info" 
+                               style="text-decoration: none;">
+                                {{ program.application_count }} pending
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No applications</span>
+                        {% endif %}
+                        {% if program.is_accepting_applications %}
+                            <div class="mt-1">
+                                <span class="badge bg-success" style="font-size: 0.7rem;">
+                                    <i class="fa fa-check me-1"></i>Accepting
+                                </span>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td class="text-center">
+                        {% if program.is_active %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'fees:scholarship_program_detail' program.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'fees:scholarship_program_edit' program.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit Program
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Links -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'fees:student_scholarship_list' %}?scholarship_program={{ program.id }}">
+                                    <i class="fa fa-users me-2"></i> View Recipients
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'fees:scholarship_application_list' %}?scholarship_program={{ program.id }}">
+                                    <i class="fa fa-file-alt me-2"></i> View Applications
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'fees:student_scholarship_create' %}?scholarship_program={{ program.id }}">
+                                    <i class="fa fa-plus me-2"></i> Award Scholarship
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Program Status Actions -->
+                                <h6 class="dropdown-header">Status Management</h6>
+                                
+                                <!-- Toggle Active Status -->
+                                {% if program.is_active %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'fees:scholarship_program_deactivate_modal' program.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i> Deactivate Program
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'fees:scholarship_program_activate_modal' program.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-play-circle me-2"></i> Activate Program
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Toggle Accepting Applications -->
+                                <button type="button" class="dropdown-item {% if program.is_accepting_applications %}text-warning{% else %}text-success{% endif %}"
+                                        hx-get="{% url 'fees:scholarship_toggle_accepting_modal' program.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-{% if program.is_accepting_applications %}pause{% else %}play{% endif %} me-2"></i> 
+                                    {% if program.is_accepting_applications %}Stop Accepting{% else %}Start Accepting{% endif %}
+                                </button>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:scholarship_program_delete_modal' program.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete Program
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Scholarship Programs Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new program.</p>
+                            <a href="{% url 'fees:scholarship_program_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Program
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if programs_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ programs_page.start_index }} - {{ programs_page.end_index }} of {{ programs_page.paginator.count|format_number }} programs
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Program pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if programs_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:scholarship_program_list' %}"
+                                hx-target="#program-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ programs_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-disabled="true">
+                            <span aria-hidden="true">«</span>
+                        </span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in programs_page.paginator.page_range %}
+                    {% if page_num == programs_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > programs_page.number|add:"-3" and page_num < programs_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'fees:scholarship_program_list' %}"
+                                    hx-target="#program-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if programs_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:scholarship_program_list' %}"
+                                hx-target="#program-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ programs_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-disabled="true">
+                            <span aria-hidden="true">»</span>
+                        </span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+.status-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.badge-scholarship-type {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+}
+
+.badge-discount-type {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+.progress {
+    border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-medal"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Programs</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Programs</div>
+                <h3>{{ stats.active|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Recipients</div>
+                <h3>{{ stats.total_recipients|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-wallet"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Budget</div>
+                <h3>{{ stats.total_budget|default:0|amount_no_decimals }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

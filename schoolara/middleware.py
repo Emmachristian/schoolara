@@ -29,7 +29,6 @@ from .managers import get_current_db, set_current_db, clear_current_db
 
 logger = logging.getLogger(__name__)
 
-
 class SchoolDatabaseMiddleware:
     """
     Universal, SAFE multi-tenant database middleware with timezone support.

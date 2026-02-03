@@ -1,0 +1,322 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* Copy the same styles from categories/list.html */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.published {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.unpublished {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.status-badge.locked {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.grade-badge {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: inline-block;
+}
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.result-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-note2 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Results for {{ class_instance.get_display_name }}
+                <div class="page-title-subheading">
+                    {{ session.name }} - Individual Student Results
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'exams:class_results_dashboard' class_instance.pk %}?session={{ session.pk }}" 
+                   class="btn btn-outline-primary">
+                    <i class="fa fa-table me-1"></i>Dashboard View
+                </a>
+                <a href="{% url 'exams:bulk_result_entry' %}?class={{ class_instance.pk }}" 
+                   class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i>Enter Results
+                </a>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Results</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Published</div>
+                <h3>{{ stats.published|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-lock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Locked Grades</div>
+                <h3>{{ stats.locked|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-graph2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Pass Rate</div>
+                <h3>{{ stats.pass_rate|default:0 }}%</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card">
+                <div class="card-body">
+                    
+                    <!-- Session Selector -->
+                    <div class="mb-3">
+                        <form method="get" class="d-flex align-items-center gap-2">
+                            <label class="mb-0">Academic Session:</label>
+                            <select name="session" class="form-select w-auto" onchange="this.form.submit()">
+                                {% for sess in all_sessions %}
+                                <option value="{{ sess.pk }}" {% if sess.pk == session.pk %}selected{% endif %}>
+                                    {{ sess.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </div>
+
+                    <!-- Search & Filters -->
+                    <div class="result-filters">
+                        <form id="searchForm" 
+                            class="row g-3"
+                            hx-get="{% url 'exams:result_list' %}"
+                            hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+                            hx-target="#results-container"
+                            hx-swap="innerHTML">
+                            
+                            <input type="hidden" name="class" value="{{ class_instance.pk }}">
+                            <input type="hidden" name="session" value="{{ session.pk }}">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Search Student</label>
+                                {% render_field filter_form.q class="form-control" placeholder="Search by name or admission number..." %}
+                            </div>
+                            
+                            <!-- Examination Filter -->
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Examination</label>
+                                {% render_field filter_form.examination class="form-select" %}
+                            </div>
+                            
+                            <!-- Status Filter -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Status</label>
+                                {% render_field filter_form.status class="form-select" %}
+                            </div>
+
+                            <!-- Published Filter -->
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Published</label>
+                                {% render_field filter_form.is_published class="form-select" %}
+                            </div>
+
+                            <!-- Reset Button -->
+                            <div class="col-md-1 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                                    <i class="fa fa-times"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="results-container">
+                        {% include 'exams/results/partials/_class_results_table.html' %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Modal Container -->
+<div id="modal-container" style="display: none;"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// HTMX Modal Handler (same as category list)
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            modalWrapper.appendChild(modalDialog);
+            document.body.appendChild(modalWrapper);
+            
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+function resetFilters() {
+    window.location.href = "{% url 'exams:class_results_dashboard' class_instance.pk %}?session={{ session.pk }}";
+}
+</script>
+{% endblock %}

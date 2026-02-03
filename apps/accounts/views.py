@@ -10,11 +10,13 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
 
+
 def logout_view(request):
     """Handle user logout"""
     logout(request)
     messages.success(request, "You have been successfully logged out.")
     return redirect('accounts:login')
+
 
 @never_cache
 def login_view(request):
@@ -64,6 +66,7 @@ def login_view(request):
     
     return render(request, 'login.html', {'form': form})
 
+
 @login_required
 @require_POST
 def save_theme_preference(request):
@@ -76,7 +79,7 @@ def save_theme_preference(request):
         if not setting:
             return JsonResponse({'success': False, 'error': 'Setting required'})
         
-        profile = request.user.userprofile
+        profile = request.user.profile
         
         # Boolean settings
         if setting in ['fixed_header', 'fixed_sidebar', 'fixed_footer']:
@@ -100,20 +103,36 @@ def save_theme_preference(request):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
     
 @login_required
 def user_account_settings(request):
     """
-    View for user to edit their account settings and profile
+    View for user to edit their account settings and profile.
+    Handles both regular form submission and AJAX photo uploads.
     """
     try:
-        # Get the user's profile
-        user_profile = UserProfile.objects.get(user=request.user)
-    except UserProfile.DoesNotExist:
-        messages.error(request, 'User profile not found.')
-        return redirect('core:home')  # Change 'home' to your home page URL name
+        # Get or create the user's profile
+        user_profile, created = UserProfile.objects.get_or_create(user=request.user)
+    except Exception as e:
+        messages.error(request, f'Error loading profile: {str(e)}')
+        return redirect('core:home')
     
-    if request.method == 'POST':
+    # Handle AJAX requests for photo upload (from the JavaScript)
+    if request.method == 'POST' and request.headers.get('Content-Type') == 'application/json':
+        try:
+            data = json.loads(request.body)
+            action = data.get('action')
+            
+            if action == 'update_photo':
+                # This is handled by ajax_views.update_profile_picture
+                # But we can add a redirect here if needed
+                pass
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid JSON'}, status=400)
+    
+    # Handle regular form submission
+    if request.method == 'POST' and request.headers.get('Content-Type') != 'application/json':
         form = UserProfileForm(
             request.POST, 
             request.FILES, 
@@ -122,12 +141,15 @@ def user_account_settings(request):
         )
         
         if form.is_valid():
+            # Save the form (this will update both User and UserProfile)
             form.save()
+            
             messages.success(request, 'Your profile has been updated successfully!')
-            return redirect('accounts:user_account_settings')  # Redirect to same page to show updated data
+            return redirect('accounts:user_account_settings')
         else:
             messages.error(request, 'Please correct the errors below.')
     else:
+        # GET request - display the form
         form = UserProfileForm(instance=user_profile, user=request.user)
     
     context = {

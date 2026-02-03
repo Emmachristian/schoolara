@@ -1,0 +1,370 @@
+{# finance/templates/finance/expense_categories/partials/_category_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Expense Categories Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="250">Category Name</th>
+                <th width="150" class="text-center">Type</th>
+                <th width="200">Default Account</th>
+                <th width="130" class="text-center">Approval Limit</th>
+                <th width="100" class="text-center">Expenses</th>
+                <th width="100" class="text-center">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="categoryTableBody">
+            {% if categories_page %}
+                {% for category in categories_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:categories_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Category Name -->
+                    <td>
+                        <div>
+                            <a href="{% url 'finance:expense_category_detail' category.pk %}" class="text-primary fw-bold">
+                                {{ category.name }}
+                            </a>
+                        </div>
+                        {% if category.description %}
+                            <small class="text-muted">{{ category.description|truncatewords:10 }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Category Type -->
+                    <td class="text-center">
+                        {% if category.category_type == 'OPERATING' %}
+                            <span class="badge bg-primary">
+                                <i class="fa fa-cogs me-1"></i>Operating
+                            </span>
+                        {% elif category.category_type == 'ADMINISTRATIVE' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-briefcase me-1"></i>Administrative
+                            </span>
+                        {% elif category.category_type == 'CAPITAL' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-building me-1"></i>Capital
+                            </span>
+                        {% elif category.category_type == 'PAYROLL' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-users me-1"></i>Payroll
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                {{ category.get_category_type_display }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Default Account -->
+                    <td>
+                        {% if category.default_expense_account %}
+                            <div class="d-flex align-items-center">
+                                <i class="fa fa-link text-muted me-2"></i>
+                                <div>
+                                    <div class="text-dark">{{ category.default_expense_account.account_number }}</div>
+                                    <small class="text-muted">{{ category.default_expense_account.name|truncatewords:4 }}</small>
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Not set</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Approval Limit -->
+                    <td class="text-center">
+                        {% if category.requires_approval %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-check-circle me-1"></i>Required
+                            </span>
+                            {% if category.approval_limit %}
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        Limit: {{ category.approval_limit|money }}
+                                    </small>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">Not required</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Expenses Count -->
+                    <td class="text-center">
+                        {% if category.expenses.count > 0 %}
+                            <a href="{% url 'finance:expense_list' %}?category={{ category.id }}" 
+                               class="badge bg-info text-decoration-none">
+                                {{ category.expenses.count }} expense{{ category.expenses.count|pluralize }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No expenses</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- ✅ STATUS COLUMN - SIMPLIFIED BADGES -->
+                    <td class="text-center status-cell">
+                        {% if category.is_active %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'finance:expense_category_detail' category.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'finance:expense_category_edit' category.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- View Expenses -->
+                                <a class="dropdown-item" href="{% url 'finance:expense_list' %}?category={{ category.id }}">
+                                    <i class="fa fa-list me-2"></i> View Expenses
+                                    {% if category.expenses.count > 0 %}
+                                        <span class="badge bg-info ms-1">{{ category.expenses.count }}</span>
+                                    {% endif %}
+                                </a>
+                                
+                                <!-- Create Expense -->
+                                <a class="dropdown-item" href="{% url 'finance:expense_create' %}?category={{ category.id }}">
+                                    <i class="fa fa-plus me-2"></i> Create Expense
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Toggle Active -->
+                                <button type="button" class="dropdown-item {% if category.is_active %}text-warning{% else %}text-success{% endif %}"
+                                        hx-get="{% url 'finance:expense_category_toggle_active_modal' category.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-{% if category.is_active %}ban{% else %}check{% endif %} me-2"></i> 
+                                    {% if category.is_active %}Deactivate{% else %}Activate{% endif %}
+                                </button>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'finance:expense_category_delete_modal' category.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Expense Categories Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new expense category.</p>
+                            <a href="{% url 'finance:expense_category_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Expense Category
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if categories_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ categories_page.start_index }} - {{ categories_page.end_index }} of {{ categories_page.paginator.count|format_number }} categories
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Expense category pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if categories_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_category_list' %}"
+                                hx-target="#expense-category-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ categories_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in categories_page.paginator.page_range %}
+                    {% if page_num == categories_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > categories_page.number|add:"-3" and page_num < categories_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'finance:expense_category_list' %}"
+                                    hx-target="#expense-category-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if categories_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_category_list' %}"
+                                hx-target="#expense-category-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ categories_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Simplified Status Badge Styling - Matching Pattern */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.status-cell {
+    min-width: 100px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown {
+    position: static !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-box2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Categories</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active</div>
+                <h3>{{ stats.active|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-shield"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Require Approval</div>
+                <h3>{{ stats.requires_approval|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Expenses</div>
+                <h3>{{ stats.total_expenses|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

@@ -1,46 +1,35 @@
 # core/utils.py
 
 """
-Central utilities for School Management System
-Prevents code duplication and ensures consistency across all apps
+Central utilities for School Management System operations
+Prevents code duplication and ensures consistency across all modules
 """
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.http import HttpResponse
+from django.utils import timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
-from datetime import date, datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Thread-local storage for recursion detection
-import threading
-_thread_locals = threading.local()
-
-def _is_in_timezone_query():
-    """Check if we're currently in a timezone query to prevent recursion"""
-    return getattr(_thread_locals, 'in_timezone_query', False)
-
-def _set_timezone_query_flag(value):
-    """Set the timezone query flag"""
-    _thread_locals.in_timezone_query = value
 
 
 # =============================================================================
 # CURRENCY & MONEY FORMATTING
 # =============================================================================
 
-def get_base_currency():
+def get_school_currency():
     """
     Get base currency from school financial settings.
     Safe method that handles circular imports and missing config.
     
     Returns:
         str: Currency code (defaults to 'UGX')
-    
+        
     Example:
-        >>> from core.utils import get_base_currency
-        >>> currency = get_base_currency()
-        >>> print(f"School currency: {currency}")
+        >>> from core.utils import get_school_currency
+        >>> currency = get_school_currency()
+        >>> print(f"School uses: {currency}")  # "UGX"
     """
     try:
         from core.models import FinancialSettings
@@ -61,11 +50,11 @@ def format_money(amount, include_symbol=True):
         
     Returns:
         str: Formatted money string
-    
+        
     Example:
         >>> from core.utils import format_money
         >>> print(format_money(1500000))  # "UGX 1,500,000.00"
-        >>> print(format_money(1500000, False))  # "1,500,000.00"
+        >>> print(format_money(1500000, include_symbol=False))  # "1,500,000.00"
     """
     try:
         from core.models import FinancialSettings
@@ -80,304 +69,154 @@ def format_money(amount, include_symbol=True):
         amount_decimal = Decimal(str(amount or 0))
         formatted = f"{amount_decimal:,.2f}"
         return f"UGX {formatted}" if include_symbol else formatted
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, InvalidOperation):
         return "UGX 0.00" if include_symbol else "0.00"
 
 
-def validate_amount_in_currency(amount, currency_code=None):
+def validate_amount(amount, min_amount=None, max_amount=None):
     """
-    Validate that an amount is appropriate for the school's currency.
+    Validate that an amount is appropriate for school operations.
     
     Args:
         amount: Amount to validate
-        currency_code: Optional currency code to check against
+        min_amount: Optional minimum amount (uses FinancialSettings default if None)
+        max_amount: Optional maximum amount
         
     Returns:
         tuple: (is_valid, error_message)
-    
+        
     Example:
-        >>> from core.utils import validate_amount_in_currency
-        >>> is_valid, error = validate_amount_in_currency(1500000)
+        >>> from core.utils import validate_amount
+        >>> is_valid, error = validate_amount(5000)
         >>> if not is_valid:
-        >>>     print(f"Error: {error}")
+        >>>     print(error)
     """
-    if currency_code is None:
-        currency_code = get_base_currency()
-    
     try:
         amount_decimal = Decimal(str(amount))
         
         if amount_decimal < 0:
             return False, "Amount cannot be negative"
         
-        # Currency-specific validations
-        # For example, some currencies don't use decimal places
-        if currency_code in ['JPY', 'KRW', 'VND']:  # No decimal currencies
-            if amount_decimal != amount_decimal.quantize(Decimal('1')):
-                return False, f"{currency_code} does not use decimal places"
+        # Get minimum from settings if not provided
+        if min_amount is None:
+            try:
+                from core.models import FinancialSettings
+                settings = FinancialSettings.get_instance()
+                if settings:
+                    min_amount = settings.minimum_payment_amount
+            except Exception:
+                min_amount = Decimal('1000.00')  # Fallback
+        
+        if min_amount and amount_decimal < Decimal(str(min_amount)):
+            return False, f"Amount must be at least {format_money(min_amount)}"
+        
+        if max_amount and amount_decimal > Decimal(str(max_amount)):
+            return False, f"Amount cannot exceed {format_money(max_amount)}"
         
         return True, None
         
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, InvalidOperation):
         return False, "Invalid amount format"
 
+
+def parse_amount(amount_str):
+    """
+    Parse amount string to Decimal, removing currency symbols and separators.
+    
+    Args:
+        amount_str: String representation of amount (e.g., "UGX 1,500,000.00")
+        
+    Returns:
+        Decimal: Parsed amount or Decimal('0')
+        
+    Example:
+        >>> from core.utils import parse_amount
+        >>> amount = parse_amount("UGX 1,500,000.00")
+        >>> print(amount)  # Decimal('1500000.00')
+    """
+    if not amount_str:
+        return Decimal('0')
+    
+    try:
+        # Remove currency symbols and separators
+        clean_str = str(amount_str)
+        clean_str = clean_str.replace('UGX', '').replace(',', '').strip()
+        return Decimal(clean_str)
+    except (ValueError, TypeError, InvalidOperation):
+        logger.warning(f"Could not parse amount: {amount_str}")
+        return Decimal('0')
+
+
+# =============================================================================
+# PERCENTAGE & CALCULATION UTILITIES
+# =============================================================================
 
 def calculate_percentage(part, whole, decimal_places=2):
     """
     Calculate percentage with safe division.
     
     Args:
-        part: The part value
-        whole: The whole value
+        part: Part value (numerator)
+        whole: Whole value (denominator)
         decimal_places: Number of decimal places (default: 2)
         
     Returns:
-        Decimal: Percentage value, 0 if whole is 0
-    
+        Decimal: Percentage value (0 if whole is 0)
+        
     Example:
         >>> from core.utils import calculate_percentage
-        >>> percentage = calculate_percentage(75, 100)  # 75.00
-        >>> completion = calculate_percentage(30, 120)  # 25.00
+        >>> print(calculate_percentage(750000, 1000000))  # Decimal('75.00')
+        >>> print(calculate_percentage(100, 0))  # Decimal('0.00')
     """
     try:
-        part = Decimal(str(part or 0))
-        whole = Decimal(str(whole or 0))
+        part_decimal = Decimal(str(part or 0))
+        whole_decimal = Decimal(str(whole or 0))
         
-        if whole == 0:
+        if whole_decimal == 0:
             return Decimal('0.00')
         
-        percentage = (part / whole) * 100
-        return percentage.quantize(Decimal(f'0.{"0" * decimal_places}'))
-    except (ValueError, TypeError, ZeroDivisionError):
+        percentage = (part_decimal / whole_decimal) * 100
+        return round(percentage, decimal_places)
+    except (ValueError, TypeError, InvalidOperation, ZeroDivisionError):
+        return Decimal('0.00')
+
+
+def calculate_amount_from_percentage(base_amount, percentage):
+    """
+    Calculate amount from percentage of base amount.
+    
+    Args:
+        base_amount: Base amount
+        percentage: Percentage to calculate
+        
+    Returns:
+        Decimal: Calculated amount
+        
+    Example:
+        >>> from core.utils import calculate_amount_from_percentage
+        >>> print(calculate_amount_from_percentage(1000000, 5))  # Decimal('50000.00')
+    """
+    try:
+        base = Decimal(str(base_amount or 0))
+        pct = Decimal(str(percentage or 0))
+        
+        amount = (base * pct) / 100
+        return round(amount, 2)
+    except (ValueError, TypeError, InvalidOperation):
         return Decimal('0.00')
 
 
 # =============================================================================
-# TIMEZONE UTILITY FUNCTIONS
+# FISCAL PERIOD & YEAR UTILITIES
 # =============================================================================
-
-def get_school_timezone():
-    """
-    Get the school's operational timezone.
-    
-    This is the central timezone utility for all school operations.
-    Use this consistently across the application to ensure all date/time
-    calculations use the correct timezone.
-    
-    Returns:
-        ZoneInfo: School's operational timezone (defaults to Africa/Kampala)
-    """
-    from zoneinfo import ZoneInfo
-    
-    # Prevent recursion - if we're already querying timezone, return default immediately
-    if _is_in_timezone_query():
-        logger.debug("Recursion detected in get_school_timezone, returning default")
-        return ZoneInfo('Africa/Kampala')
-    
-    try:
-        # Set flag to prevent recursion
-        _set_timezone_query_flag(True)
-        
-        try:
-            from core.models import SchoolConfiguration
-            # Use get_cached_instance to avoid repeated DB queries
-            config = SchoolConfiguration.get_cached_instance()
-            if config and hasattr(config, 'get_timezone'):
-                return config.get_timezone()
-            # Fallback if timezone not yet implemented
-            return ZoneInfo('Africa/Kampala')
-        finally:
-            # Always clear flag, even if exception occurs
-            _set_timezone_query_flag(False)
-            
-    except Exception as e:
-        logger.error(f"Error getting school timezone: {e}")
-        _set_timezone_query_flag(False)  # Clear flag on error too
-        return ZoneInfo('Africa/Kampala')
-
-
-def get_school_current_time():
-    """
-    Get current time in school's operational timezone.
-    
-    Use this when you need the current timestamp with timezone awareness.
-    Perfect for logging, audit trails, and transaction timestamps.
-    
-    Returns:
-        datetime: Current datetime in school's timezone
-    
-    Example:
-        >>> from core.utils import get_school_current_time
-        >>> current_time = get_school_current_time()
-        >>> payment.timestamp = current_time
-        >>> print(f"Payment time: {current_time}")
-    """
-    from django.utils import timezone
-    return timezone.now().astimezone(get_school_timezone())
-
-
-def get_school_today():
-    """
-    Get today's date in school's operational timezone.
-    
-    **CRITICAL**: Always use this instead of date.today() or timezone.now().date()
-    for any business logic that depends on dates!
-    
-    This is essential for:
-    - Academic session/term boundary checks (is term active today?)
-    - Fee payment due date calculations (is payment overdue?)
-    - Attendance marking (today's attendance records)
-    - Exam scheduling (exams scheduled for today)
-    - Report generation (data as of today)
-    - Late fee calculations (days overdue as of today)
-    - Student enrollment status (enrolled as of today)
-    - Any date-based business logic
-    
-    Why? Because "today" depends on timezone:
-    - In Uganda (EAT/UTC+3), it might be Feb 15 at 1:00 AM
-    - In New York (EST/UTC-5), it's still Feb 14 at 5:00 PM
-    - In Tokyo (JST/UTC+9), it's Feb 15 at 7:00 AM
-    - Using UTC would give wrong results for local school operations
-    
-    Real-world scenarios:
-    - Boarding school: Students check in "today" at midnight
-    - Fee deadline: Payment due "today" at 11:59 PM school time
-    - Attendance: Marked for "today" even if parent abroad logs in
-    - Report cards: Generated with data as of "today" in school timezone
-    
-    Returns:
-        date: Today's date in school's timezone
-    
-    Example:
-        >>> from core.utils import get_school_today
-        >>> today = get_school_today()
-        >>> 
-        >>> # Check if term is active
-        >>> if session.start_date <= today <= session.end_date:
-        >>>     print("Term is active today")
-        >>> 
-        >>> # Check if fee payment is overdue
-        >>> if invoice.due_date < today:
-        >>>     days_overdue = (today - invoice.due_date).days
-        >>>     print(f"Payment is {days_overdue} days overdue")
-        >>> 
-        >>> # Get today's attendance records
-        >>> attendance = Attendance.objects.filter(date=today)
-        >>> 
-        >>> # Check student enrollment status
-        >>> if enrollment.start_date <= today <= enrollment.end_date:
-        >>>     print("Student is currently enrolled")
-    """
-    return get_school_current_time().date()
-
-
-def localize_datetime(dt):
-    """
-    Convert a datetime to school's operational timezone.
-    
-    Use this to convert UTC or naive datetimes to the school's timezone
-    for display or calculations.
-    
-    Args:
-        dt: datetime object (naive or aware)
-        
-    Returns:
-        datetime: Timezone-aware datetime in school's operational timezone
-    
-    Example:
-        >>> from core.utils import localize_datetime
-        >>> utc_time = timezone.now()  # In UTC
-        >>> local_time = localize_datetime(utc_time)
-        >>> print(f"Local school time: {local_time}")
-        >>> 
-        >>> # Convert payment timestamp to school time
-        >>> payment_local = localize_datetime(payment.created_at)
-        >>> print(f"Payment received at: {payment_local}")
-    """
-    from django.utils import timezone
-    if timezone.is_naive(dt):
-        dt = timezone.make_aware(dt)
-    return dt.astimezone(get_school_timezone())
-
-
-def is_same_day_in_school_timezone(dt1, dt2):
-    """
-    Check if two datetimes fall on the same calendar day in school timezone.
-    
-    Args:
-        dt1: First datetime
-        dt2: Second datetime
-        
-    Returns:
-        bool: True if same day in school timezone
-    
-    Example:
-        >>> from core.utils import is_same_day_in_school_timezone
-        >>> 
-        >>> # Check if two payments were made on the same school day
-        >>> same_day = is_same_day_in_school_timezone(
-        >>>     payment1.created_at,
-        >>>     payment2.created_at
-        >>> )
-    """
-    local_dt1 = localize_datetime(dt1)
-    local_dt2 = localize_datetime(dt2)
-    return local_dt1.date() == local_dt2.date()
-
-
-# =============================================================================
-# ACADEMIC PERIOD & YEAR UTILITIES
-# =============================================================================
-
-def get_active_academic_session():
-    """
-    Get the currently active academic session/term.
-    
-    Returns:
-        AcademicSession or None: Active academic session
-    
-    Example:
-        >>> from core.utils import get_active_academic_session
-        >>> session = get_active_academic_session()
-        >>> if session:
-        >>>     print(f"Current term: {session.name}")
-    """
-    try:
-        from academics.models import AcademicSession
-        return AcademicSession.get_active_session()
-    except Exception as e:
-        logger.error(f"Error fetching active academic session: {e}")
-        return None
-
-
-def get_active_fiscal_year():
-    """
-    Get the currently active fiscal year.
-    
-    Returns:
-        FiscalYear or None: Active fiscal year
-    
-    Example:
-        >>> from core.utils import get_active_fiscal_year
-        >>> fiscal_year = get_active_fiscal_year()
-        >>> if fiscal_year:
-        >>>     print(f"Current fiscal year: {fiscal_year.name}")
-    """
-    try:
-        from core.models import FiscalYear
-        return FiscalYear.get_active_fiscal_year()
-    except Exception as e:
-        logger.error(f"Error fetching active fiscal year: {e}")
-        return None
-
 
 def get_active_fiscal_period():
     """
-    Get the currently active fiscal period.
+    Get the currently active fiscal period for financial transactions.
     
     Returns:
         FiscalPeriod or None: Active fiscal period
-    
+        
     Example:
         >>> from core.utils import get_active_fiscal_period
         >>> period = get_active_fiscal_period()
@@ -392,220 +231,452 @@ def get_active_fiscal_period():
         return None
 
 
-def get_academic_session_by_date(check_date=None):
+def get_active_fiscal_year():
     """
-    Get the academic session that contains a specific date.
+    Get the currently active fiscal/academic year.
     
-    Args:
-        check_date: Date to check (defaults to today in school timezone)
-        
     Returns:
-        AcademicSession or None: Session containing the date
-    
+        FiscalYear or None: Active fiscal year
+        
     Example:
-        >>> from core.utils import get_academic_session_by_date, get_school_today
-        >>> 
-        >>> # Get current session
-        >>> current_session = get_academic_session_by_date()
-        >>> 
-        >>> # Get session for specific date
-        >>> from datetime import date
-        >>> session = get_academic_session_by_date(date(2024, 3, 15))
+        >>> from core.utils import get_active_fiscal_year
+        >>> year = get_active_fiscal_year()
+        >>> if year:
+        >>>     print(f"Current academic year: {year.name}")
     """
-    if check_date is None:
-        check_date = get_school_today()
+    try:
+        from core.models import FiscalYear
+        return FiscalYear.get_active_fiscal_year()
+    except Exception as e:
+        logger.error(f"Error fetching active fiscal year: {e}")
+        return None
+
+
+def get_active_academic_session():
+    """
+    Get the currently active academic session for teaching/learning.
     
+    Returns:
+        AcademicSession or None: Active academic session
+        
+    Example:
+        >>> from core.utils import get_active_academic_session
+        >>> session = get_active_academic_session()
+        >>> if session:
+        >>>     print(f"Current term: {session.name}")
+        >>>     print(f"Session dates: {session.start_date} to {session.end_date}")
+    """
     try:
         from academics.models import AcademicSession
-        return AcademicSession.objects.filter(
-            start_date__lte=check_date,
-            end_date__gte=check_date
-        ).first()
+        return AcademicSession.get_current_session()
     except Exception as e:
-        logger.error(f"Error fetching academic session by date: {e}")
+        logger.debug(f"Could not fetch active academic session: {e}")
         return None
 
 
-def get_fiscal_period_by_date(check_date=None):
-    """
-    Get the fiscal period that contains a specific date.
-    
-    Args:
-        check_date: Date to check (defaults to today in school timezone)
-        
-    Returns:
-        FiscalPeriod or None: Period containing the date
-    
-    Example:
-        >>> from core.utils import get_fiscal_period_by_date
-        >>> period = get_fiscal_period_by_date()
-        >>> if period:
-        >>>     print(f"Current period: {period.name}")
-    """
-    if check_date is None:
-        check_date = get_school_today()
-    
-    try:
-        from core.models import FiscalPeriod
-        return FiscalPeriod.objects.filter(
-            start_date__lte=check_date,
-            end_date__gte=check_date
-        ).first()
-    except Exception as e:
-        logger.error(f"Error fetching fiscal period by date: {e}")
-        return None
+# =============================================================================
+# TIMEZONE UTILITY FUNCTIONS - THE SINGLE SOURCE OF TRUTH ⭐
+# =============================================================================
 
-
-def get_school_configuration():
+def get_school_timezone():
     """
-    Get school configuration instance safely.
+    Get the school's operational timezone.
+    
+    This is the **CENTRAL TIMEZONE UTILITY** for all school operations.
+    Use this consistently across the application to ensure all date/time
+    calculations use the correct timezone.
+    
+    **FALLBACK BEHAVIOR:**
+    - If SchoolConfiguration exists and operational_timezone is set → Uses that timezone
+    - If operational_timezone is not set or invalid → Falls back to Africa/Kampala
+    - If SchoolConfiguration doesn't exist → Falls back to Africa/Kampala
+    
+    **WHY THIS MATTERS:**
+    The school's timezone affects EVERY date-based business logic:
+    - When invoices are due
+    - When terms start/end
+    - When to send reminders
+    - What "today" means for transactions
+    - When fees become overdue
+    - Financial period boundaries
     
     Returns:
-        SchoolConfiguration or None: Configuration instance
+        ZoneInfo: School's operational timezone (or Africa/Kampala as fallback)
     
     Example:
-        >>> from core.utils import get_school_configuration
-        >>> config = get_school_configuration()
-        >>> if config:
-        >>>     print(f"Term system: {config.get_term_system_display()}")
+        >>> from core.utils import get_school_timezone
+        >>> tz = get_school_timezone()
+        >>> now = datetime.now(tz=tz)
+        >>> print(f"Current time in school timezone: {now}")
     """
     try:
         from core.models import SchoolConfiguration
-        return SchoolConfiguration.get_cached_instance()
+        config = SchoolConfiguration.get_cached_instance()
+        
+        if config and config.operational_timezone:
+            try:
+                # Try to get configured timezone
+                return ZoneInfo(config.operational_timezone)
+            except Exception as tz_error:
+                logger.warning(
+                    f"Invalid timezone '{config.operational_timezone}' in SchoolConfiguration. "
+                    f"Falling back to Africa/Kampala. Error: {tz_error}"
+                )
+                return ZoneInfo('Africa/Kampala')
+        else:
+            # No timezone configured, use default for East Africa
+            logger.debug("No operational timezone configured, using Africa/Kampala")
+            return ZoneInfo('Africa/Kampala')
+            
     except Exception as e:
-        logger.error(f"Error fetching school configuration: {e}")
-        return None
+        logger.error(f"Error getting school timezone, falling back to Africa/Kampala: {e}")
+        return ZoneInfo('Africa/Kampala')
 
 
-# =============================================================================
-# DATE & ACADEMIC CALENDAR UTILITIES
-# =============================================================================
-
-def calculate_days_between(start_date, end_date, inclusive=True):
+def get_school_current_time():
     """
-    Calculate number of days between two dates.
+    Get current time in school's operational timezone.
     
-    Args:
-        start_date: Start date
-        end_date: End date
-        inclusive: Include both start and end dates (default: True)
-        
+    **USE THIS FOR ALL TIMESTAMP OPERATIONS!**
+    
+    Use this when you need the current timestamp with timezone awareness.
+    Perfect for:
+    - Logging and audit trails
+    - Transaction timestamps
+    - Record creation/update times
+    - Event timestamps
+    - Deadline calculations
+    
+    **IMPORTANT:** This respects the school's configured timezone.
+    If no timezone is configured, falls back to Africa/Kampala (EAT).
+    
     Returns:
-        int: Number of days
+        datetime: Current datetime in school's timezone (timezone-aware)
     
     Example:
-        >>> from datetime import date
-        >>> from core.utils import calculate_days_between
+        >>> from core.utils import get_school_current_time
+        >>> from finance.models import Payment
         >>> 
-        >>> days = calculate_days_between(date(2024, 1, 1), date(2024, 1, 10))
-        >>> print(f"Days: {days}")  # 10 days (inclusive)
-        >>> 
-        >>> days = calculate_days_between(date(2024, 1, 1), date(2024, 1, 10), inclusive=False)
-        >>> print(f"Days: {days}")  # 9 days
-    """
-    if not start_date or not end_date:
-        return 0
-    
-    delta = (end_date - start_date).days
-    return delta + 1 if inclusive else delta
-
-
-def calculate_weeks_between(start_date, end_date):
-    """
-    Calculate number of weeks between two dates.
-    
-    Args:
-        start_date: Start date
-        end_date: End date
-        
-    Returns:
-        int: Number of weeks (rounded down)
-    
-    Example:
-        >>> from datetime import date
-        >>> from core.utils import calculate_weeks_between
-        >>> weeks = calculate_weeks_between(date(2024, 1, 1), date(2024, 3, 31))
-        >>> print(f"Weeks: {weeks}")
-    """
-    days = calculate_days_between(start_date, end_date, inclusive=True)
-    return days // 7
-
-
-def is_school_day(check_date=None, exclude_weekends=True):
-    """
-    Check if a date is a school day (not weekend/holiday).
-    
-    Args:
-        check_date: Date to check (defaults to today)
-        exclude_weekends: Exclude Saturday and Sunday (default: True)
-        
-    Returns:
-        bool: True if school day
-    
-    Example:
-        >>> from core.utils import is_school_day, get_school_today
-        >>> 
-        >>> if is_school_day():
-        >>>     print("Today is a school day")
-        >>> 
-        >>> # Check specific date
-        >>> from datetime import date
-        >>> if is_school_day(date(2024, 12, 25)):
-        >>>     print("Dec 25 is a school day")
-    
-    Note:
-        This is a basic implementation. Extend with:
-        - School holiday calendar integration
-        - Public holiday checking
-        - Half-day/exam day handling
-    """
-    if check_date is None:
-        check_date = get_school_today()
-    
-    # Check weekend
-    if exclude_weekends and check_date.weekday() >= 5:  # Saturday=5, Sunday=6
-        return False
-    
-    # TODO: Check against school holiday calendar
-    # TODO: Check against public holidays
-    
-    return True
-
-
-def get_school_days_between(start_date, end_date, exclude_weekends=True):
-    """
-    Count school days between two dates (excluding weekends/holidays).
-    
-    Args:
-        start_date: Start date
-        end_date: End date
-        exclude_weekends: Exclude weekends (default: True)
-        
-    Returns:
-        int: Number of school days
-    
-    Example:
-        >>> from datetime import date
-        >>> from core.utils import get_school_days_between
-        >>> 
-        >>> school_days = get_school_days_between(
-        >>>     date(2024, 1, 1),
-        >>>     date(2024, 1, 31)
+        >>> # Record payment with correct timestamp
+        >>> payment = Payment.objects.create(
+        >>>     amount=50000,
+        >>>     payment_date=get_school_current_time(),
+        >>>     # ... other fields
         >>> )
-        >>> print(f"School days in January: {school_days}")
+        >>> 
+        >>> # Log entry with correct time
+        >>> logger.info(f"Payment received at {get_school_current_time()}")
+        
+    Example Output:
+        >>> print(get_school_current_time())
+        >>> # 2025-01-15 14:30:45.123456+03:00  (If school is in Africa/Kampala)
+        >>> # 2025-01-15 12:30:45.123456+01:00  (If school is in Africa/Lagos)
     """
-    if not start_date or not end_date or start_date > end_date:
-        return 0
+    return timezone.now().astimezone(get_school_timezone())
+
+
+def get_school_today():
+    """
+    Get today's date in school's operational timezone.
     
-    count = 0
-    current = start_date
+    **🔥 CRITICAL FOR ALL DATE-BASED BUSINESS LOGIC! 🔥**
     
-    while current <= end_date:
-        if is_school_day(current, exclude_weekends):
-            count += 1
-        current += timedelta(days=1)
+    **ALWAYS USE THIS** instead of:
+    - ❌ `date.today()` - uses system timezone (could be wrong!)
+    - ❌ `timezone.now().date()` - uses UTC or Django's TIME_ZONE
     
-    return count
+    **WHY THIS IS CRITICAL:**
+    
+    "Today" depends on timezone! Consider:
+    - In Uganda (EAT/UTC+3): 2025-01-15 at 02:00 AM
+    - In New York (EST/UTC-5): 2025-01-14 at 18:00 PM (still yesterday!)
+    - In UTC: 2025-01-14 at 23:00 PM (still yesterday!)
+    
+    If you use the wrong "today", you could:
+    - ✘ Mark fees as overdue when they're not
+    - ✘ Start/end terms on wrong dates
+    - ✘ Generate reports for wrong days
+    - ✘ Send reminders at wrong times
+    - ✘ Calculate late fees incorrectly
+    
+    **USE CASES:**
+    - ✓ Check if academic session is active today
+    - ✓ Check if invoice is overdue
+    - ✓ Get today's transactions
+    - ✓ Record transaction with today's date
+    - ✓ Check if fee due date has passed
+    - ✓ Check if fiscal period is current
+    - ✓ Calculate days until deadline
+    - ✓ Any date-based business logic!
+    
+    **FALLBACK BEHAVIOR:**
+    - If school timezone is configured → Uses that timezone
+    - If not configured → Uses Africa/Kampala (EAT)
+    
+    Returns:
+        date: Today's date in school's timezone
+    
+    Example:
+        >>> from core.utils import get_school_today
+        >>> from finance.models import Invoice
+        >>> 
+        >>> # Check if invoice is overdue
+        >>> today = get_school_today()
+        >>> if invoice.due_date < today:
+        >>>     days_overdue = (today - invoice.due_date).days
+        >>>     print(f"Invoice is {days_overdue} days overdue")
+        >>> 
+        >>> # Check if academic session is active
+        >>> today = get_school_today()
+        >>> if session.start_date <= today <= session.end_date:
+        >>>     print("Session is active today")
+        >>> 
+        >>> # Get today's payments
+        >>> today = get_school_today()
+        >>> payments = Payment.objects.filter(payment_date=today)
+        >>> 
+        >>> # Create transaction with today's date
+        >>> today = get_school_today()
+        >>> transaction = Transaction.objects.create(
+        >>>     date=today,  # ✓ Correct date in school timezone
+        >>>     amount=1000
+        >>> )
+        >>> 
+        >>> # Calculate due date (30 days from today)
+        >>> today = get_school_today()
+        >>> due_date = today + timedelta(days=30)
+    """
+    return get_school_current_time().date()
+
+
+def localize_datetime(dt):
+    """
+    Convert any datetime to school's operational timezone.
+    
+    Use this to convert UTC or naive datetimes to the school's timezone
+    for display or calculations.
+    
+    **HANDLES:**
+    - Naive datetimes (assumes UTC, then converts to school timezone)
+    - Aware datetimes (converts from source timezone to school timezone)
+    
+    Args:
+        dt: datetime object (naive or aware)
+        
+    Returns:
+        datetime: Timezone-aware datetime in school's operational timezone
+    
+    Example:
+        >>> from core.utils import localize_datetime
+        >>> from django.utils import timezone
+        >>> 
+        >>> # Convert UTC time to school timezone for display
+        >>> utc_time = timezone.now()  # 2025-01-15 11:30:00+00:00
+        >>> local_time = localize_datetime(utc_time)  # 2025-01-15 14:30:00+03:00
+        >>> 
+        >>> # Use in template context
+        >>> context = {
+        >>>     'payment_time': localize_datetime(payment.created_at),
+        >>>     'invoice_date': localize_datetime(invoice.created_at)
+        >>> }
+        >>> 
+        >>> # Convert naive datetime
+        >>> from datetime import datetime
+        >>> naive_dt = datetime(2025, 1, 15, 14, 30)
+        >>> local_dt = localize_datetime(naive_dt)
+        >>> print(local_dt)  # 2025-01-15 14:30:00+03:00
+    """
+    if dt is None:
+        return None
+    
+    if timezone.is_naive(dt):
+        # Make aware (assumes UTC) then convert to school timezone
+        dt = timezone.make_aware(dt)
+    
+    return dt.astimezone(get_school_timezone())
+
+
+def format_school_datetime(dt, format_string='%Y-%m-%d %H:%M:%S %Z'):
+    """
+    Format datetime in school's operational timezone.
+    
+    Converts datetime to school timezone and formats it according to
+    the provided format string. Perfect for displaying timestamps to users.
+    
+    Args:
+        dt: datetime object (naive or aware)
+        format_string: strftime format string (default includes timezone name)
+        
+    Returns:
+        str: Formatted datetime string in school timezone, or empty string if dt is None
+    
+    Example:
+        >>> from core.utils import format_school_datetime
+        >>> 
+        >>> # Default format
+        >>> formatted = format_school_datetime(payment.created_at)
+        >>> # Output: "2025-01-15 14:30:45 EAT"
+        >>> 
+        >>> # Custom format - user-friendly
+        >>> formatted = format_school_datetime(
+        >>>     invoice.created_at,
+        >>>     format_string='%B %d, %Y at %I:%M %p'
+        >>> )
+        >>> # Output: "January 15, 2025 at 02:30 PM"
+        >>> 
+        >>> # Short date format
+        >>> formatted = format_school_datetime(
+        >>>     transaction.date,
+        >>>     format_string='%d/%m/%Y'
+        >>> )
+        >>> # Output: "15/01/2025"
+        >>> 
+        >>> # In template (via context processor or filter)
+        >>> {{ payment.created_at|format_datetime }}
+    """
+    if dt is None:
+        return ''
+    
+    local_dt = localize_datetime(dt)
+    return local_dt.strftime(format_string)
+
+
+def make_timezone_aware(dt, tz=None):
+    """
+    Make a naive datetime timezone-aware.
+    
+    Args:
+        dt: Naive datetime object
+        tz: Optional timezone (defaults to school timezone)
+        
+    Returns:
+        datetime: Timezone-aware datetime, or None if dt is None
+        
+    Example:
+        >>> from datetime import datetime
+        >>> from core.utils import make_timezone_aware
+        >>> 
+        >>> # Make naive datetime aware
+        >>> naive_dt = datetime(2025, 1, 15, 10, 30)
+        >>> aware_dt = make_timezone_aware(naive_dt)
+        >>> print(aware_dt)  # 2025-01-15 10:30:00+03:00
+        >>> 
+        >>> # Already aware datetime - returns as-is
+        >>> aware_dt = make_timezone_aware(aware_dt)
+        >>> print(aware_dt)  # 2025-01-15 10:30:00+03:00
+    """
+    if dt is None:
+        return None
+    
+    if timezone.is_aware(dt):
+        return dt
+    
+    if tz is None:
+        tz = get_school_timezone()
+    
+    return timezone.make_aware(dt, timezone=tz)
+
+
+def convert_to_utc(dt):
+    """
+    Convert school timezone datetime to UTC.
+    
+    Useful for storing datetimes in database (Django stores as UTC by default).
+    
+    Args:
+        dt: datetime object in school timezone
+        
+    Returns:
+        datetime: Timezone-aware datetime in UTC
+        
+    Example:
+        >>> from core.utils import convert_to_utc, get_school_current_time
+        >>> 
+        >>> school_time = get_school_current_time()  # 2025-01-15 14:30:00+03:00
+        >>> utc_time = convert_to_utc(school_time)   # 2025-01-15 11:30:00+00:00
+    """
+    if dt is None:
+        return None
+    
+    if timezone.is_naive(dt):
+        dt = make_timezone_aware(dt)
+    
+    return dt.astimezone(ZoneInfo('UTC'))
+
+
+# =============================================================================
+# DATE RANGE UTILITIES
+# =============================================================================
+
+def get_date_range_for_period(period_type='month', reference_date=None):
+    """
+    Get start and end dates for various period types.
+    
+    Args:
+        period_type: 'today', 'week', 'month', 'quarter', 'year'
+        reference_date: Optional reference date (uses school today if None)
+        
+    Returns:
+        tuple: (start_date, end_date) in school timezone
+        
+    Example:
+        >>> from core.utils import get_date_range_for_period
+        >>> 
+        >>> # This month's range
+        >>> start, end = get_date_range_for_period('month')
+        >>> payments = Payment.objects.filter(
+        >>>     payment_date__gte=start,
+        >>>     payment_date__lte=end
+        >>> )
+        >>> 
+        >>> # This week's range
+        >>> start, end = get_date_range_for_period('week')
+        >>> 
+        >>> # Today only
+        >>> start, end = get_date_range_for_period('today')
+    """
+    from datetime import timedelta
+    from calendar import monthrange
+    
+    if reference_date is None:
+        reference_date = get_school_today()
+    
+    if period_type == 'today':
+        return reference_date, reference_date
+    
+    elif period_type == 'week':
+        # Monday to Sunday
+        start = reference_date - timedelta(days=reference_date.weekday())
+        end = start + timedelta(days=6)
+        return start, end
+    
+    elif period_type == 'month':
+        # First to last day of month
+        start = reference_date.replace(day=1)
+        last_day = monthrange(reference_date.year, reference_date.month)[1]
+        end = reference_date.replace(day=last_day)
+        return start, end
+    
+    elif period_type == 'quarter':
+        # Quarter start/end
+        quarter = (reference_date.month - 1) // 3 + 1
+        start_month = (quarter - 1) * 3 + 1
+        start = reference_date.replace(month=start_month, day=1)
+        
+        end_month = start_month + 2
+        last_day = monthrange(reference_date.year, end_month)[1]
+        end = reference_date.replace(month=end_month, day=last_day)
+        return start, end
+    
+    elif period_type == 'year':
+        # Calendar year
+        start = reference_date.replace(month=1, day=1)
+        end = reference_date.replace(month=12, day=31)
+        return start, end
+    
+    else:
+        # Default to today
+        return reference_date, reference_date
 
 
 # =============================================================================
@@ -614,7 +685,7 @@ def get_school_days_between(start_date, end_date, exclude_weekends=True):
 
 def paginate_queryset(request, queryset, per_page=20):
     """
-    Paginate a queryset with sensible defaults.
+    Paginate a queryset with sensible defaults and error handling.
     
     Args:
         request: HTTP request object
@@ -623,14 +694,18 @@ def paginate_queryset(request, queryset, per_page=20):
         
     Returns:
         tuple: (page_obj, paginator)
-    
+        
     Example:
         >>> from core.utils import paginate_queryset
+        >>> from finance.models import Invoice
         >>> 
-        >>> def student_list(request):
-        >>>     students = Student.objects.all()
-        >>>     page_obj, paginator = paginate_queryset(request, students, per_page=25)
-        >>>     return render(request, 'students.html', {'page_obj': page_obj})
+        >>> def invoice_list(request):
+        >>>     invoices = Invoice.objects.all()
+        >>>     page_obj, paginator = paginate_queryset(request, invoices, per_page=50)
+        >>>     return render(request, 'invoices.html', {
+        >>>         'page_obj': page_obj,
+        >>>         'paginator': paginator
+        >>>     })
     """
     paginator = Paginator(queryset, per_page)
     page = request.GET.get('page', 1)
@@ -647,7 +722,7 @@ def paginate_queryset(request, queryset, per_page=20):
 
 def parse_filters(request, filter_keys):
     """
-    Extract filter values from request.GET.
+    Extract filter values from request.GET with validation.
     
     Args:
         request: HTTP request object
@@ -655,20 +730,21 @@ def parse_filters(request, filter_keys):
         
     Returns:
         dict: {key: value or None}
-    
+        
     Example:
         >>> from core.utils import parse_filters
         >>> 
-        >>> def student_search(request):
-        >>>     filters = parse_filters(request, ['grade', 'stream', 'search'])
-        >>>     queryset = Student.objects.all()
+        >>> def invoice_list(request):
+        >>>     filters = parse_filters(request, [
+        >>>         'status', 'student', 'academic_session', 'date_from', 'date_to'
+        >>>     ])
         >>>     
-        >>>     if filters['grade']:
-        >>>         queryset = queryset.filter(grade=filters['grade'])
-        >>>     if filters['search']:
-        >>>         queryset = queryset.filter(name__icontains=filters['search'])
-        >>>     
-        >>>     return queryset
+        >>>     invoices = Invoice.objects.all()
+        >>>     if filters['status']:
+        >>>         invoices = invoices.filter(status=filters['status'])
+        >>>     if filters['student']:
+        >>>         invoices = invoices.filter(student_id=filters['student'])
+        >>>     # ... more filters
     """
     filters = {}
     for key in filter_keys:
@@ -677,290 +753,302 @@ def parse_filters(request, filter_keys):
     return filters
 
 
-def build_filter_dict(filters, field_mappings=None):
-    """
-    Build Django ORM filter dictionary from parsed filters.
-    
-    Args:
-        filters: Dict of filter key-value pairs
-        field_mappings: Optional dict mapping filter keys to model fields
-        
-    Returns:
-        dict: Django ORM filter dict
-    
-    Example:
-        >>> from core.utils import parse_filters, build_filter_dict
-        >>> 
-        >>> filters = parse_filters(request, ['grade', 'status', 'search'])
-        >>> 
-        >>> filter_dict = build_filter_dict(filters, {
-        >>>     'grade': 'grade__id',
-        >>>     'status': 'enrollment_status',
-        >>>     'search': 'name__icontains'
-        >>> })
-        >>> 
-        >>> students = Student.objects.filter(**filter_dict)
-    """
-    if field_mappings is None:
-        field_mappings = {}
-    
-    filter_dict = {}
-    for key, value in filters.items():
-        if value is not None:
-            field_name = field_mappings.get(key, key)
-            filter_dict[field_name] = value
-    
-    return filter_dict
-
-
 # =============================================================================
-# NUMBER & CALCULATION UTILITIES
+# NUMBERING & CODE GENERATION
 # =============================================================================
 
-def safe_decimal(value, default=Decimal('0.00')):
+def generate_next_number(prefix, last_number, include_year=True, year=None):
     """
-    Safely convert value to Decimal.
+    Generate next sequential number with prefix and optional year.
     
     Args:
-        value: Value to convert
-        default: Default value if conversion fails
+        prefix: Number prefix (e.g., 'INV', 'PMT')
+        last_number: Last used number (e.g., 'INV-2025-00042')
+        include_year: Whether to include year in format
+        year: Optional year (uses current academic year if None)
         
     Returns:
-        Decimal: Converted value or default
-    
-    Example:
-        >>> from core.utils import safe_decimal
-        >>> amount = safe_decimal(user_input)
-        >>> amount = safe_decimal("invalid", Decimal('0.00'))
-    """
-    try:
-        return Decimal(str(value))
-    except (ValueError, TypeError, InvalidOperation):
-        return default
-
-
-def calculate_proportional_amount(total, numerator, denominator):
-    """
-    Calculate proportional amount (for pro-rata calculations).
-    
-    Args:
-        total: Total amount
-        numerator: Proportion numerator (e.g., days attended)
-        denominator: Proportion denominator (e.g., total days)
+        str: Next number in sequence
         
-    Returns:
-        Decimal: Proportional amount
-    
     Example:
-        >>> from core.utils import calculate_proportional_amount
+        >>> from core.utils import generate_next_number
         >>> 
-        >>> # Student attended 45 out of 90 days in term
-        >>> # Calculate proportional tuition fee
-        >>> full_fee = Decimal('1500000.00')
-        >>> prorated = calculate_proportional_amount(full_fee, 45, 90)
-        >>> print(f"Pro-rated fee: {prorated}")  # 750000.00
+        >>> # With year
+        >>> next_num = generate_next_number('INV', 'INV-2025-00042', include_year=True)
+        >>> print(next_num)  # 'INV-2025-00043'
+        >>> 
+        >>> # Without year
+        >>> next_num = generate_next_number('PMT', 'PMT-00156', include_year=False)
+        >>> print(next_num)  # 'PMT-00157'
+        >>> 
+        >>> # First number
+        >>> next_num = generate_next_number('RCPT', None, include_year=True)
+        >>> print(next_num)  # 'RCPT-2025-00001'
     """
-    try:
-        total = Decimal(str(total))
-        numerator = Decimal(str(numerator))
-        denominator = Decimal(str(denominator))
-        
-        if denominator == 0:
-            return Decimal('0.00')
-        
-        return (total * numerator / denominator).quantize(Decimal('0.01'))
-    except (ValueError, TypeError, ZeroDivisionError):
-        return Decimal('0.00')
-
-
-def round_to_currency(amount, currency_code=None):
-    """
-    Round amount to appropriate decimal places for currency.
+    from datetime import date
     
-    Args:
-        amount: Amount to round
-        currency_code: Currency code (defaults to school currency)
-        
-    Returns:
-        Decimal: Rounded amount
-    
-    Example:
-        >>> from core.utils import round_to_currency
-        >>> amount = round_to_currency(1500000.567)  # 1500000.57
-        >>> amount = round_to_currency(1500.5, 'JPY')  # 1501 (no decimals)
-    """
-    if currency_code is None:
-        currency_code = get_base_currency()
-    
-    try:
-        amount = Decimal(str(amount))
-        
-        # Currencies without decimal places
-        if currency_code in ['JPY', 'KRW', 'VND', 'CLP', 'PYG']:
-            return amount.quantize(Decimal('1'))
-        
-        # Standard 2 decimal places
-        return amount.quantize(Decimal('0.01'))
-        
-    except (ValueError, TypeError):
-        return Decimal('0.00')
-
-
-# =============================================================================
-# STRING & TEXT UTILITIES
-# =============================================================================
-
-def truncate_text(text, max_length=50, suffix='...'):
-    """
-    Truncate text to maximum length.
-    
-    Args:
-        text: Text to truncate
-        max_length: Maximum length
-        suffix: Suffix to add when truncated
-        
-    Returns:
-        str: Truncated text
-    
-    Example:
-        >>> from core.utils import truncate_text
-        >>> long_text = "This is a very long description that needs to be shortened"
-        >>> short = truncate_text(long_text, 30)
-        >>> print(short)  # "This is a very long descri..."
-    """
-    if not text:
-        return ''
-    
-    text = str(text)
-    if len(text) <= max_length:
-        return text
-    
-    return text[:max_length - len(suffix)] + suffix
-
-
-def generate_reference_number(prefix, sequence_number, year=None):
-    """
-    Generate formatted reference number.
-    
-    Args:
-        prefix: Reference prefix (e.g., 'INV', 'PMT', 'RCPT')
-        sequence_number: Sequence number
-        year: Optional year (defaults to current year)
-        
-    Returns:
-        str: Formatted reference number
-    
-    Example:
-        >>> from core.utils import generate_reference_number
-        >>> ref = generate_reference_number('INV', 123, 2024)
-        >>> print(ref)  # "INV-2024-00123"
-    """
+    # Determine year
     if year is None:
-        today = get_school_today()
-        year = today.year
+        fiscal_year = get_active_fiscal_year()
+        if fiscal_year:
+            year = fiscal_year.start_date.year
+        else:
+            year = date.today().year
     
-    return f"{prefix}-{year}-{sequence_number:05d}"
+    # Extract sequence number from last_number
+    if last_number:
+        try:
+            # Handle formats: PREFIX-YEAR-00042 or PREFIX-00042
+            parts = last_number.split('-')
+            sequence_part = parts[-1]
+            current_sequence = int(sequence_part)
+            next_sequence = current_sequence + 1
+        except (ValueError, IndexError):
+            next_sequence = 1
+    else:
+        next_sequence = 1
+    
+    # Format new number
+    if include_year:
+        return f"{prefix}-{year}-{next_sequence:05d}"
+    else:
+        return f"{prefix}-{next_sequence:05d}"
+
+
+# =============================================================================
+# TIMEZONE DEBUGGING UTILITIES (for development/troubleshooting)
+# =============================================================================
+
+def debug_timezone_info():
+    """
+    Get comprehensive timezone information for debugging.
+    
+    **FOR DEVELOPMENT/TROUBLESHOOTING ONLY!**
+    
+    Returns:
+        dict: Dictionary with timezone debugging information
+        
+    Example:
+        >>> from core.utils import debug_timezone_info
+        >>> import json
+        >>> 
+        >>> # In Django shell or view
+        >>> info = debug_timezone_info()
+        >>> print(json.dumps(info, indent=2))
+        >>> 
+        >>> # Or in a debug view
+        >>> def debug_view(request):
+        >>>     return JsonResponse(debug_timezone_info())
+    """
+    from django.conf import settings
+    
+    try:
+        from core.models import SchoolConfiguration
+        config = SchoolConfiguration.get_cached_instance()
+        configured_tz = config.operational_timezone if config else None
+    except Exception as e:
+        configured_tz = f"Error: {e}"
+    
+    current_time = get_school_current_time()
+    
+    return {
+        'django_timezone_setting': settings.TIME_ZONE,
+        'django_use_tz': settings.USE_TZ,
+        'school_configured_timezone': configured_tz,
+        'effective_school_timezone': str(get_school_timezone()),
+        'current_utc_time': timezone.now().isoformat(),
+        'current_school_time': current_time.isoformat(),
+        'current_school_date': get_school_today().isoformat(),
+        'timezone_offset': current_time.strftime('%z'),
+        'timezone_name': current_time.strftime('%Z'),
+        'available_timezones_sample': [
+            'Africa/Kampala', 'Africa/Nairobi', 'Africa/Lagos',
+            'Africa/Johannesburg', 'Europe/London', 'America/New_York'
+        ]
+    }
 
 
 # =============================================================================
 # VALIDATION UTILITIES
 # =============================================================================
 
-def validate_date_range(start_date, end_date, allow_same_day=True):
+def validate_date_range(start_date, end_date):
     """
-    Validate date range.
+    Validate that start_date is before end_date.
     
     Args:
         start_date: Start date
         end_date: End date
-        allow_same_day: Allow start and end to be same day
         
     Returns:
         tuple: (is_valid, error_message)
-    
+        
     Example:
-        >>> from datetime import date
         >>> from core.utils import validate_date_range
+        >>> from datetime import date
         >>> 
         >>> is_valid, error = validate_date_range(
-        >>>     date(2024, 1, 1),
-        >>>     date(2024, 12, 31)
+        >>>     date(2025, 1, 1),
+        >>>     date(2025, 12, 31)
         >>> )
         >>> if not is_valid:
-        >>>     print(f"Error: {error}")
+        >>>     print(error)
     """
-    if not start_date or not end_date:
-        return False, "Both start and end dates are required"
-    
-    if allow_same_day:
+    if start_date and end_date:
         if start_date > end_date:
-            return False, "Start date must be on or before end date"
-    else:
-        if start_date >= end_date:
             return False, "Start date must be before end date"
     
     return True, None
 
 
-def validate_no_overlap(start_date, end_date, existing_ranges, obj_to_exclude=None):
+def validate_email(email):
     """
-    Validate that date range doesn't overlap with existing ranges.
+    Simple email validation.
     
     Args:
-        start_date: New range start date
-        end_date: New range end date
-        existing_ranges: List of (start, end) tuples
-        obj_to_exclude: Optional object to exclude from check (for updates)
+        email: Email address to validate
         
     Returns:
-        tuple: (is_valid, overlapping_range)
-    
-    Example:
-        >>> from core.utils import validate_no_overlap
-        >>> 
-        >>> existing = [
-        >>>     (date(2024, 1, 1), date(2024, 4, 30)),
-        >>>     (date(2024, 5, 1), date(2024, 8, 31)),
-        >>> ]
-        >>> 
-        >>> is_valid, overlap = validate_no_overlap(
-        >>>     date(2024, 4, 1),
-        >>>     date(2024, 5, 31),
-        >>>     existing
-        >>> )
+        tuple: (is_valid, error_message)
     """
-    for existing_start, existing_end in existing_ranges:
-        # Check for overlap: new range starts before existing ends AND new range ends after existing starts
-        if start_date <= existing_end and end_date >= existing_start:
-            return False, (existing_start, existing_end)
+    import re
+    
+    if not email:
+        return False, "Email is required"
+    
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, email):
+        return False, "Invalid email format"
     
     return True, None
+
+
+def validate_phone_number(phone, country_code='UG'):
+    """
+    Validate phone number format.
+    
+    Args:
+        phone: Phone number to validate
+        country_code: Country code for validation (default: UG for Uganda)
+        
+    Returns:
+        tuple: (is_valid, error_message)
+        
+    Example:
+        >>> from core.utils import validate_phone_number
+        >>> is_valid, error = validate_phone_number('0782123456')
+        >>> if not is_valid:
+        >>>     print(error)
+    """
+    if not phone:
+        return False, "Phone number is required"
+    
+    # Remove spaces and common separators
+    clean_phone = phone.replace(' ', '').replace('-', '').replace('+', '')
+    
+    # Uganda phone number validation (example)
+    if country_code == 'UG':
+        # Should be 10 digits starting with 0, or 12 digits starting with 256
+        if len(clean_phone) == 10 and clean_phone.startswith('0'):
+            return True, None
+        elif len(clean_phone) == 12 and clean_phone.startswith('256'):
+            return True, None
+        else:
+            return False, "Invalid Uganda phone number format (should be 07XXXXXXXX or 2567XXXXXXXX)"
+    
+    # Generic validation - at least 7 digits
+    if len(clean_phone) < 7:
+        return False, "Phone number too short"
+    
+    return True, None
+
+
+# =============================================================================
+# STRING UTILITIES
+# =============================================================================
+
+def truncate_string(text, max_length=50, suffix='...'):
+    """
+    Truncate string to maximum length with suffix.
+    
+    Args:
+        text: String to truncate
+        max_length: Maximum length including suffix
+        suffix: Suffix to add (default: '...')
+        
+    Returns:
+        str: Truncated string
+        
+    Example:
+        >>> from core.utils import truncate_string
+        >>> long_text = "This is a very long description that needs truncating"
+        >>> short_text = truncate_string(long_text, max_length=30)
+        >>> print(short_text)  # "This is a very long descr..."
+    """
+    if not text:
+        return ''
+    
+    if len(text) <= max_length:
+        return text
+    
+    return text[:max_length - len(suffix)] + suffix
+
+
+def slugify_filename(filename):
+    """
+    Create a safe filename slug.
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        str: Safe filename
+        
+    Example:
+        >>> from core.utils import slugify_filename
+        >>> safe = slugify_filename("Student Report (Term 1).pdf")
+        >>> print(safe)  # "student_report_term_1.pdf"
+    """
+    from django.utils.text import slugify
+    import os
+    
+    # Split filename and extension
+    name, ext = os.path.splitext(filename)
+    
+    # Slugify the name part
+    safe_name = slugify(name)
+    
+    # Return with original extension
+    return f"{safe_name}{ext.lower()}"
 
 
 # =============================================================================
 # EXPORT UTILITIES
 # =============================================================================
 
-def generate_csv_response(data, filename, headers=None):
+def export_to_csv(queryset, fields, filename='export.csv'):
     """
-    Generate CSV HTTP response from data.
+    Export queryset to CSV response.
     
     Args:
-        data: List of lists/tuples containing row data
+        queryset: Django queryset to export
+        fields: List of field names to include
         filename: Output filename
-        headers: Optional list of column headers
         
     Returns:
-        HttpResponse: CSV download response
-    
+        HttpResponse: CSV file response
+        
     Example:
-        >>> from core.utils import generate_csv_response
+        >>> from core.utils import export_to_csv
+        >>> from finance.models import Invoice
         >>> 
-        >>> def export_students(request):
-        >>>     students = Student.objects.all()
-        >>>     data = [[s.admission_number, s.name, s.grade] for s in students]
-        >>>     headers = ['Admission No', 'Name', 'Grade']
-        >>>     return generate_csv_response(data, 'students.csv', headers)
+        >>> def export_invoices(request):
+        >>>     invoices = Invoice.objects.all()
+        >>>     return export_to_csv(
+        >>>         invoices,
+        >>>         fields=['invoice_number', 'student', 'total_amount', 'status'],
+        >>>         filename='invoices_export.csv'
+        >>>     )
     """
     import csv
     
@@ -969,43 +1057,15 @@ def generate_csv_response(data, filename, headers=None):
     
     writer = csv.writer(response)
     
-    if headers:
-        writer.writerow(headers)
+    # Write header
+    writer.writerow(fields)
     
-    for row in data:
+    # Write data
+    for obj in queryset:
+        row = []
+        for field in fields:
+            value = getattr(obj, field, '')
+            row.append(str(value))
         writer.writerow(row)
     
     return response
-
-
-# =============================================================================
-# LOGGING UTILITIES
-# =============================================================================
-
-def log_user_action(user, action, details=None, level='INFO'):
-    """
-    Log user action for audit trail.
-    
-    Args:
-        user: User object
-        action: Action description
-        details: Optional additional details dict
-        level: Log level (INFO, WARNING, ERROR)
-    
-    Example:
-        >>> from core.utils import log_user_action
-        >>> 
-        >>> log_user_action(
-        >>>     request.user,
-        >>>     'Invoice Generated',
-        >>>     {'invoice_id': invoice.pk, 'amount': invoice.total_amount}
-        >>> )
-    """
-    username = getattr(user, 'username', 'anonymous')
-    log_message = f"User: {username} | Action: {action}"
-    
-    if details:
-        log_message += f" | Details: {details}"
-    
-    log_func = getattr(logger, level.lower(), logger.info)
-    log_func(log_message)

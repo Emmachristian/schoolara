@@ -1,0 +1,529 @@
+{# students/templates/students/guardians/_guardian_results.html #}
+
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+<!-- Guardians Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Guardian</th>
+                <th>Contact Information</th>
+                <th>Type</th>
+                <th>Students</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="guardianTableBody">
+            {% if guardians_page %}
+                {% for guardian in guardians_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:guardians_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Guardian Info with Photo -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            {% if guardian.photo %}
+                                <div class="position-relative me-3 flex-shrink-0">
+                                    <img src="{{ guardian.photo.url }}" 
+                                         class="guardian-photo" 
+                                         alt="{{ guardian.get_full_name }}">
+                                    <span class="guardian-status-indicator {{ guardian.is_active|yesno:'active,inactive' }}" 
+                                          title="Status: {{ guardian.is_active|yesno:'Active,Inactive' }}"
+                                          data-bs-toggle="tooltip"></span>
+                                </div>
+                            {% else %}
+                                <div class="position-relative me-3 flex-shrink-0">
+                                    <div class="guardian-icon">
+                                        {{ guardian.first_name|first }}{{ guardian.last_name|first }}
+                                    </div>
+                                    <span class="guardian-status-indicator {{ guardian.is_active|yesno:'active,inactive' }}" 
+                                          title="Status: {{ guardian.is_active|yesno:'Active,Inactive' }}"
+                                          data-bs-toggle="tooltip"></span>
+                                </div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0">{{ guardian.get_full_name }}</h6>
+                                <div class="mt-1">
+                                    {% if guardian.gender == 'M' %}
+                                        <span class="badge badge-gender-m">
+                                            <i class="fa fa-mars me-1"></i>Male
+                                        </span>
+                                    {% elif guardian.gender == 'F' %}
+                                        <span class="badge badge-gender-f">
+                                            <i class="fa fa-venus me-1"></i>Female
+                                        </span>
+                                    {% endif %}
+                                    
+                                    {% if guardian.occupation %}
+                                        <span class="badge bg-light text-dark ms-1" title="Occupation" data-bs-toggle="tooltip">
+                                            <i class="fa fa-briefcase me-1"></i>{{ guardian.occupation|truncatewords:2 }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Contact Information -->
+                    <td>
+                        <div class="contact-info">
+                            <div class="mb-1">
+                                <i class="fa fa-phone text-primary me-2"></i>
+                                <a href="tel:{{ guardian.primary_phone }}" class="text-decoration-none">
+                                    <strong>{{ guardian.primary_phone }}</strong>
+                                </a>
+                            </div>
+                            {% if guardian.secondary_phone %}
+                                <div class="mb-1">
+                                    <i class="fa fa-phone text-muted me-2"></i>
+                                    <a href="tel:{{ guardian.secondary_phone }}" class="text-decoration-none text-muted">
+                                        {{ guardian.secondary_phone }}
+                                    </a>
+                                </div>
+                            {% endif %}
+                            {% if guardian.email %}
+                                <div class="mb-1">
+                                    <i class="fa fa-envelope text-info me-2"></i>
+                                    <a href="mailto:{{ guardian.email }}" class="text-decoration-none small">
+                                        {{ guardian.email|truncatechars:30 }}
+                                    </a>
+                                </div>
+                            {% endif %}
+                            {% if guardian.city or guardian.district %}
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        <i class="fa fa-map-marker-alt me-1"></i>
+                                        {% if guardian.city %}{{ guardian.city }}{% endif %}
+                                        {% if guardian.city and guardian.district %}, {% endif %}
+                                        {% if guardian.district %}{{ guardian.district }}{% endif %}
+                                    </small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Guardian Type Badge -->
+                    <td class="text-center">
+                        {% if guardian.guardian_type == 'PRIMARY' %}
+                            <span class="badge bg-primary">
+                                <i class="fa fa-star me-1"></i>Primary
+                            </span>
+                        {% elif guardian.guardian_type == 'SECONDARY' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-user me-1"></i>Secondary
+                            </span>
+                        {% elif guardian.guardian_type == 'EMERGENCY' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-exclamation-triangle me-1"></i>Emergency
+                            </span>
+                        {% elif guardian.guardian_type == 'FINANCIAL' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-dollar-sign me-1"></i>Financial
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                {{ guardian.get_guardian_type_display }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Number of Students -->
+                    <td class="text-center">
+                        {% with student_count=guardian.students.count %}
+                            {% if student_count > 0 %}
+                                <span class="badge bg-primary" 
+                                      style="font-size: 1rem; padding: 8px 12px;"
+                                      title="{{ student_count }} student{{ student_count|pluralize }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-users me-1"></i>{{ student_count }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                    
+                    <!-- Active Status Badge -->
+                    <td class="text-center">
+                        {% if guardian.is_active %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Profile -->
+                                <a class="dropdown-item text-success" href="{% url 'students:guardian_profile' guardian.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Profile
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'students:guardian_edit' guardian.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- Call -->
+                                <a class="dropdown-item" href="tel:{{ guardian.primary_phone }}">
+                                    <i class="fa fa-phone me-2 text-primary"></i> Call Guardian
+                                </a>
+                                
+                                <!-- Email -->
+                                {% if guardian.email %}
+                                    <a class="dropdown-item" href="mailto:{{ guardian.email }}">
+                                        <i class="fa fa-envelope me-2 text-info"></i> Send Email
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger" 
+                                        hx-get="{% url 'students:guardian_delete_modal' guardian.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="pe-7s-search"></i>
+                            </div>
+                            <h4 class="text-muted mb-2">No Guardians Found</h4>
+                            <p class="text-muted">
+                                Try adjusting your search filters or 
+                                <a href="{% url 'students:guardian_create' %}" class="text-primary">add a new guardian</a>.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if guardians_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ guardians_page.start_index }} - {{ guardians_page.end_index }} of {{ guardians_page.paginator.count }} guardians
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Guardian pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if guardians_page.has_previous %}
+                    <li class="page-item">
+                        <button type="button" class="page-link" 
+                                hx-get="{% url 'students:guardian_list' %}" 
+                                hx-target="#guardian-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ guardians_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in guardians_page.paginator.page_range %}
+                    {% if page_num == guardians_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > guardians_page.number|add:"-3" and page_num < guardians_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button type="button" class="page-link"
+                                    hx-get="{% url 'students:guardian_list' %}"
+                                    hx-target="#guardian-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if guardians_page.has_next %}
+                    <li class="page-item">
+                        <button type="button" class="page-link"
+                                hx-get="{% url 'students:guardian_list' %}"
+                                hx-target="#guardian-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ guardians_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Guardian Photo/Icon Styles */
+.guardian-photo {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e9ecef;
+}
+
+.guardian-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    color: white;
+    font-weight: 700;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+/* ✅ Guardian Status Indicator */
+.guardian-status-indicator {
+    position: absolute;
+    bottom: 0px;  
+    right: 0px;   
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid white;
+    z-index: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.guardian-status-indicator.active {
+    background-color: #28a745;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+.guardian-status-indicator.inactive {
+    background-color: #6c757d;
+}
+
+/* Gender Badges */
+.badge-gender-m {
+    background-color: #cfe2ff;
+    color: #084298;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-gender-f {
+    background-color: #f8d7da;
+    color: #842029;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Contact Info Styling */
+.contact-info a {
+    transition: color 0.2s ease;
+}
+
+.contact-info a:hover {
+    color: #0056b3 !important;
+}
+
+/* Empty State */
+.empty-state {
+    padding: 60px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+/* Fix for table responsive overflow with dropdowns */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* Table Improvements */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Responsive handling for mobile devices */
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+    
+    .guardian-photo,
+    .guardian-icon {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Guardians</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Guardians</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Primary Guardians</div>
+                <h3>{{ stats.primary|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-mail"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">With Email</div>
+                <h3>{{ stats.with_email|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Initialize tooltips after HTMX swap
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+});
+
+// Re-initialize tooltips after HTMX updates
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'guardian-list') {
+        initializeTooltips();
+    }
+});
+
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+</script>

@@ -1,0 +1,140 @@
+{# fees/templates/fees/invoices/modals/revert_to_draft.html #}
+
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title">
+                <i class="bi bi-arrow-counterclockwise me-2"></i>Revert to Draft
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_revert %}
+                <div class="text-center mb-3">
+                    <i class="bi bi-arrow-counterclockwise text-warning" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3">Revert Invoice to Draft</h4>
+                <p class="text-muted text-center mb-3">
+                    You are about to revert this invoice back to DRAFT status:
+                </p>
+                
+                {# Invoice Details #}
+                <div class="alert alert-info">
+                    <strong>{{ invoice.invoice_number }}</strong><br>
+                    <small>Student: {{ invoice.student.get_full_name }}</small><br>
+                    <small>Session: {{ invoice.academic_session.name }}</small><br>
+                    <small>Amount: {{ invoice.total_amount|money }}</small><br>
+                    <small>Current Status: 
+                        <span class="badge bg-info">{{ invoice.get_status_display }}</span>
+                    </small><br>
+                    <small>Paid Amount: {{ invoice.paid_amount|money }}</small>
+                </div>
+                
+                {# What Will Happen #}
+                <div class="alert alert-warning">
+                    <strong><i class="bi bi-exclamation-triangle me-2"></i>What happens when you revert:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Invoice status will change to DRAFT</li>
+                        <li>Journal entry will be un-posted (changed back to DRAFT)</li>
+                        <li>Invoice can be modified or deleted</li>
+                        <li>Accounting entries will be reversed</li>
+                    </ul>
+                </div>
+                
+                {# Journal Entry Info #}
+                {% if invoice.journal_entry %}
+                <div class="card border-warning mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="bi bi-journal-text me-2"></i>Journal Entry
+                        </h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">Entry Number:</small><br>
+                                <strong>{{ invoice.journal_entry.entry_number }}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Current Status:</small><br>
+                                <span class="badge bg-success">{{ invoice.journal_entry.status }}</span>
+                            </div>
+                        </div>
+                        <p class="mb-0 mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                This journal entry will be changed to DRAFT status
+                            </small>
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {# Confirmation Note #}
+                <div class="alert alert-light border">
+                    <small class="text-muted">
+                        <i class="bi bi-lightbulb me-1"></i>
+                        <strong>Note:</strong> After reverting to DRAFT, you can modify the invoice, 
+                        add/remove items, or delete it completely. You'll need to finalize it again 
+                        before accepting payments.
+                    </small>
+                </div>
+                
+            {% else %}
+                {# Cannot Revert #}
+                <div class="text-center mb-3">
+                    <i class="bi bi-x-circle text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Revert Invoice</h4>
+                
+                <div class="alert alert-danger">
+                    <strong><i class="bi bi-exclamation-circle me-2"></i>Reasons:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for warning in warnings %}
+                        <li>{{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                
+                {# Invoice Info #}
+                <div class="alert alert-info">
+                    <strong>{{ invoice.invoice_number }}</strong><br>
+                    <small>Student: {{ invoice.student.get_full_name }}</small><br>
+                    <small>Status: <span class="badge bg-{{ invoice.status|lower }}">{{ invoice.get_status_display }}</span></small><br>
+                    <small>Paid Amount: {{ invoice.paid_amount|money }}</small>
+                </div>
+                
+                {% if invoice.paid_amount > 0 %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>This invoice has payments.</strong>
+                    You cannot revert it to DRAFT status. If you need to make changes, 
+                    consider creating a credit note or adjusting the invoice instead.
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        
+        {# Modal Footer #}
+        {% if can_revert %}
+            <form hx-post="{% url 'fees:invoice_revert_to_draft' invoice.pk %}"
+                  hx-target="body">
+                {% csrf_token %}
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Revert to Draft
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

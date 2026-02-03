@@ -383,18 +383,27 @@ class Student(BaseModel):
             self.has_special_needs
         )
     
+    def get_current_enrollment(self, academic_session=None):
+        """Get student's enrollment, optionally filtered by session"""
+        from academics.models import StudentClassEnrollment
+        
+        queryset = StudentClassEnrollment.objects.filter(
+            student=self,
+            is_active=True,
+            completion_status='ONGOING'
+        )
+        
+        if academic_session:
+            queryset = queryset.filter(academic_session=academic_session)
+        
+        return queryset.order_by('-enrollment_date').first()
+    
     # -------------------------------------------------------------------------
     # SAVE METHOD
     # -------------------------------------------------------------------------
     
     def save(self, *args, **kwargs):
-        """Override save to auto-generate admission number"""
-        if not self.admission_number:
-            from students.utils import generate_admission_number
-            self.admission_number = generate_admission_number(
-                admission_date=self.admission_date
-            )
-        
+        """Override save to auto-generate admission number"""        
         super().save(*args, **kwargs)
     
     # -------------------------------------------------------------------------

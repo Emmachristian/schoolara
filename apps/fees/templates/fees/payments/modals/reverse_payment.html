@@ -1,0 +1,98 @@
+{# fees/templates/fees/payments/modals/reverse_payment.html #}
+
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-undo me-2"></i>Reverse Payment
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_reverse %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-undo text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3">Reverse Payment</h4>
+                <p class="text-muted text-center mb-3">
+                    You are about to reverse payment:
+                </p>
+                <div class="alert alert-info">
+                    <strong>{{ payment.payment_number }}</strong><br>
+                    <small>Student: {{ payment.student.get_full_name }}</small><br>
+                    <small>Amount: {{ payment.amount|money }}</small><br>
+                    <small>Date: {{ payment.payment_date|date:"M d, Y" }}</small><br>
+                    {% if payment.invoice %}
+                        <small>Invoice: {{ payment.invoice.invoice_number }}</small><br>
+                    {% endif %}
+                    <small>Verified: 
+                        {% if payment.is_verified %}
+                            <span class="badge bg-success">Yes</span>
+                        {% else %}
+                            <span class="badge bg-warning">No</span>
+                        {% endif %}
+                    </small>
+                </div>
+                
+                <div class="alert alert-danger">
+                    <strong><i class="fa fa-exclamation-circle me-2"></i>Important:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>This will reverse the payment transaction</li>
+                        <li>The invoice balance will be adjusted</li>
+                        <li>Student account will be debited</li>
+                        <li>Journal entries will be reversed</li>
+                        <li>This action cannot be undone</li>
+                    </ul>
+                </div>
+                
+                <form id="reversePaymentForm" 
+                      hx-post="{% url 'fees:payment_reverse_modal' payment.pk %}"
+                      hx-target="#modal-container"
+                      hx-swap="innerHTML">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="reason" class="form-label">
+                            <strong>Reason for Reversal <span class="text-danger">*</span></strong>
+                        </label>
+                        <textarea class="form-control" 
+                                  id="reason" 
+                                  name="reason" 
+                                  rows="3" 
+                                  required
+                                  placeholder="Please provide a detailed reason for reversing this payment..."></textarea>
+                        <small class="form-text text-muted">
+                            This reason will be recorded in the payment and transaction history.
+                        </small>
+                    </div>
+                    
+                    <div class="modal-footer px-0 pb-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fa fa-times me-1"></i>Cancel
+                        </button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fa fa-undo me-1"></i>Reverse Payment
+                        </button>
+                    </div>
+                </form>
+            {% else %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Reverse Payment</h4>
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    {{ reason }}
+                </div>
+                
+                <div class="modal-footer px-0 pb-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Close
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

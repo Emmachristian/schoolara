@@ -1,0 +1,230 @@
+{# hr/templates/hr/payroll/modals/bulk_generation.html #}
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-users me-2"></i>Bulk Payroll Generation
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form hx-post="{% url 'hr:bulk_payroll_generation' %}" 
+              hx-target="#payroll-results" 
+              hx-swap="innerHTML">
+            {% csrf_token %}
+
+            <div class="modal-body">
+                <div class="alert alert-info mb-4">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>{{ staff_with_contracts }}</strong> staff member(s) with active contracts will have payroll generated.
+                </div>
+
+                {# Fiscal Period Selection #}
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="fiscal_period" class="form-label">
+                            <strong>Fiscal Period</strong> <span class="text-danger">*</span>
+                        </label>
+                        <select name="fiscal_period" id="fiscal_period" class="form-select" required>
+                            <option value="">-- Select Fiscal Period --</option>
+                            {% for period in available_periods %}
+                                <option value="{{ period.pk }}">
+                                    {{ period.name }} ({{ period.start_date }} to {{ period.end_date }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Accounting period for reporting</small>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="fiscal_year" class="form-label">
+                            <strong>Fiscal Year</strong> <span class="text-danger">*</span>
+                        </label>
+                        <select name="fiscal_year" id="fiscal_year" class="form-select" required>
+                            <option value="">-- Select Fiscal Year --</option>
+                            {% load hr_tags %}
+                            {% get_fiscal_years as fiscal_years %}
+                            {% for year in fiscal_years %}
+                                <option value="{{ year.pk }}">{{ year.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Academic/fiscal year</small>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Pay Period Selection #}
+                <h6 class="mb-3">
+                    <i class="fa fa-calendar me-2"></i>Pay Period Details
+                </h6>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="pay_period_start" class="form-label">
+                            <strong>Pay Period Start</strong> <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" 
+                               name="pay_period_start" 
+                               id="pay_period_start" 
+                               class="form-control" 
+                               value="{{ suggested_pay_start|date:'Y-m-d' }}"
+                               required>
+                        <small class="text-muted">Start of work period being paid</small>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="pay_period_end" class="form-label">
+                            <strong>Pay Period End</strong> <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" 
+                               name="pay_period_end" 
+                               id="pay_period_end" 
+                               class="form-control" 
+                               value="{{ suggested_pay_end|date:'Y-m-d' }}"
+                               required>
+                        <small class="text-muted">End of work period being paid</small>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="pay_frequency" class="form-label">
+                            <strong>Pay Frequency</strong>
+                        </label>
+                        <select name="pay_frequency" id="pay_frequency" class="form-select">
+                            <option value="MONTHLY" selected>Monthly</option>
+                            <option value="WEEKLY">Weekly</option>
+                            <option value="BIWEEKLY">Bi-Weekly</option>
+                            <option value="SEMI_MONTHLY">Semi-Monthly</option>
+                        </select>
+                        <small class="text-muted">How often employees are paid</small>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="payment_date" class="form-label">
+                            <strong>Payment Date</strong>
+                        </label>
+                        <input type="date" 
+                               name="payment_date" 
+                               id="payment_date" 
+                               class="form-control" 
+                               value="{{ suggested_pay_end|date:'Y-m-d' }}">
+                        <small class="text-muted">When salary will be paid (defaults to period end)</small>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Summary Section #}
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading">
+                        <i class="fa fa-exclamation-triangle me-2"></i>Before Generating:
+                    </h6>
+                    <ul class="mb-0 small">
+                        <li>Ensure pay period dates fall within the selected fiscal period</li>
+                        <li>Verify no payroll already exists for this pay period</li>
+                        <li>All generated payrolls will be in <strong>DRAFT</strong> status</li>
+                        <li>You can review and edit each payroll before approval</li>
+                        <li>Allowances, deductions, and bonuses must be added manually</li>
+                    </ul>
+                </div>
+
+                {# Quick Period Presets #}
+                <div class="card bg-light mt-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-2">
+                            <i class="fa fa-magic me-2"></i>Quick Period Presets
+                        </h6>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" 
+                                    class="btn btn-outline-secondary"
+                                    onclick="setPayPeriod('current_month')">
+                                Current Month
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-outline-secondary"
+                                    onclick="setPayPeriod('last_month')">
+                                Last Month
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-outline-secondary"
+                                    onclick="setPayPeriod('next_month')">
+                                Next Month
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-2">Click to auto-fill pay period dates</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa fa-cog me-1"></i>Generate Payrolls
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Quick period preset functionality
+function setPayPeriod(period) {
+    const today = new Date();
+    let startDate, endDate;
+
+    if (period === 'current_month') {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (period === 'last_month') {
+        startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (period === 'next_month') {
+        startDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+    }
+
+    // Format dates as YYYY-MM-DD
+    const formatDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    document.getElementById('pay_period_start').value = formatDate(startDate);
+    document.getElementById('pay_period_end').value = formatDate(endDate);
+    document.getElementById('payment_date').value = formatDate(endDate);
+}
+
+// Validate dates on form submit
+document.querySelector('form').addEventListener('submit', function(e) {
+    const startDate = new Date(document.getElementById('pay_period_start').value);
+    const endDate = new Date(document.getElementById('pay_period_end').value);
+
+    if (endDate < startDate) {
+        e.preventDefault();
+        alert('Pay period end date cannot be before start date');
+        return false;
+    }
+
+    // Optional: Check if dates are more than 90 days apart
+    const daysDiff = (endDate - startDate) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 90) {
+        if (!confirm(`Pay period is ${Math.round(daysDiff)} days long. This seems unusual. Continue?`)) {
+            e.preventDefault();
+            return false;
+        }
+    }
+});
+</script>
+
+<style>
+.btn-group-sm .btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+</style>

@@ -1,6 +1,11 @@
+# boarding/apps.py
+
 from django.apps import AppConfig
 
 
 class BoardingConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "boarding"
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'boarding'
+    
+    def ready(self):
+        import boarding.signals  # Import signals when app is ready

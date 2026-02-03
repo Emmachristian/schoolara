@@ -1,0 +1,178 @@
+<!-- Staff Designation Results -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                Found {{ stats.total }} designation assignment{{ stats.total|pluralize }}
+            </h6>
+            <div class="text-muted small">
+                <span class="badge bg-success">{{ stats.active }} Active</span>
+                <span class="badge bg-primary">{{ stats.primary }} Primary</span>
+                <span class="badge bg-info">{{ stats.additional }} Additional</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-3">
+    <div class="col-md-3 col-6">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="text-muted small">Total Allowances</div>
+                <div class="h6 mb-0">{{ stats.total_allowances|format_money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="text-muted small">Permanent</div>
+                <div class="h6 mb-0">{{ stats.permanent }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="text-muted small">Acting</div>
+                <div class="h6 mb-0">{{ stats.acting }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="text-muted small">Secondment</div>
+                <div class="h6 mb-0">{{ stats.secondment }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Table -->
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Staff</th>
+                <th>Designation</th>
+                <th>Department</th>
+                <th>Type</th>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Allowance</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sd in staff_designations_page %}
+            <tr>
+                <td>
+                    <a href="{% url 'hr:staff_profile' sd.staff.pk %}">
+                        {{ sd.staff.full_name }}
+                    </a>
+                    <br>
+                    <small class="text-muted">{{ sd.staff.staff_id }}</small>
+                </td>
+                <td>
+                    <strong>{{ sd.designation.name }}</strong>
+                    {% if sd.is_primary %}
+                        <span class="badge bg-success ms-1">Primary</span>
+                    {% endif %}
+                </td>
+                <td>{{ sd.designation.department.name }}</td>
+                <td>
+                    <span class="badge bg-info">
+                        {{ sd.get_assignment_type_display }}
+                    </span>
+                </td>
+                <td>{{ sd.start_date|date:"d M Y" }}</td>
+                <td>
+                    {% if sd.end_date %}
+                        {{ sd.end_date|date:"d M Y" }}
+                    {% else %}
+                        <span class="text-muted">Ongoing</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if sd.role_allowance > 0 %}
+                        {{ sd.role_allowance|format_money }}
+                    {% else %}
+                        <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if sd.is_active %}
+                        <span class="badge bg-success">Active</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <a href="{% url 'hr:staff_designation_edit' sd.pk %}" 
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        {% if sd.is_active and not sd.is_primary %}
+                            <button type="button" 
+                                    class="btn btn-outline-success btn-sm"
+                                    onclick="setAsPrimary({{ sd.pk }})">
+                                <i class="bi bi-star"></i>
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-outline-danger btn-sm"
+                                    onclick="deactivateDesignation({{ sd.pk }})">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="9" class="text-center text-muted py-4">
+                    No designation assignments found
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if staff_designations_page.has_other_pages %}
+<nav aria-label="Page navigation">
+    <ul class="pagination pagination-sm justify-content-center">
+        {% if staff_designations_page.has_previous %}
+            <li class="page-item">
+                <a class="page-link" 
+                   hx-get="{% url 'hr:staff_designation_search' %}?{{ request.GET.urlencode }}&page={{ staff_designations_page.previous_page_number }}"
+                   hx-target="#staff-designation-list"
+                   hx-swap="innerHTML">
+                    Previous
+                </a>
+            </li>
+        {% endif %}
+        
+        <li class="page-item disabled">
+            <span class="page-link">
+                Page {{ staff_designations_page.number }} of {{ staff_designations_page.paginator.num_pages }}
+            </span>
+        </li>
+        
+        {% if staff_designations_page.has_next %}
+            <li class="page-item">
+                <a class="page-link" 
+                   hx-get="{% url 'hr:staff_designation_search' %}?{{ request.GET.urlencode }}&page={{ staff_designations_page.next_page_number }}"
+                   hx-target="#staff-designation-list"
+                   hx-swap="innerHTML">
+                    Next
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

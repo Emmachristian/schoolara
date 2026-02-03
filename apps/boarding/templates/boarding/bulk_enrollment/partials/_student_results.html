@@ -1,0 +1,483 @@
+{# boarding/templates/boarding/bulk_enrollment/partials/_student_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load humanize %}
+
+<!-- Student Selection Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">
+                    <!-- Select All Checkbox -->
+                    <input type="checkbox" 
+                           class="form-check-input" 
+                           id="selectAllStudents"
+                           onclick="toggleSelectAll(this)">
+                </th>
+                <th width="50">#</th>
+                <th>Student</th>
+                <th>Admission Number</th>
+                <th>Gender</th>
+                <th>Age</th>
+                <th>Current Level</th>
+                <th>Boarding Status</th>
+                <th>Alerts</th>
+            </tr>
+        </thead>
+        <tbody id="studentSelectionTableBody">
+            {% if page_obj %}
+                {% for student in page_obj %}
+                <tr class="student-row">
+                    <!-- Checkbox -->
+                    <td>
+                        <input type="checkbox" 
+                               class="form-check-input student-checkbox" 
+                               name="student_ids" 
+                               value="{{ student.pk }}"
+                               data-name="{{ student.get_full_name }}"
+                               data-gender="{{ student.gender }}"
+                               onchange="updateSelectedCount()">
+                    </td>
+                    
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:page_obj.start_index|add:"-1" }}</td>
+                    
+                    <!-- Student Info with Photo -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            {% if student.photo %}
+                                <div class="position-relative me-3 flex-shrink-0">
+                                    <img src="{{ student.photo.url }}" 
+                                         class="student-photo" 
+                                         alt="{{ student.get_full_name }}">
+                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}" 
+                                          title="Status: {{ student.get_enrollment_status_display }}"
+                                          data-bs-toggle="tooltip"></span>
+                                </div>
+                            {% else %}
+                                <div class="position-relative me-3 flex-shrink-0">
+                                    <div class="student-icon {% if student.gender == 'M' %}male{% else %}female{% endif %}">
+                                        <i class="pe-7s-user"></i>
+                                    </div>
+                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}" 
+                                          title="Status: {{ student.get_enrollment_status_display }}"
+                                          data-bs-toggle="tooltip"></span>
+                                </div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0">{{ student.get_full_name }}</h6>
+                                {% if student.phone_number %}
+                                    <div class="mt-1">
+                                        <small class="text-muted">
+                                            <i class="fa fa-phone me-1"></i>{{ student.phone_number }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Admission Number -->
+                    <td>
+                        <code class="text-primary fw-bold">{{ student.admission_number }}</code>
+                        {% if student.admission_date %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-calendar me-1"></i>
+                                    {{ student.admission_date|date:"M Y" }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Gender Badge -->
+                    <td>
+                        {% if student.gender == 'M' %}
+                            <span class="badge badge-gender-m">
+                                <i class="fa fa-mars me-1"></i>Male
+                            </span>
+                        {% elif student.gender == 'F' %}
+                            <span class="badge badge-gender-f">
+                                <i class="fa fa-venus me-1"></i>Female
+                            </span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Age -->
+                    <td>
+                        <strong>{{ student.age }}</strong> 
+                        <small class="text-muted">yrs</small>
+                    </td>
+                    
+                    <!-- Current Academic Level -->
+                    <td>
+                        {% if student.current_academic_level %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-graduation-cap me-1"></i>
+                                {{ student.current_academic_level.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">Not Set</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Boarding Status -->
+                    <td class="text-center">
+                        <span class="badge bg-secondary">
+                            <i class="fa fa-times me-1"></i>Not Enrolled
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">Available for enrollment</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Medical/Special Alerts -->
+                    <td>
+                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                            {% if student.medical_conditions %}
+                                <span class="alert-badge alert-medical" 
+                                      title="Medical Conditions: {{ student.medical_conditions|truncatewords:10 }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-heartbeat"></i>
+                                </span>
+                            {% endif %}
+                            
+                            {% if student.has_special_needs %}
+                                <span class="alert-badge alert-special" 
+                                      title="Special Needs: {{ student.special_needs_description|default:'See profile' }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-wheelchair"></i>
+                                </span>
+                            {% endif %}
+                            
+                            {% if student.allergies %}
+                                <span class="alert-badge alert-allergy" 
+                                      title="Allergies: {{ student.allergies|truncatewords:10 }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-exclamation-triangle"></i>
+                                </span>
+                            {% endif %}
+                            
+                            {% if student.transportation_required %}
+                                <span class="alert-badge alert-transport" 
+                                      title="Transport: {{ student.transport_route|default:'Required' }}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa fa-bus"></i>
+                                </span>
+                            {% endif %}
+                            
+                            {% if not student.medical_conditions and not student.has_special_needs and not student.allergies and not student.transportation_required %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Students Found</h5>
+                            <p class="text-muted">Try adjusting your filters to find eligible students.</p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Selection Summary & Pagination -->
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Selection Count -->
+        <div class="text-muted">
+            <span id="selectedCountDisplay">0</span> student(s) selected
+            {% if total_count %}
+                <span class="text-muted ms-2">
+                    | Showing {{ page_obj.start_index }} - {{ page_obj.end_index }} of {{ total_count }}
+                </span>
+            {% endif %}
+        </div>
+        
+        <!-- Pagination Navigation -->
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Student selection pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="#" 
+                           hx-get="{% url 'boarding:bulk_enrollment_step1' %}" 
+                           hx-target="#student-selection-results"
+                           hx-include="#filterForm"
+                           hx-vals='{"page": "{{ page_obj.previous_page_number }}"}'
+                           aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
+                            <span aria-hidden="true">«</span>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in page_obj.paginator.page_range %}
+                    {% if page_num == page_obj.number %}
+                        <li class="page-item active" aria-current="page">
+                            <a class="page-link" href="#">{{ page_num }}</a>
+                        </li>
+                    {% elif page_num > page_obj.number|add:"-3" and page_num < page_obj.number|add:"3" %}
+                        <li class="page-item">
+                            <a class="page-link" href="#"
+                               hx-get="{% url 'boarding:bulk_enrollment_step1' %}"
+                               hx-target="#student-selection-results"
+                               hx-include="#filterForm"
+                               hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'boarding:bulk_enrollment_step1' %}"
+                           hx-target="#student-selection-results"
+                           hx-include="#filterForm"
+                           hx-vals='{"page": "{{ page_obj.next_page_number }}"}'
+                           aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
+                            <span aria-hidden="true">»</span>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+/* Student Photo/Icon Styles */
+.student-photo {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e9ecef;
+}
+
+.student-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+    flex-shrink: 0;
+}
+
+.student-icon.male {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.student-icon.female {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+/* Student Status Indicator */
+.student-status-indicator {
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid white;
+    z-index: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.student-status-indicator.active {
+    background-color: #28a745;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+/* Gender Badges */
+.badge-gender-m {
+    background-color: #cfe2ff;
+    color: #084298;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-gender-f {
+    background-color: #f8d7da;
+    color: #842029;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Alert Badges */
+.alert-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: help;
+    transition: transform 0.2s ease;
+}
+
+.alert-badge:hover {
+    transform: scale(1.1);
+}
+
+.alert-badge.alert-medical {
+    background-color: #dc3545;
+    color: white;
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.alert-badge.alert-special {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.alert-badge.alert-allergy {
+    background-color: #ff6b6b;
+    color: white;
+}
+
+/* Row Selection Highlight */
+.student-row:has(.student-checkbox:checked) {
+    background-color: #e7f3ff !important;
+}
+
+/* Empty State */
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+/* Table responsive fix */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+</style>
+
+<script>
+// IMPORTANT: This script calls the parent page's updateSelection() function
+// which is defined in step1.html
+
+// Toggle select all students
+function toggleSelectAll(checkbox) {
+    const studentCheckboxes = document.querySelectorAll('.student-checkbox');
+    studentCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+        // Update row highlighting
+        if (cb.checked) {
+            cb.closest('tr').classList.add('selected');
+        } else {
+            cb.closest('tr').classList.remove('selected');
+        }
+    });
+    // Call parent page's function
+    if (typeof updateSelection === 'function') {
+        updateSelection();
+    }
+}
+
+// This function is called by checkbox onchange
+// It calls the parent page's updateSelection() function
+function updateSelectedCount() {
+    // Update row highlighting
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.closest('tr').classList.add('selected');
+        } else {
+            checkbox.closest('tr').classList.remove('selected');
+        }
+    });
+    
+    // Call parent page's function to update summary bar
+    if (typeof updateSelection === 'function') {
+        updateSelection();
+    }
+    
+    // Also update local count display
+    const count = document.querySelectorAll('.student-checkbox:checked').length;
+    const displayElement = document.getElementById('selectedCountDisplay');
+    if (displayElement) {
+        displayElement.textContent = count;
+    }
+    
+    // Update "Select All" checkbox state
+    const selectAllCheckbox = document.getElementById('selectAllStudents');
+    const allCheckboxes = document.querySelectorAll('.student-checkbox');
+    
+    if (selectAllCheckbox && allCheckboxes.length > 0) {
+        selectAllCheckbox.checked = count === allCheckboxes.length;
+        selectAllCheckbox.indeterminate = count > 0 && count < allCheckboxes.length;
+    }
+}
+
+// Initialize tooltips
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+    updateSelectedCount();
+});
+
+// Re-initialize after HTMX swap
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'student-selection-results') {
+        initializeTooltips();
+        updateSelectedCount();
+    }
+});
+</script>

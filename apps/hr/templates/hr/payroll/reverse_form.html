@@ -1,0 +1,266 @@
+{# hr/templates/hr/payroll/reverse_form.html #}
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+
+{% block title %}Reverse Payroll - {{ payroll.staff.full_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            {# Breadcrumb #}
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'hr:hr_dashboard' %}">HR</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'hr:payroll_list' %}">Payroll</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'hr:payroll_detail' payroll.pk %}">{{ payroll.pay_period_label }}</a></li>
+                    <li class="breadcrumb-item active">Reverse</li>
+                </ol>
+            </nav>
+
+            {# Page Header #}
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2>
+                        <i class="fa fa-undo text-danger me-2"></i>
+                        Reverse Payroll
+                    </h2>
+                    <p class="text-muted mb-0">
+                        {{ payroll.staff.full_name }} - {{ payroll.pay_period_label }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'hr:payroll_detail' payroll.pk %}" class="btn btn-secondary">
+                        <i class="fa fa-arrow-left me-1"></i>Back to Payroll
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                {# Left Column - Payroll Info #}
+                <div class="col-md-4">
+                    {# Critical Warning #}
+                    <div class="alert alert-danger">
+                        <h5 class="alert-heading">
+                            <i class="fa fa-exclamation-triangle me-2"></i>
+                            Critical Action
+                        </h5>
+                        <p class="mb-0 small">
+                            This action is permanent and cannot be undone. 
+                            Ensure all details are correct before proceeding.
+                        </p>
+                    </div>
+
+                    {# Payroll Summary Card #}
+                    <div class="card mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">
+                                <i class="fa fa-file-invoice me-2"></i>
+                                Payroll Details
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0 small">
+                                <dt class="col-5">Staff:</dt>
+                                <dd class="col-7">{{ payroll.staff.full_name }}</dd>
+
+                                <dt class="col-5">Staff ID:</dt>
+                                <dd class="col-7">{{ payroll.staff.staff_id }}</dd>
+
+                                <dt class="col-5">Pay Period:</dt>
+                                <dd class="col-7">{{ payroll.pay_period_label }}</dd>
+
+                                <dt class="col-5">Dates:</dt>
+                                <dd class="col-7">
+                                    {{ payroll.pay_period_start|date:"M d" }} - 
+                                    {{ payroll.pay_period_end|date:"M d, Y" }}
+                                </dd>
+
+                                <dt class="col-5">Status:</dt>
+                                <dd class="col-7">
+                                    <span class="badge bg-{{ payroll.status|lower }}">
+                                        {{ payroll.get_status_display }}
+                                    </span>
+                                </dd>
+
+                                <dt class="col-5">Gross Pay:</dt>
+                                <dd class="col-7">{{ payroll.gross_pay|money }}</dd>
+
+                                <dt class="col-5">Deductions:</dt>
+                                <dd class="col-7 text-danger">
+                                    ({{ payroll.total_deductions|money }})
+                                </dd>
+
+                                <dt class="col-5"><strong>Net Pay:</strong></dt>
+                                <dd class="col-7"><strong>{{ payroll.net_pay|money }}</strong></dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    {# Statutory Warning #}
+                    {% if requires_statutory %}
+                        <div class="alert alert-warning">
+                            <h6 class="alert-heading">
+                                <i class="fa fa-balance-scale me-2"></i>
+                                Statutory Deductions
+                            </h6>
+                            <p class="mb-1 small">This payroll contains:</p>
+                            <ul class="mb-0 small">
+                                {% for deduction in payroll.deductions.all %}
+                                    {% if deduction.is_statutory %}
+                                        <li>
+                                            {{ deduction.get_deduction_type_display }}: 
+                                            {{ deduction.amount|money }}
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
+                    {# What Happens #}
+                    <div class="card border-info">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="fa fa-info-circle me-2"></i>
+                                After Reversal
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <ul class="mb-0 small">
+                                <li>Status → <span class="badge bg-danger">REVERSED</span></li>
+                                <li>Effective amounts → {{ 0|money }}</li>
+                                <li>Original data preserved</li>
+                                <li>Audit trail created</li>
+                                <li>Cannot be undone</li>
+                                {% if payroll.status == 'PAID' %}
+                                    <li class="text-danger">
+                                        Payment recovery needed
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                {# Right Column - Reversal Form #}
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">
+                                <i class="fa fa-file-alt me-2"></i>
+                                Reversal Information
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="post" id="reversalForm">
+                                {% csrf_token %}
+
+                                {# Form Errors #}
+                                {% if form.non_field_errors %}
+                                    <div class="alert alert-danger">
+                                        {{ form.non_field_errors }}
+                                    </div>
+                                {% endif %}
+
+                                {# Reversal Reason #}
+                                <div class="mb-4">
+                                    <label for="{{ form.reversal_reason.id_for_label }}" class="form-label">
+                                        {{ form.reversal_reason.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.reversal_reason }}
+                                    {% if form.reversal_reason.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {{ form.reversal_reason.errors }}
+                                        </div>
+                                    {% endif %}
+                                    {% if form.reversal_reason.help_text %}
+                                        <small class="form-text text-muted">
+                                            {{ form.reversal_reason.help_text }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+
+                                {# Statutory Adjustments (if field exists) #}
+                                {% if form.statutory_adjustments_notes %}
+                                    <div class="mb-4">
+                                        <label for="{{ form.statutory_adjustments_notes.id_for_label }}" class="form-label">
+                                            {{ form.statutory_adjustments_notes.label }}
+                                            {% if form.statutory_adjustments_notes.field.required %}
+                                                <span class="text-danger">*</span>
+                                            {% endif %}
+                                        </label>
+                                        {{ form.statutory_adjustments_notes }}
+                                        {% if form.statutory_adjustments_notes.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form.statutory_adjustments_notes.errors }}
+                                            </div>
+                                        {% endif %}
+                                        {% if form.statutory_adjustments_notes.help_text %}
+                                            <small class="form-text text-muted">
+                                                {{ form.statutory_adjustments_notes.help_text }}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+
+                                {# Confirmation Checkbox #}
+                                <div class="mb-4">
+                                    <div class="form-check">
+                                        {{ form.confirm_reversal }}
+                                        <label class="form-check-label" for="{{ form.confirm_reversal.id_for_label }}">
+                                            {{ form.confirm_reversal.label }}
+                                        </label>
+                                        {% if form.confirm_reversal.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form.confirm_reversal.errors }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% if form.confirm_reversal.help_text %}
+                                        <small class="form-text text-muted d-block mt-1">
+                                            {{ form.confirm_reversal.help_text }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+
+                                {# Action Buttons #}
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{% url 'hr:payroll_detail' payroll.pk %}" 
+                                       class="btn btn-secondary">
+                                        <i class="fa fa-times me-1"></i>Cancel
+                                    </a>
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fa fa-undo me-1"></i>Reverse Payroll
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Final confirmation before submit
+document.getElementById('reversalForm').addEventListener('submit', function(e) {
+    const staffName = "{{ payroll.staff.full_name }}";
+    const periodLabel = "{{ payroll.pay_period_label }}";
+    const netPay = "{{ payroll.net_pay|money }}";
+    
+    const confirmed = confirm(
+        `Are you absolutely sure you want to REVERSE the payroll for ${staffName} (${periodLabel}) with net pay of ${netPay}?\n\n` +
+        `This action CANNOT be undone!`
+    );
+    
+    if (!confirmed) {
+        e.preventDefault();
+        return false;
+    }
+});
+</script>
+{% endblock %}

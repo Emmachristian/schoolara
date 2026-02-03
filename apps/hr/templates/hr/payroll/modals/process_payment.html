@@ -1,0 +1,190 @@
+{# hr/templates/hr/payroll/modals/process_payment.html #}
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-money-bill me-2"></i>Process Payment
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body text-center py-4">
+            <div class="mb-3">
+                <i class="fa fa-money-bill text-primary" style="font-size: 4rem;"></i>
+            </div>
+            <h4 class="mb-3">Process Payment for Payroll?</h4>
+            
+            {# Payroll Summary #}
+            <div class="alert alert-info">
+                <div class="mb-2">
+                    <strong>{{ payroll.staff.full_name }}</strong>
+                </div>
+                <small class="d-block">
+                    <strong>Pay Period:</strong> {{ payroll.pay_period_label|default:"N/A" }}
+                </small>
+                <small class="d-block">
+                    {{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}
+                </small>
+                <small class="d-block mt-1">
+                    <strong>Fiscal Period:</strong> {{ payroll.fiscal_period.name }}
+                </small>
+                <hr class="my-2">
+                <small class="d-block">
+                    <strong>Payment Date:</strong> {{ payroll.payment_date|date:"F d, Y" }}
+                </small>
+                <small class="d-block">
+                    <strong>Payment Method:</strong> 
+                    {{ payroll.payment_method.name|default:"Not specified" }}
+                </small>
+                {% if payroll.bank_account %}
+                    <small class="d-block text-muted">
+                        Account: {{ payroll.bank_account }}
+                    </small>
+                {% endif %}
+                {% if payroll.payment_reference %}
+                    <small class="d-block text-muted">
+                        Reference: {{ payroll.payment_reference }}
+                    </small>
+                {% endif %}
+                <hr class="my-2">
+                <div class="mt-2">
+                    <strong class="text-primary">Amount to Pay: {{ payroll.net_pay|money }}</strong>
+                </div>
+                {% if payroll.is_prorated %}
+                    <div class="mt-2">
+                        <span class="badge bg-warning">PRORATED</span>
+                        <br>
+                        <small class="text-muted">
+                            {{ payroll.days_worked }}/{{ payroll.total_working_days }} days
+                        </small>
+                    </div>
+                {% endif %}
+            </div>
+            
+            {# Error or Success Messages #}
+            {% if message %}
+                {# Show error message from modal_views.py #}
+                <div class="alert alert-danger text-start">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    <strong>Cannot Process Payment:</strong>
+                    <p class="mb-0 mt-2">{{ message }}</p>
+                </div>
+            {% elif not can_process %}
+                <div class="alert alert-danger text-start">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    <strong>Cannot Process Payment:</strong>
+                    <p class="mb-0 mt-2">
+                        Payroll must be approved before payment. Current status: 
+                        <span class="badge bg-{{ payroll.status|lower }}">
+                            {{ payroll.get_status_display }}
+                        </span>
+                    </p>
+                </div>
+            {% else %}
+                {# Show what happens after payment #}
+                <div class="alert alert-primary text-start">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>After Processing:</strong>
+                    <ul class="mb-0 mt-2 small">
+                        <li>Payroll will be marked as <strong>PAID</strong></li>
+                        <li>Payment timestamp will be recorded</li>
+                        <li>Payment processor will be recorded (your name)</li>
+                        <li>Cannot be edited or deleted</li>
+                        <li>Payment record is final</li>
+                        {% if payroll.requires_statutory_adjustments %}
+                            <li class="text-warning">
+                                <i class="fa fa-exclamation-triangle me-1"></i>
+                                Contains statutory deductions that may require reporting
+                            </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                
+                {# Critical Warning #}
+                <div class="alert alert-warning text-start">
+                    <i class="fa fa-exclamation-triangle me-2"></i>
+                    <strong>Important:</strong>
+                    <p class="mb-0 mt-2">
+                        Ensure the payment of <strong>{{ payroll.net_pay|money }}</strong> 
+                        has been successfully transferred to 
+                        <strong>{{ payroll.staff.full_name }}</strong> 
+                        before marking as paid!
+                    </p>
+                </div>
+                
+                {# Payment Breakdown Card #}
+                <div class="card border-primary">
+                    <div class="card-body py-2">
+                        <small class="text-muted d-block mb-1">
+                            <strong>Payment Breakdown:</strong>
+                        </small>
+                        <div class="row text-start">
+                            <div class="col-6">
+                                <small class="d-block">Gross Pay:</small>
+                                <small class="d-block">Deductions:</small>
+                                {% if payroll.allowances.exists %}
+                                    <small class="d-block">Allowances:</small>
+                                {% endif %}
+                                {% if payroll.bonuses.exists %}
+                                    <small class="d-block">Bonuses:</small>
+                                {% endif %}
+                            </div>
+                            <div class="col-6 text-end">
+                                <small class="d-block">{{ payroll.gross_pay|money }}</small>
+                                <small class="d-block text-danger">
+                                    ({{ payroll.total_deductions|money }})
+                                </small>
+                                {% if payroll.allowances.exists %}
+                                    <small class="d-block text-success">
+                                        {{ payroll.allowances.all|sum_field:"amount"|money }}
+                                    </small>
+                                {% endif %}
+                                {% if payroll.bonuses.exists %}
+                                    <small class="d-block text-success">
+                                        {{ payroll.bonuses.all|sum_field:"amount"|money }}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <hr class="my-1">
+                        <div class="row text-start">
+                            <div class="col-6">
+                                <small class="d-block"><strong>Net Pay:</strong></small>
+                            </div>
+                            <div class="col-6 text-end">
+                                <small class="d-block">
+                                    <strong>{{ payroll.net_pay|money }}</strong>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+        {# Footer with Actions #}
+        {% if can_process %}
+            <form hx-post="{% url 'hr:payroll_process_payment' payroll.pk %}" 
+                  hx-target="#payroll-results" 
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-check me-1"></i>Yes, Mark as Paid
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

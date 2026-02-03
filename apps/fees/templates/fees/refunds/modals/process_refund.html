@@ -1,0 +1,118 @@
+{# fees/templates/fees/refunds/modals/process_refund.html #}
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-cog me-2"></i>Process Refund
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_process %}
+                <div class="text-center mb-4">
+                    <i class="fa fa-cog text-primary" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3">Process Refund</h4>
+                <p class="text-muted text-center mb-3">
+                    You are about to process this refund:
+                </p>
+                
+                <!-- Refund Details -->
+                <div class="alert alert-info">
+                    <strong>Refund #{{ refund.refund_number }}</strong><br>
+                    <small>Student: {{ refund.student.get_full_name }}</small><br>
+                    <small>Amount: {{ refund.refund_amount|money }}</small><br>
+                    <small>Method: {{ refund.get_refund_method_display }}</small><br>
+                    <small>Approved: {{ refund.approved_date|date:"M d, Y" }}</small><br>
+                    <small>Approved By: {{ refund.approved_by.get_full_name }}</small>
+                </div>
+                
+                <!-- Processing Date -->
+                <div class="mb-3">
+                    <label for="processing_date" class="form-label">
+                        <strong>Processing Date <span class="text-danger">*</span></strong>
+                    </label>
+                    <input type="date" 
+                           class="form-control" 
+                           id="processing_date" 
+                           name="processing_date" 
+                           required
+                           value="{% now 'Y-m-d' %}">
+                </div>
+                
+                <!-- Reference Number -->
+                <div class="mb-3">
+                    <label for="reference_number" class="form-label">
+                        <strong>Reference Number</strong>
+                    </label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="reference_number" 
+                           name="reference_number"
+                           placeholder="Transaction or reference number">
+                </div>
+                
+                <!-- Processing Notes -->
+                <div class="mb-3">
+                    <label for="processing_notes" class="form-label">
+                        <strong>Processing Notes</strong>
+                    </label>
+                    <textarea class="form-control" 
+                              id="processing_notes" 
+                              name="notes" 
+                              rows="3"
+                              placeholder="Optional notes about processing this refund..."></textarea>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <strong><i class="fa fa-exclamation-circle me-2"></i>Important:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Ensure the funds have been transferred to the student</li>
+                        <li>This will mark the refund as completed</li>
+                        <li>This action cannot be undone</li>
+                    </ul>
+                </div>
+            {% else %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Process Refund</h4>
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    This refund cannot be processed. Current status: {{ refund.get_status_display }}
+                </div>
+                <p class="text-muted text-center">
+                    Only approved refunds can be processed.
+                </p>
+            {% endif %}
+        </div>
+        {% if can_process %}
+            <form hx-post="{% url 'fees:refund_process' refund.pk %}"
+                  hx-target="#refund-list"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="processing_date" id="hidden_processing_date">
+                <input type="hidden" name="reference_number" id="hidden_reference_number">
+                <input type="hidden" name="notes" id="hidden_processing_notes">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary" onclick="
+                        document.getElementById('hidden_processing_date').value = document.getElementById('processing_date').value;
+                        document.getElementById('hidden_reference_number').value = document.getElementById('reference_number').value;
+                        document.getElementById('hidden_processing_notes').value = document.getElementById('processing_notes').value;
+                    ">
+                        <i class="fa fa-cog me-1"></i>Process Refund
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

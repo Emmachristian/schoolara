@@ -1,0 +1,422 @@
+{# boarding/templates/boarding/dormitories/partials/_dormitory_results.html #}
+
+{% load static %}
+
+<!-- Dormitories Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Code</th>
+                <th>Dormitory Name</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Capacity</th>
+                <th>Occupancy</th>
+                <th>Facilities</th>
+                <th>Status</th>
+                <th>Dormitory Master</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if dormitories_page %}
+                {% for dormitory in dormitories_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:dormitories_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Dormitory Code -->
+                    <td>
+                        <span class="dormitory-code">{{ dormitory.code }}</span>
+                    </td>
+                    
+                    <!-- Dormitory Name & Description -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">{{ dormitory.name }}</h6>
+                            {% if dormitory.description %}
+                                <small class="text-muted">{{ dormitory.description|truncatewords:8 }}</small>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Dormitory Type Badge -->
+                    <td>
+                        {% if dormitory.dormitory_type == 'BOYS' %}
+                            <span class="dormitory-type-badge boys">
+                                <i class="fa fa-male me-1"></i>Boys
+                            </span>
+                        {% elif dormitory.dormitory_type == 'GIRLS' %}
+                            <span class="dormitory-type-badge girls">
+                                <i class="fa fa-female me-1"></i>Girls
+                            </span>
+                        {% elif dormitory.dormitory_type == 'MIXED' %}
+                            <span class="dormitory-type-badge mixed">
+                                <i class="fa fa-users me-1"></i>Mixed
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Location -->
+                    <td>
+                        {% if dormitory.building %}
+                            <strong>{{ dormitory.building }}</strong>
+                            {% if dormitory.floor %}
+                                <div><small class="text-muted">{{ dormitory.floor }}</small></div>
+                            {% endif %}
+                            {% if dormitory.wing %}
+                                <div><small class="text-muted">{{ dormitory.wing }}</small></div>
+                            {% endif %}
+                        {% else %}
+                            <small class="text-muted">Not specified</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Capacity -->
+                    <td>
+                        <span class="capacity-badge">
+                            <i class="fa fa-bed me-1"></i>{{ dormitory.total_capacity }} beds
+                        </span>
+                        {% if dormitory.room_count %}
+                            <div>
+                                <small class="text-muted">{{ dormitory.room_count }} room(s)</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Occupancy with Progress Meter -->
+                    <td>
+                        {% with occupancy_pct=dormitory.occupancy_ratio|default:0 %}
+                        <div class="occupancy-meter">
+                            {% if occupancy_pct < 70 %}
+                                <div class="occupancy-fill low" style="width: {{ occupancy_pct }}%;"></div>
+                            {% elif occupancy_pct < 90 %}
+                                <div class="occupancy-fill medium" style="width: {{ occupancy_pct }}%;"></div>
+                            {% elif occupancy_pct < 100 %}
+                                <div class="occupancy-fill high" style="width: {{ occupancy_pct }}%;"></div>
+                            {% else %}
+                                <div class="occupancy-fill full" style="width: 100%;"></div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                {{ dormitory.current_occupancy|default:0 }}/{{ dormitory.total_capacity }}
+                            </small>
+                            <small class="fw-bold">{{ occupancy_pct|floatformat:0 }}%</small>
+                        </div>
+                        <div>
+                            <small class="text-success">
+                                <i class="fa fa-check-circle me-1"></i>{{ dormitory.available_beds|default:0 }} available
+                            </small>
+                        </div>
+                        {% endwith %}
+                    </td>
+                    
+                    <!-- Facilities Icons -->
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            <span class="facility-icon {% if not dormitory.has_bathroom %}inactive{% endif %}" 
+                                  title="{% if dormitory.has_bathroom %}Has Bathroom{% else %}No Bathroom{% endif %}"
+                                  data-bs-toggle="tooltip">
+                                <i class="fa fa-bath"></i>
+                            </span>
+                            <span class="facility-icon {% if not dormitory.has_study_area %}inactive{% endif %}" 
+                                  title="{% if dormitory.has_study_area %}Has Study Area{% else %}No Study Area{% endif %}"
+                                  data-bs-toggle="tooltip">
+                                <i class="fa fa-book"></i>
+                            </span>
+                            <span class="facility-icon {% if not dormitory.has_wifi %}inactive{% endif %}" 
+                                  title="{% if dormitory.has_wifi %}Has WiFi{% else %}No WiFi{% endif %}"
+                                  data-bs-toggle="tooltip">
+                                <i class="fa fa-wifi"></i>
+                            </span>
+                            <span class="facility-icon {% if not dormitory.has_security %}inactive{% endif %}" 
+                                  title="{% if dormitory.has_security %}Has Security{% else %}No Security{% endif %}"
+                                  data-bs-toggle="tooltip">
+                                <i class="fa fa-shield-alt"></i>
+                            </span>
+                        </div>
+                        <div class="mt-1">
+                            {% if dormitory.maintenance_status == 'GOOD' %}
+                                <span class="maintenance-badge good">
+                                    <i class="fa fa-check me-1"></i>Good
+                                </span>
+                            {% elif dormitory.maintenance_status == 'SCHEDULED' %}
+                                <span class="maintenance-badge scheduled">
+                                    <i class="fa fa-calendar me-1"></i>Scheduled
+                                </span>
+                            {% elif dormitory.maintenance_status == 'IN_PROGRESS' %}
+                                <span class="maintenance-badge in-progress">
+                                    <i class="fa fa-wrench me-1"></i>In Progress
+                                </span>
+                            {% elif dormitory.maintenance_status == 'NEEDS_REPAIR' %}
+                                <span class="maintenance-badge needs-repair">
+                                    <i class="fa fa-exclamation-triangle me-1"></i>Needs Repair
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td>
+                        {% if dormitory.is_active %}
+                            <span class="status-badge active">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="status-badge inactive">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                        
+                        {% if dormitory.is_available_for_new_admissions %}
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="fa fa-door-open me-1"></i>Open for admissions
+                                </small>
+                            </div>
+                        {% else %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-door-closed me-1"></i>Closed
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Dormitory Master -->
+                    <td>
+                        {% if dormitory.dormitory_master %}
+                            <div>
+                                <strong>{{ dormitory.dormitory_master.get_full_name }}</strong>
+                            </div>
+                            {% if dormitory.assistant_dormitory_master %}
+                                <small class="text-muted">
+                                    Asst: {{ dormitory.assistant_dormitory_master.get_full_name }}
+                                </small>
+                            {% endif %}
+                        {% else %}
+                            <small class="text-muted">Not assigned</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'boarding:dormitory_detail' dormitory.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'boarding:dormitory_edit' dormitory.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                {% if dormitory.is_active %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'boarding:dormitory_deactivate_modal' dormitory.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i>Deactivate
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'boarding:dormitory_activate_modal' dormitory.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Activate
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Management Actions -->
+                                <h6 class="dropdown-header">Management</h6>
+                                
+                                <button type="button" class="dropdown-item"
+                                        hx-get="{% url 'boarding:dormitory_capacity_modal' dormitory.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-chart-bar me-2"></i>Check Capacity
+                                </button>
+                                
+                                <button type="button" class="dropdown-item"
+                                        hx-get="{% url 'boarding:dormitory_maintenance_modal' dormitory.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-wrench me-2"></i>Maintenance Schedule
+                                </button>
+                                
+                                <button type="button" class="dropdown-item"
+                                        hx-get="{% url 'boarding:dormitory_update_maintenance_modal' dormitory.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-tools me-2"></i>Update Maintenance
+                                </button>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'boarding:dormitory_delete_modal' dormitory.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="11" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No dormitories found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or create a new dormitory.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if dormitories_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ dormitories_page.start_index }} - {{ dormitories_page.end_index }} of {{ dormitories_page.paginator.count }} dormitories
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Dormitory pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if dormitories_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'boarding:dormitory_list' %}" 
+                                hx-target="#dormitory-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ dormitories_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in dormitories_page.paginator.page_range %}
+                    {% if page_num == dormitories_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > dormitories_page.number|add:"-3" and page_num < dormitories_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'boarding:dormitory_list' %}"
+                                    hx-target="#dormitory-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if dormitories_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'boarding:dormitory_list' %}"
+                                hx-target="#dormitory-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ dormitories_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-home"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Dormitories</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Dormitories</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Capacity</div>
+                <h3>{{ stats.total_capacity|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-graph2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Available Beds</div>
+                <h3>{{ stats.available_beds|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

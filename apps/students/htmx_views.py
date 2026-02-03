@@ -63,20 +63,31 @@ def student_search(request):
     ).annotate(
         guardian_count=Count('guardians', distinct=True),
         sibling_count=Count('sibling_relationships', distinct=True)
-    ).order_by('admission_number')
+    ).order_by('-admission_date', 'admission_number')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        students = students.filter(
-            Q(admission_number__icontains=query) |
-            Q(national_student_number__icontains=query) |
-            Q(first_name__icontains=query) |
-            Q(middle_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(phone_number__icontains=query) |
-            Q(personal_email__icontains=query) |
-            Q(birth_certificate_number__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(admission_number__icontains=word) |
+                    Q(national_student_number__icontains=word) |
+                    Q(first_name__icontains=word) |
+                    Q(middle_name__icontains=word) |
+                    Q(last_name__icontains=word) |
+                    Q(phone_number__icontains=word) |
+                    Q(personal_email__icontains=word) |
+                    Q(birth_certificate_number__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            students = students.filter(combined_q)
     
     # Apply filters
     if enrollment_status:
@@ -109,33 +120,47 @@ def student_search(request):
     if transportation_required is not None:
         students = students.filter(transportation_required=(transportation_required.lower() == 'true'))
     
-    # Age filters
+    # Age filters with better error handling
+    today = date.today()
+    
     if min_age:
         try:
-            max_birth_date = date.today().replace(year=date.today().year - int(min_age))
+            max_birth_date = date(today.year - int(min_age), today.month, today.day)
             students = students.filter(date_of_birth__lte=max_birth_date)
-        except:
+        except (ValueError, TypeError):
             pass
     
     if max_age:
         try:
-            min_birth_date = date.today().replace(year=date.today().year - int(max_age) - 1)
+            min_birth_date = date(today.year - int(max_age) - 1, today.month, today.day)
             students = students.filter(date_of_birth__gte=min_birth_date)
-        except:
+        except (ValueError, TypeError):
             pass
     
     # Admission year filter
     if admission_year:
         try:
             students = students.filter(admission_date__year=int(admission_year))
-        except:
+        except (ValueError, TypeError):
             pass
     
     # Paginate
-    students_page, paginator = paginate_queryset(request, students, per_page=10)
+    students_page, paginator = paginate_queryset(request, students, per_page=20)
     
-    # Calculate stats
+    # Calculate stats with aggregates
     total = students.count()
+    
+    aggregates = students.aggregate(
+        avg_age=Avg(
+            Case(
+                When(
+                    date_of_birth__isnull=False,
+                    then=timezone.now().year - F('date_of_birth__year')
+                ),
+                output_field=DecimalField()
+            )
+        )
+    )
     
     stats = {
         'total': total,
@@ -153,6 +178,7 @@ def student_search(request):
             Q(allergies__isnull=False) & ~Q(allergies='') |
             Q(medications__isnull=False) & ~Q(medications='')
         ).count(),
+        'avg_age': round(aggregates['avg_age'] or 0, 1),
     }
     
     return render(request, 'students/_student_results.html', {
@@ -200,18 +226,29 @@ def guardian_search(request):
         )
     ).order_by('last_name', 'first_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        guardians = guardians.filter(
-            Q(first_name__icontains=query) |
-            Q(middle_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(primary_phone__icontains=query) |
-            Q(secondary_phone__icontains=query) |
-            Q(email__icontains=query) |
-            Q(national_id__icontains=query) |
-            Q(employer__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(first_name__icontains=word) |
+                    Q(middle_name__icontains=word) |
+                    Q(last_name__icontains=word) |
+                    Q(primary_phone__icontains=word) |
+                    Q(secondary_phone__icontains=word) |
+                    Q(email__icontains=word) |
+                    Q(national_id__icontains=word) |
+                    Q(employer__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            guardians = guardians.filter(combined_q)
     
     # Apply filters
     if guardian_type:
@@ -290,16 +327,27 @@ def student_guardian_search(request):
         'guardian'
     ).order_by('student__admission_number', 'emergency_contact_priority')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        relationships = relationships.filter(
-            Q(student__first_name__icontains=query) |
-            Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query) |
-            Q(guardian__first_name__icontains=query) |
-            Q(guardian__last_name__icontains=query) |
-            Q(guardian__primary_phone__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(student__first_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__admission_number__icontains=word) |
+                    Q(guardian__first_name__icontains=word) |
+                    Q(guardian__last_name__icontains=word) |
+                    Q(guardian__primary_phone__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            relationships = relationships.filter(combined_q)
     
     # Apply filters
     if student:
@@ -383,16 +431,27 @@ def sibling_search(request):
         'to_student__current_academic_level'
     ).order_by('from_student__admission_number')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        siblings = siblings.filter(
-            Q(from_student__first_name__icontains=query) |
-            Q(from_student__last_name__icontains=query) |
-            Q(from_student__admission_number__icontains=query) |
-            Q(to_student__first_name__icontains=query) |
-            Q(to_student__last_name__icontains=query) |
-            Q(to_student__admission_number__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(from_student__first_name__icontains=word) |
+                    Q(from_student__last_name__icontains=word) |
+                    Q(from_student__admission_number__icontains=word) |
+                    Q(to_student__first_name__icontains=word) |
+                    Q(to_student__last_name__icontains=word) |
+                    Q(to_student__admission_number__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            siblings = siblings.filter(combined_q)
     
     # Apply filters
     if from_student:
@@ -461,14 +520,25 @@ def enrollment_status_history_search(request):
         'academic_session'
     ).order_by('-effective_date', 'student__admission_number')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        history = history.filter(
-            Q(student__first_name__icontains=query) |
-            Q(student__last_name__icontains=query) |
-            Q(student__admission_number__icontains=query) |
-            Q(reason__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(student__first_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__admission_number__icontains=word) |
+                    Q(reason__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            history = history.filter(combined_q)
     
     # Apply filters
     if student:

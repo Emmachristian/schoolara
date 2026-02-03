@@ -1,0 +1,426 @@
+{# exams/templates/exams/class_grading_systems/partials/_assignment_results.html #}
+
+{% load static %}
+
+<!-- Class Grading System Assignments Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Class</th>
+                <th>Subject</th>
+                <th>Grading System</th>
+                <th>Academic Session</th>
+                <th>Effective Period</th>
+                <th>Priority</th>
+                <th>Overrides</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if assignments_page %}
+                {% for assignment in assignments_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:assignments_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Class -->
+                    <td>
+                        <span class="class-badge">
+                            {{ assignment.class_instance.name }}
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                {{ assignment.class_instance.academic_level.name }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Subject -->
+                    <td>
+                        {% if assignment.subject %}
+                            <span class="subject-badge">
+                                {{ assignment.subject.name }}
+                            </span>
+                        {% else %}
+                            <span class="subject-badge">
+                                <i class="fa fa-layer-group me-1"></i>Class-Wide
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Grading System -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">
+                                {{ assignment.grading_system.name }}
+                                {% if assignment.is_default_for_class %}
+                                    <span class="status-badge default ms-1">Default</span>
+                                {% endif %}
+                            </h6>
+                            <small class="text-muted">
+                                {{ assignment.grading_system.get_grading_type_display }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Academic Session -->
+                    <td>
+                        <span class="subject-badge">
+                            {{ assignment.academic_session.name }}
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                {{ assignment.academic_session.start_date|date:"M Y" }} - {{ assignment.academic_session.end_date|date:"M Y" }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Effective Period -->
+                    <td>
+                        <div>
+                            <span class="date-badge effective" data-bs-toggle="tooltip" title="Effective Date">
+                                <i class="fa fa-calendar-check me-1"></i>
+                                {{ assignment.effective_date|date:"M d, Y" }}
+                            </span>
+                        </div>
+                        {% if assignment.end_date %}
+                            <div class="mt-1">
+                                <span class="date-badge end" data-bs-toggle="tooltip" title="End Date">
+                                    <i class="fa fa-calendar-times me-1"></i>
+                                    {{ assignment.end_date|date:"M d, Y" }}
+                                </span>
+                            </div>
+                        {% else %}
+                            <div class="mt-1">
+                                <small class="text-muted">Ongoing</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Priority -->
+                    <td>
+                        {% if assignment.priority <= 50 %}
+                            <span class="priority-badge high">
+                                High ({{ assignment.priority }})
+                            </span>
+                        {% elif assignment.priority <= 100 %}
+                            <span class="priority-badge medium">
+                                Medium ({{ assignment.priority }})
+                            </span>
+                        {% else %}
+                            <span class="priority-badge low">
+                                Low ({{ assignment.priority }})
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Overrides -->
+                    <td>
+                        {% if assignment.custom_pass_mark %}
+                            <div>
+                                <small class="text-warning">
+                                    <i class="fa fa-edit me-1"></i>Pass Mark: {{ assignment.custom_pass_mark }}
+                                </small>
+                            </div>
+                        {% endif %}
+                        
+                        {% if assignment.custom_maximum_score %}
+                            <div>
+                                <small class="text-warning">
+                                    <i class="fa fa-edit me-1"></i>Max Score: {{ assignment.custom_maximum_score }}
+                                </small>
+                            </div>
+                        {% endif %}
+                        
+                        {% if assignment.curriculum_override %}
+                            <div>
+                                <small class="text-info">
+                                    <i class="fa fa-book me-1"></i>{{ assignment.curriculum_override }}
+                                </small>
+                            </div>
+                        {% endif %}
+                        
+                        {% if not assignment.custom_pass_mark and not assignment.custom_maximum_score and not assignment.curriculum_override %}
+                            <small class="text-muted">None</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td>
+                        {% if assignment.is_active %}
+                            {% if assignment.is_currently_active %}
+                                <span class="status-badge current">Current</span>
+                            {% else %}
+                                <span class="status-badge active">Active</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="status-badge inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'exams:class_grading_system_detail' assignment.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'exams:class_grading_system_quick_view_modal' assignment.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'exams:class_grading_system_edit' assignment.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                {% if assignment.is_active %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'exams:class_grading_system_toggle_active_modal' assignment.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i>Deactivate
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'exams:class_grading_system_toggle_active_modal' assignment.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Activate
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Assignment Details -->
+                                <h6 class="dropdown-header">Assignment Info</h6>
+                                
+                                <div class="dropdown-item-text">
+                                    <small class="text-muted">
+                                        <i class="fa fa-user me-1"></i>
+                                        Assigned by: {{ assignment.assigned_by.get_full_name|default:"System" }}
+                                    </small>
+                                </div>
+                                
+                                {% if assignment.assignment_reason %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-info-circle me-1"></i>
+                                            {{ assignment.assignment_reason|truncatewords:5 }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Reporting Settings -->
+                                <h6 class="dropdown-header">Reporting</h6>
+                                
+                                {% if assignment.include_in_report_cards %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-success">
+                                            <i class="fa fa-check-circle me-1"></i>Included in Report Cards
+                                        </small>
+                                    </div>
+                                {% else %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-times-circle me-1"></i>Not in Report Cards
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                {% if assignment.show_grade_breakdown %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-success">
+                                            <i class="fa fa-check-circle me-1"></i>Shows Grade Breakdown
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'exams:class_grading_system_delete_modal' assignment.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No class grading system assignments found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or create a new assignment.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if assignments_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ assignments_page.start_index }} - {{ assignments_page.end_index }} of {{ assignments_page.paginator.count }} assignments
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Assignment pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if assignments_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'exams:class_grading_system_list' %}" 
+                                hx-target="#assignment-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ assignments_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in assignments_page.paginator.page_range %}
+                    {% if page_num == assignments_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > assignments_page.number|add:"-3" and page_num < assignments_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'exams:class_grading_system_list' %}"
+                                    hx-target="#assignment-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if assignments_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:class_grading_system_list' %}"
+                                hx-target="#assignment-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ assignments_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-link"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Assignments</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Assignments</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-close-circle"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Inactive Assignments</div>
+                <h3>{{ stats.inactive|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-date"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Current Session</div>
+                <h3>{{ stats.current_session|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'assignment-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

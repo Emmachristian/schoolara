@@ -1,0 +1,706 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   EXAMINATION STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.planned {
+    background-color: #e7f3ff;
+    color: #004085;
+    border-color: #b8daff;
+}
+
+.status-badge.scheduled {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.status-badge.ongoing {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+.status-badge.completed {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.cancelled {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.status-badge.postponed {
+    background-color: #ffeaa7;
+    color: #856404;
+    border-color: #ffd966;
+}
+
+.status-badge.suspended {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border-color: #d6d8db;
+}
+
+/* ============================================================================
+   EXAM MODE BADGES
+   ============================================================================ */
+
+.mode-badge {
+    padding: 3px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.mode-badge.written {
+    background-color: #e7f3ff;
+    color: #004085;
+    border: 1px solid #b8daff;
+}
+
+.mode-badge.oral {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.mode-badge.practical {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.mode-badge.online {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.examination-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS SUMMARY
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   EXAMINATION SPECIFIC STYLING
+   ============================================================================ */
+
+.subject-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: inline-block;
+}
+
+.category-badge {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.date-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    display: inline-block;
+    margin-right: 4px;
+}
+
+.date-badge.exam-date {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.date-badge.time {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.time-info {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+}
+
+.time-info i {
+    color: #6c757d;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .examination-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        padding: 15px;
+    }
+    
+    .stats-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Examinations
+                <div class="page-title-subheading">
+                    Manage and schedule all examinations
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'exams:examination_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i>Create Examination
+                </a>
+                <button type="button" class="btn btn-outline-info"
+                        hx-get="{% url 'exams:bulk_result_entry_modal' %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-edit me-1"></i>Bulk Entry
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+                <a href="{% url 'exams:export_examinations_excel' %}" class="btn btn-outline-success">
+                    <i class="fa fa-file-excel me-1"></i>Export Excel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Examinations</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-clock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Upcoming</div>
+                <h3>{{ stats.upcoming|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Ongoing</div>
+                <h3>{{ stats.ongoing|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Completed</div>
+                <h3>{{ stats.completed|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-study me-2 text-primary"></i>
+                                Examinations Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i>Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="examination-filters">
+                        <form id="searchForm" 
+                              class="row g-3"
+                              hx-get="{% url 'exams:examination_list' %}"
+                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+                              hx-target="#examination-results"
+                              hx-swap="innerHTML">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="search" class="form-label small text-muted mb-1">
+                                    Search Examinations
+                                </label>
+                                <input type="text" name="q" class="form-control" 
+                                       placeholder="Search by name, code..."
+                                       value="{{ request.GET.q }}">
+                            </div>
+                            
+                            <!-- Status Filter -->
+                            <div class="col-md-2">
+                                <label for="status" class="form-label small text-muted mb-1">
+                                    Status
+                                </label>
+                                <select name="status" class="form-select">
+                                    <option value="">All Statuses</option>
+                                    <option value="PLANNED" {% if request.GET.status == 'PLANNED' %}selected{% endif %}>Planned</option>
+                                    <option value="SCHEDULED" {% if request.GET.status == 'SCHEDULED' %}selected{% endif %}>Scheduled</option>
+                                    <option value="ONGOING" {% if request.GET.status == 'ONGOING' %}selected{% endif %}>Ongoing</option>
+                                    <option value="COMPLETED" {% if request.GET.status == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                                    <option value="CANCELLED" {% if request.GET.status == 'CANCELLED' %}selected{% endif %}>Cancelled</option>
+                                </select>
+                            </div>
+
+                            <!-- Academic Session Filter -->
+                            <div class="col-md-3">
+                                <label for="academic_session" class="form-label small text-muted mb-1">
+                                    Academic Session
+                                </label>
+                                <select name="academic_session" class="form-select">
+                                    <option value="">All Sessions</option>
+                                    {% for session in filter_form.fields.academic_session.queryset %}
+                                        <option value="{{ session.id }}" {% if request.GET.academic_session == session.id|stringformat:"s" %}selected{% endif %}>
+                                            {{ session.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <!-- Exam Category Filter -->
+                            <div class="col-md-3">
+                                <label for="exam_category" class="form-label small text-muted mb-1">
+                                    Category
+                                </label>
+                                <select name="exam_category" class="form-select">
+                                    <option value="">All Categories</option>
+                                    {% for category in filter_form.fields.exam_category.queryset %}
+                                        <option value="{{ category.id }}" {% if request.GET.exam_category == category.id|stringformat:"s" %}selected{% endif %}>
+                                            {{ category.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Subject Filter -->
+                            <div class="col-md-3">
+                                <label for="subject" class="form-label small text-muted mb-1">
+                                    Subject
+                                </label>
+                                <select name="subject" class="form-select">
+                                    <option value="">All Subjects</option>
+                                    {% for subject in filter_form.fields.subject.queryset %}
+                                        <option value="{{ subject.id }}" {% if request.GET.subject == subject.id|stringformat:"s" %}selected{% endif %}>
+                                            {{ subject.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Exam Mode Filter -->
+                            <div class="col-md-2">
+                                <label for="exam_mode" class="form-label small text-muted mb-1">
+                                    Exam Mode
+                                </label>
+                                <select name="exam_mode" class="form-select">
+                                    <option value="">All Modes</option>
+                                    <option value="WRITTEN" {% if request.GET.exam_mode == 'WRITTEN' %}selected{% endif %}>Written</option>
+                                    <option value="ORAL" {% if request.GET.exam_mode == 'ORAL' %}selected{% endif %}>Oral</option>
+                                    <option value="PRACTICAL" {% if request.GET.exam_mode == 'PRACTICAL' %}selected{% endif %}>Practical</option>
+                                    <option value="ONLINE" {% if request.GET.exam_mode == 'ONLINE' %}selected{% endif %}>Online</option>
+                                </select>
+                            </div>
+
+                            <!-- Date Range -->
+                            <div class="col-md-2">
+                                <label for="exam_date_from" class="form-label small text-muted mb-1">
+                                    From Date
+                                </label>
+                                <input type="date" name="exam_date_from" class="form-control" 
+                                       value="{{ request.GET.exam_date_from }}">
+                            </div>
+
+                            <div class="col-md-2">
+                                <label for="exam_date_to" class="form-label small text-muted mb-1">
+                                    To Date
+                                </label>
+                                <input type="date" name="exam_date_to" class="form-control" 
+                                       value="{{ request.GET.exam_date_to }}">
+                            </div>
+
+                            <!-- Reset Button -->
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="examination-results">
+                        {% include 'exams/examinations/partials/_examination_results.html' %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========================================== -->
+<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;">
+    <!-- Modal content loaded here via HTMX -->
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// PAGE-SPECIFIC HTMX MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            // Create a proper Bootstrap modal structure
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            // Remove existing modal wrapper if it exists
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            // Create new modal wrapper
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            // Move the modal-dialog into the wrapper
+            modalWrapper.appendChild(modalDialog);
+            
+            // Append to body (outside app-container)
+            document.body.appendChild(modalWrapper);
+            
+            // Initialize and show modal
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            // Clean up when hidden
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+    
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' : 
+                                   type === 'error' ? '#dc3545' : 
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+    
+    // Close modal if instructed
+    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
+    if (closeModal === 'true') {
+        if (currentModal) {
+            currentModal.hide();
+        }
+    }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'exams:examination_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

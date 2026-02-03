@@ -1,0 +1,413 @@
+{# hr/templates/hr/payroll/modals/payroll_detail.html #}
+{% load currency_filters %}
+
+<div class="modal-dialog modal-xl">
+    <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-file-invoice-dollar me-2"></i>Payroll Details
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body">
+            {# Reversal Warning #}
+            {% if payroll.reversed %}
+                <div class="alert alert-danger mb-3">
+                    <h5 class="alert-heading">
+                        <i class="fa fa-exclamation-triangle me-2"></i>REVERSED PAYROLL
+                    </h5>
+                    <p class="mb-1"><strong>Reversed on:</strong> {{ payroll.reversed_on|date:"F d, Y g:i A" }}</p>
+                    <p class="mb-1"><strong>Reversed by:</strong> {{ payroll.get_reversed_by_user.get_full_name|default:"System" }}</p>
+                    <p class="mb-1"><strong>Reason:</strong> {{ payroll.reversal_reason }}</p>
+                    {% if payroll.statutory_adjustments_notes %}
+                        <hr>
+                        <p class="mb-0"><strong>Statutory Adjustments:</strong></p>
+                        <p class="mb-0">{{ payroll.statutory_adjustments_notes }}</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {# Staff & Period Information #}
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <h6 class="text-muted mb-1">Staff Member</h6>
+                    <p class="mb-0"><strong>{{ payroll.staff.full_name }}</strong></p>
+                    <small class="text-muted">{{ payroll.staff.staff_id }}</small>
+                    {% if payroll.staff.primary_department %}
+                        <br><small class="text-muted">{{ payroll.staff.primary_department }}</small>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-4">
+                    <h6 class="text-muted mb-1">Pay Period</h6>
+                    <p class="mb-0">
+                        <strong>{{ payroll.pay_period_label|default:"N/A" }}</strong>
+                    </p>
+                    <small class="text-muted">
+                        {{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}
+                    </small>
+                    <br>
+                    <small class="text-muted">
+                        <i class="fa fa-calendar me-1"></i>{{ payroll.get_pay_frequency_display }}
+                    </small>
+                </div>
+                
+                <div class="col-md-4">
+                    <h6 class="text-muted mb-1">Fiscal Period</h6>
+                    <p class="mb-0">{{ payroll.fiscal_period.name }}</p>
+                    <small class="text-muted">{{ payroll.fiscal_year.name }}</small>
+                </div>
+            </div>
+
+            {# Working Days (if prorated) #}
+            {% if payroll.is_prorated %}
+                <div class="alert alert-warning mb-3">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>Prorated Salary:</strong>
+                    {{ payroll.days_worked }} of {{ payroll.total_working_days }} working days
+                </div>
+            {% endif %}
+            
+            <hr>
+
+            {# Salary Breakdown #}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h6 class="mb-2"><i class="fa fa-calculator me-2"></i>Salary Breakdown</h6>
+                    <table class="table table-sm table-bordered">
+                        <tbody>
+                            <tr>
+                                <td>Basic Salary</td>
+                                <td class="text-end"><strong>{{ payroll.basic_salary|money }}</strong></td>
+                            </tr>
+                            {% if total_allowances > 0 %}
+                                <tr class="table-light">
+                                    <td>
+                                        <i class="fa fa-plus-circle text-success me-1"></i>
+                                        Allowances ({{ payroll.allowances.count }})
+                                    </td>
+                                    <td class="text-end">{{ total_allowances|money }}</td>
+                                </tr>
+                            {% endif %}
+                            {% if total_bonuses > 0 %}
+                                <tr class="table-light">
+                                    <td>
+                                        <i class="fa fa-star text-warning me-1"></i>
+                                        Bonuses ({{ payroll.bonuses.count }})
+                                    </td>
+                                    <td class="text-end">{{ total_bonuses|money }}</td>
+                                </tr>
+                            {% endif %}
+                            <tr class="table-primary">
+                                <td><strong>Gross Pay</strong></td>
+                                <td class="text-end">
+                                    <strong>{{ payroll.gross_pay|money }}</strong>
+                                </td>
+                            </tr>
+                            {% if total_deductions > 0 %}
+                                <tr class="table-danger">
+                                    <td>
+                                        <i class="fa fa-minus-circle text-danger me-1"></i>
+                                        Deductions ({{ payroll.deductions.count }})
+                                    </td>
+                                    <td class="text-end">({{ total_deductions|money }})</td>
+                                </tr>
+                            {% endif %}
+                            <tr class="table-success">
+                                <td><strong>Net Pay</strong></td>
+                                <td class="text-end">
+                                    <strong>{{ payroll.net_pay|money }}</strong>
+                                </td>
+                            </tr>
+                            {% if payroll.reversed %}
+                                <tr class="table-danger">
+                                    <td><strong>Effective Amount (Reversed)</strong></td>
+                                    <td class="text-end">
+                                        <strong>{{ effective_net_pay|money }}</strong>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {# Detailed Breakdowns #}
+                <div class="col-md-6">
+                    {# Allowances Detail #}
+                    {% if payroll.allowances.exists %}
+                        <h6 class="mb-2"><i class="fa fa-list me-2"></i>Allowances Detail</h6>
+                        <table class="table table-sm table-bordered mb-3">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for allowance in payroll.allowances.all %}
+                                    <tr>
+                                        <td>
+                                            {{ allowance.get_allowance_type_display }}
+                                            {% if allowance.is_taxable %}
+                                                <span class="badge badge-sm bg-info">Taxable</span>
+                                            {% endif %}
+                                            {% if allowance.is_recurring %}
+                                                <span class="badge badge-sm bg-secondary">Recurring</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">{{ allowance.amount|money }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+
+                    {# Deductions Detail #}
+                    {% if payroll.deductions.exists %}
+                        <h6 class="mb-2"><i class="fa fa-list me-2"></i>Deductions Detail</h6>
+                        <table class="table table-sm table-bordered mb-3">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for deduction in payroll.deductions.all %}
+                                    <tr>
+                                        <td>
+                                            {{ deduction.get_deduction_type_display }}
+                                            {% if deduction.is_statutory %}
+                                                <span class="badge badge-sm bg-danger">Statutory</span>
+                                            {% endif %}
+                                            {% if deduction.is_pretax %}
+                                                <span class="badge badge-sm bg-warning">Pre-Tax</span>
+                                            {% endif %}
+                                            {% if deduction.is_recurring %}
+                                                <span class="badge badge-sm bg-secondary">Recurring</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">{{ deduction.amount|money }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+
+                    {# Bonuses Detail #}
+                    {% if payroll.bonuses.exists %}
+                        <h6 class="mb-2"><i class="fa fa-list me-2"></i>Bonuses Detail</h6>
+                        <table class="table table-sm table-bordered mb-3">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for bonus in payroll.bonuses.all %}
+                                    <tr>
+                                        <td>
+                                            {{ bonus.get_bonus_type_display }}
+                                            {% if bonus.is_taxable %}
+                                                <span class="badge badge-sm bg-info">Taxable</span>
+                                            {% endif %}
+                                            {% if bonus.overtime_hours %}
+                                                <small class="text-muted">
+                                                    ({{ bonus.overtime_hours }}h @ {{ bonus.overtime_rate|money }})
+                                                </small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">{{ bonus.amount|money }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <hr>
+
+            {# Payment Information #}
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <h6 class="text-muted mb-1">Status</h6>
+                    <p class="mb-0">
+                        {% if payroll.reversed %}
+                            <span class="badge bg-danger">REVERSED</span>
+                        {% else %}
+                            <span class="badge bg-{{ payroll.status|lower }}">
+                                {{ payroll.get_status_display }}
+                            </span>
+                        {% endif %}
+                    </p>
+                </div>
+                
+                <div class="col-md-3">
+                    <h6 class="text-muted mb-1">Payment Method</h6>
+                    <p class="mb-0">{{ payroll.payment_method.name|default:"Not specified" }}</p>
+                    {% if payroll.bank_account %}
+                        <small class="text-muted">{{ payroll.bank_account }}</small>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-3">
+                    <h6 class="text-muted mb-1">Payment Date</h6>
+                    <p class="mb-0">{{ payroll.payment_date|date:"F d, Y" }}</p>
+                </div>
+
+                <div class="col-md-3">
+                    <h6 class="text-muted mb-1">Reference</h6>
+                    <p class="mb-0">{{ payroll.payment_reference|default:"—" }}</p>
+                </div>
+            </div>
+
+            {# Approval & Payment Tracking #}
+            {% if payroll.approved_at or payroll.paid_at %}
+                <hr>
+                <div class="row mb-3">
+                    {% if payroll.approved_at %}
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-1">Approved</h6>
+                            <p class="mb-0">
+                                {{ payroll.approved_at|date:"F d, Y g:i A" }}
+                            </p>
+                            <small class="text-muted">
+                                by {{ payroll.get_approved_by_user.get_full_name|default:"System" }}
+                            </small>
+                        </div>
+                    {% endif %}
+
+                    {% if payroll.paid_at %}
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-1">Paid</h6>
+                            <p class="mb-0">
+                                {{ payroll.paid_at|date:"F d, Y g:i A" }}
+                            </p>
+                            <small class="text-muted">
+                                by {{ payroll.get_paid_by_user.get_full_name|default:"System" }}
+                            </small>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {# Journal Entries #}
+            {% if payroll.journal_entry or payroll.payment_journal_entry or payroll.reversal_journal_entry %}
+                <hr>
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="mb-2"><i class="fa fa-book me-2"></i>Journal Entries</h6>
+                        <div class="list-group">
+                            {% if payroll.journal_entry %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>Payroll Accrual Entry</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ payroll.journal_entry.entry_number }} - 
+                                                {{ payroll.journal_entry.date|date:"M d, Y" }}
+                                            </small>
+                                        </div>
+                                        <a href="{% url 'finance:journal_entry_detail' payroll.journal_entry.pk %}" 
+                                           class="btn btn-sm btn-outline-primary"
+                                           target="_blank">
+                                            <i class="fa fa-external-link-alt"></i> View
+                                        </a>
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            {% if payroll.payment_journal_entry %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>Payment Entry</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ payroll.payment_journal_entry.entry_number }} - 
+                                                {{ payroll.payment_journal_entry.date|date:"M d, Y" }}
+                                            </small>
+                                        </div>
+                                        <a href="{% url 'finance:journal_entry_detail' payroll.payment_journal_entry.pk %}" 
+                                           class="btn btn-sm btn-outline-primary"
+                                           target="_blank">
+                                            <i class="fa fa-external-link-alt"></i> View
+                                        </a>
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            {% if payroll.reversal_journal_entry %}
+                                <div class="list-group-item list-group-item-danger">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>Reversal Entry</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ payroll.reversal_journal_entry.entry_number }} - 
+                                                {{ payroll.reversal_journal_entry.date|date:"M d, Y" }}
+                                            </small>
+                                        </div>
+                                        <a href="{% url 'finance:journal_entry_detail' payroll.reversal_journal_entry.pk %}" 
+                                           class="btn btn-sm btn-outline-danger"
+                                           target="_blank">
+                                            <i class="fa fa-external-link-alt"></i> View
+                                        </a>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            {# Notes #}
+            {% if payroll.notes %}
+                <hr>
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6 class="text-muted mb-1">Notes</h6>
+                        <p class="mb-0">{{ payroll.notes }}</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Close
+            </button>
+            
+            {% if not payroll.reversed %}
+                {% if payroll.status == 'DRAFT' %}
+                    <a href="{% url 'hr:payroll_edit' payroll.pk %}" class="btn btn-primary">
+                        <i class="fa fa-edit me-1"></i>Edit
+                    </a>
+                {% endif %}
+                
+                <a href="{% url 'hr:payroll_detail' payroll.pk %}" class="btn btn-info">
+                    <i class="fa fa-eye me-1"></i>Full Details
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.badge-sm {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+}
+
+.list-group-item {
+    border-left: 3px solid transparent;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+</style>

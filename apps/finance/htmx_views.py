@@ -267,7 +267,7 @@ def expense_category_search(request):
         categories = categories.filter(requires_approval=(requires_approval.lower() == 'true'))
     
     # Paginate
-    categories_page, paginator = paginate_queryset(request, categories, per_page=20)
+    categories_page, paginator = paginate_queryset(request, categories, per_page=10)
     
     # Calculate stats
     total = categories.count()
@@ -382,7 +382,7 @@ def expense_search(request):
             pass
     
     # Paginate
-    expenses_page, paginator = paginate_queryset(request, expenses, per_page=20)
+    expenses_page, paginator = paginate_queryset(request, expenses, per_page=10)
     
     # Calculate stats
     total = expenses.count()
@@ -490,7 +490,7 @@ def expense_payment_search(request):
             pass
     
     # Paginate
-    payments_page, paginator = paginate_queryset(request, payments, per_page=20)
+    payments_page, paginator = paginate_queryset(request, payments, per_page=10)
     
     # Calculate stats
     total = payments.count()
@@ -549,7 +549,7 @@ def journal_search(request):
         journals = journals.filter(is_active=(is_active.lower() == 'true'))
     
     # Paginate
-    journals_page, paginator = paginate_queryset(request, journals, per_page=20)
+    journals_page, paginator = paginate_queryset(request, journals, per_page=10)
     
     # Calculate stats
     total = journals.count()
@@ -646,7 +646,7 @@ def journal_entry_search(request):
         entries = entries.filter(entry_date__lte=end_date)
     
     # Paginate
-    entries_page, paginator = paginate_queryset(request, entries, per_page=20)
+    entries_page, paginator = paginate_queryset(request, entries, per_page=10)
     
     # Calculate stats
     total = entries.count()
@@ -824,7 +824,7 @@ def budget_search(request):
         budgets = budgets.filter(end_date__lte=end_date)
     
     # Paginate
-    budgets_page, paginator = paginate_queryset(request, budgets, per_page=20)
+    budgets_page, paginator = paginate_queryset(request, budgets, per_page=10)
     
     # Calculate stats
     total = budgets.count()

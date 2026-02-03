@@ -6,7 +6,7 @@ Finance Management Signals
 Automatic triggers for:
 - Journal entry number generation
 - Expense number generation
-- Account balance updates
+- Account balance updates (AUTOMATIC BALANCE TRACKING)
 - Journal entry validation
 - Fiscal period enforcement
 - Audit logging
@@ -23,25 +23,40 @@ from finance.models import (
     Budget, Account
 )
 from finance.utils import (
-    generate_journal_entry_number, generate_expense_number,
-    validate_journal_entry, validate_fiscal_period
+    generate_journal_entry_number, 
+    generate_expense_number,
+    validate_journal_entry, 
+    validate_fiscal_period,
+    update_journal_entry_accounts
 )
 
 logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# JOURNAL ENTRY SIGNALS
+# JOURNAL ENTRY SIGNALS - COMBINED AND CORRECTED
 # =============================================================================
 
 @receiver(pre_save, sender=JournalEntry)
 def journal_entry_pre_save(sender, instance, **kwargs):
     """
     Pre-save processing for journal entries:
+    - Track previous status for detecting transitions
     - Auto-generate entry number
     - Set fiscal period if not set
     - Validate entry date is in open period
+    - Set posted date when posting
     """
+    # Track previous status for post_save signal
+    if instance.pk:  # Only for existing entries
+        try:
+            old_instance = JournalEntry.objects.get(pk=instance.pk)
+            instance._previous_status = old_instance.status
+        except JournalEntry.DoesNotExist:
+            instance._previous_status = None
+    else:
+        instance._previous_status = None
+    
     # Generate entry number if not set
     if not instance.entry_number:
         instance.entry_number = generate_journal_entry_number(instance.journal)
@@ -71,37 +86,118 @@ def journal_entry_pre_save(sender, instance, **kwargs):
 def journal_entry_post_save(sender, instance, created, **kwargs):
     """
     Post-save processing for journal entries:
-    - Validate entry is balanced (when posted)
-    - Log entry creation
+    1. Log creation
+    2. Validate when posted
+    3. Update account balances when status transitions occur
+    
+    Status Transitions Handled:
+    - Created as POSTED: Update balances (from payment signals)
+    - DRAFT → POSTED: Update balances
+    - POSTED → REVERSED: Update balances (recalculate without this entry)
     """
-    # Skip if in raw mode
+    # Skip if in raw mode (fixtures, loaddata)
     if kwargs.get('raw', False):
         return
     
+    # Get previous status (set by pre_save signal)
+    previous_status = getattr(instance, '_previous_status', None)
+    current_status = instance.status
+    
+    # =========================================================================
+    # 1. LOG CREATION
+    # =========================================================================
     if created:
         logger.info(
             f"Journal entry created: {instance.entry_number} - "
             f"Date: {instance.entry_date} - "
-            f"Status: {instance.status}"
+            f"Status: {instance.status} - "
+            f"Description: {instance.description[:50]}"
         )
     
-    # Validate if posted
-    if instance.status == 'POSTED':
-        validation = validate_journal_entry(instance)
+    # =========================================================================
+    # 2. DETERMINE IF BALANCE UPDATE NEEDED
+    # =========================================================================
+    should_update_balances = False
+    action = None
+    
+    if created and current_status == 'POSTED':
+        # Entry created directly as POSTED (common from payment signals)
+        should_update_balances = True
+        action = 'CREATED_AS_POSTED'
+    
+    elif not created and previous_status != current_status:
+        # Status changed
+        if previous_status == 'DRAFT' and current_status == 'POSTED':
+            should_update_balances = True
+            action = 'POSTED'
         
-        if not validation['valid']:
-            logger.error(
-                f"Posted journal entry {instance.entry_number} has validation errors: "
-                f"{', '.join(validation['errors'])}"
-            )
-            # Note: We log but don't raise exception here since entry is already saved
-            # Validation should happen in views/forms before posting
+        elif previous_status == 'POSTED' and current_status == 'REVERSED':
+            should_update_balances = True
+            action = 'REVERSED'
+    
+    # =========================================================================
+    # 3. VALIDATE AND UPDATE BALANCES
+    # =========================================================================
+    if should_update_balances:
         
-        if not validation['balanced']:
-            logger.error(
-                f"Posted journal entry {instance.entry_number} is not balanced! "
-                f"Debits: {validation['debit_total']}, Credits: {validation['credit_total']}"
+        # Validate entry before updating balances
+        if current_status == 'POSTED':
+            validation = validate_journal_entry(instance)
+            
+            if not validation['valid'] or not validation['balanced']:
+                # Log critical errors
+                errors = []
+                if not validation['valid']:
+                    errors.extend(validation['errors'])
+                if not validation['balanced']:
+                    errors.append(
+                        f"Entry not balanced! Debits: {validation['debit_total']}, "
+                        f"Credits: {validation['credit_total']}"
+                    )
+                
+                logger.error(
+                    f"CRITICAL: Posted journal entry {instance.entry_number} "
+                    f"has validation errors: {', '.join(errors)}"
+                )
+                
+                # Don't update balances for invalid entries
+                return
+        
+        # Update account balances
+        try:
+            results = update_journal_entry_accounts(instance)
+            
+            logger.info(
+                f"✓ Updated {len(results)} account balances: "
+                f"Entry {instance.entry_number} - Action: {action} "
+                f"({previous_status or 'NEW'} → {current_status})"
             )
+            
+            # Detailed logging in debug mode
+            if logger.isEnabledFor(logging.DEBUG):
+                for account_number, data in results.items():
+                    logger.debug(
+                        f"  - {account_number}: "
+                        f"{data['old_balance']:,.2f} → {data['new_balance']:,.2f} "
+                        f"(Δ {data['change']:+,.2f})"
+                    )
+        
+        except Exception as e:
+            logger.error(
+                f"Error updating account balances for entry {instance.entry_number}: {e}",
+                exc_info=True
+            )
+            # Don't re-raise - we don't want to block the save
+            # Balances can be recalculated later if needed
+    
+    # =========================================================================
+    # 4. LOG REVERSALS
+    # =========================================================================
+    if current_status == 'REVERSED' and not created:
+        logger.info(
+            f"Journal entry reversed: {instance.entry_number} - "
+            f"Reason: {instance.reversal_reason}"
+        )
 
 
 @receiver(pre_delete, sender=JournalEntry)
@@ -123,37 +219,6 @@ def journal_entry_pre_delete(sender, instance, **kwargs):
 # JOURNAL TRANSACTION SIGNALS
 # =============================================================================
 
-@receiver(post_save, sender=JournalTransaction)
-def journal_transaction_post_save(sender, instance, created, **kwargs):
-    """
-    Post-save processing for journal transactions:
-    - Update journal entry totals
-    - Log transaction creation
-    """
-    # Skip if in raw mode
-    if kwargs.get('raw', False):
-        return
-    
-    if created:
-        logger.debug(
-            f"Journal transaction created: Entry {instance.journal_entry.entry_number} - "
-            f"Account {instance.account.code} - "
-            f"{'Debit' if instance.is_debit else 'Credit'}: {instance.amount}"
-        )
-
-
-@receiver(post_delete, sender=JournalTransaction)
-def journal_transaction_post_delete(sender, instance, **kwargs):
-    """
-    Post-delete processing for journal transactions:
-    - Log transaction deletion
-    """
-    logger.debug(
-        f"Journal transaction deleted: Entry {instance.journal_entry.entry_number} - "
-        f"Account {instance.account.code}"
-    )
-
-
 @receiver(pre_save, sender=JournalTransaction)
 def journal_transaction_pre_save(sender, instance, **kwargs):
     """
@@ -165,12 +230,12 @@ def journal_transaction_pre_save(sender, instance, **kwargs):
     # Validate account
     if not instance.account.is_active:
         raise ValidationError(
-            f"Cannot create transaction for inactive account {instance.account.code}"
+            f"Cannot create transaction for inactive account {instance.account.account_number}"
         )
     
     if instance.account.is_header:
         raise ValidationError(
-            f"Cannot create transaction for header account {instance.account.code}. "
+            f"Cannot create transaction for header account {instance.account.account_number}. "
             f"Use a child account instead."
         )
     
@@ -178,12 +243,36 @@ def journal_transaction_pre_save(sender, instance, **kwargs):
     if instance.amount <= 0:
         raise ValidationError("Transaction amount must be positive")
     
-    # Prevent changes to posted entries
-    if instance.pk:  # Existing transaction
-        if instance.journal_entry.status == 'POSTED':
-            raise ValidationError(
-                f"Cannot modify transaction in posted journal entry {instance.journal_entry.entry_number}"
-            )
+    # Only prevent changes to EXISTING transactions in posted entries
+    if instance.pk:  # Only check for existing transactions
+        try:
+            previous = JournalTransaction.objects.get(pk=instance.pk)
+            # Check if trying to modify an existing transaction in a posted entry
+            if previous.journal_entry.status == 'POSTED':
+                raise ValidationError(
+                    f"Cannot modify transaction in posted journal entry {instance.journal_entry.entry_number}"
+                )
+        except JournalTransaction.DoesNotExist:
+            # Transaction doesn't exist yet, allow creation
+            pass
+
+
+@receiver(post_save, sender=JournalTransaction)
+def journal_transaction_post_save(sender, instance, created, **kwargs):
+    """
+    Post-save processing for journal transactions:
+    - Log transaction creation
+    """
+    # Skip if in raw mode
+    if kwargs.get('raw', False):
+        return
+    
+    if created:
+        logger.debug(
+            f"Journal transaction created: Entry {instance.journal_entry.entry_number} - "
+            f"Account {instance.account.account_number} - "
+            f"{'Debit' if instance.is_debit else 'Credit'}: {instance.amount}"
+        )
 
 
 @receiver(pre_delete, sender=JournalTransaction)
@@ -197,6 +286,17 @@ def journal_transaction_pre_delete(sender, instance, **kwargs):
             f"Cannot delete transaction from posted journal entry {instance.journal_entry.entry_number}"
         )
 
+
+@receiver(post_delete, sender=JournalTransaction)
+def journal_transaction_post_delete(sender, instance, **kwargs):
+    """
+    Post-delete processing for journal transactions:
+    - Log transaction deletion
+    """
+    logger.debug(
+        f"Journal transaction deleted: Entry {instance.journal_entry.entry_number} - "
+        f"Account {instance.account.account_number}"
+    )
 
 # =============================================================================
 # EXPENSE SIGNALS
@@ -246,12 +346,12 @@ def expense_post_save(sender, instance, created, **kwargs):
     if created:
         logger.info(
             f"Expense created: {instance.expense_number} - "
-            f"Amount: {instance.amount} - "
+            f"Amount: {instance.total_amount} - "
             f"Vendor: {instance.vendor_name}"
         )
     
-    # Create journal entry if approved and not already created
-    if instance.status == 'APPROVED' and not instance.journal_entry:
+    # Create journal entry if approved and auto-create is enabled
+    if instance.status == 'APPROVED' and instance.auto_create_journal_entry and not instance.journal_entry:
         try:
             create_expense_journal_entry(instance)
         except Exception as e:
@@ -271,7 +371,7 @@ def create_expense_journal_entry(expense):
     
     Entry:
     Debit: Expense Account
-    Credit: Cash/Bank or Accounts Payable
+    Credit: Accounts Payable
     """
     from core.models import FinancialSettings
     
@@ -281,44 +381,32 @@ def create_expense_journal_entry(expense):
         logger.warning("FinancialSettings not found, skipping journal entry creation")
         return
     
-    # Determine credit account based on payment status
-    if expense.payment_status == 'PAID':
-        # Use cash or bank account
-        if hasattr(expense, 'payment_method') and expense.payment_method:
-            if hasattr(expense.payment_method, 'is_cash') and expense.payment_method.is_cash:
-                credit_account = settings.default_cash_account
-            else:
-                credit_account = settings.default_bank_account
-        else:
-            credit_account = settings.default_cash_account
-    else:
-        # Use accounts payable
-        credit_account = settings.default_payables_account
+    # Get payable account from expense method
+    payable_account = expense.get_payable_account()
     
-    if not credit_account:
-        logger.warning("No credit account found for expense journal entry")
+    if not payable_account:
+        logger.warning("No payable account found for expense journal entry")
         return
     
     # Get or create journal
-    from finance.models import Journal
+    from finance.models import Journal, JournalTransaction
     journal, _ = Journal.objects.get_or_create(
-        journal_type='EXPENSE',
+        journal_type='EXPENSES',
         defaults={
             'name': 'Expense Journal',
             'description': 'Journal for expense transactions'
         }
     )
     
-    # Create journal entry
+    # Create journal entry as DRAFT first
     entry = JournalEntry.objects.create(
         journal=journal,
-        entry_number=f"JE-EXP-{expense.expense_number}",
         entry_date=expense.expense_date,
         fiscal_period=expense.fiscal_period,
         academic_session=expense.academic_session,
         reference_number=expense.expense_number,
         description=f"Expense: {expense.description or expense.vendor_name}",
-        status='POSTED'
+        status='DRAFT'
     )
     
     # Debit: Expense Account
@@ -326,22 +414,28 @@ def create_expense_journal_entry(expense):
         journal_entry=entry,
         account=expense.expense_account,
         description=f"Expense - {expense.vendor_name}",
-        amount=expense.amount,
+        amount=expense.total_amount,
         is_debit=True
     )
     
-    # Credit: Cash/Bank or Accounts Payable
+    # Credit: Accounts Payable
     JournalTransaction.objects.create(
         journal_entry=entry,
-        account=credit_account,
-        description=f"Payment for expense {expense.expense_number}",
-        amount=expense.amount,
+        account=payable_account,
+        description=f"Payable for expense {expense.expense_number}",
+        amount=expense.total_amount,
         is_debit=False
     )
     
+    # Now post the entry after transactions are added
+    # This will trigger the balance update signals
+    entry.status = 'POSTED'
+    entry.posted_at = timezone.now()
+    entry.save(update_fields=['status', 'posted_at'])
+    
     # Link entry to expense
     expense.journal_entry = entry
-    expense.save()
+    expense.save(update_fields=['journal_entry'])
     
     logger.info(f"Created journal entry {entry.entry_number} for expense {expense.expense_number}")
 
@@ -356,13 +450,12 @@ def update_budget_spent_amount(budget):
     total_spent = Expense.objects.filter(
         budget=budget,
         status__in=['APPROVED', 'PAID']
-    ).aggregate(total=Sum('amount'))['total'] or 0
+    ).aggregate(total=Sum('total_amount'))['total'] or 0
     
-    budget.spent_amount = total_spent
-    budget.remaining_amount = budget.allocated_amount - total_spent
-    budget.save(update_fields=['spent_amount', 'remaining_amount'])
+    budget.actual_expense_total = total_spent
+    budget.save(update_fields=['actual_expense_total'])
     
-    logger.debug(f"Updated budget {budget.budget_code}: Spent {total_spent}")
+    logger.debug(f"Updated budget {budget.name}: Spent {total_spent}")
 
 
 # =============================================================================
@@ -373,15 +466,18 @@ def update_budget_spent_amount(budget):
 def budget_pre_save(sender, instance, **kwargs):
     """
     Pre-save processing for budgets:
-    - Calculate remaining amount
-    - Validate allocated amount is positive
+    - Calculate net budget
+    - Validate amounts
     """
-    # Calculate remaining amount
-    instance.remaining_amount = instance.allocated_amount - instance.spent_amount
+    # Calculate net budget
+    instance.net_budget = instance.total_revenue_budget - instance.total_expense_budget
     
-    # Validate allocated amount
-    if instance.allocated_amount < 0:
-        raise ValidationError("Budget allocated amount cannot be negative")
+    # Validate amounts
+    if instance.total_revenue_budget < 0:
+        raise ValidationError("Budget revenue cannot be negative")
+    
+    if instance.total_expense_budget < 0:
+        raise ValidationError("Budget expenses cannot be negative")
 
 
 @receiver(post_save, sender=Budget)
@@ -397,17 +493,19 @@ def budget_post_save(sender, instance, created, **kwargs):
     
     if created:
         logger.info(
-            f"Budget created: {instance.budget_code} - "
-            f"Allocated: {instance.allocated_amount} - "
-            f"Fiscal Year: {instance.fiscal_year.year}"
+            f"Budget created: {instance.name} - "
+            f"Revenue: {instance.total_revenue_budget} - "
+            f"Expenses: {instance.total_expense_budget} - "
+            f"Fiscal Year: {instance.fiscal_year.name if instance.fiscal_year else 'N/A'}"
         )
     
-    # Check for over-budget
-    if instance.spent_amount > instance.allocated_amount:
+    # Check for over-budget on expenses
+    if instance.actual_expense_total > instance.total_expense_budget:
         logger.warning(
-            f"BUDGET ALERT: Budget {instance.budget_code} is over budget! "
-            f"Allocated: {instance.allocated_amount}, Spent: {instance.spent_amount}, "
-            f"Over by: {instance.spent_amount - instance.allocated_amount}"
+            f"BUDGET ALERT: Budget {instance.name} is over budget on expenses! "
+            f"Budgeted: {instance.total_expense_budget}, "
+            f"Actual: {instance.actual_expense_total}, "
+            f"Over by: {instance.actual_expense_total - instance.total_expense_budget}"
         )
 
 
@@ -431,10 +529,13 @@ def account_pre_save(sender, instance, **kwargs):
         
         # Check for circular reference in hierarchy
         parent = instance.parent_account
-        while parent:
-            if parent == instance:
+        max_depth = 10  # Prevent infinite loop
+        depth = 0
+        while parent and depth < max_depth:
+            if parent.pk == instance.pk:
                 raise ValidationError("Circular reference detected in account hierarchy")
             parent = parent.parent_account
+            depth += 1
         
         # Parent and child must be same account type
         if instance.account_type != instance.parent_account.account_type:
@@ -455,8 +556,8 @@ def account_post_save(sender, instance, created, **kwargs):
     
     if created:
         logger.info(
-            f"Account created: {instance.code} - {instance.name} - "
-            f"Type: {instance.account_type.code}"
+            f"Account created: {instance.account_number} - {instance.name} - "
+            f"Type: {instance.account_type.name}"
         )
 
 
@@ -470,17 +571,17 @@ def account_pre_delete(sender, instance, **kwargs):
     # Check for transactions
     if instance.journal_transactions.exists():
         raise ValidationError(
-            f"Cannot delete account {instance.code} because it has transactions. "
+            f"Cannot delete account {instance.account_number} because it has transactions. "
             f"Deactivate it instead."
         )
     
     # Check for child accounts
     if Account.objects.filter(parent_account=instance).exists():
         raise ValidationError(
-            f"Cannot delete account {instance.code} because it has child accounts"
+            f"Cannot delete account {instance.account_number} because it has child accounts"
         )
     
-    logger.info(f"Deleting account: {instance.code} - {instance.name}")
+    logger.info(f"Deleting account: {instance.account_number} - {instance.name}")
 
 
 # =============================================================================
@@ -601,13 +702,31 @@ def disable_finance_signals():
     """
     Disable finance signals temporarily.
     Useful for bulk operations to improve performance.
+    
+    Example:
+        >>> from finance.signals import disable_finance_signals, enable_finance_signals
+        >>> disable_finance_signals()
+        >>> # ... bulk import operations ...
+        >>> enable_finance_signals()
     """
     from django.db.models import signals
+
+    # Reconnect JournalEntry signals
+    signals.pre_save.connect(journal_entry_pre_save, sender=JournalEntry)
+    signals.post_save.connect(journal_entry_post_save, sender=JournalEntry)
+    signals.pre_delete.connect(journal_entry_pre_delete, sender=JournalEntry)
     
-    signals.post_save.disconnect(journal_entry_post_save, sender=JournalEntry)
-    signals.post_save.disconnect(journal_transaction_post_save, sender=JournalTransaction)
-    signals.post_save.disconnect(expense_post_save, sender=Expense)
-    signals.post_save.disconnect(budget_post_save, sender=Budget)
+    # Reconnect JournalTransaction signals
+    signals.pre_save.connect(journal_transaction_pre_save, sender=JournalTransaction)
+    signals.post_save.connect(journal_transaction_post_save, sender=JournalTransaction)
+    signals.pre_delete.connect(journal_transaction_pre_delete, sender=JournalTransaction)
+    
+    # Reconnect Expense signals 
+    signals.pre_save.connect(expense_pre_save, sender=Expense)
+    signals.post_save.connect(expense_post_save, sender=Expense) 
+    
+    # Reconnect Budget signals 
+    signals.post_save.connect(budget_post_save, sender=Budget)
     
     logger.info("Finance signals disabled")
 
@@ -615,11 +734,24 @@ def disable_finance_signals():
 def enable_finance_signals():
     """
     Re-enable finance signals after bulk operations.
+    
+    Example:
+        >>> from finance.signals import disable_finance_signals, enable_finance_signals
+        >>> disable_finance_signals()
+        >>> # ... bulk import operations ...
+        >>> enable_finance_signals()
+        >>> 
+        >>> # Then recalculate balances
+        >>> from finance.utils import recalculate_all_account_balances
+        >>> recalculate_all_account_balances()
     """
     import importlib
     import sys
     
+    # Reload the signals module to reconnect all signals
     if 'finance.signals' in sys.modules:
         importlib.reload(sys.modules['finance.signals'])
     
     logger.info("Finance signals re-enabled")
+
+

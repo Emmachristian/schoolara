@@ -1084,3 +1084,238 @@ def calculate_reorder_quantity(uniform_item, target_days=90):
     reorder_quantity = max(0, target_quantity - current_stock)
     
     return reorder_quantity
+
+# =============================================================================
+# PAYMENT REVERSAL UTILITIES
+# =============================================================================
+
+# uniforms/utils.py - NEW reversal functions
+
+from django.db import transaction
+from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@transaction.atomic
+def cancel_uniform_sale(sale, user, reason):
+    """
+    Cancel a uniform sale (before items were issued).
+    
+    Actions:
+    1. Mark sale as cancelled
+    2. Cancel/void the fee invoice
+    3. If payment was made, process refund
+    4. No inventory adjustment (items never left stock)
+    
+    Args:
+        sale: UniformSale instance
+        user: User performing cancellation
+        reason: Reason for cancellation
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    can_cancel, msg = sale.can_be_cancelled
+    if not can_cancel:
+        return False, msg
+    
+    try:
+        # 1. Mark sale as cancelled
+        sale.cancelled = True
+        sale.cancelled_on = timezone.now()
+        sale.cancelled_by_id = str(user.id)
+        sale.cancellation_reason = reason
+        sale.status = 'CANCELLED'
+        sale.save()
+        
+        # 2. Cancel/void the invoice
+        if sale.fee_invoice:
+            invoice = sale.fee_invoice
+            invoice.status = 'CANCELLED'
+            invoice.save()
+            
+            logger.info(f"Cancelled invoice {invoice.invoice_number}")
+        
+        # 3. If paid, need to process refund via Payment model
+        if sale.paid_amount > 0 and sale.fee_invoice:
+            # Find payments for this invoice
+            payments = sale.fee_invoice.payments.filter(
+                status='COMPLETED',
+                reversed=False,
+                refunded=False
+            )
+            
+            if payments.exists():
+                logger.warning(
+                    f"Uniform sale {sale.sale_number} cancelled but has payments. "
+                    f"Process refunds manually for payments: {[p.payment_number for p in payments]}"
+                )
+        
+        logger.info(f"Uniform sale {sale.sale_number} cancelled by {user}")
+        
+        return True, "Sale cancelled successfully"
+    
+    except Exception as e:
+        logger.error(f"Error cancelling uniform sale: {e}", exc_info=True)
+        return False, f"Error: {str(e)}"
+
+
+@transaction.atomic
+def return_uniform_sale(sale, user, reason, condition):
+    """
+    Process return of issued uniforms (items come back to inventory).
+    
+    Actions:
+    1. Mark sale as returned
+    2. Return items to inventory
+    3. Process refund if applicable
+    4. Create reversal journal entries
+    
+    Args:
+        sale: UniformSale instance
+        user: User processing return
+        reason: Reason for return
+        condition: Condition of returned items
+    
+    Returns:
+        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
+    """
+    can_return, msg = sale.can_be_returned
+    if not can_return:
+        return False, msg, None
+    
+    try:
+        from finance.models import JournalEntry, JournalTransaction, Journal
+        from core.models import FiscalPeriod
+        
+        # 1. Mark sale as returned
+        sale.returned = True
+        sale.returned_on = timezone.now()
+        sale.returned_by_id = str(user.id)
+        sale.return_reason = reason
+        sale.return_condition = condition
+        sale.status = 'RETURNED'
+        
+        # 2. Return items to inventory
+        for item in sale.items.all():
+            # Get inventory stock for this item/size
+            from uniforms.models import UniformInventory
+            
+            inventory = UniformInventory.objects.filter(
+                item=item.uniform_item,
+                size=item.size
+            ).first()
+            
+            if inventory:
+                inventory.quantity += item.quantity
+                inventory.save()
+                logger.info(
+                    f"Returned {item.quantity} units of {item.uniform_item.name} "
+                    f"to inventory"
+                )
+        
+        # 3. Create return journal entry (reverse original sale entry)
+        fiscal_period = FiscalPeriod.get_current_fiscal_period()
+        
+        general_journal = Journal.objects.filter(
+            journal_type='GENERAL',
+            is_active=True
+        ).first()
+        
+        if general_journal:
+            return_entry = JournalEntry.objects.create(
+                journal=general_journal,
+                entry_date=timezone.now().date(),
+                fiscal_period=fiscal_period,
+                reference_number=sale.sale_number,
+                description=f"RETURN: Uniform Sale {sale.sale_number} - {reason}",
+                status='POSTED'
+            )
+            
+            # Get accounts
+            inventory_account = sale.get_inventory_account()
+            cogs_account = sale.get_cogs_account()
+            revenue_account = sale.get_revenue_account()
+            receivable_account = sale.get_receivable_account()
+            
+            # RETURN entries (reverse original):
+            # Original sale was:
+            #   DR: COGS, CR: Inventory (for cost)
+            #   DR: Receivables, CR: Revenue (for sale)
+            
+            # Return reverses this:
+            # 1. Restore inventory
+            JournalTransaction.objects.create(
+                journal_entry=return_entry,
+                account=inventory_account,
+                amount=sale.total_cost,
+                is_debit=True,
+                description="Inventory returned"
+            )
+            
+            # 2. Reverse COGS
+            JournalTransaction.objects.create(
+                journal_entry=return_entry,
+                account=cogs_account,
+                amount=sale.total_cost,
+                is_debit=False,
+                description="COGS reversed"
+            )
+            
+            # 3. Reverse revenue
+            JournalTransaction.objects.create(
+                journal_entry=return_entry,
+                account=revenue_account,
+                amount=sale.total_amount,
+                is_debit=True,
+                description="Revenue reversed"
+            )
+            
+            # 4. Reverse receivables
+            JournalTransaction.objects.create(
+                journal_entry=return_entry,
+                account=receivable_account,
+                amount=sale.total_amount,
+                is_debit=False,
+                description="Receivables reversed"
+            )
+            
+            # Update balances
+            inventory_account.current_balance += sale.total_cost
+            inventory_account.save()
+            
+            cogs_account.current_balance -= sale.total_cost
+            cogs_account.save()
+            
+            revenue_account.current_balance -= sale.total_amount
+            revenue_account.save()
+            
+            receivable_account.current_balance -= sale.total_amount
+            receivable_account.save()
+            
+            sale.return_journal_entry = return_entry
+        
+        sale.save()
+        
+        # 4. Handle invoice/payment
+        if sale.fee_invoice:
+            invoice = sale.fee_invoice
+            invoice.status = 'CANCELLED'
+            invoice.save()
+            
+            # If paid, payments should be refunded separately via Payment refund process
+            if sale.paid_amount > 0:
+                logger.warning(
+                    f"Uniform sale {sale.sale_number} returned but was paid. "
+                    f"Process payment refunds separately."
+                )
+        
+        logger.info(f"Uniform sale {sale.sale_number} returned by {user}")
+        
+        return True, "Return processed successfully", sale.return_journal_entry
+    
+    except Exception as e:
+        logger.error(f"Error processing uniform return: {e}", exc_info=True)
+        return False, f"Error: {str(e)}", None

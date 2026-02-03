@@ -1,0 +1,373 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+{% load exam_filters %}
+
+{% block extra_css %}
+<style>
+/* Common styles for both modes */
+.mode-toggle {
+    background: white;
+    border-radius: 8px;
+    padding: 5px;
+    display: inline-flex;
+    gap: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.mode-toggle .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.mode-toggle .btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+/* Dashboard mode specific styles */
+.dashboard-table {
+    font-size: 0.9rem;
+}
+
+.dashboard-table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    padding: 12px 8px;
+    text-align: center;
+}
+
+.dashboard-table td {
+    padding: 8px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.score-cell {
+    font-weight: 600;
+    color: #495057;
+}
+
+.grade-cell {
+    font-size: 0.85rem;
+}
+
+/* List mode specific styles */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+}
+
+.status-badge.published {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.grade-badge {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+/* Stats cards */
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Category tabs */
+.nav-tabs-custom {
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 20px;
+}
+
+.nav-tabs-custom .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 12px 20px;
+    transition: all 0.3s;
+}
+
+.nav-tabs-custom .nav-link.active {
+    color: #667eea;
+    border-bottom: 3px solid #667eea;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-note2 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Results: {{ class_instance.get_display_name }}
+                <div class="page-title-subheading">
+                    {{ session.name }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <!-- Mode Toggle -->
+                <div class="mode-toggle me-2">
+                    <a href="?session={{ session.pk }}&mode=dashboard" 
+                       class="btn {% if view_mode == 'dashboard' %}active{% endif %}">
+                        <i class="fa fa-table me-1"></i>Dashboard
+                    </a>
+                    <a href="?session={{ session.pk }}&mode=list" 
+                       class="btn {% if view_mode == 'list' %}active{% endif %}">
+                        <i class="fa fa-list me-1"></i>List View
+                    </a>
+                </div>
+                
+                <a href="{% url 'exams:bulk_result_entry' %}?class={{ class_instance.pk }}" 
+                   class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i>Enter Results
+                </a>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Session Selector -->
+<div class="row mb-3">
+    <div class="col-md-12">
+        <form method="get" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="mode" value="{{ view_mode }}">
+            {% if view_mode == 'dashboard' and selected_category %}
+            <input type="hidden" name="tab" value="{{ selected_category }}">
+            {% endif %}
+            <label class="mb-0"><strong>Academic Session:</strong></label>
+            <select name="session" class="form-select w-auto" onchange="this.form.submit()">
+                {% for sess in all_sessions %}
+                <option value="{{ sess.pk }}" {% if sess.pk == session.pk %}selected{% endif %}>
+                    {{ sess.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    {% if view_mode == 'dashboard' %}
+        <!-- Dashboard Stats -->
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-primary">
+                    <i class="pe-7s-users"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Total Students</div>
+                    <h3>{{ stats.total_students|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-success">
+                    <i class="pe-7s-note2"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Total Exams</div>
+                    <h3>{{ stats.total_exams|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-info">
+                    <i class="pe-7s-folder"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Categories</div>
+                    <h3>{{ stats.categories|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-warning">
+                    <i class="pe-7s-check"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Results Entered</div>
+                    <h3>{{ stats.results_entered|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <!-- List Stats -->
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-primary">
+                    <i class="pe-7s-note2"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Total Results</div>
+                    <h3>{{ stats.total|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-success">
+                    <i class="pe-7s-check"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Published</div>
+                    <h3>{{ stats.published|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-warning">
+                    <i class="pe-7s-lock"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Locked</div>
+                    <h3>{{ stats.locked|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-icon bg-info">
+                    <i class="pe-7s-graph2"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-label">Pass Rate</div>
+                    <h3>{{ stats.pass_rate|default:0 }}%</h3>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Main Content -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card">
+                <div class="card-body">
+                    
+                    {% if view_mode == 'dashboard' %}
+                        <!-- =============================================== -->
+                        <!-- DASHBOARD MODE - Category Tabs                  -->
+                        <!-- =============================================== -->
+                        {% include 'exams/results/partials/_dashboard_content.html' %}
+                    {% else %}
+                        <!-- =============================================== -->
+                        <!-- LIST MODE - Results Table                       -->
+                        <!-- =============================================== -->
+                        {% include 'exams/results/partials/_list_content.html' %}
+                    {% endif %}
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Modal Container -->
+<div id="modal-container" style="display: none;"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// HTMX Modal Handler
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            
+            modalWrapper.appendChild(modalDialog);
+            document.body.appendChild(modalWrapper);
+            
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

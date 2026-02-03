@@ -1,0 +1,433 @@
+{# exams/templates/exams/examinations/partials/_examination_results.html #}
+
+{% load static %}
+
+<!-- Examinations Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Examination Details</th>
+                <th>Subject</th>
+                <th>Date & Time</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Marks</th>
+                <th>Target Classes</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if examinations_page %}
+                {% for examination in examinations_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:examinations_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Examination Details -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">
+                                {{ examination.name }}
+                            </h6>
+                            <small class="text-muted">
+                                <strong>Code:</strong> {{ examination.code }}
+                            </small>
+                        </div>
+                        {% if examination.exam_mode %}
+                            <div class="mt-1">
+                                <span class="mode-badge {{ examination.exam_mode|lower }}">
+                                    {{ examination.get_exam_mode_display }}
+                                </span>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Subject -->
+                    <td>
+                        <span class="subject-badge">
+                            {{ examination.subject.name }}
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                {{ examination.academic_session.name }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Date & Time -->
+                    <td>
+                        <div>
+                            <span class="date-badge exam-date" data-bs-toggle="tooltip" title="Exam Date">
+                                <i class="fa fa-calendar me-1"></i>
+                                {{ examination.exam_date|date:"M d, Y" }}
+                            </span>
+                        </div>
+                        <div class="time-info mt-1">
+                            <i class="fa fa-clock"></i>
+                            <span>{{ examination.start_time|time:"g:i A" }} - {{ examination.end_time|time:"g:i A" }}</span>
+                        </div>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                Duration: {{ examination.duration_minutes }} mins
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Category -->
+                    <td>
+                        <span class="category-badge">
+                            {{ examination.exam_category.name }}
+                        </span>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                {{ examination.exam_category.get_category_type_display }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td>
+                        <span class="status-badge {{ examination.status|lower }}">
+                            {{ examination.get_status_display }}
+                        </span>
+                        {% if examination.results_published %}
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="fa fa-check-circle me-1"></i>Results Published
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Marks -->
+                    <td>
+                        <div>
+                            <strong>Total:</strong> {{ examination.total_marks }}
+                        </div>
+                        <div class="mt-1">
+                            <small class="text-muted">
+                                <strong>Pass:</strong> {{ examination.pass_marks }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Target Classes -->
+                    <td>
+                        {% with target_classes=examination.target_classes.all %}
+                            {% if target_classes.count == 1 %}
+                                <span class="category-badge">
+                                    {{ target_classes.0.name }}
+                                </span>
+                            {% elif target_classes.count > 1 %}
+                                <span class="category-badge">
+                                    {{ target_classes.count }} Classes
+                                </span>
+                                <div class="mt-1">
+                                    <small class="text-muted" data-bs-toggle="tooltip" 
+                                           title="{% for cls in target_classes %}{{ cls.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                                        <i class="fa fa-info-circle"></i> View all
+                                    </small>
+                                </div>
+                            {% else %}
+                                <small class="text-muted">No classes</small>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'exams:examination_detail' examination.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'exams:examination_quick_view_modal' examination.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'exams:examination_edit' examination.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                <button type="button" class="dropdown-item text-primary"
+                                        hx-get="{% url 'exams:examination_update_status_modal' examination.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-exchange-alt me-2"></i>Update Status
+                                </button>
+                                
+                                {% if examination.status == 'COMPLETED' and not examination.results_published %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'exams:examination_publish_results_modal' examination.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Publish Results
+                                    </button>
+                                {% elif examination.results_published %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'exams:examination_unpublish_results_modal' examination.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-times-circle me-2"></i>Unpublish Results
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Results Management -->
+                                <h6 class="dropdown-header">Results</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:result_list' %}?examination={{ examination.id }}">
+                                    <i class="fa fa-list me-2"></i>View Results
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:bulk_result_entry' %}?examination={{ examination.id }}">
+                                    <i class="fa fa-edit me-2"></i>Enter Results
+                                </a>
+                                
+                                <button type="button" class="dropdown-item"
+                                        hx-get="{% url 'exams:examination_statistics_modal' examination.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-chart-bar me-2"></i>View Statistics
+                                </button>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Registration Management -->
+                                <h6 class="dropdown-header">Registrations</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:registration_list' %}?examination={{ examination.id }}">
+                                    <i class="fa fa-users me-2"></i>View Registrations
+                                </a>
+                                
+                                {% if examination.exam_category.requires_registration %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-info">
+                                            <i class="fa fa-info-circle me-1"></i>Registration Required
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Print Options -->
+                                <h6 class="dropdown-header">Print</h6>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:examination_print_detail' examination.pk %}" target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print Details
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'exams:examination_print_timetable' examination.pk %}" target="_blank">
+                                    <i class="fa fa-calendar me-2"></i>Print Timetable
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Examination Info -->
+                                <h6 class="dropdown-header">Info</h6>
+                                
+                                {% if examination.examination_venue %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-map-marker-alt me-1"></i>
+                                            {{ examination.examination_venue }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                {% if examination.classroom %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-muted">
+                                            <i class="fa fa-door-open me-1"></i>
+                                            Room: {{ examination.classroom }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'exams:examination_delete_modal' examination.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No examinations found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or create a new examination.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if examinations_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ examinations_page.start_index }} - {{ examinations_page.end_index }} of {{ examinations_page.paginator.count }} examinations
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Examination pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if examinations_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'exams:examination_list' %}" 
+                                hx-target="#examination-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ examinations_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in examinations_page.paginator.page_range %}
+                    {% if page_num == examinations_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > examinations_page.number|add:"-3" and page_num < examinations_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'exams:examination_list' %}"
+                                    hx-target="#examination-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if examinations_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:examination_list' %}"
+                                hx-target="#examination-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ examinations_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Examinations</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-clock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Upcoming</div>
+                <h3>{{ stats.upcoming|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Ongoing</div>
+                <h3>{{ stats.ongoing|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Completed</div>
+                <h3>{{ stats.completed|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'examination-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

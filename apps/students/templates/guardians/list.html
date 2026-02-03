@@ -1,0 +1,788 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   GUARDIAN STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border-color: #d6d8db;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.guardian-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS SUMMARY
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content {
+    flex: 1;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .guardian-filters {
+        padding: 15px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Guardian Directory
+                <div class="page-title-subheading">
+                    Manage guardian information, contacts, and relationships with students
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'students:guardian_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Add New Guardian
+                </a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
+                    <i class="fa fa-print me-1"></i> Print
+                </button>
+                <a href="{% url 'students:export_guardians_excel' %}" class="btn btn-outline-success">
+                    <i class="fa fa-file-excel me-1"></i> Export Excel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    <script>
+        {% for message in messages %}
+            {% if 'sweetalert' in message.tags %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    showSuccess('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    showError('{{ message|escapejs }}');
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    showWarning('{{ message|escapejs }}');
+                {% else %}
+                    showInfo('{{ message|escapejs }}');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </script>
+{% endif %}
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Guardians</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Guardians</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Primary Guardians</div>
+                <h3>{{ stats.primary|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-mail"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">With Email</div>
+                <h3>{{ stats.with_email|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-users me-2 text-primary"></i>
+                                Guardian Directory
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="guardian-filters">
+                        <form id="searchForm" 
+                              class="row g-3"
+                              hx-get="{% url 'students:guardian_list' %}"
+                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+                              hx-target="#guardian-list"
+                              hx-swap="innerHTML">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-4">
+                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.q.label }}</label>
+                                {{ filter_form.q|add_class:"form-control" }}
+                            </div>
+                            
+                            <!-- Guardian Type Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.guardian_type.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.guardian_type.label }}</label>
+                                {{ filter_form.guardian_type|add_class:"form-select" }}
+                            </div>
+
+                            <!-- Gender Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.gender.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.gender.label }}</label>
+                                {{ filter_form.gender|add_class:"form-select" }}
+                            </div>
+                            
+                            <!-- Active Status Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.is_active.label }}</label>
+                                {{ filter_form.is_active|add_class:"form-select" }}
+                            </div>
+
+                            <!-- Country Filter -->
+                            <div class="col-md-2">
+                                <label for="{{ filter_form.country.id_for_label }}" class="form-label small text-muted mb-1">{{ filter_form.country.label }}</label>
+                                {{ filter_form.country|add_class:"form-select" }}
+                            </div>
+
+                            <!-- Reset Button -->
+                            <div class="col-md-12 d-flex justify-content-end mt-3">
+                                <button type="button" class="btn btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset All Filters
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="guardian-list">
+                        {% include 'guardians/partials/_guardian_results.html' %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========================================== -->
+<!-- STATIC PRINT MODAL -->
+<!-- ========================================== -->
+<div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="printModalLabel">
+                    <i class="fa fa-print me-2"></i>Print Options
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"></i>
+                    Select the fields you want to include in your print. Current filters will be applied.
+                </div>
+
+                <!-- Field Selection -->
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">Select Fields to Print</label>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="selectAllFields()">
+                                    <i class="fa fa-check-square me-1"></i>Select All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="deselectAllFields()">
+                                    <i class="fa fa-square me-1"></i>Deselect All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Basic Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <strong><i class="fa fa-user me-2"></i>Basic Information</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="full_name" id="field_full_name" checked>
+                                    <label class="form-check-label" for="field_full_name">Full Name</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="gender" id="field_gender" checked>
+                                    <label class="form-check-label" for="field_gender">Gender</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="guardian_type" id="field_guardian_type" checked>
+                                    <label class="form-check-label" for="field_guardian_type">Guardian Type</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <strong><i class="fa fa-phone me-2"></i>Contact Information</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="primary_phone" id="field_primary_phone" checked>
+                                    <label class="form-check-label" for="field_primary_phone">Primary Phone</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="secondary_phone" id="field_secondary_phone">
+                                    <label class="form-check-label" for="field_secondary_phone">Secondary Phone</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="email" id="field_email" checked>
+                                    <label class="form-check-label" for="field_email">Email</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="home_address" id="field_home_address">
+                                    <label class="form-check-label" for="field_home_address">Home Address</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Professional Information -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <strong><i class="fa fa-briefcase me-2"></i>Professional</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="occupation" id="field_occupation" checked>
+                                    <label class="form-check-label" for="field_occupation">Occupation</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="employer" id="field_employer">
+                                    <label class="form-check-label" for="field_employer">Employer</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status & Students -->
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-warning text-dark">
+                                <strong><i class="fa fa-info-circle me-2"></i>Status</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="is_active" id="field_is_active" checked>
+                                    <label class="form-check-label" for="field_is_active">Active Status</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input field-checkbox" type="checkbox" value="student_count" id="field_student_count" checked>
+                                    <label class="form-check-label" for="field_student_count">Number of Students</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Options -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card border-secondary">
+                            <div class="card-header bg-secondary text-white">
+                                <strong><i class="fa fa-cog me-2"></i>Additional Options</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="include_stats" checked>
+                                    <label class="form-check-label" for="include_stats">
+                                        Include statistics summary
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="landscape">
+                                    <label class="form-check-label" for="landscape">
+                                        Landscape orientation (for more columns)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-secondary mt-3 mb-0">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>Preview:</strong> <span id="selected_field_count">7</span> field(s) selected
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="generateAndPrint()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- ✅ DYNAMIC MODAL CONTAINER -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// PAGE-SPECIFIC HTMX MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            modalWrapper.appendChild(modalDialog);
+            document.body.appendChild(modalWrapper);
+            
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+    
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' : 
+                                   type === 'error' ? '#dc3545' : 
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+    
+    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
+    if (closeModal === 'true') {
+        if (currentModal) {
+            currentModal.hide();
+        }
+    }
+});
+
+// ============================================================================
+// PRINT FUNCTIONALITY
+// ============================================================================
+
+function selectAllFields() {
+    document.querySelectorAll('.field-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectedFieldCount();
+}
+
+function deselectAllFields() {
+    document.querySelectorAll('.field-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectedFieldCount();
+}
+
+function updateSelectedFieldCount() {
+    const count = document.querySelectorAll('.field-checkbox:checked').length;
+    const countSpan = document.getElementById('selected_field_count');
+    if (countSpan) {
+        countSpan.textContent = count;
+    }
+}
+
+function generateAndPrint() {
+    const checkedFields = document.querySelectorAll('.field-checkbox:checked');
+    if (checkedFields.length === 0) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Fields Selected',
+                text: 'Please select at least one field to include in the print view.',
+                confirmButtonColor: '#ffc107'
+            });
+        } else {
+            alert('Please select at least one field to include in the print view.');
+        }
+        return;
+    }
+    
+    const printBtn = event.target;
+    const originalText = printBtn.innerHTML;
+    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating...';
+    printBtn.disabled = true;
+    
+    const selectedFields = Array.from(checkedFields).map(cb => cb.value);
+    const includeStats = document.getElementById('include_stats').checked;
+    const landscape = document.getElementById('landscape').checked;
+    
+    const formData = new FormData(document.getElementById('searchForm'));
+    const params = new URLSearchParams(formData);
+    
+    selectedFields.forEach(field => params.append('fields', field));
+    if (includeStats) params.append('include_stats', 'true');
+    if (landscape) params.append('landscape', 'true');
+    params.append('direct_print', 'true');
+    
+    fetch(`{% url 'students:guardian_print_view' %}?${params.toString()}`)
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.text();
+        })
+        .then(html => {
+            let printFrame = document.getElementById('print-frame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'print-frame';
+                printFrame.style.display = 'none';
+                document.body.appendChild(printFrame);
+            }
+            
+            const frameDoc = printFrame.contentWindow.document;
+            frameDoc.open();
+            frameDoc.write(html);
+            frameDoc.close();
+            
+            printFrame.onload = function() {
+                setTimeout(() => {
+                    printFrame.contentWindow.focus();
+                    printFrame.contentWindow.print();
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+                    if (modal) modal.hide();
+                    
+                    printBtn.innerHTML = originalText;
+                    printBtn.disabled = false;
+                }, 500);
+            };
+        })
+        .catch(error => {
+            console.error('Print error:', error);
+            
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Print Error',
+                    text: 'Error generating print view. Please try again.',
+                    confirmButtonColor: '#dc3545'
+                });
+            } else {
+                alert('Error generating print view. Please try again.');
+            }
+            
+            printBtn.innerHTML = originalText;
+            printBtn.disabled = false;
+        });
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'students:guardian_list' %}";
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    const printCheckboxes = document.querySelectorAll('.field-checkbox');
+    printCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedFieldCount);
+    });
+    
+    updateSelectedFieldCount();
+});
+</script>
+{% endblock %}

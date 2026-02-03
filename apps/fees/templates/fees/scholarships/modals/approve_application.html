@@ -1,0 +1,129 @@
+{# fees/templates/fees/scholarships/modals/approve_application.html #}
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-check-circle me-2"></i>Approve Scholarship Application
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_approve %}
+                <div class="text-center mb-4">
+                    <i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3">Approve Application</h4>
+                
+                <!-- Application Details -->
+                <div class="alert alert-info">
+                    <h6 class="mb-2"><strong>Application Details:</strong></h6>
+                    <small><strong>Student:</strong> {{ application.student.get_full_name }}</small><br>
+                    <small><strong>Program:</strong> {{ application.scholarship_program.name }}</small><br>
+                    <small><strong>Applied Date:</strong> {{ application.application_date|date:"M d, Y" }}</small><br>
+                    <small><strong>Status:</strong> {{ application.get_status_display }}</small>
+                </div>
+                
+                <!-- Award Amount -->
+                <div class="mb-3">
+                    <label for="award_amount" class="form-label">
+                        <strong>Award Amount <span class="text-danger">*</span></strong>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">{% get_currency_symbol %}</span>
+                        <input type="number" 
+                               class="form-control" 
+                               id="award_amount" 
+                               name="award_amount" 
+                               required
+                               min="0"
+                               step="0.01"
+                               placeholder="Enter award amount">
+                    </div>
+                    <small class="form-text text-muted">
+                        Program budget remaining: {{ application.scholarship_program.remaining_budget|money }}
+                    </small>
+                </div>
+                
+                <!-- Start Date -->
+                <div class="mb-3">
+                    <label for="start_date" class="form-label">
+                        <strong>Start Date <span class="text-danger">*</span></strong>
+                    </label>
+                    <input type="date" 
+                           class="form-control" 
+                           id="start_date" 
+                           name="start_date" 
+                           required>
+                </div>
+                
+                <!-- End Date -->
+                <div class="mb-3">
+                    <label for="end_date" class="form-label">
+                        <strong>End Date</strong>
+                    </label>
+                    <input type="date" 
+                           class="form-control" 
+                           id="end_date" 
+                           name="end_date">
+                    <small class="form-text text-muted">Leave blank for no end date</small>
+                </div>
+                
+                <!-- Approval Notes -->
+                <div class="mb-3">
+                    <label for="approval_notes" class="form-label">
+                        <strong>Approval Notes</strong>
+                    </label>
+                    <textarea class="form-control" 
+                              id="approval_notes" 
+                              name="notes" 
+                              rows="3"
+                              placeholder="Optional notes about this approval..."></textarea>
+                </div>
+                
+                <div class="alert alert-success">
+                    <i class="fa fa-info-circle me-2"></i>
+                    Approving will create an active scholarship record for this student.
+                </div>
+            {% else %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Approve Application</h4>
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    This application cannot be approved at this time. Current status: {{ application.get_status_display }}
+                </div>
+            {% endif %}
+        </div>
+        {% if can_approve %}
+            <form hx-post="{% url 'fees:scholarship_application_approve' application.pk %}"
+                  hx-target="#application-list"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="award_amount" id="hidden_award_amount">
+                <input type="hidden" name="start_date" id="hidden_start_date">
+                <input type="hidden" name="end_date" id="hidden_end_date">
+                <input type="hidden" name="notes" id="hidden_notes">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-success" onclick="
+                        document.getElementById('hidden_award_amount').value = document.getElementById('award_amount').value;
+                        document.getElementById('hidden_start_date').value = document.getElementById('start_date').value;
+                        document.getElementById('hidden_end_date').value = document.getElementById('end_date').value;
+                        document.getElementById('hidden_notes').value = document.getElementById('approval_notes').value;
+                    ">
+                        <i class="fa fa-check-circle me-1"></i>Approve Application
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

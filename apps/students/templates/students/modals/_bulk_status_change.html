@@ -1,0 +1,94 @@
+{# students/templates/students/modals/_bulk_status_change.html #}
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-exchange-alt me-2"></i>Bulk Status Change
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle me-2"></i>
+                <strong>Selected Students:</strong> {{ student_count }}
+            </div>
+            
+            <!-- Show list of selected students (max 10 displayed) -->
+            <div class="mb-3">
+                <label class="form-label"><strong>Students to Update:</strong></label>
+                <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                    <ul class="list-unstyled mb-0">
+                        {% for student in students|slice:":10" %}
+                            <li class="mb-1">
+                                <i class="fa fa-user text-muted me-2"></i>
+                                {{ student.get_full_name }} ({{ student.admission_number }})
+                                <span class="badge bg-secondary ms-2">{{ student.get_enrollment_status_display }}</span>
+                            </li>
+                        {% endfor %}
+                        {% if student_count > 10 %}
+                            <li class="text-muted mt-2">
+                                <i class="fa fa-ellipsis-h me-2"></i>
+                                and {{ student_count|add:"-10" }} more...
+                            </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+            
+            <form hx-post="{% url 'students:bulk_status_change' %}"
+                  hx-target="#student-results"
+                  hx-swap="innerHTML"
+                  id="bulk-status-form">
+                {% csrf_token %}
+                
+                <!-- Hidden student IDs -->
+                {% for student in students %}
+                    <input type="hidden" name="student_ids" value="{{ student.pk }}">
+                {% endfor %}
+                
+                <!-- New Status Selection -->
+                <div class="mb-3">
+                    <label for="new_status" class="form-label">
+                        <i class="fa fa-tag me-1"></i>New Status <span class="text-danger">*</span>
+                    </label>
+                    <select name="new_status" id="new_status" class="form-select" required>
+                        <option value="">-- Select Status --</option>
+                        {% for status_code, status_name in status_choices %}
+                            <option value="{{ status_code }}">{{ status_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Reason -->
+                <div class="mb-3">
+                    <label for="reason" class="form-label">
+                        <i class="fa fa-comment me-1"></i>Reason for Change <span class="text-danger">*</span>
+                    </label>
+                    <textarea name="reason" 
+                              id="reason" 
+                              class="form-control" 
+                              rows="3" 
+                              placeholder="Please provide a reason for this bulk status change..."
+                              required></textarea>
+                    <small class="form-text text-muted">
+                        This reason will be recorded in each student's enrollment history.
+                    </small>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This will change the status for all {{ student_count }} selected student(s).
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-check me-1"></i>Update {{ student_count }} Student(s)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -115,6 +115,29 @@ class AccountType(BaseModel):
         blank=True,
         help_text="Maximum allowed balance for accounts of this type"
     )
+
+    normal_balance = models.CharField(
+        "Normal Balance",
+        max_length=6,
+        choices=[
+            ('DEBIT', 'Debit'),
+            ('CREDIT', 'Credit'),
+        ],
+        default='DEBIT',
+        help_text="Normal balance side for this account type"
+    )
+    
+    affects_balance_sheet = models.BooleanField(
+        "Affects Balance Sheet",
+        default=True,
+        help_text="Whether accounts of this type appear on balance sheet"
+    )
+    
+    affects_income_statement = models.BooleanField(
+        "Affects Income Statement",
+        default=False,
+        help_text="Whether accounts of this type appear on P&L statement"
+    )
     
     # -------------------------------------------------------------------------
     # META CLASS
@@ -527,6 +550,14 @@ class Account(BaseModel):
     # -------------------------------------------------------------------------
     
     is_active = models.BooleanField("Is Active", default=True, db_index=True)
+
+    # ✅ ADD THIS FIELD
+    is_header = models.BooleanField(
+        "Is Header Account",
+        default=False,
+        db_index=True,
+        help_text="Header accounts are used for grouping only and cannot have transactions posted to them"
+    )
     requires_approval = models.BooleanField(
         "Requires Approval",
         null=True,
@@ -569,6 +600,7 @@ class Account(BaseModel):
             models.Index(fields=['account_number']),
             models.Index(fields=['account_type']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['is_header']),
             models.Index(fields=['is_bank_account']),
             models.Index(fields=['is_cash_account']),
             models.Index(fields=['is_mobile_money_account']),
@@ -1000,6 +1032,48 @@ class Expense(BaseModel):
         help_text="Automatically create journal entry when expense is approved"
     )
     
+    def get_payable_account(self):
+        """
+        Get appropriate payable account for this expense.
+        
+        Returns:
+            Account: Accounts payable account
+        """
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            return None
+        
+        mappings = settings.get_account_mappings()
+        
+        # Default to main payable account
+        # Could add logic based on vendor type, expense category, etc.
+        return mappings.default_payable_account
+    
+    def get_expense_account(self):
+        """
+        Get expense account (already stored in field, but provide method for consistency).
+        
+        Returns:
+            Account: Expense account
+        """
+        if self.expense_account:
+            return self.expense_account
+        
+        # Fallback: Get from category default
+        if self.category and self.category.default_expense_account:
+            return self.category.default_expense_account
+        
+        # Last resort: Get from CoreAccountMappings
+        from core.models import FinancialSettings
+        settings = FinancialSettings.get_instance()
+        if settings:
+            mappings = settings.get_account_mappings()
+            return mappings.get_expense_account(self.category)
+        
+        return None
+    
     # -------------------------------------------------------------------------
     # META CLASS
     # -------------------------------------------------------------------------
@@ -1143,20 +1217,32 @@ class ExpenseLine(BaseModel):
         return f"{self.expense.expense_number} - {self.description}"
 
 
+# finance/models.py - UPDATED ExpensePayment model with reversal support
+
 class ExpensePayment(BaseModel):
-    """Expense payment tracking with automatic journal entries"""
+    """
+    Expense payment tracking with automatic journal entries and reversal support.
+    
+    KEY CONCEPTS:
+    - REVERSAL: Internal correction when payment was entered incorrectly
+    - Reversed payments are kept for audit trail but don't affect balances
+    - Cannot delete expense payments - only reverse them
+    - Journal entries are never deleted - reversing entries are created instead
+    """
     
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
+        ('PROCESSING', 'Processing'),  # NEW: For in-progress payments
         ('PROCESSED', 'Processed'),
         ('VERIFIED', 'Verified'),
         ('FAILED', 'Failed'),
         ('CANCELLED', 'Cancelled'),
+        ('REVERSED', 'Reversed'),  # NEW: For reversed payments
     ]
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # BASIC PAYMENT INFORMATION
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     expense = models.ForeignKey(
         Expense, 
@@ -1180,9 +1266,9 @@ class ExpensePayment(BaseModel):
         help_text="Amount being paid (excluding fees)"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # FISCAL CONTEXT (When was payment actually made?)
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     fiscal_period = models.ForeignKey(
         FiscalPeriod,
@@ -1194,16 +1280,16 @@ class ExpensePayment(BaseModel):
     
     # Access fiscal year via: payment.fiscal_period.fiscal_year
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # PAYMENT METHOD AND ACCOUNT DETAILS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     payment_method = models.ForeignKey(
         PaymentMethod,
         verbose_name="Payment Method",
         on_delete=models.PROTECT,
         related_name='expense_payments',
-        help_text="Method used for this payment"
+        help_text="Method used for this payment (Cash, Bank Transfer, Mobile Money, etc.)"
     )
     
     account = models.ForeignKey(
@@ -1211,19 +1297,29 @@ class ExpensePayment(BaseModel):
         verbose_name="Payment Account",
         on_delete=models.PROTECT, 
         related_name='expense_payments',
-        help_text="Account from which payment was made"
+        help_text="Account from which payment was made (Cash Account, Bank Account, etc.)"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # FEES AND CHARGES
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     processing_fee = models.DecimalField(
         "Processing Fee",
         max_digits=10,
         decimal_places=2,
         default=Decimal('0.00'),
-        help_text="Fee charged by payment method (auto-calculated)"
+        help_text="Fee charged by payment method (e.g., mobile money charges, wire transfer fees)"
+    )
+    
+    processing_fee_account = models.ForeignKey(
+        Account,
+        verbose_name="Processing Fee Account",
+        on_delete=models.PROTECT,
+        related_name='expense_processing_fees',
+        null=True,
+        blank=True,
+        help_text="Expense account for payment processing fees (auto-assigned from settings)"
     )
     
     bank_charges = models.DecimalField(
@@ -1231,19 +1327,19 @@ class ExpensePayment(BaseModel):
         max_digits=10, 
         decimal_places=2, 
         default=Decimal('0.00'),
-        help_text="Additional bank charges"
+        help_text="Additional bank charges not included in processing fee"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # PAYMENT REFERENCES AND TRACKING
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     reference_number = models.CharField(
         "Reference Number", 
         max_length=100, 
         blank=True,
         db_index=True,
-        help_text="Payment reference number"
+        help_text="Payment reference number (e.g., bank reference, mobile money ref)"
     )
     
     transaction_id = models.CharField(
@@ -1251,7 +1347,7 @@ class ExpensePayment(BaseModel):
         max_length=100, 
         blank=True,
         db_index=True,
-        help_text="External transaction identifier"
+        help_text="External transaction identifier from payment gateway or bank"
     )
     
     batch_number = models.CharField(
@@ -1259,37 +1355,37 @@ class ExpensePayment(BaseModel):
         max_length=50,
         blank=True,
         db_index=True,
-        help_text="Batch number for grouped payments"
+        help_text="Batch number for grouped payments (for bulk vendor payments)"
     )
     
     check_number = models.CharField(
-        "Check Number",
+        "Check/Cheque Number",
         max_length=20,
         blank=True,
-        help_text="Check number if payment by check"
+        help_text="Cheque number if payment by cheque"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # ADDITIONAL PAYMENT DETAILS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     payment_details = models.JSONField(
         "Payment Details",
         default=dict,
         blank=True,
-        help_text="Additional payment method specific details"
+        help_text="Additional payment method specific details (JSON format)"
     )
     
     receipt_number = models.CharField(
         "Receipt Number",
         max_length=50,
         blank=True,
-        help_text="Receipt number for this payment"
+        help_text="Receipt number from vendor/supplier"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # STATUS AND WORKFLOW
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     status = models.CharField(
         "Status",
@@ -1319,18 +1415,18 @@ class ExpensePayment(BaseModel):
         "Processed Date",
         null=True,
         blank=True,
-        help_text="When payment was processed"
+        help_text="When payment was actually processed/disbursed"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # VERIFICATION DETAILS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     is_verified = models.BooleanField(
         "Verified", 
         default=False,
         db_index=True,
-        help_text="Whether this payment has been verified"
+        help_text="Whether this payment has been verified by finance manager"
     )
     
     verified_by_id = models.CharField(
@@ -1344,18 +1440,89 @@ class ExpensePayment(BaseModel):
     verification_date = models.DateTimeField(
         "Verification Date", 
         null=True, 
-        blank=True
+        blank=True,
+        help_text="When payment was verified"
     )
     
     verification_notes = models.TextField(
         "Verification Notes",
         blank=True,
-        help_text="Notes from payment verification"
+        help_text="Notes from payment verification process"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # REVERSAL TRACKING (Internal Correction) ⭐ NEW
+    # =========================================================================
+    
+    reversed = models.BooleanField(
+        "Reversed",
+        default=False,
+        db_index=True,
+        help_text=(
+            "Payment was reversed due to internal error (wrong vendor, duplicate entry, "
+            "wrong amount). This is an accounting correction - no actual money movement."
+        )
+    )
+    
+    reversed_on = models.DateTimeField(
+        "Reversed On",
+        null=True,
+        blank=True,
+        help_text="When this payment was reversed"
+    )
+    
+    reversed_by_id = models.CharField(
+        "Reversed By ID",
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="User ID who reversed this payment"
+    )
+    
+    reversal_reason = models.TextField(
+        "Reversal Reason",
+        blank=True,
+        help_text=(
+            "Detailed reason for payment reversal. Examples: "
+            "'Duplicate payment entry', 'Posted to wrong expense', "
+            "'Incorrect vendor', 'Wrong amount entered'"
+        )
+    )
+    
+    reversal_journal_entry = models.ForeignKey(
+        'JournalEntry',
+        verbose_name="Reversal Journal Entry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reversed_expense_payments',
+        help_text="Journal entry created when payment was reversed"
+    )
+    
+    reversal_approval_required = models.BooleanField(
+        "Reversal Approval Required",
+        default=True,
+        help_text="Whether reversal requires manager approval"
+    )
+    
+    reversal_approved_by_id = models.CharField(
+        "Reversal Approved By ID",
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="User ID who approved the reversal"
+    )
+    
+    reversal_approved_on = models.DateTimeField(
+        "Reversal Approved On",
+        null=True,
+        blank=True,
+        help_text="When reversal was approved"
+    )
+    
+    # =========================================================================
     # JOURNAL ENTRY INTEGRATION
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     journal_entry = models.ForeignKey(
         'JournalEntry',
@@ -1364,7 +1531,7 @@ class ExpensePayment(BaseModel):
         null=True,
         blank=True,
         related_name='expense_payments',
-        help_text="Journal entry created for this payment"
+        help_text="Journal entry created for this payment (DR: Payables, CR: Cash/Bank)"
     )
     
     auto_create_journal_entry = models.BooleanField(
@@ -1373,55 +1540,215 @@ class ExpensePayment(BaseModel):
         help_text="Automatically create journal entry when payment is verified"
     )
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # ADDITIONAL DETAILS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
-    notes = models.TextField("Notes", blank=True)
+    notes = models.TextField(
+        "Notes", 
+        blank=True,
+        help_text="Public notes about this payment"
+    )
+    
     internal_notes = models.TextField(
         "Internal Notes", 
         blank=True,
-        help_text="Internal notes not visible to requestor"
+        help_text="Internal notes not visible to requestor (for finance team only)"
     )
     
-    # -------------------------------------------------------------------------
-    # META CLASS
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # ACCOUNT MAPPING HELPERS
+    # =========================================================================
     
-    class Meta:
-        verbose_name = "Expense Payment"
-        verbose_name_plural = "Expense Payments"
-        ordering = ['-payment_date', '-created_at']
-        indexes = [
-            models.Index(fields=['payment_date', 'status']),
-            models.Index(fields=['reference_number']),
-            models.Index(fields=['transaction_id']),
-            models.Index(fields=['batch_number']),
-            models.Index(fields=['is_verified']),
-            models.Index(fields=['expense', 'payment_date']),
-            models.Index(fields=['fiscal_period']),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                check=Q(amount__gt=0),
-                name='expense_payment_amount_positive'
-            ),
-            models.CheckConstraint(
-                check=Q(processing_fee__gte=0),
-                name='expense_payment_fee_non_negative'
-            ),
-        ]
+    def get_payment_account(self):
+        """
+        Get the account from which payment was made (already stored in 'account' field).
+        
+        Returns:
+            Account: Cash/Bank account
+        """
+        return self.account
     
-    # -------------------------------------------------------------------------
-    # STRING REPRESENTATION
-    # -------------------------------------------------------------------------
+    def get_payable_account(self):
+        """
+        Get appropriate accounts payable account for this expense.
+        
+        Returns:
+            Account: Accounts payable account
+        """
+        # Use expense's payable account method
+        if hasattr(self.expense, 'get_payable_account'):
+            return self.expense.get_payable_account()
+        
+        # Fallback: Get from settings
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            logger.error("FinancialSettings not configured")
+            return None
+        
+        mappings = settings.get_account_mappings()
+        return mappings.default_payable_account
     
-    def __str__(self):
-        return f"Payment {self.reference_number} - {self.expense.expense_number}"
+    def get_processing_fee_account(self):
+        """
+        Get processing fee expense account.
+        
+        Returns:
+            Account: Processing fee expense account
+        """
+        # If specific account set, use it
+        if self.processing_fee_account:
+            return self.processing_fee_account
+        
+        # Get from special account mappings
+        from core.models import FinancialSettings
+        
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            return None
+        
+        # Try special account mappings
+        special_mappings = getattr(settings, 'special_account_mappings', None)
+        if special_mappings and hasattr(special_mappings, 'payment_processing_fee_account'):
+            return special_mappings.payment_processing_fee_account
+        
+        # Fallback: default expense account
+        mappings = settings.get_account_mappings()
+        return mappings.default_expense_account
     
-    # -------------------------------------------------------------------------
-    # HELPER METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # VALIDATION
+    # =========================================================================
+    
+    def clean(self):
+        """Validate expense payment data"""
+        super().clean()
+        errors = {}
+        
+        # If reversed, must have reason
+        if self.reversed and not self.reversal_reason:
+            errors['reversal_reason'] = "Reversal reason is required for reversed payments"
+        
+        # Amount validations
+        if self.amount < 0:
+            errors['amount'] = "Payment amount cannot be negative"
+        
+        if self.processing_fee < 0:
+            errors['processing_fee'] = "Processing fee cannot be negative"
+        
+        if self.bank_charges < 0:
+            errors['bank_charges'] = "Bank charges cannot be negative"
+        
+        # Cannot reverse a failed or cancelled payment
+        if self.reversed and self.status in ['FAILED', 'CANCELLED']:
+            errors['reversed'] = f"Cannot reverse a {self.status.lower()} payment"
+        
+        if errors:
+            raise ValidationError(errors)
+    
+    # =========================================================================
+    # STATUS PROPERTIES AND HELPERS ⭐ NEW
+    # =========================================================================
+    
+    @property
+    def is_active(self):
+        """
+        Check if payment is still active (not reversed).
+        
+        Active payments count toward expense payment totals.
+        Reversed payments are kept for audit trail only.
+        
+        Returns:
+            bool: True if payment is active and affects balances
+        """
+        return not self.reversed
+    
+    @property
+    def effective_amount(self):
+        """
+        Get effective amount that counts toward expense payment.
+        
+        Returns:
+            Decimal: Amount (0 if reversed, full amount if active)
+        """
+        if self.reversed:
+            return Decimal('0.00')
+        return self.amount
+    
+    @property
+    def total_amount_including_fees(self):
+        """
+        Get total amount including all fees and charges.
+        
+        Returns:
+            Decimal: Total disbursement amount
+        """
+        return self.amount + self.processing_fee + self.bank_charges
+    
+    @property
+    def payment_state(self):
+        """
+        Get human-readable payment state.
+        
+        Returns:
+            str: Current state of payment
+        """
+        if self.reversed:
+            return "REVERSED"
+        elif self.status == 'VERIFIED' and self.is_verified:
+            return "ACTIVE"
+        else:
+            return self.status
+    
+    def can_be_reversed(self):
+        """
+        Check if this payment can be reversed.
+        
+        Returns:
+            tuple: (can_reverse: bool, reason: str)
+        """
+        if self.reversed:
+            return False, "Payment already reversed"
+        
+        if self.status in ['FAILED', 'CANCELLED']:
+            return False, f"Cannot reverse {self.status.lower()} payment"
+        
+        # Check if fiscal period is closed
+        if self.fiscal_period and hasattr(self.fiscal_period, 'is_closed'):
+            if self.fiscal_period.is_closed:
+                return False, "Cannot reverse payment from closed fiscal period"
+        
+        # Check if reversal requires approval and hasn't been approved
+        if self.reversal_approval_required and not self.reversal_approved_by_id:
+            return False, "Reversal requires manager approval"
+        
+        return True, "OK"
+    
+    def requires_reversal_approval(self):
+        """
+        Check if this payment's reversal requires approval.
+        
+        Large amounts or verified payments may require approval.
+        
+        Returns:
+            bool: True if approval required
+        """
+        # Threshold for approval (could come from settings)
+        APPROVAL_THRESHOLD = Decimal('1000000.00')  # 1M UGX
+        
+        # Require approval if:
+        # 1. Payment is verified
+        # 2. Amount is over threshold
+        if self.is_verified or self.amount >= APPROVAL_THRESHOLD:
+            return True
+        
+        return False
+    
+    # =========================================================================
+    # USER RETRIEVAL HELPERS
+    # =========================================================================
     
     def get_performed_by_user(self):
         """Get the user who performed this payment"""
@@ -1446,7 +1773,191 @@ class ExpensePayment(BaseModel):
         except Exception as e:
             logger.error(f"Error fetching verified_by user: {e}")
             return None
-
+    
+    def get_reversed_by_user(self):
+        """Get the user who reversed this payment"""
+        if not self.reversed_by_id:
+            return None
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.using('default').get(id=self.reversed_by_id)
+        except Exception as e:
+            logger.error(f"Error fetching reversed_by user: {e}")
+            return None
+    
+    def get_reversal_approved_by_user(self):
+        """Get the user who approved the reversal"""
+        if not self.reversal_approved_by_id:
+            return None
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.using('default').get(id=self.reversal_approved_by_id)
+        except Exception as e:
+            logger.error(f"Error fetching reversal_approved_by user: {e}")
+            return None
+    
+    # =========================================================================
+    # AUDIT TRAIL HELPERS
+    # =========================================================================
+    
+    def get_audit_trail(self):
+        """
+        Get complete audit trail for this expense payment.
+        
+        Returns:
+            dict: Chronological audit trail
+        """
+        trail = []
+        
+        # Creation
+        trail.append({
+            'action': 'CREATED',
+            'timestamp': self.created_at,
+            'user': self.get_created_by_user(),
+            'details': f"Payment {self.reference_number} created for {self.amount}"
+        })
+        
+        # Processing
+        if self.processed_date:
+            trail.append({
+                'action': 'PROCESSED',
+                'timestamp': self.processed_date,
+                'user': self.get_performed_by_user(),
+                'details': f"Payment processed by {self.performed_by}"
+            })
+        
+        # Verification
+        if self.is_verified and self.verification_date:
+            trail.append({
+                'action': 'VERIFIED',
+                'timestamp': self.verification_date,
+                'user': self.get_verified_by_user(),
+                'details': "Payment verified by finance team"
+            })
+        
+        # Journal entry
+        if self.journal_entry:
+            trail.append({
+                'action': 'JOURNAL_ENTRY_CREATED',
+                'timestamp': self.journal_entry.created_at,
+                'details': f"Journal Entry {self.journal_entry.entry_number} created"
+            })
+        
+        # Reversal approval (if required)
+        if self.reversal_approved_by_id and self.reversal_approved_on:
+            trail.append({
+                'action': 'REVERSAL_APPROVED',
+                'timestamp': self.reversal_approved_on,
+                'user': self.get_reversal_approved_by_user(),
+                'details': "Reversal approved by manager"
+            })
+        
+        # Reversal
+        if self.reversed and self.reversed_on:
+            trail.append({
+                'action': 'REVERSED',
+                'timestamp': self.reversed_on,
+                'user': self.get_reversed_by_user(),
+                'details': f"Payment reversed: {self.reversal_reason}"
+            })
+            
+            if self.reversal_journal_entry:
+                trail.append({
+                    'action': 'REVERSAL_JOURNAL_ENTRY',
+                    'timestamp': self.reversal_journal_entry.created_at,
+                    'details': f"Reversal Journal Entry {self.reversal_journal_entry.entry_number} created"
+                })
+        
+        # Sort by timestamp
+        trail.sort(key=lambda x: x['timestamp'])
+        
+        return trail
+    
+    # =========================================================================
+    # EXPENSE STATUS HELPERS
+    # =========================================================================
+    
+    def update_expense_status(self):
+        """
+        Update parent expense status based on active payments.
+        
+        Called after payment creation, verification, or reversal.
+        """
+        try:
+            # Calculate total active payments
+            total_paid = sum(
+                p.amount for p in self.expense.payments.all()
+                if p.is_active  # Only count non-reversed payments
+            )
+            
+            # Update expense status
+            if total_paid >= self.expense.total_amount:
+                self.expense.status = 'PAID'
+            elif total_paid > 0:
+                # Partially paid - return to approved
+                self.expense.status = 'APPROVED'
+            else:
+                # No active payments
+                self.expense.status = 'APPROVED'
+            
+            self.expense.save(update_fields=['status'])
+            
+            logger.debug(
+                f"Updated expense {self.expense.expense_number} status to "
+                f"{self.expense.status} (paid: {total_paid})"
+            )
+        
+        except Exception as e:
+            logger.error(f"Error updating expense status: {e}", exc_info=True)
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
+    
+    class Meta:
+        verbose_name = "Expense Payment"
+        verbose_name_plural = "Expense Payments"
+        ordering = ['-payment_date', '-created_at']
+        indexes = [
+            models.Index(fields=['payment_date', 'status']),
+            models.Index(fields=['reference_number']),
+            models.Index(fields=['transaction_id']),
+            models.Index(fields=['batch_number']),
+            models.Index(fields=['is_verified']),
+            models.Index(fields=['expense', 'payment_date']),
+            models.Index(fields=['fiscal_period']),
+            # NEW indexes for reversal tracking
+            models.Index(fields=['reversed']),
+            models.Index(fields=['reversed_on']),
+            models.Index(fields=['reversal_approved_by_id']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(amount__gt=0),
+                name='expense_payment_amount_positive'
+            ),
+            models.CheckConstraint(
+                check=Q(processing_fee__gte=0),
+                name='expense_payment_fee_non_negative'
+            ),
+            models.CheckConstraint(
+                check=Q(bank_charges__gte=0),
+                name='expense_payment_bank_charges_non_negative'
+            ),
+        ]
+    
+    # =========================================================================
+    # STRING REPRESENTATION
+    # =========================================================================
+    
+    def __str__(self):
+        state_suffix = ""
+        if self.reversed:
+            state_suffix = " [REVERSED]"
+        
+        return f"Payment {self.reference_number} - {self.expense.expense_number} - {self.amount:,.2f}{state_suffix}"
 
 # =============================================================================
 # JOURNAL AND ACCOUNTING SYSTEM

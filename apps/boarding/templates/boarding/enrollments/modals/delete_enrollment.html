@@ -1,0 +1,142 @@
+{# boarding/templates/boarding/enrollments/modals/delete_enrollment.html #}
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title"><i class="fa fa-trash me-2"></i>Delete Boarding Enrollment</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-center py-4">
+            <div class="mb-3"><i class="fa fa-exclamation-triangle text-warning" style="font-size: 4rem;"></i></div>
+            <h4 class="mb-3">Are you sure?</h4>
+            
+            {# Enrollment Details #}
+            <div class="alert alert-info">
+                <strong>{{ enrollment.student.get_full_name }}</strong><br>
+                <small>Dormitory: {{ enrollment.dormitory.name }}</small><br>
+                {% if enrollment.room_number %}<small>Room: {{ enrollment.room_number }}</small><br>{% endif %}
+                {% if enrollment.bed_number %}<small>Bed: {{ enrollment.bed_number }}</small><br>{% endif %}
+                <small>Status: <span class="badge bg-secondary">{{ enrollment.get_status_display }}</span></small><br>
+                <small>Start Date: {{ enrollment.effective_start_date|date:"M d, Y" }}</small>
+            </div>
+
+            {# Invoice Information #}
+            {% if enrollment.boarding_invoice %}
+                <div class="alert {% if enrollment.boarding_invoice.status == 'DRAFT' %}alert-success{% else %}alert-warning{% endif %} text-start">
+                    <strong><i class="fa fa-file-invoice me-1"></i> Invoice Linked:</strong>
+                    <div class="ms-3 mt-2">
+                        <div>Invoice: <strong>{{ enrollment.boarding_invoice.invoice_number }}</strong></div>
+                        <div>Status: <span class="badge {{ enrollment.boarding_invoice.status|payment_status_badge }}">{{ enrollment.boarding_invoice.get_status_display }}</span></div>
+                        <div>Total: <strong>{{ enrollment.boarding_invoice.total_amount|money }}</strong></div>
+                        <div>Paid: <strong>{{ enrollment.boarding_invoice.paid_amount|money }}</strong></div>
+                        <div>Balance: <strong class="{{ enrollment.boarding_invoice.balance|balance_color_class }}">{{ enrollment.boarding_invoice.balance|money }}</strong></div>
+                        {% if enrollment.boarding_invoice.journal_entry %}
+                            <div class="mt-2 p-2 rounded {% if enrollment.boarding_invoice.journal_entry.status == 'POSTED' %}bg-danger-subtle text-danger{% elif enrollment.boarding_invoice.journal_entry.status == 'REVERSED' %}bg-warning-subtle text-warning{% else %}bg-light text-dark{% endif %}">
+                                <i class="fa fa-book me-1"></i> Journal Entry: <strong>{{ enrollment.boarding_invoice.journal_entry.entry_number }}</strong>
+                                <span class="badge {% if enrollment.boarding_invoice.journal_entry.status == 'POSTED' %}bg-danger{% elif enrollment.boarding_invoice.journal_entry.status == 'REVERSED' %}bg-warning{% else %}bg-secondary{% endif %} ms-1">
+                                    {{ enrollment.boarding_invoice.journal_entry.get_status_display }}
+                                </span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# Deletion Impact Notice #}
+            {% if can_delete %}
+                {% if deletion_impact %}
+                    <div class="alert alert-warning text-start">
+                        <strong><i class="fa fa-info-circle me-1"></i> What will happen:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>This boarding enrollment will be permanently deleted</li>
+                            <li><strong>{{ deletion_impact.items_count }}</strong> boarding item(s) will be removed from invoice {{ deletion_impact.invoice_number }}</li>
+                            <li>Boarding fees removed: <strong>{{ deletion_impact.boarding_amount|money }}</strong></li>
+                            <li>Invoice total will change from {{ enrollment.boarding_invoice.total_amount|money }} to <strong>{{ deletion_impact.new_total|money }}</strong></li>
+                            <li>Bed <strong>{{ enrollment.bed.bed_number }}</strong> will become available</li>
+                        </ul>
+                        <div class="mt-2 p-2 bg-light rounded">
+                            <small class="text-muted">
+                                <i class="fa fa-lightbulb me-1"></i>
+                                <strong>Tip:</strong> If student is still enrolled but ending boarding, 
+                                consider using <strong>TERMINATE</strong> status instead of deleting.
+                            </small>
+                        </div>
+                    </div>
+                {% elif not enrollment.boarding_invoice %}
+                    <div class="alert alert-warning">
+                        <i class="fa fa-exclamation-circle me-2"></i>
+                        This boarding enrollment and bed assignment will be permanently deleted. This action cannot be undone!
+                    </div>
+                {% endif %}
+            {% endif %}
+
+            {# Blocking Warnings #}
+            {% if not can_delete %}
+                <div class="alert alert-danger text-start">
+                    <strong><i class="fa fa-ban me-1"></i> Cannot Delete:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for warning in warnings %}
+                            <li>{{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                    
+                    {% if enrollment.boarding_invoice %}
+                        <hr>
+                        <div class="mt-2">
+                            <strong>Recommended Actions:</strong>
+                            <ol class="mb-0 mt-1">
+                                <li>Change enrollment status to <strong>TERMINATED</strong> (don't delete)</li>
+                                <li>Issue a credit note for unused boarding fees</li>
+                                <li>Process refund if applicable{% if enrollment.boarding_invoice.paid_amount|is_positive %} ({{ enrollment.boarding_invoice.paid_amount|money }} has been paid){% endif %}</li>
+                            </ol>
+                            <div class="mt-2 text-muted">
+                                <small>Contact the finance team for assistance with credit notes and refunds.</small>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+
+        {# Footer Actions #}
+        {% if can_delete %}
+            <form hx-post="{% url 'boarding:enrollment_delete' enrollment.pk %}" 
+                  hx-target="#enrollment-results" 
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    {% if deletion_impact %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fa fa-trash me-1"></i>Yes, Delete & Remove Boarding Fees
+                        </button>
+                    {% else %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fa fa-trash me-1"></i>Yes, Delete Enrollment
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+                {% if enrollment.boarding_invoice %}
+                    <a href="{% url 'fees:invoice_detail' enrollment.boarding_invoice.pk %}" 
+                       class="btn btn-primary" 
+                       target="_blank">
+                        <i class="fa fa-external-link-alt me-1"></i>View Invoice
+                    </a>
+                {% endif %}
+                <a href="{% url 'boarding:enrollment_terminate' enrollment.pk %}" 
+                   class="btn btn-warning">
+                    <i class="fa fa-stop-circle me-1"></i>Terminate Instead
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>

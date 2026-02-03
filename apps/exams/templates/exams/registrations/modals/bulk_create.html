@@ -1,0 +1,71 @@
+{# exams/templates/exams/registrations/modals/bulk_create.html #}
+<div class="modal-dialog modal-xl">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title"><i class="fa fa-users me-2"></i>Bulk Exam Registration</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form hx-post="{% url 'exams:bulk_registration_create' %}" hx-target="#registration-results" hx-swap="innerHTML">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Examination *</label>
+                    <select name="examination" class="form-select" required id="examination-select">
+                        <option value="">Select examination...</option>
+                        {% for exam in examinations %}
+                        <option value="{{ exam.pk }}">{{ exam.name }} - {{ exam.subject.name }} ({{ exam.exam_date|date:"M d, Y" }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Filter by Class (Optional)</label>
+                    <select name="filter_class" class="form-select" id="filter-class">
+                        <option value="">All Classes</option>
+                        {% for class in classes %}
+                        <option value="{{ class.pk }}">{{ class }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Select Students *</label>
+                    <div class="border rounded p-2" style="max-height: 400px; overflow-y: auto;">
+                        <div class="mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="select-all">Select All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all">Deselect All</button>
+                        </div>
+                        {% for student in students %}
+                        <div class="form-check student-item" data-class="{{ student.current_class.pk }}">
+                            <input class="form-check-input" type="checkbox" name="students" value="{{ student.pk }}" id="student-{{ student.pk }}">
+                            <label class="form-check-label" for="student-{{ student.pk }}">
+                                {{ student.get_full_name }} ({{ student.admission_number }}) - {{ student.current_class|default:"No Class" }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fa fa-save me-1"></i>Register Students</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('select-all').addEventListener('click', function() {
+    document.querySelectorAll('.student-item input[type="checkbox"]').forEach(cb => cb.checked = true);
+});
+document.getElementById('deselect-all').addEventListener('click', function() {
+    document.querySelectorAll('.student-item input[type="checkbox"]').forEach(cb => cb.checked = false);
+});
+document.getElementById('filter-class').addEventListener('change', function() {
+    const classId = this.value;
+    document.querySelectorAll('.student-item').forEach(item => {
+        if (!classId || item.dataset.class === classId) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+});
+</script>

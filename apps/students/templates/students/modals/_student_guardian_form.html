@@ -1,0 +1,196 @@
+{# students/templates/students/modals/_student_guardian_form.html #}
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-user-friends me-2"></i>
+                {% if relationship %}Edit Guardian Relationship{% else %}Add Guardian to Student{% endif %}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            {% if error_message %}
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>{{ error_message }}
+                </div>
+            {% endif %}
+            
+            <div class="alert alert-info mb-4">
+                <i class="fa fa-user me-2"></i>
+                <strong>Student:</strong> {{ student.get_full_name }} ({{ student.admission_number }})
+            </div>
+            
+            <form {% if relationship %}
+                      hx-post="{% url 'students:student_guardian_update' student.pk relationship.pk %}"
+                  {% else %}
+                      hx-post="{% url 'students:student_guardian_create' student.pk %}"
+                  {% endif %}
+                  id="guardian-form">
+                {% csrf_token %}
+                
+                <!-- Guardian Selection -->
+                <div class="mb-3">
+                    <label for="guardian_id" class="form-label">
+                        <i class="fa fa-user-shield me-1"></i>Guardian <span class="text-danger">*</span>
+                    </label>
+                    <select name="guardian_id" id="guardian_id" class="form-select" required {% if relationship %}disabled{% endif %}>
+                        <option value="">-- Select Guardian --</option>
+                        {% for guardian in available_guardians %}
+                            <option value="{{ guardian.pk }}" {% if relationship and relationship.guardian.pk == guardian.pk %}selected{% endif %}>
+                                {{ guardian.get_full_name }} - {{ guardian.primary_phone }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    {% if relationship %}
+                        <input type="hidden" name="guardian_id" value="{{ relationship.guardian.pk }}">
+                        <small class="form-text text-muted">Guardian cannot be changed when editing.</small>
+                    {% endif %}
+                </div>
+                
+                <!-- Relationship Type -->
+                <div class="mb-3">
+                    <label for="relationship" class="form-label">
+                        <i class="fa fa-link me-1"></i>Relationship Type <span class="text-danger">*</span>
+                    </label>
+                    <select name="relationship" id="relationship" class="form-select" required>
+                        <option value="">-- Select Relationship --</option>
+                        {% for rel_code, rel_name in relationship_choices %}
+                            <option value="{{ rel_code }}" {% if relationship and relationship.relationship == rel_code %}selected{% endif %}>
+                                {{ rel_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Checkboxes Row 1 -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_primary" name="is_primary" 
+                                   {% if relationship and relationship.is_primary %}checked{% endif %}>
+                            <label class="form-check-label" for="is_primary">
+                                <i class="fa fa-star text-warning me-1"></i>Primary Guardian
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_financial_responsible" name="is_financial_responsible"
+                                   {% if relationship and relationship.is_financial_responsible %}checked{% endif %}>
+                            <label class="form-check-label" for="is_financial_responsible">
+                                <i class="fa fa-dollar-sign text-success me-1"></i>Financially Responsible
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Checkboxes Row 2 -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="can_pickup" name="can_pickup"
+                                   {% if not relationship or relationship.can_pickup %}checked{% endif %}>
+                            <label class="form-check-label" for="can_pickup">
+                                <i class="fa fa-car text-info me-1"></i>Can Pickup Student
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="can_authorize_medical" name="can_authorize_medical"
+                                   {% if relationship and relationship.can_authorize_medical %}checked{% endif %}>
+                            <label class="form-check-label" for="can_authorize_medical">
+                                <i class="fa fa-hospital text-danger me-1"></i>Can Authorize Medical
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Emergency Contact Priority -->
+                <div class="mb-3">
+                    <label for="emergency_contact_priority" class="form-label">
+                        <i class="fa fa-phone-square me-1"></i>Emergency Contact Priority
+                    </label>
+                    <input type="number" class="form-control" id="emergency_contact_priority" 
+                           name="emergency_contact_priority" 
+                           value="{% if relationship %}{{ relationship.emergency_contact_priority }}{% else %}999{% endif %}"
+                           min="1" max="999">
+                    <small class="form-text text-muted">
+                        Lower number = higher priority (1 is highest). Use 999 for non-emergency contacts.
+                    </small>
+                </div>
+                
+                <!-- Checkboxes Row 3 - Communications -->
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="fa fa-envelope me-1"></i>Communication Preferences
+                    </label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="receives_academic_reports" name="receives_academic_reports"
+                               {% if not relationship or relationship.receives_academic_reports %}checked{% endif %}>
+                        <label class="form-check-label" for="receives_academic_reports">
+                            Receives Academic Reports
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="receives_financial_statements" name="receives_financial_statements"
+                               {% if not relationship or relationship.receives_financial_statements %}checked{% endif %}>
+                        <label class="form-check-label" for="receives_financial_statements">
+                            Receives Financial Statements
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="receives_emergency_notifications" name="receives_emergency_notifications"
+                               {% if not relationship or relationship.receives_emergency_notifications %}checked{% endif %}>
+                        <label class="form-check-label" for="receives_emergency_notifications">
+                            Receives Emergency Notifications
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Custody Information -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="has_custody" name="has_custody"
+                                   {% if relationship and relationship.has_custody %}checked{% endif %}>
+                            <label class="form-check-label" for="has_custody">
+                                <i class="fa fa-gavel me-1"></i>Has Legal Custody
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Active Status -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="is_active" name="is_active"
+                               {% if not relationship or relationship.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            <i class="fa fa-check-circle text-success me-1"></i>Active Relationship
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Notes -->
+                <div class="mb-3">
+                    <label for="notes" class="form-label">
+                        <i class="fa fa-comment me-1"></i>Notes
+                    </label>
+                    <textarea name="notes" id="notes" class="form-control" rows="3" 
+                              placeholder="Additional notes about this relationship...">{% if relationship %}{{ relationship.notes }}{% endif %}</textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-save me-1"></i>
+                        {% if relationship %}Update Relationship{% else %}Add Guardian{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

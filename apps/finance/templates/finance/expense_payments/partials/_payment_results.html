@@ -1,0 +1,460 @@
+{# finance/templates/finance/expense_payments/partials/_payment_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Expense Payments Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="130">Payment Date</th>
+                <th width="140">Reference</th>
+                <th width="200">Expense</th>
+                <th width="150">Payment Method</th>
+                <th width="150">Account</th>
+                <th width="120" class="text-end">Amount</th>
+                <th width="100" class="text-center">Verified</th>
+                <th width="100" class="text-center">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="paymentTableBody">
+            {% if payments_page %}
+                {% for payment in payments_page %}
+                <tr {% if payment.is_reversed %}class="table-danger"{% endif %}>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:payments_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Payment Date -->
+                    <td>
+                        <div class="text-dark">{{ payment.payment_date|date:"M d, Y" }}</div>
+                        {% if payment.fiscal_period %}
+                            <small class="text-muted">{{ payment.fiscal_period.name }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Reference Number -->
+                    <td>
+                        {% if payment.reference_number %}
+                            <div>
+                                <a href="{% url 'finance:expense_payment_detail' payment.pk %}" class="text-primary fw-bold">
+                                    {{ payment.reference_number }}
+                                </a>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                        {% if payment.transaction_id %}
+                            <div class="mt-1">
+                                <small class="text-muted">TXN: {{ payment.transaction_id }}</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Expense Details -->
+                    <td>
+                        <div class="d-flex flex-column">
+                            <a href="{% url 'finance:expense_detail' payment.expense.pk %}" 
+                               class="text-primary fw-bold">
+                                {{ payment.expense.expense_number }}
+                            </a>
+                            <small class="text-muted">{{ payment.expense.description|truncatewords:5 }}</small>
+                            {% if payment.expense.vendor_name %}
+                                <small class="text-muted">
+                                    <i class="fa fa-user me-1"></i>{{ payment.expense.vendor_name|truncatewords:3 }}
+                                </small>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Payment Method -->
+                    <td>
+                        <span class="badge bg-info">{{ payment.payment_method.name }}</span>
+                        <div class="mt-1">
+                            <small class="text-muted">{{ payment.payment_method.get_method_type_display }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Payment Account -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            {% if payment.account.icon %}
+                                <i class="fa {{ payment.account.icon }} text-primary me-2"></i>
+                            {% endif %}
+                            <div>
+                                <div class="text-dark">{{ payment.account.account_number }}</div>
+                                <small class="text-muted">{{ payment.account.name|truncatewords:4 }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Amount -->
+                    <td class="text-end">
+                        <strong>{{ payment.amount|money }}</strong>
+                        {% if payment.processing_fee > 0 or payment.bank_charges > 0 %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    +{{ payment.processing_fee|add:payment.bank_charges|money }} fees
+                                </small>
+                            </div>
+                        {% endif %}
+                        {% if payment.is_reversed %}
+                            <div class="mt-1">
+                                <span class="badge bg-danger">Reversed</span>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Verification Status -->
+                    <td class="text-center">
+                        {% if payment.is_verified %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Verified
+                            </span>
+                            {% if payment.verification_date %}
+                                <div class="mt-1">
+                                    <small class="text-muted">{{ payment.verification_date|date:"M d" }}</small>
+                                </div>
+                            {% endif %}
+                            {% if payment.verified_by %}
+                                <div class="mt-1">
+                                    <small class="text-muted">By: {{ payment.verified_by.get_full_name|truncatewords:2 }}</small>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-warning status-badge">
+                                <i class="fa fa-clock me-1"></i>Unverified
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- ✅ STATUS COLUMN - SIMPLIFIED BADGES -->
+                    <td class="text-center status-cell">
+                        {% if payment.is_reversed %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-undo me-1"></i>Reversed
+                            </span>
+                        {% elif payment.status == 'PENDING' %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="fa fa-clock me-1"></i>Pending
+                            </span>
+                        {% elif payment.status == 'PROCESSED' %}
+                            <span class="badge bg-info status-badge">
+                                <i class="fa fa-check me-1"></i>Processed
+                            </span>
+                        {% elif payment.status == 'VERIFIED' %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-double me-1"></i>Verified
+                            </span>
+                        {% elif payment.status == 'FAILED' %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times-circle me-1"></i>Failed
+                            </span>
+                        {% elif payment.status == 'CANCELLED' %}
+                            <span class="badge bg-dark status-badge">
+                                <i class="fa fa-ban me-1"></i>Cancelled
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary status-badge">
+                                {{ payment.status|title }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'finance:expense_payment_detail' payment.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'finance:expense_payment_quick_view_modal' payment.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-bolt me-2"></i> Quick View
+                                </button>
+                                
+                                <!-- Edit (if unverified and not reversed) -->
+                                {% if not payment.is_verified and not payment.is_reversed %}
+                                    <a class="dropdown-item text-warning" href="{% url 'finance:expense_payment_edit' payment.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit
+                                    </a>
+                                {% endif %}
+                                
+                                <!-- Print Receipt -->
+                                <a class="dropdown-item" href="{% url 'finance:expense_payment_print_receipt' payment.pk %}" target="_blank">
+                                    <i class="fa fa-print me-2"></i> Print Receipt
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ✅ PAYMENT STATUS ACTIONS -->
+                                <h6 class="dropdown-header">Payment Status</h6>
+                                
+                                <!-- Verify (if unverified and not reversed) -->
+                                {% if not payment.is_verified and not payment.is_reversed %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'finance:expense_payment_verify_modal' payment.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i> Verify Payment
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Reverse Payment (if verified and not already reversed) -->
+                                {% if payment.is_verified and not payment.is_reversed %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'finance:expense_payment_reverse_modal' payment.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-undo me-2"></i> Reverse Payment
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Actions -->
+                                <h6 class="dropdown-header">Quick Links</h6>
+                                
+                                <!-- View Expense -->
+                                <a class="dropdown-item" href="{% url 'finance:expense_detail' payment.expense.pk %}">
+                                    <i class="fa fa-file-invoice me-2"></i> View Expense
+                                </a>
+                                
+                                <!-- View Journal Entry -->
+                                {% if payment.journal_entry %}
+                                    <a class="dropdown-item" href="{% url 'finance:journal_entry_detail' payment.journal_entry.pk %}">
+                                        <i class="fa fa-book me-2"></i> View Journal Entry
+                                        {% if payment.journal_entry.status == 'DRAFT' %}
+                                            <span class="badge bg-warning ms-1">Draft</span>
+                                        {% else %}
+                                            <span class="badge bg-success ms-1">Posted</span>
+                                        {% endif %}
+                                    </a>
+                                {% endif %}
+                                
+                                <!-- View Reversal (if reversed) -->
+                                {% if payment.is_reversed and payment.reversal %}
+                                    <a class="dropdown-item text-danger" href="{% url 'finance:expense_payment_reversal_detail' payment.reversal.pk %}">
+                                        <i class="fa fa-undo me-2"></i> View Reversal Details
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action (only if unverified and not reversed) -->
+                                {% if not payment.is_verified and not payment.is_reversed %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'finance:expense_payment_delete_modal' payment.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i> Delete
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Expense Payments Found</h5>
+                            <p class="text-muted">Try adjusting your filters or record a new payment.</p>
+                            <a href="{% url 'finance:expense_payment_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Record Payment
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if payments_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ payments_page.start_index }} - {{ payments_page.end_index }} of {{ payments_page.paginator.count|format_number }} payments
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Payment pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if payments_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_payment_list' %}"
+                                hx-target="#expense-payment-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ payments_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in payments_page.paginator.page_range %}
+                    {% if page_num == payments_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > payments_page.number|add:"-3" and page_num < payments_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'finance:expense_payment_list' %}"
+                                    hx-target="#expense-payment-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if payments_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:expense_payment_list' %}"
+                                hx-target="#expense-payment-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ payments_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Simplified Status Badge Styling - Matching Pattern */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.status-cell {
+    min-width: 100px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown {
+    position: static !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+/* Reversed payment row styling */
+.table-danger {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Payments</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Verified</div>
+                <h3>{{ stats.verified|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Unverified</div>
+                <h3>{{ stats.unverified|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-danger">
+                <i class="pe-7s-close-circle"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Reversed</div>
+                <h3>{{ stats.reversed|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

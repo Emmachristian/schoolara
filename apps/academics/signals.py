@@ -4,7 +4,7 @@ Signal handlers for academics app
 Handles automatic operations when models are created, updated, or deleted
 """
 
-from django.db.models.signals import post_save, pre_save, post_delete, m2m_changed
+from django.db.models.signals import post_save, pre_save, post_delete, m2m_changed, pre_delete
 from django.db.models import Q
 from django.dispatch import receiver
 from django.utils import timezone
@@ -269,6 +269,7 @@ def classroom_post_save(sender, instance, created, **kwargs):
             f"(Type: {instance.get_room_type_display()})"
         )
 
+
 # =============================================================================
 # STUDENT CLASS ENROLLMENT SIGNALS
 # =============================================================================
@@ -277,10 +278,18 @@ def classroom_post_save(sender, instance, created, **kwargs):
 def auto_generate_roll_number(sender, instance, **kwargs):
     """
     Automatically generate roll number when creating a new enrollment.
-    Only generates if roll_number is not already set.
+    Handles both None and empty string cases.
     """
-    # Only generate for new enrollments without a roll number
-    if not instance.pk and not instance.roll_number:
+    # Check if this is a new enrollment (not yet saved to database)
+    is_new = instance._state.adding
+    
+    # Check if we need to generate a roll number
+    needs_roll_number = (
+        is_new and  # New enrollment (not an update)
+        (not instance.roll_number or instance.roll_number.strip() == '')  # No roll number provided
+    )
+    
+    if needs_roll_number:
         from academics.utils import generate_class_roll_number
         
         try:
@@ -288,12 +297,17 @@ def auto_generate_roll_number(sender, instance, **kwargs):
                 class_instance=instance.class_instance,
                 academic_session=instance.academic_session
             )
-            logger.debug(
+            
+            logger.info(
                 f"Auto-generated roll number {instance.roll_number} for "
-                f"{instance.student} in {instance.class_instance}"
+                f"{instance.student.get_full_name()} in {instance.class_instance.get_display_name()}"
             )
         except Exception as e:
-            logger.error(f"Error auto-generating roll number: {e}")
+            logger.error(
+                f"Error auto-generating roll number for "
+                f"{instance.student.get_full_name()}: {e}",
+                exc_info=True
+            )
 
 
 @receiver(post_save, sender='academics.StudentClassEnrollment')
@@ -389,6 +403,99 @@ def enrollment_status_change_handler(sender, instance, **kwargs):
             logger.error(f"Error in enrollment status change handler: {e}")
 
 
+# =============================================================================
+# CLASS ENROLLMENT DELETION - INVOICE HANDLING ⭐ NEW
+# =============================================================================
+
+@receiver(pre_delete, sender='academics.StudentClassEnrollment')
+def class_enrollment_pre_delete(sender, instance, **kwargs):
+    """Handle invoice when class enrollment is being deleted."""
+    
+    # Add extensive logging
+    logger.info("=" * 80)
+    logger.info(f"🔍 PRE_DELETE SIGNAL FIRED for enrollment {instance.id}")
+    logger.info(f"   Student: {instance.student.get_full_name()}")
+    logger.info(f"   Class: {instance.class_instance}")
+    logger.info(f"   Session: {instance.academic_session}")
+    
+    if not instance.academic_invoice:
+        logger.info("   ✅ No invoice linked - allowing deletion")
+        logger.info("=" * 80)
+        return
+    
+    invoice = instance.academic_invoice
+    invoice_number = invoice.invoice_number
+    invoice_status = invoice.status
+    
+    logger.info(f"   📄 Invoice found: {invoice_number}")
+    logger.info(f"   📊 Invoice status: {invoice_status}")
+    logger.info(f"   💰 Paid amount: {invoice.paid_amount}")
+    
+    if hasattr(invoice, 'journal_entry') and invoice.journal_entry:
+        logger.info(f"   📖 Journal entry: {invoice.journal_entry.entry_number}")
+        logger.info(f"   📖 JE status: {invoice.journal_entry.status}")
+    else:
+        logger.info("   📖 No journal entry linked")
+    
+    # =========================================================================
+    # ✅ ALLOW DELETION IF INVOICE IS VOID OR CANCELLED
+    # =========================================================================
+    if invoice.status in ['VOID', 'CANCELLED']:
+        logger.info(f"   ✅ Invoice is {invoice_status} - safe to delete")
+        
+        try:
+            # Delete the invoice explicitly
+            logger.info(f"   🗑️  Attempting to delete invoice {invoice_number}...")
+            invoice.delete()
+            logger.info(f"   ✅ Successfully deleted {invoice_status} invoice {invoice_number}")
+            logger.info("=" * 80)
+            return
+        except Exception as e:
+            logger.error(f"   ❌ ERROR deleting invoice: {e}", exc_info=True)
+            logger.info("=" * 80)
+            raise
+    
+    # =========================================================================
+    # CHECK IF INVOICE CAN BE SAFELY DELETED (DRAFT)
+    # =========================================================================
+    logger.info("   🔍 Checking if DRAFT invoice can be safely deleted...")
+    can_modify, reason = invoice.can_be_safely_modified()
+    logger.info(f"   📋 Can modify: {can_modify}")
+    if not can_modify:
+        logger.info(f"   📋 Reason: {reason}")
+    
+    if can_modify:
+        logger.info(f"   ✅ Invoice can be modified - safe to delete")
+        
+        try:
+            logger.info(f"   🗑️  Attempting to delete DRAFT invoice {invoice_number}...")
+            invoice.delete()
+            logger.info(f"   ✅ Successfully deleted DRAFT invoice {invoice_number}")
+            logger.info("=" * 80)
+            return
+        except Exception as e:
+            logger.error(f"   ❌ ERROR deleting invoice: {e}", exc_info=True)
+            logger.info("=" * 80)
+            raise
+    else:
+        # Block deletion
+        error_message = (
+            f"Cannot delete class enrollment: {reason}\n\n"
+            f"This enrollment has a finalized invoice ({invoice_number}).\n\n"
+            f"Before deleting this enrollment, you must:\n"
+            f"1. Cancel/void the invoice\n"
+            f"2. Process any necessary refunds\n"
+            f"3. Update student financial records\n\n"
+            f"Contact finance team for assistance."
+        )
+        
+        logger.error(f"   ❌ BLOCKING DELETION: {reason}")
+        logger.info("=" * 80)
+        
+        raise ValidationError({
+            '__all__': error_message
+        })
+    
 @receiver(post_delete, sender='academics.StudentClassEnrollment')
 def enrollment_post_delete(sender, instance, **kwargs):
     """
@@ -400,6 +507,7 @@ def enrollment_post_delete(sender, instance, **kwargs):
         f"Enrollment deleted: {instance.student.get_full_name()} from "
         f"{instance.class_instance} ({instance.academic_session})"
     )
+
 
 # =============================================================================
 # HELPER FUNCTIONS FOR SIGNALS

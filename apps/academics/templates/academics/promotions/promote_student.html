@@ -1,0 +1,715 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   FILTERS SECTION
+   ============================================================================ */
+
+.bulk-filters-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* ============================================================================
+   SUMMARY SECTION
+   ============================================================================ */
+
+.summary-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.summary-stats {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #495057;
+}
+
+.stat-value.highlighted {
+    color: #667eea;
+}
+
+/* ============================================================================
+   LEVEL GROUPS
+   ============================================================================ */
+
+.level-group {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+.level-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.level-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.select-all-level {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ============================================================================
+   STUDENT TABLE
+   ============================================================================ */
+
+.student-avatar {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.student-avatar-placeholder {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* ============================================================================
+   PROMOTION ACTION SECTION
+   ============================================================================ */
+
+.promotion-action-card {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    margin-top: 30px;
+    border: 2px solid #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.promotion-action-card h5 {
+    color: #667eea;
+    margin-bottom: 25px;
+}
+
+/* ============================================================================
+   CHECKBOXES
+   ============================================================================ */
+
+.form-check-input:checked {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+.student-checkbox {
+    cursor: pointer;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .summary-stats {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .level-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Bulk Promote Students
+                <div class="page-title-subheading">
+                    Select multiple students and promote them to a new academic level
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:promotion_dashboard' %}" class="btn btn-outline-secondary me-2">
+                <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+            <a href="{% url 'academics:promote_student' %}" class="btn btn-outline-primary">
+                <i class="fa fa-user me-1"></i> Single Promotion
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            
+            <!-- Information Box -->
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle me-2"></i>
+                <strong>How it works:</strong> Filter students by level, class, or status. Select students using checkboxes, then choose the target level and submit.
+            </div>
+
+            <!-- Filters Section -->
+            <div class="bulk-filters-section">
+                <h5 class="mb-3">
+                    <i class="fa fa-filter me-2"></i>Filter Students
+                </h5>
+                
+                <form method="get" id="filterForm" class="row g-3">
+                    <!-- Search Input -->
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Search</label>
+                        <input type="text" 
+                               name="search" 
+                               class="form-control" 
+                               placeholder="Name or ID..." 
+                               value="{{ search_query }}">
+                    </div>
+                    
+                    <!-- Current Level -->
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Current Level</label>
+                        <select name="level" class="form-select">
+                            <option value="">All Levels</option>
+                            {% for level in all_levels %}
+                            <option value="{{ level.id }}" {% if level_filter == level.id|stringformat:"s" %}selected{% endif %}>
+                                {{ level.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Current Class -->
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Current Class</label>
+                        <select name="class" class="form-select">
+                            <option value="">All Classes</option>
+                            {% for class in all_classes %}
+                            <option value="{{ class.id }}" {% if class_filter == class.id|stringformat:"s" %}selected{% endif %}>
+                                {{ class }} ({{ class.academic_level.name }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Academic Session -->
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Session</label>
+                        <select name="session" class="form-select">
+                            <option value="">All Sessions</option>
+                            {% for session in all_sessions %}
+                            <option value="{{ session.id }}" {% if session_filter == session.id|stringformat:"s" %}selected{% endif %}>
+                                {{ session }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Status -->
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="ACTIVE" {% if status_filter == 'ACTIVE' %}selected{% endif %}>Active</option>
+                            <option value="INACTIVE" {% if status_filter == 'INACTIVE' %}selected{% endif %}>Inactive</option>
+                            <option value="GRADUATED" {% if status_filter == 'GRADUATED' %}selected{% endif %}>Graduated</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Eligible Only -->
+                    <div class="col-md-1 d-flex align-items-end">
+                        <div class="form-check">
+                            <input type="checkbox" 
+                                   name="eligible_only" 
+                                   value="true" 
+                                   class="form-check-input" 
+                                   id="eligible_only"
+                                   {% if eligible_only %}checked{% endif %}>
+                            <label class="form-check-label" for="eligible_only">
+                                <small>Eligible Only</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa fa-search me-1"></i>Apply Filters
+                        </button>
+                        <a href="{% url 'academics:bulk_promote_students' %}" class="btn btn-outline-secondary">
+                            <i class="fa fa-times me-1"></i>Clear Filters
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Summary Section -->
+            <div class="summary-card">
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Students</span>
+                        <span class="stat-value">{{ total_count }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Selected</span>
+                        <span class="stat-value highlighted" id="selected-count">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Students List (Grouped by Level) -->
+            <form method="post" id="promotionForm">
+                {% csrf_token %}
+                
+                {% if students_by_level %}
+                {% for level_name, level_students in students_by_level.items %}
+                <div class="level-group">
+                    <div class="level-header">
+                        <h5>
+                            <i class="fa fa-graduation-cap me-2"></i>
+                            {{ level_name }}
+                        </h5>
+                        <label class="select-all-level">
+                            <input type="checkbox" 
+                                   class="form-check-input select-level-checkbox"
+                                   data-level="{{ level_name }}">
+                            <span>Select All ({{ level_students|length }})</span>
+                        </label>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th width="50">
+                                        <input type="checkbox" class="form-check-input select-all-table">
+                                    </th>
+                                    <th>Student</th>
+                                    <th>Student ID</th>
+                                    <th>Current Class</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in level_students %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" 
+                                               name="student_ids" 
+                                               value="{{ student.id }}"
+                                               class="form-check-input student-checkbox"
+                                               data-level="{{ level_name }}">
+                                    </td>
+                                    
+                                    <!-- Student Info -->
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            {% if student.profile_picture %}
+                                                <img src="{{ student.profile_picture.url }}" 
+                                                     class="student-avatar me-2" 
+                                                     alt="{{ student.get_full_name }}">
+                                            {% else %}
+                                                <div class="student-avatar-placeholder me-2">
+                                                    {{ student.first_name.0|upper }}{{ student.last_name.0|upper }}
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <strong>{{ student.get_full_name }}</strong>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    
+                                    <!-- Student ID -->
+                                    <td><strong>{{ student.student_id }}</strong></td>
+                                    
+                                    <!-- Current Class -->
+                                    <td>
+                                        {% with enrollment=student.enrollments.first %}
+                                        {{ enrollment.class_instance|default:"N/A" }}
+                                        {% endwith %}
+                                    </td>
+                                    
+                                    <!-- Status -->
+                                    <td>
+                                        <span class="status-badge {{ student.enrollment_status|lower }}">
+                                            {{ student.get_enrollment_status_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Pagination -->
+                {% if students.has_other_pages %}
+                <nav class="mb-4">
+                    <ul class="pagination justify-content-center">
+                        {% if students.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ students.previous_page_number }}&{{ request.GET.urlencode }}">
+                                Previous
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        <li class="page-item active">
+                            <span class="page-link">Page {{ students.number }} of {{ students.paginator.num_pages }}</span>
+                        </li>
+                        
+                        {% if students.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ students.next_page_number }}&{{ request.GET.urlencode }}">
+                                Next
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+                
+                <!-- Promotion Action Section -->
+                <div class="promotion-action-card">
+                    <h5>
+                        <i class="fa fa-level-up-alt me-2"></i>Promotion Settings
+                    </h5>
+                    
+                    <div class="row">
+                        <!-- Target Level -->
+                        <div class="col-md-6 mb-3">
+                            <label for="next_level" class="form-label">
+                                <strong>Promote All Selected To:</strong> <span class="text-danger">*</span>
+                            </label>
+                            <select name="next_level" id="next_level" class="form-select" required>
+                                <option value="">-- Select Target Level --</option>
+                                {% for level in target_levels %}
+                                <option value="{{ level.id }}">{{ level.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                All selected students will be promoted to this level
+                            </div>
+                        </div>
+                        
+                        <!-- Completion Date -->
+                        <div class="col-md-6 mb-3">
+                            <label for="completion_date" class="form-label">
+                                <strong>Completion Date:</strong>
+                            </label>
+                            <input type="date" 
+                                   name="completion_date" 
+                                   id="completion_date" 
+                                   class="form-control"
+                                   value="{{ today|date:'Y-m-d' }}">
+                            <div class="form-text">
+                                Date to mark current enrollments as completed
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Complete Enrollments Option -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input type="checkbox" 
+                                   name="complete_enrollments" 
+                                   value="true" 
+                                   class="form-check-input" 
+                                   id="complete_enrollments"
+                                   checked>
+                            <label class="form-check-label" for="complete_enrollments">
+                                <strong>Mark current enrollments as complete</strong>
+                            </label>
+                        </div>
+                        <div class="form-text ms-4">
+                            <i class="fa fa-info-circle me-1"></i>
+                            This will complete and deactivate all selected students' current class enrollments
+                        </div>
+                    </div>
+                    
+                    <!-- Warning -->
+                    <div class="alert alert-warning">
+                        <i class="fa fa-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> You are about to promote <strong><span id="promotion-count">0</span> student(s)</strong>. 
+                        This action will update their academic level. Please ensure you have selected the correct students and target level.
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="d-flex justify-content-between pt-3 border-top">
+                        <a href="{% url 'academics:bulk_promote_students' %}" class="btn btn-secondary">
+                            <i class="fa fa-times me-1"></i>Cancel
+                        </a>
+                        <button type="button" class="btn btn-primary btn-lg" onclick="confirmBulkPromotion()">
+                            <i class="fa fa-level-up-alt me-1"></i>Promote Selected Students
+                        </button>
+                    </div>
+                </div>
+                
+                {% else %}
+                <div class="empty-state">
+                    <i class="fa fa-users empty-state-icon"></i>
+                    <h5 class="mb-2">No Students Found</h5>
+                    <p class="text-muted mb-3">Try adjusting your filter criteria</p>
+                    <a href="{% url 'academics:bulk_promote_students' %}" class="btn btn-primary">
+                        <i class="fa fa-refresh me-1"></i>Reset Filters
+                    </a>
+                </div>
+                {% endif %}
+            </form>
+
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// CHECKBOX HANDLING
+// ============================================================================
+
+// Update count of selected students
+function updateSelectedCount() {
+    const count = document.querySelectorAll('input.student-checkbox:checked').length;
+    document.getElementById('selected-count').textContent = count;
+    document.getElementById('promotion-count').textContent = count;
+}
+
+// Select all in table
+document.querySelectorAll('.select-all-table').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const table = this.closest('table');
+        table.querySelectorAll('.student-checkbox').forEach(cb => {
+            cb.checked = this.checked;
+        });
+        updateSelectedCount();
+    });
+});
+
+// Select all in level group
+document.querySelectorAll('.select-level-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const level = this.dataset.level;
+        document.querySelectorAll(`.student-checkbox[data-level="${level}"]`).forEach(cb => {
+            cb.checked = this.checked;
+        });
+        updateSelectedCount();
+    });
+});
+
+// Update count when individual checkbox changes
+document.querySelectorAll('.student-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', updateSelectedCount);
+});
+
+// Initialize count
+updateSelectedCount();
+
+// ============================================================================
+// FORM SUBMISSION
+// ============================================================================
+
+function confirmBulkPromotion() {
+    const count = document.querySelectorAll('input.student-checkbox:checked').length;
+    const levelSelect = document.getElementById('next_level');
+    
+    // Validation
+    if (count === 0) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Students Selected',
+                text: 'Please select at least one student to promote',
+                confirmButtonColor: '#ffc107'
+            });
+        } else {
+            alert('Please select at least one student to promote');
+        }
+        return;
+    }
+    
+    if (!levelSelect.value) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Target Level Required',
+                text: 'Please select a target academic level',
+                confirmButtonColor: '#ffc107'
+            });
+        } else {
+            alert('Please select a target academic level');
+        }
+        return;
+    }
+    
+    // Confirmation dialog
+    const levelText = levelSelect.options[levelSelect.selectedIndex].text;
+    const message = `Are you sure you want to promote ${count} student(s) to ${levelText}?`;
+    
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'Confirm Bulk Promotion',
+            text: message,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#667eea',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, Promote Students',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Processing...',
+                    text: 'Promoting students, please wait',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                // Submit form
+                document.getElementById('promotionForm').submit();
+            }
+        });
+    } else {
+        if (confirm(message)) {
+            document.getElementById('promotionForm').submit();
+        }
+    }
+}
+
+// ============================================================================
+// FORM VALIDATION
+// ============================================================================
+
+document.getElementById('promotionForm').addEventListener('submit', function(e) {
+    const count = document.querySelectorAll('input.student-checkbox:checked').length;
+    const levelSelect = document.getElementById('next_level');
+    
+    if (count === 0) {
+        e.preventDefault();
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Students Selected',
+                text: 'Please select at least one student',
+                confirmButtonColor: '#ffc107'
+            });
+        } else {
+            alert('Please select at least one student');
+        }
+        return false;
+    }
+    
+    if (!levelSelect.value) {
+        e.preventDefault();
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Target Level Required',
+                text: 'Please select a target academic level',
+                confirmButtonColor: '#ffc107'
+            });
+        } else {
+            alert('Please select a target academic level');
+        }
+        return false;
+    }
+});
+</script>
+{% endblock %}

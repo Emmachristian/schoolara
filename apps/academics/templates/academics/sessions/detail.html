@@ -1,0 +1,755 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+    .session-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .session-title {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    
+    .session-subtitle {
+        font-size: 1.1rem;
+        opacity: 0.95;
+    }
+    
+    .status-badge-large {
+        padding: 8px 16px;
+        font-size: 0.9rem;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+    
+    .info-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #667eea;
+    }
+    
+    .info-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #f8f9fa;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .info-value {
+        color: #212529;
+        font-weight: 600;
+    }
+    
+    .progress-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .progress-bar-custom {
+        height: 30px;
+        border-radius: 15px;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+        margin-bottom: 20px;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .stat-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 1.5rem;
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .action-buttons {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .list-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .list-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #667eea;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.3;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fa;
+        cursor: pointer;
+    }
+    
+    .badge-session-type {
+        padding: 5px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+    
+    .timeline-item {
+        padding: 15px;
+        border-left: 3px solid #667eea;
+        margin-bottom: 15px;
+        background: #f8f9fa;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .timeline-date {
+        color: #667eea;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    
+    .timeline-content {
+        margin-top: 5px;
+        color: #495057;
+    }
+    
+    @media (max-width: 768px) {
+        .session-title {
+            font-size: 1.5rem;
+        }
+        
+        .stat-card {
+            margin-bottom: 15px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Session Header -->
+<div class="session-header">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <div class="d-flex align-items-center mb-2">
+                <h1 class="session-title mb-0">{{ session.name }}</h1>
+                {% if session.is_special_session %}
+                    <span class="badge bg-warning ms-3">Special Session</span>
+                {% endif %}
+            </div>
+            <p class="session-subtitle mb-0">
+                <i class="fa fa-calendar me-2"></i>
+                {{ session.start_date|date:"F j, Y" }} - {{ session.end_date|date:"F j, Y" }}
+                <span class="ms-3">
+                    <i class="fa fa-clock me-2"></i>
+                    {{ session.total_days }} days
+                </span>
+            </p>
+        </div>
+        <div>
+            {% if session.is_current %}
+                <span class="badge bg-success status-badge-large">
+                    <i class="fa fa-check-circle me-1"></i> Current Session
+                </span>
+            {% elif session.is_academically_closed %}
+                <span class="badge bg-secondary status-badge-large">
+                    <i class="fa fa-lock me-1"></i> Closed
+                </span>
+            {% elif session.is_active %}
+                <span class="badge bg-primary status-badge-large">
+                    <i class="fa fa-play-circle me-1"></i> Active
+                </span>
+            {% else %}
+                <span class="badge bg-light text-dark status-badge-large">
+                    <i class="fa fa-pause-circle me-1"></i> Inactive
+                </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <a href="{% url 'academics:session_list' %}" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i> Back to Sessions
+            </a>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if not session.is_academically_closed %}
+                <a href="{% url 'academics:session_edit' session.pk %}" class="btn btn-primary">
+                    <i class="fa fa-edit me-1"></i> Edit Session
+                </a>
+                
+                {% if not session.is_current %}
+                    <form method="post" action="{% url 'academics:session_close' session.pk %}" 
+                          onsubmit="return confirm('Are you sure you want to close this session? This will lock all academic records.');" 
+                          class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fa fa-lock me-1"></i> Close Session
+                        </button>
+                    </form>
+                {% endif %}
+            {% else %}
+                <form method="post" action="{% url 'academics:session_reopen' session.pk %}" 
+                      onsubmit="return confirm('Are you sure you want to reopen this closed session? Use this carefully!');" 
+                      class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success">
+                        <i class="fa fa-unlock me-1"></i> Reopen Session
+                    </button>
+                </form>
+            {% endif %}
+            
+            <div class="btn-group">
+                <button type="button" class="btn btn-info dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fa fa-download me-1"></i> Export
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#"><i class="fa fa-file-pdf me-2"></i> Export as PDF</a></li>
+                    <li><a class="dropdown-item" href="#"><i class="fa fa-file-excel me-2"></i> Export as Excel</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#"><i class="fa fa-print me-2"></i> Print</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Left Column -->
+    <div class="col-lg-8">
+        <!-- Progress Card -->
+        {% if not session.is_academically_closed %}
+            <div class="progress-card mb-4">
+                <h6 class="mb-3">
+                    <i class="fa fa-chart-line me-2 text-primary"></i>
+                    Session Progress
+                </h6>
+                
+                {% if progress_info.is_future %}
+                    <div class="alert alert-info">
+                        <i class="fa fa-info-circle me-2"></i>
+                        This session starts in <strong>{{ progress_info.days_until_start }}</strong> days
+                        ({{ session.start_date|date:"F j, Y" }})
+                    </div>
+                {% elif progress_info.is_past %}
+                    <div class="alert alert-secondary">
+                        <i class="fa fa-check-circle me-2"></i>
+                        This session ended <strong>{{ progress_info.days_since_end }}</strong> days ago
+                        ({{ session.end_date|date:"F j, Y" }})
+                    </div>
+                {% else %}
+                    <div class="progress" style="height: 30px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             role="progressbar" 
+                             style="width: {{ progress_info.progress_percentage }}%"
+                             aria-valuenow="{{ progress_info.progress_percentage }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            {{ progress_info.progress_percentage }}%
+                        </div>
+                    </div>
+                    
+                    <div class="row text-center mt-3">
+                        <div class="col-4">
+                            <div class="text-muted small">Days Elapsed</div>
+                            <div class="h4 mb-0 text-primary">{{ progress_info.days_elapsed }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Days Remaining</div>
+                            <div class="h4 mb-0 text-warning">{{ progress_info.days_remaining }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Total Days</div>
+                            <div class="h4 mb-0 text-info">{{ progress_info.total_days }}</div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+        
+        <!-- Session Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                        <i class="fa fa-school"></i>
+                    </div>
+                    <div class="stat-value text-primary">{{ session_stats.classes|default:0 }}</div>
+                    <div class="stat-label">Classes</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-success bg-opacity-10 text-success">
+                        <i class="fa fa-users"></i>
+                    </div>
+                    <div class="stat-value text-success">{{ session_stats.enrollments|default:0 }}</div>
+                    <div class="stat-label">Enrollments</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-info bg-opacity-10 text-info">
+                        <i class="fa fa-book"></i>
+                    </div>
+                    <div class="stat-value text-info">{{ session_stats.total_subjects|default:0 }}</div>
+                    <div class="stat-label">Subjects</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                        <i class="fa fa-calendar"></i>
+                    </div>
+                    <div class="stat-value text-warning">{{ holidays.count|default:0 }}</div>
+                    <div class="stat-label">Holidays</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Classes List -->
+        <div class="list-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fa fa-school me-2"></i>
+                    Classes ({{ classes.count }})
+                </h6>
+                <a href="{% url 'academics:class_list' %}?academic_session={{ session.pk }}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="fa fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+            
+            {% if classes %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Class Name</th>
+                                <th>Section</th>
+                                <th>Level</th>
+                                <th>Teacher</th>
+                                <th>Enrolled</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for class in classes %}
+                                <tr onclick="window.location='{% url 'academics:class_detail' class.pk %}'">
+                                    <td>
+                                        <strong>{{ class.name }}</strong>
+                                    </td>
+                                    <td>{{ class.section|default:"-" }}</td>
+                                    <td>{{ class.academic_level.name }}</td>
+                                    <td>
+                                        {% if class.class_teacher %}
+                                            {{ class.class_teacher.staff.get_full_name }}  
+                                        {% else %}
+                                            <span class="text-muted">Not assigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            {{ class.enrollments.count }} / {{ class.max_students }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if class.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fa fa-school"></i>
+                    <p class="mb-0">No classes found for this session</p>
+                    <a href="{% url 'academics:class_create' %}" class="btn btn-sm btn-primary mt-2">
+                        <i class="fa fa-plus me-1"></i> Create First Class
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Recent Enrollments -->
+        <div class="list-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fa fa-user-plus me-2"></i>
+                    Recent Enrollments
+                </h6>
+                <a href="{% url 'academics:enrollment_list' %}?academic_session={{ session.pk }}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="fa fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+            
+            {% if recent_enrollments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Class</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for enrollment in recent_enrollments %}
+                                <tr onclick="window.location='{% url 'academics:enrollment_detail' enrollment.pk %}'">
+                                    <td>
+                                        <strong>{{ enrollment.student.get_full_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ enrollment.student.admission_number }}</small>
+                                    </td>
+                                    <td>{{ enrollment.class_instance.name }}</td>
+                                    <td>{{ enrollment.enrollment_date|date:"M d, Y" }}</td>
+                                    <td>
+                                        <span class="badge badge-session-type bg-info">
+                                            {{ enrollment.get_enrollment_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if enrollment.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fa fa-user-plus"></i>
+                    <p class="mb-0">No enrollments yet</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Holidays -->
+        <div class="list-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fa fa-calendar-alt me-2"></i>
+                    Holidays & Breaks
+                </h6>
+                <a href="{% url 'academics:holiday_create' %}?session={{ session.pk }}" class="btn btn-sm btn-primary">
+                    <i class="fa fa-plus me-1"></i> Add Holiday
+                </a>
+            </div>
+            
+            {% if holidays %}
+                {% for holiday in holidays %}
+                    <div class="timeline-item">
+                        <div class="timeline-date">
+                            {{ holiday.start_date|date:"M d" }} 
+                            {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                                - {{ holiday.end_date|date:"M d, Y" }}
+                            {% else %}
+                                {{ holiday.start_date|date:", Y" }}
+                            {% endif %}
+                        </div>
+                        <div class="timeline-content">
+                            <strong>{{ holiday.name }}</strong>
+                            {% if holiday.description %}
+                                <p class="mb-0 mt-1 small text-muted">{{ holiday.description }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <i class="fa fa-calendar-alt"></i>
+                    <p class="mb-0">No holidays scheduled</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Right Column - Session Details -->
+    <div class="col-lg-4">
+        <!-- Basic Information -->
+        <div class="info-card">
+            <h6><i class="fa fa-info-circle me-2"></i>Session Information</h6>
+            
+            <div class="info-row">
+                <span class="info-label">Academic Year:</span>
+                <span class="info-value">{{ session.year_name }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Period Number:</span>
+                <span class="info-value">{{ session.term_number }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Period Type:</span>
+                <span class="info-value">{{ session.get_period_type_display }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Session Type:</span>
+                <span class="info-value">
+                    {% if session.is_special_session %}
+                        <span class="badge bg-warning">Special Session</span>
+                    {% else %}
+                        <span class="badge bg-info">Regular Session</span>
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Start Date:</span>
+                <span class="info-value">{{ session.start_date|date:"F j, Y" }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">End Date:</span>
+                <span class="info-value">{{ session.end_date|date:"F j, Y" }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Duration:</span>
+                <span class="info-value">
+                    {{ session.total_days }} days 
+                    <small class="text-muted">({{ session.get_duration_weeks }} weeks)</small>
+                </span>
+            </div>
+            
+            {% if session.enrollment_deadline %}
+                <div class="info-row">
+                    <span class="info-label">Enrollment Deadline:</span>
+                    <span class="info-value">{{ session.enrollment_deadline|date:"M d, Y" }}</span>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Academic Settings -->
+        <div class="info-card">
+            <h6><i class="fa fa-cogs me-2"></i>Academic Settings</h6>
+            
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value">
+                    {% if session.is_current %}
+                        <span class="badge bg-success">Current Session</span>
+                    {% elif session.is_active %}
+                        <span class="badge bg-primary">Active</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Academic Closure:</span>
+                <span class="info-value">
+                    {% if session.is_academically_closed %}
+                        <span class="badge bg-danger">Closed</span>
+                    {% else %}
+                        <span class="badge bg-success">Open</span>
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Allows Promotion:</span>
+                <span class="info-value">
+                    {% if session.allows_promotion %}
+                        <i class="fa fa-check-circle text-success"></i> Yes
+                    {% else %}
+                        <i class="fa fa-times-circle text-danger"></i> No
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Late Enrollment:</span>
+                <span class="info-value">
+                    {% if session.late_enrollment_allowed %}
+                        <i class="fa fa-check-circle text-success"></i> Allowed
+                    {% else %}
+                        <i class="fa fa-times-circle text-danger"></i> Not Allowed
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Min. Attendance:</span>
+                <span class="info-value">{{ session.minimum_attendance_percentage }}%</span>
+            </div>
+            
+            {% if session.is_academically_closed %}
+                <div class="info-row">
+                    <span class="info-label">Closed On:</span>
+                    <span class="info-value">{{ session.academic_closure_date|date:"M d, Y H:i" }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Closed By:</span>
+                    <span class="info-value">{{ session.closed_by_name }}</span>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Description -->
+        {% if session.description %}
+            <div class="info-card">
+                <h6><i class="fa fa-align-left me-2"></i>Description</h6>
+                <p class="mb-0 text-muted">{{ session.description }}</p>
+            </div>
+        {% endif %}
+        
+        <!-- Audit Information -->
+        <div class="info-card">
+            <h6><i class="fa fa-history me-2"></i>Audit Trail</h6>
+            
+            <div class="info-row">
+                <span class="info-label">Created:</span>
+                <span class="info-value">
+                    {{ session.created_at|date:"M d, Y H:i" }}
+                </span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Last Updated:</span>
+                <span class="info-value">
+                    {{ session.updated_at|date:"M d, Y H:i" }}
+                </span>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="info-card">
+            <h6><i class="fa fa-bolt me-2"></i>Quick Actions</h6>
+            
+            <div class="d-grid gap-2">
+                <a href="{% url 'academics:class_create' %}?session={{ session.pk }}" class="btn btn-outline-primary btn-sm">
+                    <i class="fa fa-plus me-1"></i> Add Class
+                </a>
+                
+                <a href="{% url 'academics:enrollment_create' %}?session={{ session.pk }}" class="btn btn-outline-success btn-sm">
+                    <i class="fa fa-user-plus me-1"></i> Enroll Student
+                </a>
+                
+                <a href="{% url 'academics:holiday_create' %}?session={{ session.pk }}" class="btn btn-outline-warning btn-sm">
+                    <i class="fa fa-calendar-plus me-1"></i> Add Holiday
+                </a>
+                
+                <a href="#" class="btn btn-outline-info btn-sm">
+                    <i class="fa fa-chart-bar me-1"></i> View Reports
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add row click animations
+    document.querySelectorAll('.table-hover tbody tr').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function() {
+            this.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 100);
+        });
+    });
+    
+    // Initialize tooltips if Bootstrap tooltips are available
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+});
+</script>
+{% endblock %}

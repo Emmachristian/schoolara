@@ -1,0 +1,1059 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .detail-card {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .detail-card-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 25px;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .detail-card-header h5 {
+        margin: 0;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+    }
+    
+    .detail-card-header h5 i {
+        margin-right: 10px;
+        font-size: 1.3rem;
+    }
+    
+    .detail-card-body {
+        padding: 25px;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #f1f1f1;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 500;
+        color: #6c757d;
+        min-width: 180px;
+    }
+    
+    .info-value {
+        color: #495057;
+        font-weight: 600;
+        text-align: right;
+        flex: 1;
+    }
+    
+    /* Status Badges */
+    .status-badge {
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: inline-block;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .status-pending {
+        background-color: #ffc107;
+        color: #000;
+    }
+    
+    .status-partially_paid {
+        background-color: #17a2b8;
+        color: #fff;
+    }
+    
+    .status-paid {
+        background-color: #28a745;
+        color: #fff;
+    }
+    
+    .status-overdue {
+        background-color: #dc3545;
+        color: #fff;
+    }
+    
+    .status-void,
+    .status-cancelled {
+        background-color: #6c757d;
+        color: #fff;
+    }
+    
+    /* Invoice Items Table */
+    .items-table {
+        margin-top: 20px;
+    }
+    
+    .items-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        padding: 12px 15px;
+        font-size: 0.875rem;
+    }
+    
+    .items-table td {
+        padding: 12px 15px;
+        vertical-align: middle;
+    }
+    
+    .items-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    /* Payment Summary */
+    .payment-summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 8px;
+        margin-top: 20px;
+    }
+    
+    .payment-summary .row {
+        align-items: center;
+    }
+    
+    .payment-item {
+        text-align: center;
+        padding: 15px;
+    }
+    
+    .payment-item h6 {
+        font-size: 0.875rem;
+        margin-bottom: 8px;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .payment-item .amount {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    /* Progress Bar */
+    .payment-progress {
+        margin-top: 20px;
+    }
+    
+    .progress {
+        height: 30px;
+        border-radius: 15px;
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .progress-bar {
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Payment Status Indicator */
+    .payment-status-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    
+    .payment-status-indicator i {
+        font-size: 3rem;
+        margin-right: 15px;
+    }
+    
+    .payment-status-indicator.paid {
+        color: #28a745;
+    }
+    
+    .payment-status-indicator.pending {
+        color: #ffc107;
+    }
+    
+    .payment-status-indicator.overdue {
+        color: #dc3545;
+    }
+    
+    /* Student Info Card */
+    .student-info-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .student-info-card h4 {
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+    
+    .student-info-card .student-details {
+        font-size: 0.95rem;
+        opacity: 0.95;
+    }
+    
+    .student-info-card .student-details div {
+        margin-bottom: 5px;
+    }
+    
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    /* Quick Actions Card */
+    .quick-actions-card {
+        position: sticky;
+        top: 20px;
+    }
+    
+    /* Discount/Scholarship Badges */
+    .discount-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        color: #155724;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .scholarship-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        background-color: #cce5ff;
+        border: 1px solid #b8daff;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        color: #004085;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    /* Payment History */
+    .payment-history-item {
+        padding: 15px;
+        border-left: 3px solid #667eea;
+        margin-bottom: 15px;
+        background-color: #f8f9fa;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .payment-history-item .payment-amount {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #28a745;
+    }
+    
+    .payment-history-item .payment-date {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .payment-history-item .payment-method {
+        display: inline-block;
+        padding: 4px 10px;
+        background-color: #667eea;
+        color: white;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        margin-top: 5px;
+    }
+    
+    /* Overdue Alert */
+    .overdue-alert {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+        color: #721c24;
+    }
+    
+    .overdue-alert h6 {
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .overdue-alert .overdue-days {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    /* Void/Cancelled Info */
+    .void-info {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+    
+    .void-info h6 {
+        color: #6c757d;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    @media print {
+        .action-buttons,
+        .quick-actions-card,
+        .page-title-actions,
+        .app-page-title {
+            display: none !important;
+        }
+        
+        .detail-card {
+            break-inside: avoid;
+            box-shadow: none;
+            border: 1px solid #dee2e6;
+        }
+        
+        .detail-card-header {
+            background: #667eea !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-file icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Invoice Details
+                <div class="page-title-subheading">
+                    Complete invoice information and payment history
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'fees:invoice_list' %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left me-1"></i> Back to List
+                </a>
+                
+                {% if invoice.status not in 'PAID,VOID,CANCELLED' %}
+                    <a href="{% url 'fees:invoice_edit' invoice.pk %}" class="btn btn-warning">
+                        <i class="fa fa-edit me-1"></i> Edit
+                    </a>
+                {% endif %}
+                
+                <a href="{% url 'fees:invoice_print' invoice.pk %}" 
+                   class="btn btn-info" target="_blank">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="row">
+    <!-- Main Content Column -->
+    <div class="col-lg-8">
+        
+        <!-- Student Information Card -->
+        <div class="student-info-card">
+            <h4>
+                <i class="fa fa-user me-2"></i>
+                {{ invoice.student.get_full_name }}
+            </h4>
+            <div class="student-details">
+                <div><strong>Admission Number:</strong> {{ invoice.student.admission_number }}</div>
+                {% if invoice.student.current_academic_level %}
+                    <div><strong>Academic Level:</strong> {{ invoice.student.current_academic_level.name }}</div>
+                {% endif %}
+                {% if invoice.academic_session %}
+                    <div><strong>Academic Session:</strong> {{ invoice.academic_session.name }}</div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Invoice Information -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-note"></i>
+                    Invoice Information
+                </h5>
+                <span class="status-badge status-{{ invoice.status|lower }}">
+                    {{ invoice.get_status_display }}
+                </span>
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <span class="info-label">Invoice Number</span>
+                    <span class="info-value">
+                        <strong>{{ invoice.invoice_number }}</strong>
+                    </span>
+                </div>
+                
+                {% if invoice.fee_structure %}
+                <div class="info-row">
+                    <span class="info-label">Fee Structure</span>
+                    <span class="info-value">
+                        {{ invoice.fee_structure.name }}
+                        <br>
+                        <small class="text-muted">{{ invoice.fee_structure.get_structure_type_display }}</small>
+                    </span>
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <span class="info-label">Issue Date</span>
+                    <span class="info-value">
+                        <i class="fa fa-calendar me-2"></i>
+                        {{ invoice.issue_date|date:"l, F d, Y" }}
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Due Date</span>
+                    <span class="info-value">
+                        <i class="fa fa-calendar-check me-2"></i>
+                        {{ invoice.due_date|date:"l, F d, Y" }}
+                        {% if payment_progress.is_overdue %}
+                            <br>
+                            <small class="text-danger">
+                                <i class="fa fa-exclamation-triangle me-1"></i>
+                                Overdue by {{ payment_progress.days_overdue }} day{{ payment_progress.days_overdue|pluralize }}
+                            </small>
+                        {% elif payment_progress.days_until_due > 0 %}
+                            <br>
+                            <small class="text-muted">
+                                Due in {{ payment_progress.days_until_due }} day{{ payment_progress.days_until_due|pluralize }}
+                            </small>
+                        {% endif %}
+                    </span>
+                </div>
+                
+                {% if invoice.fiscal_period %}
+                <div class="info-row">
+                    <span class="info-label">Fiscal Period</span>
+                    <span class="info-value">
+                        {{ invoice.fiscal_period.name }}
+                        <small class="text-muted">({{ invoice.fiscal_period.start_date|date:"M d" }} - {{ invoice.fiscal_period.end_date|date:"M d, Y" }})</small>
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if invoice.payment_terms %}
+                <div class="info-row">
+                    <span class="info-label">Payment Terms</span>
+                    <span class="info-value">{{ invoice.payment_terms }}</span>
+                </div>
+                {% endif %}
+                
+                {% if invoice.notes %}
+                <div class="info-row">
+                    <span class="info-label">Notes</span>
+                    <span class="info-value">{{ invoice.notes }}</span>
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">
+                        {{ invoice.created_at|date:"M d, Y g:i A" }}
+                    </span>
+                </div>
+                
+                <!-- Scholarship/Discount Indicators -->
+                {% if invoice.has_scholarships_applied or invoice.has_discounts_applied %}
+                <div class="info-row">
+                    <span class="info-label">Discounts Applied</span>
+                    <span class="info-value">
+                        {% if invoice.has_scholarships_applied %}
+                            <span class="scholarship-badge">
+                                <i class="fa fa-graduation-cap me-1"></i>
+                                Scholarship: {{ invoice.scholarship_discount_amount|money }}
+                            </span>
+                        {% endif %}
+                        {% if invoice.has_discounts_applied %}
+                            <span class="discount-badge">
+                                <i class="fa fa-tag me-1"></i>
+                                Discount: {{ invoice.discount_amount|money }}
+                            </span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Invoice Items Table -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-menu"></i>
+                    Invoice Items ({{ invoice.items.count }})
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if invoice.items.exists %}
+                    <div class="table-responsive">
+                        <table class="table table-hover items-table">
+                            <thead>
+                                <tr>
+                                    <th width="50">#</th>
+                                    <th>Description</th>
+                                    <th width="80" class="text-center">Qty</th>
+                                    <th width="120" class="text-end">Unit Price</th>
+                                    <th width="120" class="text-end">Amount</th>
+                                    <th width="120" class="text-end">Discount</th>
+                                    <th width="120" class="text-end">Final Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in invoice.items.all %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>
+                                        <strong>{{ item.fee_category.name }}</strong>
+                                        {% if item.description %}
+                                            <br>
+                                            <small class="text-muted">{{ item.description }}</small>
+                                        {% endif %}
+                                        
+                                        <!-- Show if scholarship or discount applied -->
+                                        {% if item.has_scholarship_discount or item.has_regular_discount %}
+                                            <br>
+                                            {% if item.has_scholarship_discount %}
+                                                <span class="badge bg-info" style="font-size: 0.7rem;">
+                                                    Scholarship: {{ item.scholarship_discount_amount|money }}
+                                                </span>
+                                            {% endif %}
+                                            {% if item.has_regular_discount %}
+                                                <span class="badge bg-success" style="font-size: 0.7rem;">
+                                                    Discount: {{ item.discount_amount|money }}
+                                                </span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ item.quantity }}</td>
+                                    <td class="text-end">{{ item.unit_amount|money }}</td>
+                                    <td class="text-end">{{ item.amount|money }}</td>
+                                    <td class="text-end">
+                                        {% if item.total_discount_amount > 0 %}
+                                            <span class="text-success">-{{ item.total_discount_amount|money }}</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>{{ item.final_amount|money }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="6" class="text-end"><strong>Subtotal:</strong></td>
+                                    <td class="text-end"><strong>{{ invoice.subtotal_amount|money }}</strong></td>
+                                </tr>
+                                {% if invoice.discount_amount > 0 or invoice.scholarship_discount_amount > 0 %}
+                                <tr>
+                                    <td colspan="6" class="text-end">
+                                        <span class="text-muted">Total Discounts:</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="text-success">
+                                            -{{ invoice.discount_amount|add:invoice.scholarship_discount_amount|money }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% if invoice.tax_amount > 0 %}
+                                <tr>
+                                    <td colspan="6" class="text-end">
+                                        <span class="text-muted">Tax:</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span>{{ invoice.tax_amount|money }}</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                <tr style="border-top: 2px solid #dee2e6;">
+                                    <td colspan="6" class="text-end"><strong>TOTAL:</strong></td>
+                                    <td class="text-end">
+                                        <strong style="font-size: 1.25rem; color: #667eea;">
+                                            {{ invoice.total_amount|money }}
+                                        </strong>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    
+                    <!-- Payment Summary -->
+                    <div class="payment-summary">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="payment-item">
+                                    <h6>Total Amount</h6>
+                                    <p class="amount">{{ invoice.total_amount|amount_no_decimals }}</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="payment-item">
+                                    <h6>Amount Paid</h6>
+                                    <p class="amount">{{ invoice.paid_amount|amount_no_decimals }}</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="payment-item">
+                                    <h6>Balance Due</h6>
+                                    <p class="amount">{{ invoice.balance|amount_no_decimals }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Progress Bar -->
+                        <div class="payment-progress">
+                            <h6 class="mb-2">Payment Progress</h6>
+                            <div class="progress">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: {{ payment_progress.paid_percentage }}%"
+                                     aria-valuenow="{{ payment_progress.paid_percentage }}" 
+                                     aria-valuemin="0" aria-valuemax="100">
+                                    {{ payment_progress.paid_percentage }}%
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Status Indicator -->
+                        <div class="payment-status-indicator {% if invoice.status == 'PAID' %}paid{% elif payment_progress.is_overdue %}overdue{% else %}pending{% endif %}">
+                            {% if invoice.status == 'PAID' %}
+                                <i class="fa fa-check-circle"></i>
+                                <div>
+                                    <h5 class="mb-0">Fully Paid</h5>
+                                    <small>No balance due</small>
+                                </div>
+                            {% elif payment_progress.is_overdue %}
+                                <i class="fa fa-exclamation-triangle"></i>
+                                <div>
+                                    <h5 class="mb-0">Overdue</h5>
+                                    <small>{{ payment_progress.days_overdue }} day{{ payment_progress.days_overdue|pluralize }} past due</small>
+                                </div>
+                            {% else %}
+                                <i class="fa fa-clock"></i>
+                                <div>
+                                    <h5 class="mb-0">Payment Pending</h5>
+                                    <small>Balance: {{ invoice.balance|money }}</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fa fa-exclamation-triangle me-2"></i>
+                        <strong>No Items</strong> - This invoice has no line items yet.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Payment History -->
+        {% if payments.exists %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-wallet"></i>
+                    Payment History ({{ payments.count }})
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% for payment in payments %}
+                <div class="payment-history-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="payment-amount">{{ payment.amount|money }}</div>
+                            <div class="payment-date">
+                                <i class="fa fa-calendar me-1"></i>
+                                {{ payment.payment_date|date:"M d, Y" }}
+                            </div>
+                            <span class="payment-method">
+                                {{ payment.payment_method.name }}
+                            </span>
+                            {% if payment.reference_number %}
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        Ref: {{ payment.reference_number }}
+                                    </small>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-{{ payment.status|lower }}">
+                                {{ payment.get_status_display }}
+                            </span>
+                            <br>
+                            <a href="{% url 'fees:payment_detail' payment.pk %}" 
+                               class="btn btn-sm btn-outline-primary mt-2">
+                                <i class="fa fa-eye me-1"></i> View
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Scholarship Applications (if any) -->
+        {% if scholarship_logs.exists %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <h5>
+                    <i class="pe-7s-study"></i>
+                    Scholarships Applied ({{ scholarship_logs.count }})
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% for log in scholarship_logs %}
+                <div class="scholarship-item mb-3 p-3" style="background-color: #f8f9fa; border-radius: 8px;">
+                    <h6 class="mb-2">
+                        <i class="fa fa-graduation-cap me-2 text-primary"></i>
+                        {{ log.scholarship.scholarship_program.name }}
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Discount Amount:</small>
+                            <div class="text-success fw-bold">{{ log.discount_amount|money }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Applied Date:</small>
+                            <div>{{ log.application_date|date:"M d, Y" }}</div>
+                        </div>
+                    </div>
+                    {% if log.remarks %}
+                        <div class="mt-2">
+                            <small class="text-muted">{{ log.remarks }}</small>
+                        </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Discount Applications (if any) -->
+        {% if discount_applications.exists %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                <h5>
+                    <i class="pe-7s-ticket"></i>
+                    Discounts Applied ({{ discount_applications.count }})
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% for app in discount_applications %}
+                <div class="discount-item mb-3 p-3" style="background-color: #f8f9fa; border-radius: 8px;">
+                    <h6 class="mb-2">
+                        <i class="fa fa-tag me-2 text-success"></i>
+                        {{ app.discount.name }}
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Discount Amount:</small>
+                            <div class="text-success fw-bold">{{ app.discount_amount|money }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Discount Type:</small>
+                            <div>{{ app.discount.get_discount_type_display }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Void/Cancelled Information -->
+        {% if invoice.status in 'VOID,CANCELLED' %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">
+                <h5>
+                    <i class="pe-7s-close-circle"></i>
+                    {{ invoice.get_status_display }} Information
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="void-info">
+                    <h6>
+                        <i class="fa fa-ban me-2"></i> 
+                        This Invoice Has Been {{ invoice.get_status_display }}
+                    </h6>
+                    {% if invoice.internal_notes %}
+                    <div class="mt-2">
+                        <strong>Reason:</strong>
+                        <p class="mb-0">{{ invoice.internal_notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+    </div>
+    
+    <!-- Sidebar Column -->
+    <div class="col-lg-4">
+        
+        <!-- Quick Actions -->
+        <div class="detail-card quick-actions-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-plugin"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="action-buttons d-grid gap-2">
+                    
+                    {% if invoice.status not in 'PAID,VOID,CANCELLED' %}
+                        <a href="{% url 'fees:payment_create' %}?invoice={{ invoice.pk }}" 
+                           class="btn btn-success">
+                            <i class="fa fa-money-bill-wave me-2"></i> Record Payment
+                        </a>
+                    {% endif %}
+                    
+                    {% if invoice.status not in 'VOID,CANCELLED' %}
+                        <a href="{% url 'fees:invoice_edit' invoice.pk %}" class="btn btn-warning">
+                            <i class="fa fa-edit me-2"></i> Edit Invoice
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{% url 'fees:invoice_print' invoice.pk %}" 
+                       class="btn btn-info" target="_blank">
+                        <i class="fa fa-print me-2"></i> Print Invoice
+                    </a>
+                    
+                    <a href="{% url 'students:student_profile' invoice.student.pk %}" 
+                       class="btn btn-secondary">
+                        <i class="fa fa-user me-2"></i> View Student
+                    </a>
+                    
+                    {% if payments.exists %}
+                        <a href="{% url 'fees:payment_list' %}?invoice={{ invoice.pk }}" 
+                           class="btn btn-secondary">
+                            <i class="fa fa-list me-2"></i> View All Payments
+                        </a>
+                    {% endif %}
+                    
+                    <hr>
+                    
+                    {% if invoice.status not in 'VOID,CANCELLED' and invoice.payment_count == 0 %}
+                        <a href="{% url 'fees:invoice_void_modal' invoice.pk %}"
+                           class="btn btn-danger"
+                           hx-get="{% url 'fees:invoice_void_modal' invoice.pk %}"
+                           hx-target="#modal-content"
+                           hx-swap="innerHTML">
+                            <i class="fa fa-ban me-2"></i> Void Invoice
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{% url 'fees:invoice_list' %}" class="btn btn-secondary">
+                        <i class="fa fa-list me-2"></i> View All Invoices
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Invoice Statistics -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-graph2"></i>
+                    Invoice Statistics
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <span class="info-label">Total Items</span>
+                    <span class="info-value">{{ invoice.items.count }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Total Payments</span>
+                    <span class="info-value">{{ payments.count }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Payment Progress</span>
+                    <span class="info-value">
+                        <span class="badge bg-primary">
+                            {{ payment_progress.paid_percentage }}%
+                        </span>
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Invoice Status</span>
+                    <span class="info-value">
+                        <span class="status-badge status-{{ invoice.status|lower }}">
+                            {{ invoice.get_status_display }}
+                        </span>
+                    </span>
+                </div>
+                
+                {% if invoice.has_scholarships_applied or invoice.has_discounts_applied %}
+                <div class="info-row">
+                    <span class="info-label">Discounts Applied</span>
+                    <span class="info-value">
+                        {% if invoice.has_scholarships_applied %}
+                            <span class="badge bg-info">Scholarship</span>
+                        {% endif %}
+                        {% if invoice.has_discounts_applied %}
+                            <span class="badge bg-success">Discount</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Related Information -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <h5>
+                    <i class="pe-7s-date"></i>
+                    Related Information
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                {% if invoice.fiscal_period %}
+                <div class="info-row">
+                    <span class="info-label">Fiscal Period</span>
+                    <span class="info-value">
+                        <div>{{ invoice.fiscal_period.name }}</div>
+                        <small class="text-muted">
+                            {{ invoice.fiscal_period.start_date|date:"M d" }} - 
+                            {{ invoice.fiscal_period.end_date|date:"M d, Y" }}
+                        </small>
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if invoice.academic_session %}
+                <div class="info-row">
+                    <span class="info-label">Academic Session</span>
+                    <span class="info-value">
+                        {{ invoice.academic_session.name }}
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if invoice.fee_structure %}
+                <div class="info-row">
+                    <span class="info-label">Fee Structure</span>
+                    <span class="info-value">
+                        <div>{{ invoice.fee_structure.name }}</div>
+                        <small class="text-muted">
+                            {{ invoice.fee_structure.get_structure_type_display }}
+                        </small>
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Overdue Alert (if applicable) -->
+        {% if payment_progress.is_overdue and invoice.status not in 'PAID,VOID,CANCELLED' %}
+        <div class="detail-card">
+            <div class="detail-card-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                <h5>
+                    <i class="pe-7s-attention"></i>
+                    Overdue Notice
+                </h5>
+            </div>
+            <div class="detail-card-body">
+                <div class="overdue-alert">
+                    <h6>
+                        <i class="fa fa-exclamation-triangle me-2"></i>
+                        Payment Overdue
+                    </h6>
+                    <div>
+                        This invoice is 
+                        <span class="overdue-days">{{ payment_progress.days_overdue }}</span> 
+                        day{{ payment_progress.days_overdue|pluralize }} overdue.
+                    </div>
+                    <div class="mt-2">
+                        <strong>Outstanding Balance:</strong>
+                        <div class="text-danger" style="font-size: 1.25rem; font-weight: 700;">
+                            {{ invoice.balance|money }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    console.log('Invoice detail page loaded');
+    console.log('Invoice Number: {{ invoice.invoice_number }}');
+    console.log('Status: {{ invoice.status }}');
+    console.log('Balance: {{ invoice.balance }}');
+});
+</script>
+{% endblock %}

@@ -1,36 +1,27 @@
 # academics/modal_views.py
 
 """
-Academic Management Modal Views (HTMX)
+Modal Views for Academic Management
 
-Handles HTMX modal operations including:
-- Delete confirmations and operations
-- Quick actions and forms
-- Inline editing capabilities
-- Bulk operations
-- Status changes
+This module contains modal views for the academics app.
+These are lightweight views that return HTML partials for modals.
 
-All modals use HTMX for seamless UX
-Uses core.utils for timezone awareness
-Audit trail automatically handled by BaseModel
+IMPORTANT: This module does NOT contain form modals for create/edit operations.
+Create and Edit operations use full template pages in views.py instead.
+
+Modal types included:
+- Delete confirmation modals
+- Toggle action modals (activate/deactivate)  
+- Quick view modals (preview)
+- Action confirmation modals (close, finalize, promote, etc.)
+- Report option modals
+- Bulk operation modals
+- Utility modals
 """
 
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.http import JsonResponse, HttpResponse
-from django.db import transaction
-from django.db.models import Q, Count
-from django.views.decorators.http import require_http_methods
-import logging
-
-# ⭐ Import timezone utilities from core (BaseModel handles audit trail automatically)
-from core.utils import (
-    get_school_today,
-    get_school_current_time,
-)
-
-from .utils import get_current_academic_session
+from django.db.models import Q
 
 from .models import (
     AcademicSession,
@@ -44,1160 +35,979 @@ from .models import (
     Holiday,
 )
 
-from .services import (
-    ClassEnrollmentService,
-    AcademicSessionService,
-    ClassSubjectService,
-)
-
-logger = logging.getLogger(__name__)
+from core.utils import get_school_today
 
 
 # =============================================================================
-# DELETE CONFIRMATION MODALS
+# ACADEMIC SESSION MODALS
 # =============================================================================
 
 @login_required
-def academic_session_delete_modal(request, pk):
-    """Show delete confirmation modal for academic session"""
+def academic_session_delete_modal(request, session_pk):
+    """Return delete confirmation modal for academic session"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
     
-    session = get_object_or_404(AcademicSession, pk=pk)
-    
-    # Check if session can be deleted
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for enrollments
-    enrollment_count = session.student_class_enrollments.count()
-    if enrollment_count > 0:
+    # Check for active classes
+    active_classes = session.classes.filter(is_active=True).count()
+    if active_classes > 0:
         can_delete = False
-        warnings.append(f"Session has {enrollment_count} student enrollments")
+        warnings.append(f"Has {active_classes} active class(es)")
     
-    # Check for classes
-    class_count = session.classes.count()
-    if class_count > 0:
+    # Check for active enrollments
+    active_enrollments = session.student_class_enrollments.filter(is_active=True).count()
+    if active_enrollments > 0:
         can_delete = False
-        warnings.append(f"Session has {class_count} classes")
+        warnings.append(f"Has {active_enrollments} active enrollment(s)")
     
-    # Check if current or active
-    if session.is_current or session.is_active:
-        can_delete = False
-        warnings.append("Cannot delete active or current sessions")
-    
-    context = {
-        'object': session,
-        'object_name': 'Academic Session',
-        'object_title': session.name,
+    return render(request, 'academics/sessions/modals/delete_session.html', {
+        'session': session,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:session_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
+    })
 
 
 @login_required
-@require_http_methods(["POST"])
-def academic_session_delete(request, pk):
-    """Delete academic session via HTMX"""
+def academic_session_close_modal(request, session_pk):
+    """Return modal for closing academic session"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
     
-    session = get_object_or_404(AcademicSession, pk=pk)
-    session_name = session.name
+    # Get statistics
+    total_enrollments = session.student_class_enrollments.count()
+    ongoing_enrollments = session.student_class_enrollments.filter(
+        completion_status='ONGOING'
+    ).count()
     
-    # Final validation
-    if session.is_current or session.is_active:
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete active or current sessions'
-        })
+    # Warnings
+    warnings = []
+    if ongoing_enrollments > 0:
+        warnings.append(f"{ongoing_enrollments} student(s) still have ongoing enrollments")
     
-    if session.student_class_enrollments.exists() or session.classes.exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete session with enrollments or classes'
-        })
-    
-    try:
-        session.delete()
-        
-        messages.success(request, f'Academic session "{session_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Academic session "{session_name}" deleted successfully.',
-            'redirect': '/academics/sessions/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting session: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting session: {str(e)}'
-        })
+    return render(request, 'academics/sessions/modals/close_session.html', {
+        'session': session,
+        'total_enrollments': total_enrollments,
+        'ongoing_enrollments': ongoing_enrollments,
+        'warnings': warnings,
+    })
 
 
 @login_required
-def subject_delete_modal(request, pk):
-    """Show delete confirmation modal for subject"""
+def academic_session_reopen_modal(request, session_pk):
+    """Return modal for reopening academic session"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
     
-    subject = get_object_or_404(Subject, pk=pk)
+    return render(request, 'academics/sessions/modals/reopen_session.html', {
+        'session': session,
+    })
+
+
+@login_required
+def academic_session_set_current_modal(request, session_pk):
+    """Return modal for setting session as current"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
     
-    # Check if subject can be deleted
+    # Get current session if exists
+    current_session = AcademicSession.objects.filter(is_current=True).first()
+    
+    return render(request, 'academics/sessions/modals/set_current.html', {
+        'session': session,
+        'current_session': current_session,
+    })
+
+
+# =============================================================================
+# SUBJECT MODALS
+# =============================================================================
+
+@login_required
+def subject_delete_modal(request, subject_pk):
+    """Return delete confirmation modal for subject"""
+    subject = get_object_or_404(Subject, pk=subject_pk)
+    
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
     # Check for class assignments
-    assignment_count = subject.classes.filter(is_active=True).count()
-    if assignment_count > 0:
+    active_assignments = ClassSubject.objects.filter(
+        subject=subject,
+        is_active=True
+    ).count()
+    
+    if active_assignments > 0:
         can_delete = False
-        warnings.append(f"Subject is assigned to {assignment_count} active classes")
+        warnings.append(f"Assigned to {active_assignments} active class(es)")
     
-    # Check for prerequisites
-    prerequisite_count = Subject.objects.filter(prerequisites=subject).count()
-    if prerequisite_count > 0:
-        warnings.append(f"Subject is a prerequisite for {prerequisite_count} other subjects")
-    
-    context = {
-        'object': subject,
-        'object_name': 'Subject',
-        'object_title': subject.name,
+    return render(request, 'academics/subjects/modals/delete_subject.html', {
+        'subject': subject,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:subject_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
+    })
 
 
-@login_required
-@require_http_methods(["POST"])
-def subject_delete(request, pk):
-    """Delete subject via HTMX"""
-    
-    subject = get_object_or_404(Subject, pk=pk)
-    subject_name = subject.name
-    
-    # Final validation
-    if subject.classes.filter(is_active=True).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete subject assigned to active classes'
-        })
-    
-    try:
-        subject.delete()
-        
-        messages.success(request, f'Subject "{subject_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Subject "{subject_name}" deleted successfully.',
-            'redirect': '/academics/subjects/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting subject: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting subject: {str(e)}'
-        })
-
+# =============================================================================
+# ACADEMIC LEVEL MODALS
+# =============================================================================
 
 @login_required
-def enrollment_delete_modal(request, pk):
-    """Show delete confirmation modal for student enrollment"""
+def academic_level_delete_modal(request, level_pk):
+    """Return delete confirmation modal for academic level"""
+    level = get_object_or_404(AcademicLevel, pk=level_pk)
     
-    enrollment = get_object_or_404(
-        StudentClassEnrollment.objects.select_related('student', 'class_instance'),
-        pk=pk
-    )
-    
-    # Check if enrollment can be deleted
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check completion status
-    if enrollment.completion_status != 'ONGOING':
-        warnings.append(f"Enrollment is {enrollment.get_completion_status_display()}")
-    
-    # Check for invoice
-    if enrollment.academic_invoice:
-        if enrollment.academic_invoice.status == 'PAID':
-            can_delete = False
-            warnings.append("Enrollment has paid invoice - use withdrawal instead")
-        else:
-            warnings.append("Enrollment has unpaid invoice that will be cancelled")
-    
-    # Check for progress records
-    progress_count = enrollment.progress_records.count()
-    if progress_count > 0:
-        warnings.append(f"Enrollment has {progress_count} academic progress records")
-    
-    context = {
-        'object': enrollment,
-        'object_name': 'Student Enrollment',
-        'object_title': f'{enrollment.student.get_full_name()} - {enrollment.class_instance}',
-        'can_delete': can_delete,
-        'warnings': warnings,
-        'delete_url': 'academics:enrollment_delete',
-        'alternative_action': 'Consider using withdrawal instead of deletion',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def enrollment_delete(request, pk):
-    """Delete student enrollment via HTMX"""
-    
-    enrollment = get_object_or_404(StudentClassEnrollment, pk=pk)
-    student_name = enrollment.student.get_full_name()
-    class_name = str(enrollment.class_instance)
-    
-    # Final validation
-    if enrollment.academic_invoice and enrollment.academic_invoice.status == 'PAID':
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete enrollment with paid invoice'
-        })
-    
-    try:
-        # Cancel unpaid invoice if exists
-        if enrollment.academic_invoice and enrollment.academic_invoice.status in ['PENDING', 'OVERDUE']:
-            enrollment.academic_invoice.status = 'CANCELLED'
-            enrollment.academic_invoice.save()
-        
-        enrollment.delete()
-        
-        messages.success(request, f'Enrollment for "{student_name}" in {class_name} deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Enrollment deleted successfully.',
-            'redirect': '/academics/enrollments/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting enrollment: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting enrollment: {str(e)}'
-        })
-
-
-# =============================================================================
-# QUICK ACTION MODALS
-# =============================================================================
-
-@login_required
-def session_set_current_modal(request, pk):
-    """Modal to set session as current"""
-    
-    session = get_object_or_404(AcademicSession, pk=pk)
-    
-    # Check if session can be made current
-    can_set_current = True
-    warnings = []
-    
-    # ⭐ Check against school timezone
-    today = get_school_today()
-    
-    if today < session.start_date:
-        warnings.append("Session hasn't started yet")
-    elif today > session.end_date:
-        warnings.append("Session has already ended")
-    
-    if session.is_academically_closed:
-        can_set_current = False
-        warnings.append("Cannot make closed session current")
-    
-    if not session.is_active:
-        warnings.append("Session is not active")
-    
-    context = {
-        'session': session,
-        'can_set_current': can_set_current,
-        'warnings': warnings,
-        'today': today,
-    }
-    
-    return render(request, 'academics/modals/set_current_session.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def session_set_current(request, pk):
-    """Set session as current via HTMX"""
-    
-    session = get_object_or_404(AcademicSession, pk=pk)
-    
-    try:
-        # Remove current flag from all sessions
-        AcademicSession.objects.filter(is_current=True).update(is_current=False)
-        
-        # Set this session as current
-        session.is_current = True
-        session.save()
-        
-        messages.success(request, f'"{session.name}" is now the current academic session.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Current session updated to "{session.name}"',
-        })
-        
-    except Exception as e:
-        logger.error(f"Error setting current session: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error setting current session: {str(e)}'
-        })
-
-
-@login_required
-def bulk_enrollment_modal(request):
-    """Modal for bulk student enrollment"""
-    
-    # Get available classes and sessions
-    current_session = get_current_academic_session
-    active_sessions = AcademicSession.objects.filter(is_active=True).order_by('-start_date')
-    
-    available_classes = Class.objects.filter(
-        academic_session__in=active_sessions,
-        is_active=True
-    ).select_related('academic_level', 'academic_session')
-    
-    # Get students available for enrollment
-    from students.models import Student
-    available_students = Student.objects.filter(
-        enrollment_status='ACTIVE'
-    ).exclude(
-        class_enrollments__is_active=True,
-        class_enrollments__completion_status='ONGOING'
-    ).order_by('last_name', 'first_name')[:50]  # Limit for performance
-    
-    context = {
-        'current_session': current_session,
-        'active_sessions': active_sessions,
-        'available_classes': available_classes,
-        'available_students': available_students,
-    }
-    
-    return render(request, 'academics/modals/bulk_enrollment.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def bulk_enrollment_process(request):
-    """Process bulk enrollment via HTMX"""
-    
-    try:
-        student_ids = request.POST.getlist('students')
-        class_id = request.POST.get('class_instance')
-        session_id = request.POST.get('academic_session')
-        enrollment_type = request.POST.get('enrollment_type', 'BULK')
-        
-        if not student_ids or not class_id or not session_id:
-            return JsonResponse({
-                'success': False,
-                'message': 'Missing required fields'
-            })
-        
-        # Get objects
-        from students.models import Student
-        students = Student.objects.filter(id__in=student_ids)
-        class_instance = Class.objects.get(pk=class_id)
-        session = AcademicSession.objects.get(pk=session_id)
-        
-        # Use bulk enrollment service
-        from .services import BulkEnrollmentService
-        
-        results = BulkEnrollmentService.bulk_enroll_students(
-            students=students,
-            class_instance=class_instance,
-            session=session,
-            enrollment_type=enrollment_type
-        )
-        
-        message = f"Bulk enrollment completed: {len(results['enrolled'])} enrolled, {len(results['failed'])} failed"
-        
-        if results['failed']:
-            message += f". Failures: {', '.join([f['student'].get_full_name() for f in results['failed'][:3]])}"
-            if len(results['failed']) > 3:
-                message += f" and {len(results['failed']) - 3} others"
-        
-        messages.success(request, message)
-        
-        return JsonResponse({
-            'success': True,
-            'message': message,
-            'results': {
-                'enrolled_count': len(results['enrolled']),
-                'failed_count': len(results['failed']),
-                'total_count': results['total']
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in bulk enrollment: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Bulk enrollment failed: {str(e)}'
-        })
-
-
-# =============================================================================
-# STATUS CHANGE MODALS
-# =============================================================================
-
-@login_required
-def enrollment_status_change_modal(request, pk):
-    """Modal to change enrollment status"""
-    
-    enrollment = get_object_or_404(
-        StudentClassEnrollment.objects.select_related('student', 'class_instance'),
-        pk=pk
-    )
-    
-    # Available status transitions
-    current_status = enrollment.completion_status
-    available_statuses = []
-    
-    if current_status == 'ONGOING':
-        available_statuses = [
-            ('COMPLETED', 'Mark as Completed'),
-            ('TRANSFERRED', 'Mark as Transferred'),
-            ('WITHDRAWN', 'Mark as Withdrawn'),
-            ('DROPPED', 'Mark as Dropped'),
-            ('SUSPENDED', 'Mark as Suspended'),
-        ]
-    elif current_status in ['SUSPENDED', 'TRANSFERRED']:
-        available_statuses = [
-            ('ONGOING', 'Reactivate Enrollment'),
-        ]
-    
-    context = {
-        'enrollment': enrollment,
-        'current_status': current_status,
-        'available_statuses': available_statuses,
-    }
-    
-    return render(request, 'academics/modals/enrollment_status_change.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def enrollment_status_change(request, pk):
-    """Change enrollment status via HTMX"""
-    
-    enrollment = get_object_or_404(StudentClassEnrollment, pk=pk)
-    
-    try:
-        new_status = request.POST.get('new_status')
-        reason = request.POST.get('reason', '')
-        
-        old_status = enrollment.completion_status
-        enrollment.completion_status = new_status
-        
-        # ⭐ Set completion date if completing
-        if new_status in ['COMPLETED', 'WITHDRAWN', 'DROPPED'] and not enrollment.completion_date:
-            enrollment.completion_date = get_school_today()
-        
-        # Update active status
-        enrollment.is_active = (new_status == 'ONGOING')
-        
-        # Add note
-        if reason:
-            note = f"\nStatus changed from {old_status} to {new_status}: {reason}"
-            enrollment.enrollment_notes = (enrollment.enrollment_notes or '') + note
-        
-        enrollment.save() 
-        
-        messages.success(
-            request, 
-            f'Enrollment status changed from {old_status} to {new_status} for {enrollment.student.get_full_name()}'
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Status updated to {new_status}',
-        })
-        
-    except Exception as e:
-        logger.error(f"Error changing enrollment status: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error changing status: {str(e)}'
-        })
-
-
-# =============================================================================
-# QUICK EDIT MODALS
-# =============================================================================
-
-@login_required
-def enrollment_roll_number_modal(request, pk):
-    """Modal to edit enrollment roll number"""
-    
-    enrollment = get_object_or_404(
-        StudentClassEnrollment.objects.select_related('student', 'class_instance'),
-        pk=pk
-    )
-    
-    # Get existing roll numbers in the class to avoid duplicates
-    existing_roll_numbers = StudentClassEnrollment.objects.filter(
-        class_instance=enrollment.class_instance,
-        academic_session=enrollment.academic_session,
-        is_active=True
-    ).exclude(pk=pk).values_list('roll_number', flat=True)
-    
-    context = {
-        'enrollment': enrollment,
-        'existing_roll_numbers': list(existing_roll_numbers),
-    }
-    
-    return render(request, 'academics/modals/edit_roll_number.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def enrollment_roll_number_update(request, pk):
-    """Update enrollment roll number via HTMX"""
-    
-    enrollment = get_object_or_404(StudentClassEnrollment, pk=pk)
-    
-    try:
-        new_roll_number = request.POST.get('roll_number', '').strip()
-        
-        # Validate uniqueness
-        if new_roll_number:
-            existing = StudentClassEnrollment.objects.filter(
-                class_instance=enrollment.class_instance,
-                academic_session=enrollment.academic_session,
-                roll_number=new_roll_number,
-                is_active=True
-            ).exclude(pk=pk).exists()
-            
-            if existing:
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Roll number {new_roll_number} is already assigned to another student'
-                })
-        
-        old_roll_number = enrollment.roll_number
-        enrollment.roll_number = new_roll_number
-        enrollment.save()
-        
-        messages.success(
-            request, 
-            f'Roll number updated for {enrollment.student.get_full_name()}: {old_roll_number} → {new_roll_number}'
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Roll number updated successfully',
-            'new_roll_number': new_roll_number
-        })
-        
-    except Exception as e:
-        logger.error(f"Error updating roll number: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error updating roll number: {str(e)}'
-        })
-
-
-# =============================================================================
-# ACADEMIC LEVEL DELETE MODALS
-# =============================================================================
-
-@login_required
-def academic_level_delete_modal(request, pk):
-    """Show delete confirmation modal for academic level"""
-    
-    level = get_object_or_404(AcademicLevel, pk=pk)
-    
-    # Check if level can be deleted
-    can_delete = True
-    warnings = []
-    
-    # Check for classes
-    class_count = level.classes.filter(is_active=True).count()
-    if class_count > 0:
+    # Check for active classes
+    active_classes = level.classes.filter(is_active=True).count()
+    if active_classes > 0:
         can_delete = False
-        warnings.append(f"Academic level has {class_count} active classes")
+        warnings.append(f"Has {active_classes} active class(es)")
     
     # Check for students
     from students.models import Student
-    student_count = Student.objects.filter(current_academic_level=level).count()
-    if student_count > 0:
+    students_at_level = Student.objects.filter(
+        current_academic_level=level
+    ).count()
+    if students_at_level > 0:
         can_delete = False
-        warnings.append(f"Academic level has {student_count} students")
+        warnings.append(f"{students_at_level} student(s) currently at this level")
     
-    # Check for subjects
-    subject_count = level.applicable_subjects.count()
-    if subject_count > 0:
-        warnings.append(f"Academic level has {subject_count} applicable subjects")
-    
-    context = {
-        'object': level,
-        'object_name': 'Academic Level',
-        'object_title': level.name,
+    return render(request, 'academics/levels/modals/delete_level.html', {
+        'level': level,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:level_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def academic_level_delete(request, pk):
-    """Delete academic level via HTMX"""
-    
-    level = get_object_or_404(AcademicLevel, pk=pk)
-    level_name = level.name
-    
-    # Final validation
-    if level.classes.filter(is_active=True).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete academic level with active classes'
-        })
-    
-    from students.models import Student
-    if Student.objects.filter(current_academic_level=level).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete academic level with assigned students'
-        })
-    
-    try:
-        level.delete()
-        
-        messages.success(request, f'Academic level "{level_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Academic level "{level_name}" deleted successfully.',
-            'redirect': '/academics/levels/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting academic level: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting academic level: {str(e)}'
-        })
+    })
 
 
 # =============================================================================
-# CLASSROOM DELETE MODALS
+# CLASSROOM MODALS
 # =============================================================================
 
 @login_required
-def classroom_delete_modal(request, pk):
-    """Show delete confirmation modal for classroom"""
+def classroom_delete_modal(request, classroom_pk):
+    """Return delete confirmation modal for classroom"""
+    classroom = get_object_or_404(ClassRoom, pk=classroom_pk)
     
-    classroom = get_object_or_404(ClassRoom, pk=pk)
-    
-    # Check if classroom can be deleted
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
     # Check for assigned classes
-    class_count = classroom.assigned_classes.filter(is_active=True).count()
-    if class_count > 0:
+    assigned_classes = classroom.assigned_classes.filter(is_active=True).count()
+    if assigned_classes > 0:
         can_delete = False
-        warnings.append(f"Classroom is assigned to {class_count} active classes")
+        warnings.append(f"Assigned to {assigned_classes} active class(es)")
     
-    # Check for bookings (if booking system exists)
-    try:
-        booking_count = classroom.bookings.filter(
-            status='CONFIRMED',
-            start_time__gte=get_school_today()
-        ).count()
-        if booking_count > 0:
-            warnings.append(f"Classroom has {booking_count} future bookings")
-    except:
-        pass  # Booking system might not exist
-    
-    context = {
-        'object': classroom,
-        'object_name': 'Classroom',
-        'object_title': classroom.name,
+    return render(request, 'academics/classrooms/modals/delete_classroom.html', {
+        'classroom': classroom,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:classroom_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def classroom_delete(request, pk):
-    """Delete classroom via HTMX"""
-    
-    classroom = get_object_or_404(ClassRoom, pk=pk)
-    classroom_name = classroom.name
-    
-    # Final validation
-    if classroom.assigned_classes.filter(is_active=True).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete classroom assigned to active classes'
-        })
-    
-    try:
-        classroom.delete()
-        
-        messages.success(request, f'Classroom "{classroom_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Classroom "{classroom_name}" deleted successfully.',
-            'redirect': '/academics/classrooms/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting classroom: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting classroom: {str(e)}'
-        })
+    })
 
 
 # =============================================================================
-# CLASS DELETE MODALS
+# CLASS MODALS
 # =============================================================================
 
 @login_required
-def class_delete_modal(request, pk):
-    """Show delete confirmation modal for class"""
+def class_delete_modal(request, class_pk):
+    """Return delete confirmation modal for class"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
     
-    class_instance = get_object_or_404(Class, pk=pk)
-    
-    # Check if class can be deleted
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for enrollments
-    enrollment_count = class_instance.enrollments.filter(is_active=True).count()
-    if enrollment_count > 0:
+    # Check for active enrollments
+    active_enrollments = class_instance.enrollments.filter(is_active=True).count()
+    if active_enrollments > 0:
         can_delete = False
-        warnings.append(f"Class has {enrollment_count} active student enrollments")
+        warnings.append(f"Has {active_enrollments} active enrollment(s)")
     
-    # Check for subject assignments
-    subject_count = class_instance.subjects.filter(is_active=True).count()
-    if subject_count > 0:
-        can_delete = False
-        warnings.append(f"Class has {subject_count} subject assignments")
+    # Check for assigned subjects
+    active_subjects = class_instance.subjects.filter(is_active=True).count()
+    if active_subjects > 0:
+        warnings.append(f"Has {active_subjects} assigned subject(s)")
     
-    # Check for progress records
-    progress_count = class_instance.progress_records.count()
-    if progress_count > 0:
-        warnings.append(f"Class has {progress_count} academic progress records")
-    
-    context = {
-        'object': class_instance,
-        'object_name': 'Class',
-        'object_title': str(class_instance),
+    return render(request, 'academics/classes/modals/delete_class.html', {
+        'class': class_instance,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:class_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def class_delete(request, pk):
-    """Delete class via HTMX"""
-    
-    class_instance = get_object_or_404(Class, pk=pk)
-    class_name = str(class_instance)
-    
-    # Final validation
-    if class_instance.enrollments.filter(is_active=True).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete class with active enrollments'
-        })
-    
-    if class_instance.subjects.filter(is_active=True).exists():
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete class with active subject assignments'
-        })
-    
-    try:
-        class_instance.delete()
-        
-        messages.success(request, f'Class "{class_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Class "{class_name}" deleted successfully.',
-            'redirect': '/academics/classes/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting class: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting class: {str(e)}'
-        })
+    })
 
 
 # =============================================================================
-# CLASS SUBJECT DELETE MODALS
+# ENROLLMENT MODALS
 # =============================================================================
 
 @login_required
-def class_subject_delete_modal(request, pk):
-    """Show delete confirmation modal for class subject"""
-    
-    class_subject = get_object_or_404(
-        ClassSubject.objects.select_related('class_instance', 'subject', 'teacher'),
-        pk=pk
+def enrollment_delete_modal(request, enrollment_pk):
+    """Return delete confirmation modal for enrollment"""
+    from core.utils import format_money
+
+    enrollment = get_object_or_404(StudentClassEnrollment, pk=enrollment_pk)
+
+    can_delete = True
+    warnings = []
+
+    if enrollment.academic_invoice:
+        invoice = enrollment.academic_invoice
+
+        # PRIMARY CHECK: Journal Entry Status (highest priority)
+        if invoice.journal_entry:
+            je_status = invoice.journal_entry.status
+            
+            if je_status == 'POSTED':
+                can_delete = False
+                warnings.append(
+                    f"Invoice has posted journal entry ({invoice.journal_entry.entry_number})"
+                )
+            elif je_status == 'REVERSED':
+                can_delete = False
+                warnings.append(
+                    f"Invoice has reversed journal entry ({invoice.journal_entry.entry_number})"
+                )
+            # DRAFT journal entries are OK - will be deleted with invoice
+
+        # SECONDARY CHECK: Invoice Status
+        # Allow deletion for DRAFT and VOID invoices only
+        if invoice.status not in ['DRAFT', 'VOID'] and can_delete:
+            can_delete = False
+            warnings.append(
+                f"Invoice status is {invoice.get_status_display()}"
+            )
+
+        # TERTIARY CHECK: Payments (but VOID invoices should have zero payments)
+        if invoice.paid_amount > 0 and can_delete:
+            can_delete = False
+            warnings.append(
+                f"Invoice has payments of {format_money(invoice.paid_amount)}"
+            )
+
+    return render(
+        request,
+        'academics/enrollments/modals/delete_enrollment.html',
+        {
+            'enrollment': enrollment,
+            'can_delete': can_delete,
+            'warnings': warnings,
+        }
     )
+
+@login_required
+def enrollment_toggle_active_modal(request, enrollment_pk):
+    """Return modal for toggling enrollment active status"""
+    enrollment = get_object_or_404(StudentClassEnrollment, pk=enrollment_pk)
     
-    # Check if class subject can be deleted
+    action = 'deactivate' if enrollment.is_active else 'activate'
+    
+    return render(request, 'academics/enrollments/modals/toggle_active.html', {
+        'enrollment': enrollment,
+        'action': action,
+    })
+
+
+@login_required
+def enrollment_update_status_modal(request, enrollment_pk):
+    """Return modal for updating enrollment completion status"""
+    enrollment = get_object_or_404(StudentClassEnrollment, pk=enrollment_pk)
+    
+    return render(request, 'academics/enrollments/modals/update_status.html', {
+        'enrollment': enrollment,
+    })
+
+
+@login_required
+def enrollment_assign_roll_number_modal(request, enrollment_pk):
+    """Return modal for assigning roll number"""
+    enrollment = get_object_or_404(StudentClassEnrollment, pk=enrollment_pk)
+    
+    # Get next available roll number
+    last_enrollment = StudentClassEnrollment.objects.filter(
+        class_instance=enrollment.class_instance
+    ).exclude(
+        roll_number__isnull=True
+    ).order_by('-roll_number').first()
+    
+    suggested_roll_number = '001'
+    if last_enrollment and last_enrollment.roll_number:
+        try:
+            next_num = int(last_enrollment.roll_number) + 1
+            suggested_roll_number = str(next_num).zfill(3)
+        except ValueError:
+            pass
+    
+    return render(request, 'academics/enrollments/modals/assign_roll_number.html', {
+        'enrollment': enrollment,
+        'suggested_roll_number': suggested_roll_number,
+    })
+
+
+@login_required
+def enrollment_create_invoice_modal(request, enrollment_pk):
+    """Return modal for creating invoice for enrollment"""
+    enrollment = get_object_or_404(StudentClassEnrollment, pk=enrollment_pk)
+    
+    # Check if already has invoice
+    has_invoice = enrollment.academic_invoice is not None
+    
+    return render(request, 'academics/enrollments/modals/create_invoice.html', {
+        'enrollment': enrollment,
+        'has_invoice': has_invoice,
+    })
+
+
+@login_required
+def bulk_enrollment_modal(request):
+    """Return modal for bulk enrollment"""
+    # Get active sessions and classes
+    sessions = AcademicSession.objects.filter(is_active=True)
+    classes = Class.objects.filter(is_active=True).select_related('academic_level', 'academic_session')
+    
+    return render(request, 'academics/enrollments/modals/bulk_enrollment.html', {
+        'sessions': sessions,
+        'classes': classes,
+    })
+
+
+# =============================================================================
+# CLASS SUBJECT MODALS
+# =============================================================================
+
+@login_required
+def class_subject_delete_modal(request, class_subject_pk):
+    """Return delete confirmation modal for class subject"""
+    class_subject = get_object_or_404(ClassSubject, pk=class_subject_pk)
+    
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for grades/assessments (if grading system exists)
-    try:
-        grade_count = class_subject.grades.count()
-        if grade_count > 0:
-            warnings.append(f"Subject assignment has {grade_count} student grades")
-    except:
-        pass  # Grading system might not exist
+    # Check for existing grades (if grades model exists)
+    # This would need to be implemented based on your grades model
     
-    # Check for timetable entries (if timetable system exists)
-    try:
-        timetable_count = class_subject.timetable_entries.count()
-        if timetable_count > 0:
-            warnings.append(f"Subject has {timetable_count} timetable entries")
-    except:
-        pass  # Timetable system might not exist
-    
-    context = {
-        'object': class_subject,
-        'object_name': 'Class Subject Assignment',
-        'object_title': f'{class_subject.subject.name} - {class_subject.class_instance}',
+    return render(request, 'academics/class_subjects/modals/delete_class_subject.html', {
+        'class_subject': class_subject,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:class_subject_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
+    })
 
 
 @login_required
-@require_http_methods(["POST"])
-def class_subject_delete(request, pk):
-    """Delete class subject via HTMX"""
+def class_subject_assign_teacher_modal(request, class_subject_pk):
+    """Return modal for assigning teacher to class subject"""
+    class_subject = get_object_or_404(ClassSubject, pk=class_subject_pk)
     
-    class_subject = get_object_or_404(ClassSubject, pk=pk)
-    subject_name = class_subject.subject.name
-    class_name = str(class_subject.class_instance)
+    # Get available teachers
+    from hr.models import Teacher
+    teachers = Teacher.objects.filter(is_active=True).select_related('staff')
     
-    try:
-        class_subject.delete()
-        
-        messages.success(request, f'Subject "{subject_name}" removed from {class_name} successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Subject assignment deleted successfully.',
-            'redirect': '/academics/class-subjects/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting class subject: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting subject assignment: {str(e)}'
-        })
+    return render(request, 'academics/class_subjects/modals/assign_teacher.html', {
+        'class_subject': class_subject,
+        'teachers': teachers,
+    })
+
+
+@login_required
+def class_subject_toggle_active_modal(request, class_subject_pk):
+    """Return modal for toggling class subject active status"""
+    class_subject = get_object_or_404(ClassSubject, pk=class_subject_pk)
+    
+    action = 'deactivate' if class_subject.is_active else 'activate'
+    
+    return render(request, 'academics/class_subjects/modals/toggle_active.html', {
+        'class_subject': class_subject,
+        'action': action,
+    })
+
+
+@login_required
+def bulk_class_subject_assign_modal(request):
+    """Return modal for bulk subject assignment"""
+    classes = Class.objects.filter(is_active=True).select_related('academic_level')
+    subjects = Subject.objects.filter(is_active=True)
+    
+    return render(request, 'academics/class_subjects/modals/bulk_assign.html', {
+        'classes': classes,
+        'subjects': subjects,
+    })
 
 
 # =============================================================================
-# ACADEMIC PROGRESS DELETE MODALS
+# ACADEMIC PROGRESS MODALS
 # =============================================================================
 
 @login_required
-def academic_progress_delete_modal(request, pk):
-    """Show delete confirmation modal for academic progress"""
+def academic_progress_delete_modal(request, progress_pk):
+    """Return delete confirmation modal for academic progress"""
+    progress = get_object_or_404(AcademicProgress, pk=progress_pk)
     
-    progress = get_object_or_404(
-        AcademicProgress.objects.select_related('student', 'academic_session'),
-        pk=pk
-    )
-    
-    # Check if progress can be deleted
-    can_delete = True
-    warnings = []
-    
-    # Check if finalized
-    if progress.is_final:
-        can_delete = False
-        warnings.append("Cannot delete finalized progress records")
-    
-    # Check if used for promotion
-    if progress.promotion_decision and progress.promotion_decision != 'PENDING':
-        warnings.append(f"Progress record has promotion decision: {progress.get_promotion_decision_display()}")
-    
-    context = {
-        'object': progress,
-        'object_name': 'Academic Progress',
-        'object_title': f'{progress.student.get_full_name()} - {progress.academic_session}',
-        'can_delete': can_delete,
-        'warnings': warnings,
-        'delete_url': 'academics:progress_delete',
-    }
-    
-    return render(request, 'academics/modals/delete_confirmation.html', context)
-
-
-@login_required
-@require_http_methods(["POST"])
-def academic_progress_delete(request, pk):
-    """Delete academic progress via HTMX"""
-    
-    progress = get_object_or_404(AcademicProgress, pk=pk)
-    student_name = progress.student.get_full_name()
-    session_name = str(progress.academic_session)
-    
-    # Final validation
-    if progress.is_final:
-        return JsonResponse({
-            'success': False,
-            'message': 'Cannot delete finalized progress records'
-        })
-    
-    try:
-        progress.delete()
-        
-        messages.success(request, f'Academic progress for "{student_name}" in {session_name} deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Progress record deleted successfully.',
-            'redirect': '/academics/progress/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting academic progress: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting progress record: {str(e)}'
-        })
-
-
-@login_required
-def academic_progress_finalize_modal(request, pk):
-    """Modal to finalize academic progress"""
-    
-    progress = get_object_or_404(
-        AcademicProgress.objects.select_related('student', 'academic_session'),
-        pk=pk
-    )
-    
-    # Check if progress can be finalized
-    can_finalize = True
+    # Check if can be deleted
+    can_delete = not progress.is_final
     warnings = []
     
     if progress.is_final:
-        can_finalize = False
-        warnings.append("Progress record is already finalized")
+        warnings.append("Progress record is finalized - cannot delete")
     
-    if not progress.gpa:
-        warnings.append("GPA is not calculated")
-    
-    if not progress.attendance_percentage:
-        warnings.append("Attendance percentage is not recorded")
-    
-    context = {
+    return render(request, 'academics/progress/modals/delete_progress.html', {
         'progress': progress,
-        'can_finalize': can_finalize,
+        'can_delete': can_delete,
         'warnings': warnings,
-    }
-    
-    return render(request, 'academics/modals/finalize_progress.html', context)
+    })
 
 
 @login_required
-@require_http_methods(["POST"])
-def academic_progress_finalize(request, pk):
-    """Finalize academic progress via HTMX"""
+def academic_progress_finalize_modal(request, progress_pk):
+    """Return modal for finalizing academic progress"""
+    progress = get_object_or_404(AcademicProgress, pk=progress_pk)
     
-    progress = get_object_or_404(AcademicProgress, pk=pk)
+    warnings = []
+    if progress.is_final:
+        warnings.append("Progress is already finalized")
     
-    try:
-        from .services import AcademicProgressService
-        
-        finalized_progress = AcademicProgressService.finalize_session_progress(
-            progress, 
-            finalized_by=request.user
-        )
-        
-        messages.success(
-            request, 
-            f'Academic progress for {progress.student.get_full_name()} finalized successfully!'
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Progress record finalized successfully',
-        })
-        
-    except Exception as e:
-        logger.error(f"Error finalizing progress: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error finalizing progress: {str(e)}'
-        })
+    return render(request, 'academics/progress/modals/finalize_progress.html', {
+        'progress': progress,
+        'warnings': warnings,
+    })
 
 
 # =============================================================================
-# HOLIDAY DELETE MODALS
+# HOLIDAY MODALS
 # =============================================================================
 
 @login_required
-def holiday_delete_modal(request, pk):
-    """Show delete confirmation modal for holiday"""
+def holiday_delete_modal(request, holiday_pk):
+    """Return delete confirmation modal for holiday"""
+    holiday = get_object_or_404(Holiday, pk=holiday_pk)
     
-    holiday = get_object_or_404(Holiday, pk=pk)
-    
-    # Check if holiday can be deleted
+    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check if holiday is in the past
     today = get_school_today()
     if holiday.start_date < today:
         warnings.append("Holiday has already started/passed")
     
-    # Check if recurring
     if holiday.is_recurring:
         warnings.append("This is a recurring holiday")
     
-    context = {
-        'object': holiday,
-        'object_name': 'Holiday',
-        'object_title': holiday.name,
+    return render(request, 'academics/holidays/modals/delete_holiday.html', {
+        'holiday': holiday,
         'can_delete': can_delete,
         'warnings': warnings,
-        'delete_url': 'academics:holiday_delete',
+    })
+
+
+# =============================================================================
+# QUICK VIEW MODALS
+# =============================================================================
+
+@login_required
+def academic_session_quick_view_modal(request, session_pk):
+    """Quick view modal for academic session"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
+    
+    stats = {
+        'total_classes': session.classes.filter(is_active=True).count(),
+        'total_enrollments': session.student_class_enrollments.filter(is_active=True).count(),
     }
     
-    return render(request, 'academics/modals/delete_confirmation.html', context)
+    return render(request, 'academics/sessions/modals/quick_view.html', {
+        'session': session,
+        'stats': stats,
+    })
 
 
 @login_required
-@require_http_methods(["POST"])
-def holiday_delete(request, pk):
-    """Delete holiday via HTMX"""
+def subject_quick_view_modal(request, subject_pk):
+    """Quick view modal for subject"""
+    subject = get_object_or_404(Subject, pk=subject_pk)
     
-    holiday = get_object_or_404(Holiday, pk=pk)
-    holiday_name = holiday.name
+    assignment_count = ClassSubject.objects.filter(subject=subject, is_active=True).count()
     
-    try:
-        holiday.delete()
-        
-        messages.success(request, f'Holiday "{holiday_name}" deleted successfully.')
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Holiday "{holiday_name}" deleted successfully.',
-            'redirect': '/academics/holidays/'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error deleting holiday: {e}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error deleting holiday: {str(e)}'
-        })
+    return render(request, 'academics/subjects/modals/quick_view.html', {
+        'subject': subject,
+        'assignment_count': assignment_count,
+    })
 
-
-# =============================================================================
-# ADDITIONAL UTILITY MODALS
-# =============================================================================
 
 @login_required
-def class_capacity_modal(request, pk):
-    """Modal to view class capacity details"""
+def academic_level_quick_view_modal(request, level_pk):
+    """Quick view modal for academic level"""
+    level = get_object_or_404(AcademicLevel, pk=level_pk)
     
+    stats = {
+        'total_classes': level.classes.filter(is_active=True).count(),
+    }
+    
+    return render(request, 'academics/levels/modals/quick_view.html', {
+        'level': level,
+        'stats': stats,
+    })
+
+
+@login_required
+def classroom_quick_view_modal(request, classroom_pk):
+    """Quick view modal for classroom"""
+    classroom = get_object_or_404(ClassRoom, pk=classroom_pk)
+    
+    assigned_classes = classroom.assigned_classes.filter(is_active=True)
+    
+    return render(request, 'academics/classrooms/modals/quick_view.html', {
+        'classroom': classroom,
+        'assigned_classes': assigned_classes,
+    })
+
+
+@login_required
+def class_quick_view_modal(request, class_pk):
+    """Quick view modal for class"""
     class_instance = get_object_or_404(
-        Class.objects.select_related('academic_level', 'academic_session'),
-        pk=pk
+        Class.objects.select_related('academic_level', 'class_teacher', 'classroom'),
+        pk=class_pk
     )
     
-    # Get capacity information
-    from .utils import get_class_capacity_summary
-    capacity_info = get_class_capacity_summary(class_instance)
+    enrollment_count = class_instance.enrollments.filter(is_active=True).count()
     
-    # Get enrolled students
-    enrollments = class_instance.enrollments.filter(
-        is_active=True,
-        completion_status='ONGOING'
-    ).select_related('student').order_by('roll_number', 'student__last_name')
-    
-    context = {
+    return render(request, 'academics/classes/modals/quick_view.html', {
         'class': class_instance,
-        'capacity_info': capacity_info,
-        'enrollments': enrollments,
-    }
-    
-    return render(request, 'academics/modals/class_capacity.html', context)
+        'enrollment_count': enrollment_count,
+    })
 
 
 @login_required
-def student_enrollment_history_modal(request, student_id):
-    """Modal to view student's enrollment history"""
+def enrollment_quick_view_modal(request, enrollment_pk):
+    """Quick view modal for enrollment"""
+    enrollment = get_object_or_404(
+        StudentClassEnrollment.objects.select_related('student', 'class_instance'),
+        pk=enrollment_pk
+    )
     
+    return render(request, 'academics/enrollments/modals/quick_view.html', {
+        'enrollment': enrollment,
+    })
+
+
+@login_required
+def class_subject_quick_view_modal(request, class_subject_pk):
+    """Quick view modal for class subject"""
+    class_subject = get_object_or_404(
+        ClassSubject.objects.select_related('class_instance', 'subject', 'teacher'),
+        pk=class_subject_pk
+    )
+    
+    return render(request, 'academics/class_subjects/modals/quick_view.html', {
+        'class_subject': class_subject,
+    })
+
+
+@login_required
+def academic_progress_quick_view_modal(request, progress_pk):
+    """Quick view modal for academic progress"""
+    progress = get_object_or_404(
+        AcademicProgress.objects.select_related('student', 'academic_session'),
+        pk=progress_pk
+    )
+    
+    return render(request, 'academics/progress/modals/quick_view.html', {
+        'progress': progress,
+    })
+
+
+@login_required
+def holiday_quick_view_modal(request, holiday_pk):
+    """Quick view modal for holiday"""
+    holiday = get_object_or_404(Holiday, pk=holiday_pk)
+    
+    return render(request, 'academics/holidays/modals/quick_view.html', {
+        'holiday': holiday,
+    })
+
+
+# =============================================================================
+# TOGGLE ACTIVE MODALS
+# =============================================================================
+
+@login_required
+def academic_session_toggle_active_modal(request, session_pk):
+    """Toggle active modal for academic session"""
+    session = get_object_or_404(AcademicSession, pk=session_pk)
+    
+    action = 'deactivate' if session.is_active else 'activate'
+    
+    return render(request, 'academics/sessions/modals/toggle_active.html', {
+        'session': session,
+        'action': action,
+    })
+
+
+@login_required
+def subject_toggle_active_modal(request, subject_pk):
+    """Toggle active modal for subject"""
+    subject = get_object_or_404(Subject, pk=subject_pk)
+    
+    action = 'deactivate' if subject.is_active else 'activate'
+    
+    return render(request, 'academics/subjects/modals/toggle_active.html', {
+        'subject': subject,
+        'action': action,
+    })
+
+
+@login_required
+def academic_level_toggle_active_modal(request, level_pk):
+    """Toggle active modal for academic level"""
+    level = get_object_or_404(AcademicLevel, pk=level_pk)
+    
+    action = 'deactivate' if level.is_active else 'activate'
+    
+    return render(request, 'academics/levels/modals/toggle_active.html', {
+        'level': level,
+        'action': action,
+    })
+
+
+@login_required
+def classroom_toggle_active_modal(request, classroom_pk):
+    """Toggle active modal for classroom"""
+    classroom = get_object_or_404(ClassRoom, pk=classroom_pk)
+    
+    action = 'deactivate' if classroom.is_active else 'activate'
+    
+    return render(request, 'academics/classrooms/modals/toggle_active.html', {
+        'classroom': classroom,
+        'action': action,
+    })
+
+
+@login_required
+def classroom_toggle_bookable_modal(request, classroom_pk):
+    """Toggle bookable modal for classroom"""
+    classroom = get_object_or_404(ClassRoom, pk=classroom_pk)
+    
+    action = 'make non-bookable' if classroom.is_bookable else 'make bookable'
+    
+    return render(request, 'academics/classrooms/modals/toggle_bookable.html', {
+        'classroom': classroom,
+        'action': action,
+    })
+
+
+@login_required
+def class_toggle_active_modal(request, class_pk):
+    """Toggle active modal for class"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
+    
+    action = 'deactivate' if class_instance.is_active else 'activate'
+    
+    return render(request, 'academics/classes/modals/toggle_active.html', {
+        'class': class_instance,
+        'action': action,
+    })
+
+
+# =============================================================================
+# ASSIGNMENT MODALS
+# =============================================================================
+
+@login_required
+def class_assign_teacher_modal(request, class_pk):
+    """Assign teacher to class modal"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
+    
+    from hr.models import Teacher
+    teachers = Teacher.objects.filter(is_active=True).select_related('staff')
+    
+    return render(request, 'academics/classes/modals/assign_teacher.html', {
+        'class': class_instance,
+        'teachers': teachers,
+    })
+
+
+@login_required
+def class_assign_classroom_modal(request, class_pk):
+    """Assign classroom to class modal"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
+    
+    classrooms = ClassRoom.objects.filter(is_active=True)
+    
+    return render(request, 'academics/classes/modals/assign_classroom.html', {
+        'class': class_instance,
+        'classrooms': classrooms,
+    })
+
+
+# =============================================================================
+# PROMOTION DECISION MODAL (for academic progress)
+# =============================================================================
+
+@login_required
+def academic_progress_promotion_modal(request, progress_pk):
+    """Promotion decision modal for academic progress record"""
+    progress = get_object_or_404(AcademicProgress, pk=progress_pk)
+    
+    return render(request, 'academics/progress/modals/promotion.html', {
+        'progress': progress,
+    })
+
+
+# =============================================================================
+# BULK OPERATION MODALS
+# =============================================================================
+
+@login_required
+def bulk_enrollment_status_update_modal(request):
+    """Bulk enrollment status update modal"""
+    return render(request, 'academics/enrollments/modals/bulk_status_update.html')
+
+
+@login_required
+def bulk_progress_finalize_modal(request):
+    """Bulk progress finalization modal"""
+    return render(request, 'academics/progress/modals/bulk_finalize.html')
+
+
+# =============================================================================
+# UTILITY AND HELPER MODALS
+# =============================================================================
+
+@login_required
+def confirm_action_modal(request):
+    """Generic confirmation modal"""
+    action = request.GET.get('action', 'this action')
+    message = request.GET.get('message', f'Are you sure you want to {action}?')
+    
+    return render(request, 'academics/modals/confirm_action.html', {
+        'action': action,
+        'message': message,
+    })
+
+
+@login_required
+def history_modal(request):
+    """History view modal"""
+    model_name = request.GET.get('model')
+    object_id = request.GET.get('id')
+    
+    return render(request, 'academics/modals/history.html', {
+        'model_name': model_name,
+        'object_id': object_id,
+    })
+
+
+@login_required
+def student_enrollment_history_modal(request, student_pk):
+    """Student enrollment history modal"""
     from students.models import Student
-    student = get_object_or_404(Student, pk=student_id)
+    student = get_object_or_404(Student, pk=student_pk)
     
-    # Get enrollment history
     enrollments = StudentClassEnrollment.objects.filter(
         student=student
-    ).select_related(
-        'class_instance__academic_level',
-        'academic_session'
-    ).order_by('-enrollment_date')
+    ).select_related('class_instance', 'academic_session').order_by('-enrollment_date')
     
-    context = {
+    return render(request, 'academics/enrollments/modals/student_history.html', {
         'student': student,
         'enrollments': enrollments,
-    }
-    
-    return render(request, 'academics/modals/enrollment_history.html', context)
+    })
 
 
 @login_required
-def session_statistics_modal(request, pk):
-    """Modal to view detailed session statistics"""
+def class_students_modal(request, class_pk):
+    """Class students list modal"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
     
-    session = get_object_or_404(AcademicSession, pk=pk)
+    enrollments = class_instance.enrollments.select_related('student').filter(
+        is_active=True
+    ).order_by('roll_number', 'student__last_name')
     
-    # Get session statistics
-    try:
-        from .stats import get_enrollment_summary_by_session
-        session_stats = get_enrollment_summary_by_session(session)
-    except Exception as e:
-        logger.error(f"Error getting session stats: {e}")
-        session_stats = {}
+    return render(request, 'academics/classes/modals/students.html', {
+        'class': class_instance,
+        'enrollments': enrollments,
+    })
+
+
+@login_required
+def teacher_classes_modal(request, teacher_pk):
+    """Teacher classes list modal"""
+    from hr.models import Teacher
+    teacher = get_object_or_404(Teacher, pk=teacher_pk)
     
-    context = {
-        'session': session,
-        'stats': session_stats,
-    }
+    class_teacher_for = Class.objects.filter(class_teacher=teacher, is_active=True)
     
-    return render(request, 'academics/modals/session_statistics.html', context)
+    teaches_subjects = ClassSubject.objects.filter(
+        teacher=teacher, is_active=True
+    ).select_related('class_instance', 'subject')
+    
+    return render(request, 'academics/teachers/modals/classes.html', {
+        'teacher': teacher,
+        'class_teacher_for': class_teacher_for,
+        'teaches_subjects': teaches_subjects,
+    })
+
+
+# =============================================================================
+# REPORT MODALS
+# =============================================================================
+
+@login_required
+def session_summary_report_modal(request):
+    """Session summary report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/session_summary.html', {
+        'sessions': sessions,
+    })
+
+
+@login_required
+def enrollment_report_modal(request):
+    """Enrollment report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    levels = AcademicLevel.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/enrollment.html', {
+        'sessions': sessions,
+        'levels': levels,
+    })
+
+
+@login_required
+def attendance_report_modal(request):
+    """Attendance report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    classes = Class.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/attendance.html', {
+        'sessions': sessions,
+        'classes': classes,
+    })
+
+
+@login_required
+def grade_distribution_report_modal(request):
+    """Grade distribution report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    subjects = Subject.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/grade_distribution.html', {
+        'sessions': sessions,
+        'subjects': subjects,
+    })
+
+
+@login_required
+def class_roster_report_modal(request, class_pk):
+    """Class roster report options modal"""
+    class_instance = get_object_or_404(Class, pk=class_pk)
+    
+    return render(request, 'academics/reports/modals/class_roster.html', {
+        'class': class_instance,
+    })
+
+
+@login_required
+def teacher_assignment_report_modal(request):
+    """Teacher assignment report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/teacher_assignment.html', {
+        'sessions': sessions,
+    })
+
+
+@login_required
+def promotion_analysis_report_modal(request):
+    """Promotion analysis report options modal"""
+    sessions = AcademicSession.objects.filter(is_active=True)
+    levels = AcademicLevel.objects.filter(is_active=True)
+    
+    return render(request, 'academics/reports/modals/promotion_analysis.html', {
+        'sessions': sessions,
+        'levels': levels,
+    })
+
+
+# =============================================================================
+# IMPORT/EXPORT MODALS
+# =============================================================================
+
+@login_required
+def import_students_modal(request):
+    """Import students modal"""
+    return render(request, 'academics/import/modals/students.html')
+
+
+@login_required
+def import_subjects_modal(request):
+    """Import subjects modal"""
+    return render(request, 'academics/import/modals/subjects.html')
+
+
+@login_required
+def import_enrollments_modal(request):
+    """Import enrollments modal"""
+    classes = Class.objects.filter(is_active=True)
+    
+    return render(request, 'academics/import/modals/enrollments.html', {
+        'classes': classes,
+    })
+
+
+@login_required
+def export_options_modal(request):
+    """Export options modal"""
+    export_type = request.GET.get('type', 'general')
+    
+    return render(request, 'academics/export/modals/options.html', {
+        'export_type': export_type,
+    })
+
+
+# =============================================================================
+# SETTINGS MODALS
+# =============================================================================
+
+@login_required
+def academic_settings_modal(request):
+    """Academic settings modal"""
+    return render(request, 'academics/settings/modals/settings.html')
+
+
+@login_required
+def grading_scale_modal(request):
+    """Grading scale configuration modal"""
+    return render(request, 'academics/settings/modals/grading_scale.html')
+
+
+@login_required
+def promotion_rules_modal(request):
+    """Promotion rules configuration modal"""
+    return render(request, 'academics/settings/modals/promotion_rules.html')
+
+
+# =============================================================================
+# CALENDAR MODALS
+# =============================================================================
+
+@login_required
+def calendar_events_modal(request):
+    """Calendar events modal"""
+    year = request.GET.get('year')
+    month = request.GET.get('month')
+    
+    holidays = Holiday.objects.filter(is_active=True)
+    if year and month:
+        holidays = holidays.filter(
+            start_date__year=year,
+            start_date__month=month
+        )
+    
+    return render(request, 'academics/calendar/modals/events.html', {
+        'holidays': holidays,
+        'year': year,
+        'month': month,
+    })

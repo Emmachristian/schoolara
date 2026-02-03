@@ -1,29 +1,29 @@
 # academics/forms.py
 
 """
-Academic management forms with timezone support and HTMX filters.
+Academic management forms with timezone support.
 All date validations use school timezone for consistency.
+
+HTMX configuration removed - to be handled in views and templates.
 """
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.db.models import Q
+from decimal import Decimal
 from django.urls import reverse_lazy
+import re
 import logging
 
 # Import base form utilities with timezone support ⭐
 from utils.forms import (
     BootstrapFormMixin,
-    HTMXFormMixin,
-    HTMXFilterFormMixin,
     DateRangeFormMixin,
     RequiredFieldsMixin,
-    BaseFilterForm,
-    DateRangeFilterForm,
     DatePickerInput,
     SearchInput,
-    SelectWithDefault,
     PercentageField,
     PercentageInput,
     validate_future_date,  # ⭐ Uses school timezone
@@ -31,6 +31,9 @@ from utils.forms import (
     validate_date_not_before,  # ⭐ Uses school timezone
     validate_date_not_after,  # ⭐ Uses school timezone
 )
+
+# Import school timezone utilities ⭐
+from core.utils import get_school_today, get_school_current_time
 
 from .models import (
     AcademicSession,
@@ -51,21 +54,12 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# ACADEMIC SESSION FILTER FORMS (HTMX SEARCH)
+# ACADEMIC SESSION FILTER FORMS
 # =============================================================================
 
-class AcademicSessionFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered academic session filter form.
-    All date validations use school timezone. ⭐
-    """
+class AcademicSessionFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for academic session search"""
     
-    # Configuration
-    htmx_get =  'academics:session_search'
-    htmx_target = '#session-list'
-    search_delay = 300
-    
-    # Search
     q = forms.CharField(
         label='Search',
         required=False,
@@ -74,7 +68,6 @@ class AcademicSessionFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.F
         })
     )
     
-    # Status filters
     is_current = forms.NullBooleanField(
         label='Current Session',
         required=False,
@@ -127,10 +120,9 @@ class AcademicSessionFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.F
             ('remedial', 'Remedial Program'),
         ],
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # Date range filters (uses school timezone) ⭐
     start_date_from = forms.DateField(
         label='Start Date From',
         required=False,
@@ -143,7 +135,6 @@ class AcademicSessionFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.F
         widget=DatePickerInput()
     )
     
-    # Year filter
     year_name = forms.CharField(
         label='Academic Year',
         required=False,
@@ -152,24 +143,10 @@ class AcademicSessionFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.F
             'placeholder': 'e.g., 2024 or 2024-2025'
         })
     )
-    
-    def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
-        super().__init__(*args, **kwargs)
 
 
-class HolidayFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered holiday filter form.
-    Uses school timezone for date validations. ⭐
-    """
-    
-    htmx_get = None
-    htmx_target = '#holiday-list'
-    search_delay = 300
+class HolidayFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
+    """Filter form for holiday search"""
     
     q = forms.CharField(
         label='Search',
@@ -181,7 +158,7 @@ class HolidayFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMi
         label='Holiday Type',
         choices=[('', 'All Types')] + Holiday.HOLIDAY_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     is_school_closed = forms.NullBooleanField(
@@ -194,7 +171,6 @@ class HolidayFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMi
         ], attrs={'class': 'form-select'})
     )
     
-    # Date range (uses school timezone) ⭐
     date_from = forms.DateField(
         label='From Date',
         required=False,
@@ -211,17 +187,13 @@ class HolidayFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMi
         label='Academic Session',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
+        empty_label="All Sessions",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set academic session queryset
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
@@ -229,18 +201,13 @@ class HolidayFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMi
         except Exception as e:
             logger.error(f"Error setting session queryset: {e}")
 
+
 # =============================================================================
 # SUBJECT FILTER FORM
 # =============================================================================
 
-class SubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered subject filter form.
-    """
-    
-    htmx_get = 'academics:subject_search'
-    htmx_target = '#subject-list'
-    search_delay = 100
+class SubjectFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for subject search"""
     
     q = forms.CharField(
         label='Search',
@@ -254,7 +221,7 @@ class SubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         label='Subject Type',
         choices=[('', 'All Types')] + Subject.SUBJECT_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     is_active = forms.NullBooleanField(
@@ -286,32 +253,29 @@ class SubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
             ('EXPERT', 'Expert'),
         ],
         required=False,
-        widget=SelectWithDefault(default_label="All Levels")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     department = forms.ModelChoiceField(
         label='Department',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Departments")
+        empty_label="All Departments",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     academic_level = forms.ModelChoiceField(
         label='Academic Level',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Levels"),
+        empty_label="All Levels",
+        widget=forms.Select(attrs={'class': 'form-select'}),
         help_text="Filter by applicable academic level"
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set department queryset
         try:
             from hr.models import Department
             self.fields['department'].queryset = Department.objects.filter(
@@ -320,7 +284,6 @@ class SubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         except Exception as e:
             logger.error(f"Error setting department queryset: {e}")
         
-        # Set academic level queryset
         try:
             self.fields['academic_level'].queryset = AcademicLevel.objects.filter(
                 is_active=True
@@ -333,14 +296,8 @@ class SubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
 # ACADEMIC LEVEL FILTER FORM
 # =============================================================================
 
-class AcademicLevelFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered academic level filter form.
-    """
-    
-    htmx_get = 'academics:level_search'
-    htmx_target = '#level-list'
-    search_delay = 100
+class AcademicLevelFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for academic level search"""
     
     q = forms.CharField(
         label='Search',
@@ -379,27 +336,14 @@ class AcademicLevelFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.For
             ('false', 'Not Graduation Level')
         ], attrs={'class': 'form-select'})
     )
-    
-    def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
-        super().__init__(*args, **kwargs)
 
 
 # =============================================================================
 # CLASSROOM FILTER FORM
 # =============================================================================
 
-class ClassRoomFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered classroom filter form.
-    """
-    
-    htmx_get =  'academics:classroom_search'
-    htmx_target = '#classroom-list'
-    search_delay = 300
+class ClassRoomFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for classroom search"""
     
     q = forms.CharField(
         label='Search',
@@ -413,7 +357,7 @@ class ClassRoomFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
         label='Room Type',
         choices=[('', 'All Types')] + ClassRoom.ROOM_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     building = forms.CharField(
@@ -503,27 +447,14 @@ class ClassRoomFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
             ('false', 'Not Accessible')
         ], attrs={'class': 'form-select'})
     )
-    
-    def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
-        super().__init__(*args, **kwargs)
 
 
 # =============================================================================
-# CLASS FILTER FORM (COMPLETE FIX)
+# CLASS FILTER FORM
 # =============================================================================
 
-class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered class filter form with robust queryset handling.
-    """
-    
-    htmx_get = 'academics:class_search'
-    htmx_target = '#class-list'
-    search_delay = 300
+class ClassFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for class search"""
     
     q = forms.CharField(
         label='Search',
@@ -535,16 +466,18 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     
     academic_level = forms.ModelChoiceField(
         label='Academic Level',
-        queryset=AcademicLevel.objects.none(),  # ⭐ Initialize with empty queryset
+        queryset=AcademicLevel.objects.none(),
         required=False,
-        widget=SelectWithDefault(default_label="All Levels")
+        empty_label="All Levels",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     academic_session = forms.ModelChoiceField(
         label='Academic Session',
-        queryset=AcademicSession.objects.none(),  # ⭐ Initialize with empty queryset
+        queryset=AcademicSession.objects.none(),
         required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
+        empty_label="All Sessions",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     section = forms.CharField(
@@ -558,16 +491,18 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     
     class_teacher = forms.ModelChoiceField(
         label='Class Teacher',
-        queryset=None,  # Will be set in __init__
+        queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Teachers")
+        empty_label="All Teachers",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     classroom = forms.ModelChoiceField(
         label='Classroom',
-        queryset=ClassRoom.objects.none(),  # ⭐ Initialize with empty queryset
+        queryset=ClassRoom.objects.none(),
         required=False,
-        widget=SelectWithDefault(default_label="All Rooms")
+        empty_label="All Rooms",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     is_active = forms.NullBooleanField(
@@ -592,13 +527,8 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set academic level queryset
         try:
             self.fields['academic_level'].queryset = AcademicLevel.objects.filter(
                 is_active=True
@@ -607,7 +537,6 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
             logger.error(f"Error setting level queryset: {e}")
             self.fields['academic_level'].queryset = AcademicLevel.objects.none()
         
-        # Set academic session queryset
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
@@ -616,24 +545,23 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
             logger.error(f"Error setting session queryset: {e}")
             self.fields['academic_session'].queryset = AcademicSession.objects.none()
         
-        # Set teacher queryset
         try:
             from hr.models import Teacher
             self.fields['class_teacher'].queryset = Teacher.objects.filter(
                 is_active=True
             ).order_by('user__last_name', 'user__first_name')
+        except ImportError:
+            logger.error("Teacher model not found - hr app may not be installed")
+            self.fields['class_teacher'].widget = forms.HiddenInput()
+            self.fields['class_teacher'].required = False
         except Exception as e:
             logger.error(f"Error setting teacher queryset: {e}")
-            # Create empty queryset with proper model
             try:
                 from hr.models import Teacher
                 self.fields['class_teacher'].queryset = Teacher.objects.none()
             except:
-                # If Teacher model doesn't exist, remove the field
-                self.fields['class_teacher'].widget = forms.HiddenInput()
-                self.fields['class_teacher'].required = False
+                pass
         
-        # Set classroom queryset
         try:
             self.fields['classroom'].queryset = ClassRoom.objects.filter(
                 is_active=True
@@ -647,15 +575,8 @@ class ClassFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
 # STUDENT CLASS ENROLLMENT FILTER FORM
 # =============================================================================
 
-class StudentClassEnrollmentFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered student class enrollment filter form.
-    Uses school timezone for date validations.
-    """
-    
-    htmx_get = 'academics:enrollment_search'
-    htmx_target = '#enrollment-list'
-    search_delay = 300
+class StudentClassEnrollmentFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
+    """Filter form for student class enrollment search"""
     
     q = forms.CharField(
         label='Search',
@@ -669,58 +590,61 @@ class StudentClassEnrollmentFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, 
         label='Class',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Classes")
+        empty_label="All Classes",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     academic_session = forms.ModelChoiceField(
         label='Academic Session',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
+        empty_label="All Sessions",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     enrollment_type = forms.ChoiceField(
         label='Enrollment Type',
-        choices=[('', 'All Types')] + StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES,
+        choices=[('', 'All Types')] + list(StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES),
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     completion_status = forms.ChoiceField(
         label='Completion Status',
-        choices=[('', 'All Statuses')] + StudentClassEnrollment.COMPLETION_STATUS_CHOICES,
+        choices=[('', 'All Statuses')] + list(StudentClassEnrollment.COMPLETION_STATUS_CHOICES),
         required=False,
-        widget=SelectWithDefault(default_label="All Statuses")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     progression_type = forms.ChoiceField(
         label='Progression Type',
-        choices=[('', 'All Types')] + StudentClassEnrollment.PROGRESSION_TYPE_CHOICES,
+        choices=[('', 'All Types')] + list(StudentClassEnrollment.PROGRESSION_TYPE_CHOICES),
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    is_active = forms.NullBooleanField(
+    is_active = forms.ChoiceField(
         label='Active Status',
         required=False,
-        widget=forms.Select(choices=[
+        choices=[
             ('', 'All'),
             ('true', 'Active'),
             ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    has_invoice = forms.NullBooleanField(
+    has_invoice = forms.ChoiceField(
         label='Invoice Status',
         required=False,
-        widget=forms.Select(choices=[
+        choices=[
             ('', 'All'),
             ('true', 'Has Invoice'),
             ('false', 'No Invoice')
-        ], attrs={'class': 'form-select'})
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # Date range filters
     enrollment_date_from = forms.DateField(
         label='Enrolled From',
         required=False,
@@ -734,50 +658,133 @@ class StudentClassEnrollmentFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, 
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set querysets
         try:
-            self.fields['class_instance'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level', 'academic_session').order_by(
+            self.fields['class_instance'].queryset = Class.objects.select_related(
+                'academic_level', 'academic_session'
+            ).order_by(
                 '-academic_session__start_date',
                 'academic_level__order',
                 'section'
             )
         except Exception as e:
             logger.error(f"Error setting class queryset: {e}")
+            self.fields['class_instance'].queryset = Class.objects.none()
         
         try:
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
+            self.fields['academic_session'].queryset = AcademicSession.objects.all().order_by(
+                '-start_date'
+            )
         except Exception as e:
             logger.error(f"Error setting session queryset: {e}")
+            self.fields['academic_session'].queryset = AcademicSession.objects.none()
+    
+    def clean(self):
+        """Validate date range"""
+        cleaned_data = super().clean()
+        
+        enrollment_date_from = cleaned_data.get('enrollment_date_from')
+        enrollment_date_to = cleaned_data.get('enrollment_date_to')
+        
+        if enrollment_date_from and enrollment_date_to:
+            if enrollment_date_from > enrollment_date_to:
+                raise ValidationError({
+                    'enrollment_date_to': 'End date must be after start date.'
+                })
+        
+        return cleaned_data
+    
+    def get_boolean_value(self, field_name):
+        """Convert string boolean values to actual booleans"""
+        value = self.cleaned_data.get(field_name)
+        if value == 'true':
+            return True
+        elif value == 'false':
+            return False
+        return None
+    
+    def get_filter_summary(self):
+        """
+        Generate a human-readable summary of active filters
+        Returns a list of tuples: (field_label, display_value)
+        """
+        if not self.is_valid():
+            return []
+        
+        summary = []
+        cleaned_data = self.cleaned_data
+        
+        # Search query
+        if cleaned_data.get('q'):
+            summary.append(('Search', cleaned_data['q']))
+        
+        # Class instance
+        if cleaned_data.get('class_instance'):
+            summary.append(('Class', str(cleaned_data['class_instance'])))
+        
+        # Academic session
+        if cleaned_data.get('academic_session'):
+            summary.append(('Academic Session', str(cleaned_data['academic_session'])))
+        
+        # Enrollment type
+        if cleaned_data.get('enrollment_type'):
+            display = dict(StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES).get(
+                cleaned_data['enrollment_type']
+            )
+            summary.append(('Enrollment Type', display))
+        
+        # Completion status
+        if cleaned_data.get('completion_status'):
+            display = dict(StudentClassEnrollment.COMPLETION_STATUS_CHOICES).get(
+                cleaned_data['completion_status']
+            )
+            summary.append(('Completion Status', display))
+        
+        # Progression type
+        if cleaned_data.get('progression_type'):
+            display = dict(StudentClassEnrollment.PROGRESSION_TYPE_CHOICES).get(
+                cleaned_data['progression_type']
+            )
+            summary.append(('Progression Type', display))
+        
+        # Active status
+        is_active = self.get_boolean_value('is_active')
+        if is_active is not None:
+            summary.append(('Active Status', 'Active' if is_active else 'Inactive'))
+        
+        # Invoice status
+        has_invoice = self.get_boolean_value('has_invoice')
+        if has_invoice is not None:
+            summary.append(('Invoice Status', 'Has Invoice' if has_invoice else 'No Invoice'))
+        
+        # Date range
+        date_from = cleaned_data.get('enrollment_date_from')
+        date_to = cleaned_data.get('enrollment_date_to')
+        
+        if date_from and date_to:
+            summary.append(('Enrollment Date', f'{date_from} to {date_to}'))
+        elif date_from:
+            summary.append(('Enrolled From', str(date_from)))
+        elif date_to:
+            summary.append(('Enrolled To', str(date_to)))
+        
+        return summary
 
 
 # =============================================================================
 # CLASS SUBJECT FILTER FORM
 # =============================================================================
 
-class ClassSubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered class subject filter form.
-    """
-    
-    htmx_get = None
-    htmx_target = '#class-subject-list'
-    search_delay = 300
+class ClassSubjectFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for class subject search"""
     
     q = forms.CharField(
         label='Search',
         required=False,
         widget=SearchInput(attrs={
-            'placeholder': 'Search subjects...'
+            'placeholder': 'Search by subject name, class, or code...',
+            'autocomplete': 'off'
         })
     )
     
@@ -785,89 +792,124 @@ class ClassSubjectFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form
         label='Class',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Classes")
+        empty_label="All Classes",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     subject = forms.ModelChoiceField(
         label='Subject',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Subjects")
+        empty_label="All Subjects",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     teacher = forms.ModelChoiceField(
         label='Teacher',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Teachers")
+        empty_label="All Teachers",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     is_optional = forms.NullBooleanField(
-        label='Optional',
+        label='Subject Type',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Optional'),
-            ('false', 'Compulsory')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[
+                ('', 'All Types'),
+                ('false', 'Compulsory'),
+                ('true', 'Optional')
+            ],
+            attrs={'class': 'form-select'}
+        )
     )
     
     is_active = forms.NullBooleanField(
-        label='Active Status',
+        label='Status',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[
+                ('', 'All Status'),
+                ('true', 'Active'),
+                ('false', 'Inactive')
+            ],
+            attrs={'class': 'form-select'}
+        )
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set querysets
         try:
-            self.fields['class_instance'].queryset = Class.objects.filter(
+            self.fields['class_instance'].queryset = Class.objects.select_related(
+                'academic_level',
+                'academic_session'
+            ).filter(
                 is_active=True
-            ).select_related('academic_level', 'academic_session').order_by(
+            ).order_by(
+                '-academic_session__start_date',
                 'academic_level__order',
                 'section'
             )
+            
+            self.fields['class_instance'].label_from_instance = lambda obj: (
+                f"{obj.academic_level.name}"
+                f"{f' {obj.section}' if obj.section else ''}"
+                f" - {obj.academic_session.year_name}"
+            )
+            
         except Exception as e:
-            logger.error(f"Error setting class queryset: {e}")
+            logger.error(f"Error setting class_instance queryset: {e}")
+            self.fields['class_instance'].queryset = Class.objects.none()
         
         try:
             self.fields['subject'].queryset = Subject.objects.filter(
                 is_active=True
             ).order_by('name')
+            
+            self.fields['subject'].label_from_instance = lambda obj: (
+                f"{obj.code} - {obj.name}"
+            )
+            
         except Exception as e:
             logger.error(f"Error setting subject queryset: {e}")
+            self.fields['subject'].queryset = Subject.objects.none()
         
         try:
             from hr.models import Teacher
-            self.fields['teacher'].queryset = Teacher.objects.filter(
-                is_active=True
-            ).order_by('user__last_name', 'user__first_name')
+            
+            self.fields['teacher'].queryset = Teacher.objects.select_related(
+                'staff'
+            ).filter(
+                staff__is_active=True
+            ).order_by(
+                'staff__first_name',
+                'staff__last_name'
+            )
+            
+            self.fields['teacher'].label_from_instance = lambda obj: (
+                f"{obj.staff.full_name()} ({obj.staff.staff_id})"
+            )
+            
+        except ImportError:
+            logger.error("Teacher model not found - hr app may not be installed")
+            self.fields['teacher'].queryset = Teacher.objects.none()
         except Exception as e:
             logger.error(f"Error setting teacher queryset: {e}")
+            try:
+                from hr.models import Teacher
+                self.fields['teacher'].queryset = Teacher.objects.none()
+            except:
+                pass
 
 
 # =============================================================================
 # ACADEMIC PROGRESS FILTER FORM
 # =============================================================================
 
-class AcademicProgressFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered academic progress filter form.
-    """
-    
-    htmx_get = None
-    htmx_target = '#progress-list'
-    search_delay = 300
+class AcademicProgressFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter form for academic progress search"""
     
     q = forms.CharField(
         label='Search',
@@ -881,28 +923,30 @@ class AcademicProgressFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.
         label='Academic Session',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
+        empty_label="All Sessions",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     class_enrollment = forms.ModelChoiceField(
         label='Class',
         queryset=None,
         required=False,
-        widget=SelectWithDefault(default_label="All Classes")
+        empty_label="All Classes",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     progress_status = forms.ChoiceField(
         label='Progress Status',
         choices=[('', 'All Statuses')] + AcademicProgress.PROGRESS_STATUS_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Statuses")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     promotion_decision = forms.ChoiceField(
         label='Promotion Decision',
         choices=[('', 'All Decisions')] + AcademicProgress.PROMOTION_DECISION_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Decisions")
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     is_eligible_for_promotion = forms.NullBooleanField(
@@ -962,13 +1006,8 @@ class AcademicProgressFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.
     )
     
     def __init__(self, *args, **kwargs):
-        search_url = kwargs.pop('search_url', None)
-        if search_url:
-            self.htmx_get = search_url
-        
         super().__init__(*args, **kwargs)
         
-        # Set querysets
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.all().order_by('-start_date')
         except Exception as e:
@@ -983,6 +1022,7 @@ class AcademicProgressFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.
             )
         except Exception as e:
             logger.error(f"Error setting class queryset: {e}")
+
 
 # =============================================================================
 # ACADEMIC SESSION FORM
@@ -1005,77 +1045,238 @@ class AcademicSessionForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelFo
         ]
         widgets = {
             'year_name': forms.TextInput(attrs={
-                'placeholder': 'e.g., 2024 or 2024-2025'
+                'placeholder': 'e.g., 2024 or 2024-2025',
+                'class': 'form-control'
             }),
             'term_number': forms.NumberInput(attrs={
                 'min': '1',
                 'max': '20',
-                'placeholder': '1'
+                'placeholder': '1',
+                'class': 'form-control'
             }),
             'term_name': forms.TextInput(attrs={
-                'placeholder': 'Leave blank to auto-generate'
+                'placeholder': 'Leave blank to auto-generate',
+                'class': 'form-control'
             }),
-            'period_type': forms.Select(),
+            'period_type': forms.Select(attrs={
+                'class': 'form-select'
+            }),
             'start_date': DatePickerInput(),
             'end_date': DatePickerInput(),
             'enrollment_deadline': DatePickerInput(),
             'minimum_attendance_percentage': PercentageInput(),
-            'description': forms.Textarea(attrs={'rows': 3}),
+            'description': forms.Textarea(attrs={
+                'rows': 3,
+                'class': 'form-control',
+                'placeholder': 'Optional description or notes about this session'
+            }),
+            'is_special_session': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'late_enrollment_allowed': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_current': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'allows_promotion': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Add help text
+        try:
+            from core.models import SchoolConfiguration
+            config = SchoolConfiguration.get_instance()
+            
+            if config:
+                self.fields['term_number'].help_text = (
+                    f'Position within academic year (1-{config.get_period_count()} for regular sessions, '
+                    f'1-20 for special sessions). Your school uses {config.get_term_system_display_name()}.'
+                )
+                
+                self.fields['term_name'].help_text = (
+                    f'Leave blank for regular sessions (will auto-generate as "{config.get_period_type_name()} 1", '
+                    f'"{config.get_period_type_name()} 2", etc.). Provide custom name for special sessions.'
+                )
+                
+                self.fields['period_type'].help_text = (
+                    f'Leave blank to use school default ({config.get_term_system_display_name()}). '
+                    f'Select manually for special sessions.'
+                )
+            else:
+                self._set_fallback_help_text()
+        except Exception as e:
+            logger.warning(f"Could not load SchoolConfiguration for form help text: {e}")
+            self._set_fallback_help_text()
+        
         self.fields['year_name'].help_text = (
-            'Format: "YYYY" or "YYYY-YYYY" or "YYYY/YYYY"'
+            'Format: "YYYY" (e.g., 2025) or "YYYY-YYYY" (e.g., 2024-2025) or "YYYY/YYYY" (e.g., 2024/2025)'
         )
+        
+        self.fields['term_name'].required = False
+        self.fields['period_type'].required = False
+        self.fields['enrollment_deadline'].required = False
+        self.fields['description'].required = False
+    
+    def _set_fallback_help_text(self):
+        """Set fallback help text when SchoolConfiguration is not available"""
         self.fields['term_number'].help_text = (
-            'Position within academic year (1, 2, 3, etc.)'
+            'Position within academic year (1-12 for regular sessions, 1-20 for special sessions)'
         )
+        
         self.fields['term_name'].help_text = (
             'Leave blank for regular sessions (auto-generated). '
             'Provide custom name for special sessions.'
         )
-        self.fields['is_special_session'].help_text = (
-            'Check for holiday programs, summer school, or remedial classes'
+        
+        self.fields['period_type'].help_text = (
+            'Leave blank to auto-set. Select manually for special sessions.'
         )
+    
+    def clean_year_name(self):
+        """Validate year name format"""
+        year_name = self.cleaned_data.get('year_name')
+        
+        if not year_name:
+            raise ValidationError('Academic year is required.')
+        
+        if '/' in year_name or '-' in year_name:
+            pattern = r'^(20\d{2})[\/-](20\d{2})$'
+            if not re.match(pattern, year_name):
+                raise ValidationError(
+                    'Year name must be in format "YYYY-YYYY" or "YYYY/YYYY" (e.g., "2024-2025" or "2024/2025")'
+                )
+            
+            parts = year_name.replace('/', '-').split('-')
+            if len(parts) == 2:
+                year1, year2 = int(parts[0]), int(parts[1])
+                if year2 != year1 + 1:
+                    raise ValidationError(
+                        'For multi-year format, the second year must be exactly one year after the first '
+                        '(e.g., "2024-2025" not "2024-2026")'
+                    )
+        else:
+            pattern = r'^20\d{2}$'
+            if not re.match(pattern, year_name):
+                raise ValidationError(
+                    'Year name must be in format "YYYY" (e.g., "2025")'
+                )
+        
+        return year_name
+    
+    def clean_term_number(self):
+        """Validate term number"""
+        term_number = self.cleaned_data.get('term_number')
+        is_special_session = self.cleaned_data.get('is_special_session', False)
+        
+        if not term_number:
+            raise ValidationError('Period number is required.')
+        
+        if term_number < 1:
+            raise ValidationError('Period number must be at least 1.')
+        
+        if not is_special_session:
+            try:
+                from core.models import SchoolConfiguration
+                config = SchoolConfiguration.get_instance()
+                
+                if config:
+                    max_periods = config.get_period_count()
+                    if term_number > max_periods:
+                        raise ValidationError(
+                            f'Period number cannot exceed {max_periods} for regular sessions in your '
+                            f'{config.get_term_system_display_name()} system. '
+                            f'Check "Special Session" if this is outside the regular term structure.'
+                        )
+            except Exception as e:
+                logger.warning(f"Could not validate term_number against SchoolConfiguration: {e}")
+                if term_number > 12:
+                    raise ValidationError(
+                        'Period number cannot exceed 12 for regular sessions. '
+                        'Check "Special Session" for programs outside the regular term structure.'
+                    )
+        else:
+            if term_number > 20:
+                raise ValidationError('Period number cannot exceed 20, even for special sessions.')
+        
+        return term_number
     
     def clean_start_date(self):
         """Validate start date using school timezone ⭐"""
         start_date = self.cleaned_data.get('start_date')
-        if start_date:
-            from core.utils import get_school_today
-            from datetime import timedelta
-            
-            today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Allow sessions to be created up to 2 years in advance
-            max_future = today + timedelta(days=2*365)
-            if start_date > max_future:
-                raise ValidationError(
-                    "Start date cannot be more than 2 years in the future."
-                )
+        
+        if not start_date:
+            raise ValidationError('Start date is required.')
+        
+        from datetime import timedelta
+        today = get_school_today()  # ⭐ SCHOOL TIMEZONE
+        
+        min_past = today - timedelta(days=2*365)
+        if start_date < min_past:
+            raise ValidationError(
+                f"Start date cannot be more than 2 years in the past (before {min_past.strftime('%Y-%m-%d')})."
+            )
+        
+        max_future = today + timedelta(days=2*365)
+        if start_date > max_future:
+            raise ValidationError(
+                f"Start date cannot be more than 2 years in the future (after {max_future.strftime('%Y-%m-%d')})."
+            )
         
         return start_date
     
+    def clean_end_date(self):
+        """Validate end date"""
+        end_date = self.cleaned_data.get('end_date')
+        
+        if not end_date:
+            raise ValidationError('End date is required.')
+        
+        return end_date
+    
+    def clean_minimum_attendance_percentage(self):
+        """Validate attendance percentage"""
+        percentage = self.cleaned_data.get('minimum_attendance_percentage')
+        
+        if percentage is None:
+            return Decimal('75.00')
+        
+        if not (0 <= percentage <= 100):
+            raise ValidationError('Attendance percentage must be between 0 and 100.')
+        
+        return percentage
+    
     def clean(self):
-        """
-        Cross-field validation using school timezone. ⭐
-        """
+        """Cross-field validation using school timezone ⭐"""
         cleaned_data = super().clean()
         start_date = cleaned_data.get('start_date')
         end_date = cleaned_data.get('end_date')
         enrollment_deadline = cleaned_data.get('enrollment_deadline')
+        is_special_session = cleaned_data.get('is_special_session', False)
+        term_name = cleaned_data.get('term_name')
+        period_type = cleaned_data.get('period_type')
         
-        # Validate date range
         if start_date and end_date:
             if start_date >= end_date:
                 raise ValidationError({
                     'end_date': 'End date must be after start date.'
                 })
+            
+            duration = (end_date - start_date).days
+            if duration < 7:
+                raise ValidationError({
+                    'end_date': 'Session must be at least 1 week long.'
+                })
+            
+            if duration > 180:
+                logger.warning(f"Session duration is {duration} days (over 6 months)")
         
-        # Validate enrollment deadline
         if enrollment_deadline:
             if start_date and enrollment_deadline < start_date:
                 raise ValidationError({
@@ -1087,7 +1288,56 @@ class AcademicSessionForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelFo
                     'enrollment_deadline': 'Enrollment deadline cannot be after end date.'
                 })
         
+        if is_special_session:
+            if not term_name:
+                raise ValidationError({
+                    'term_name': 'Period name is required for special sessions.'
+                })
+            
+            if not period_type:
+                raise ValidationError({
+                    'period_type': 'Period type is required for special sessions.'
+                })
+        
+        if start_date and end_date:
+            year_name = cleaned_data.get('year_name')
+            term_number = cleaned_data.get('term_number')
+            
+            if year_name and term_number:
+                existing = AcademicSession.objects.filter(
+                    year_name=year_name,
+                    term_number=term_number
+                )
+                
+                if self.instance and self.instance.pk:
+                    existing = existing.exclude(pk=self.instance.pk)
+                
+                if existing.exists():
+                    raise ValidationError(
+                        f'An academic session already exists for {year_name}, Period {term_number}. '
+                        f'Please use a different period number or year.'
+                    )
+        
         return cleaned_data
+    
+    def save(self, commit=True):
+        """Save the form with additional processing"""
+        instance = super().save(commit=False)
+        
+        if instance.pk:
+            logger.info(f"Updating academic session: {instance.year_name} - Period {instance.term_number}")
+        else:
+            logger.info(f"Creating academic session: {instance.year_name} - Period {instance.term_number}")
+        
+        if commit:
+            try:
+                instance.save()
+                logger.info(f"Academic session saved successfully: {instance.name}")
+            except Exception as e:
+                logger.error(f"Error saving academic session: {e}", exc_info=True)
+                raise
+        
+        return instance
 
 
 # =============================================================================
@@ -1095,10 +1345,7 @@ class AcademicSessionForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelFo
 # =============================================================================
 
 class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """
-    Form for creating/editing holidays.
-    Uses school timezone for date validations. ⭐
-    """
+    """Form for creating/editing holidays"""
     
     class Meta:
         model = Holiday
@@ -1124,7 +1371,6 @@ class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set academic session queryset
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
@@ -1132,7 +1378,6 @@ class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         except Exception as e:
             logger.error(f"Error setting session queryset: {e}")
         
-        # Help text
         self.fields['end_date'].help_text = 'Leave blank for single-day holidays'
         self.fields['is_recurring'].help_text = 'Check if this holiday repeats annually'
     
@@ -1140,12 +1385,9 @@ class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         """Validate start date using school timezone ⭐"""
         start_date = self.cleaned_data.get('start_date')
         if start_date:
-            from core.utils import get_school_today
             from datetime import timedelta
             
             today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Allow holidays to be created up to 2 years in advance
             max_future = today + timedelta(days=2*365)
             if start_date > max_future:
                 raise ValidationError(
@@ -1155,7 +1397,7 @@ class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         return start_date
     
     def clean(self):
-        """Validate date range using school timezone ⭐"""
+        """Validate date range"""
         cleaned_data = super().clean()
         start_date = cleaned_data.get('start_date')
         end_date = cleaned_data.get('end_date')
@@ -1174,7 +1416,7 @@ class HolidayForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
 # =============================================================================
 
 class SubjectForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing subjects."""
+    """Form for creating/editing subjects"""
     
     class Meta:
         model = Subject
@@ -1216,7 +1458,7 @@ class SubjectForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
 # =============================================================================
 
 class AcademicLevelForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing academic levels."""
+    """Form for creating/editing academic levels"""
     
     class Meta:
         model = AcademicLevel
@@ -1235,7 +1477,6 @@ class AcademicLevelForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Filter next_level to exclude self
         if self.instance.pk:
             self.fields['next_level'].queryset = AcademicLevel.objects.exclude(
                 pk=self.instance.pk
@@ -1247,7 +1488,7 @@ class AcademicLevelForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm
 # =============================================================================
 
 class ClassRoomForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing classrooms."""
+    """Form for creating/editing classrooms"""
     
     last_maintenance_date = forms.DateField(
         label='Last Maintenance Date',
@@ -1295,12 +1536,13 @@ class ClassRoomForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             validate_future_date(date)  # ⭐ Uses school timezone
         return date
 
+
 # =============================================================================
-# CLASS FORM (COMPLETE FIX)
+# CLASS FORM
 # =============================================================================
 
 class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing classes with proper queryset handling."""
+    """Form for creating/editing classes"""
     
     start_time = forms.TimeField(
         label='Start Time',
@@ -1338,7 +1580,6 @@ class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # ⭐ Set academic level queryset
         try:
             self.fields['academic_level'].queryset = AcademicLevel.objects.filter(
                 is_active=True
@@ -1347,7 +1588,6 @@ class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             logger.error(f"Error setting academic level queryset: {e}")
             self.fields['academic_level'].queryset = AcademicLevel.objects.none()
         
-        # ⭐ Set academic session queryset
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
@@ -1356,7 +1596,6 @@ class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             logger.error(f"Error setting session queryset: {e}")
             self.fields['academic_session'].queryset = AcademicSession.objects.none()
         
-        # ⭐ Set classroom queryset
         try:
             self.fields['classroom'].queryset = ClassRoom.objects.filter(
                 is_active=True
@@ -1365,24 +1604,32 @@ class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             logger.error(f"Error setting classroom queryset: {e}")
             self.fields['classroom'].queryset = ClassRoom.objects.none()
         
-        # ⭐ Set teacher querysets
+        # =====================================================================
+        # TEACHER QUERYSET - FIXED ⭐
+        # =====================================================================
         try:
             from hr.models import Teacher
+            
+            # ✅ FIXED: Order by staff fields, not user fields
             teacher_queryset = Teacher.objects.filter(
                 is_active=True
-            ).order_by('user__last_name', 'user__first_name')
+            ).select_related('staff').order_by(
+                'staff__first_name', 
+                'staff__last_name'
+            )
             
             self.fields['class_teacher'].queryset = teacher_queryset
             self.fields['assistant_teacher'].queryset = teacher_queryset
+            
         except ImportError:
             logger.error("Teacher model not found - hr app may not be installed")
-            # Hide teacher fields if hr app not available
             self.fields['class_teacher'].widget = forms.HiddenInput()
             self.fields['class_teacher'].required = False
             self.fields['assistant_teacher'].widget = forms.HiddenInput()
             self.fields['assistant_teacher'].required = False
+            
         except Exception as e:
-            logger.error(f"Error setting teacher queryset: {e}")
+            logger.error(f"Error setting teacher queryset: {e}", exc_info=True)
             try:
                 from hr.models import Teacher
                 self.fields['class_teacher'].queryset = Teacher.objects.none()
@@ -1397,62 +1644,405 @@ class ClassForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         start_time = cleaned_data.get('start_time')
         end_time = cleaned_data.get('end_time')
         
-        # Validate time schedule
         if start_time and end_time:
             if start_time >= end_time:
                 raise ValidationError({
                     'end_time': 'End time must be after start time.'
                 })
         
+        # Validate that class teacher and assistant teacher are different
+        class_teacher = cleaned_data.get('class_teacher')
+        assistant_teacher = cleaned_data.get('assistant_teacher')
+        
+        if class_teacher and assistant_teacher:
+            if class_teacher == assistant_teacher:
+                raise ValidationError({
+                    'assistant_teacher': 'Assistant teacher must be different from class teacher.'
+                })
+        
         return cleaned_data
 
+
 # =============================================================================
-# STUDENT CLASS ENROLLMENT FORM
+# STUDENT CLASS ENROLLMENT FORMS
 # =============================================================================
 
-class StudentClassEnrollmentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """
-    Form for enrolling students in classes.
-    Uses school timezone for date validations. ⭐
-    """
+class BulkEnrollmentStudentSelectionForm(BootstrapFormMixin, forms.Form):
+    """Step 1: Filter and select students for bulk enrollment"""
+    
+    search = forms.CharField(
+        label='Search Students',
+        required=False,
+        widget=SearchInput(attrs={
+            'placeholder': 'Search by name, admission number...',
+            'autofocus': True
+        })
+    )
+    
+    current_level = forms.ModelChoiceField(
+        queryset=AcademicLevel.objects.filter(is_active=True),
+        required=False,
+        empty_label='All Levels',
+        label='Current Academic Level',
+        help_text='Filter students by their current level'
+    )
+    
+    enrollment_status = forms.ChoiceField(
+        choices=[('', 'All Statuses')] + list(Student.ENROLLMENT_STATUS_CHOICES),
+        required=False,
+        label='Enrollment Status',
+        initial='ACTIVE'
+    )
+    
+    gender = forms.ChoiceField(
+        choices=[('', 'All Genders')] + list(Student.GENDER_CHOICES),
+        required=False,
+        label='Gender'
+    )
+    
+    exclude_already_enrolled = forms.BooleanField(
+        initial=True,
+        required=False,
+        label='Hide already enrolled students',
+        help_text='Exclude students already enrolled in the target session',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    show_only_eligible = forms.BooleanField(
+        initial=False,
+        required=False,
+        label='Show only promotion-eligible students',
+        help_text='Only show students eligible for promotion',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    sort_by = forms.ChoiceField(
+        choices=[
+            ('name', 'Name (A-Z)'),
+            ('-name', 'Name (Z-A)'),
+            ('admission_number', 'Admission Number'),
+            ('-admission_date', 'Recently Admitted'),
+            ('admission_date', 'Oldest Admission'),
+        ],
+        required=True,
+        initial='name',
+        label='Sort By'
+    )
+    
+    def __init__(self, *args, academic_session=None, target_class=None, **kwargs):
+        self.academic_session = academic_session
+        self.target_class = target_class
+        
+        super().__init__(*args, **kwargs)
+        
+        if self.academic_session:
+            self.fields['exclude_already_enrolled'].help_text = (
+                f'Exclude students already enrolled in {self.academic_session.name}'
+            )
+
+
+class BulkEnrollmentConfirmationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
+    """Step 2: Configure enrollment details for selected students"""
+    
+    academic_session = forms.ModelChoiceField(
+        queryset=AcademicSession.objects.none(),
+        required=True,
+        label='Academic Session',
+        empty_label='Select Academic Session',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Only sessions open for enrollment are shown'
+    )
+    
+    class_instance = forms.ModelChoiceField(
+        queryset=Class.objects.filter(is_active=True),
+        required=True,
+        label='Class'
+    )
+    
+    enrollment_date = forms.DateField(
+        widget=DatePickerInput(),
+        required=True,
+        label='Enrollment Date'
+    )
+    
+    enrollment_type = forms.ChoiceField(
+        choices=StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES,
+        initial='CONTINUING',
+        required=True,
+        label='Enrollment Type'
+    )
+    
+    auto_create_invoice = forms.BooleanField(
+        initial=True,
+        required=False,
+        label='Auto-create Fee Invoices',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    selected_student_ids = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=True
+    )
+    
+    confirm_enrollment = forms.BooleanField(
+        required=True,
+        label='I confirm this bulk enrollment',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        self.student_count = kwargs.pop('student_count', 0)
+        super().__init__(*args, **kwargs)
+        
+        if self.student_count:
+            self.fields['confirm_enrollment'].label = (
+                f'I confirm enrollment of {self.student_count} student(s)'
+            )
+        
+        self.fields['academic_session'].queryset = AcademicSession.get_open_for_enrollment()
+        
+        if not self.data and not self.initial.get('enrollment_date'):
+            self.fields['enrollment_date'].initial = get_school_today()  # ⭐ SCHOOL TIMEZONE
+    
+    def clean_selected_student_ids(self):
+        """Parse and validate selected student IDs"""
+        ids_str = self.cleaned_data.get('selected_student_ids', '')
+        
+        if not ids_str:
+            raise ValidationError('No students selected for enrollment.')
+        
+        try:
+            ids = [id.strip() for id in ids_str.split(',') if id.strip()]
+            if not ids:
+                raise ValidationError('No valid student IDs provided.')
+            
+            actual_count = Student.objects.filter(id__in=ids).count()
+            if actual_count != len(ids):
+                raise ValidationError(
+                    f'Some students no longer exist. Found {actual_count} of {len(ids)}.'
+                )
+            
+            return ids
+            
+        except ValueError:
+            raise ValidationError('Invalid student ID format.')
+    
+    def clean_enrollment_date(self):
+        """Validate enrollment date using school timezone ⭐"""
+        enrollment_date = self.cleaned_data.get('enrollment_date')
+        
+        if not enrollment_date:
+            return enrollment_date
+        
+        from datetime import timedelta
+        today = get_school_today()  # ⭐ SCHOOL TIMEZONE
+        
+        if enrollment_date > today + timedelta(days=365):
+            raise ValidationError('Enrollment date cannot be more than 1 year in the future.')
+        
+        return enrollment_date
+    
+    def clean(self):
+        """Cross-field validation"""
+        cleaned_data = super().clean()
+        
+        academic_session = cleaned_data.get('academic_session')
+        class_instance = cleaned_data.get('class_instance')
+        enrollment_date = cleaned_data.get('enrollment_date')
+        student_ids = cleaned_data.get('selected_student_ids', [])
+        
+        if class_instance and academic_session:
+            if class_instance.academic_session != academic_session:
+                raise ValidationError({
+                    'class_instance': 'Selected class does not belong to the selected session.'
+                })
+        
+        if enrollment_date and academic_session:
+            if enrollment_date > academic_session.end_date:
+                raise ValidationError({
+                    'enrollment_date': f'Enrollment date cannot be after session end date ({academic_session.end_date})'
+                })
+        
+        if class_instance and student_ids:
+            current_count = class_instance.enrollments.filter(
+                completion_status='ONGOING'
+            ).count()
+            
+            if hasattr(class_instance, 'max_capacity') and class_instance.max_capacity:
+                available = class_instance.max_capacity - current_count
+                if len(student_ids) > available:
+                    raise ValidationError({
+                        'class_instance': (
+                            f'Class has only {available} available spots, '
+                            f'but you are trying to enroll {len(student_ids)} students.'
+                        )
+                    })
+        
+        if academic_session and student_ids:
+            existing_enrollments = StudentClassEnrollment.objects.filter(
+                academic_session=academic_session,
+                student_id__in=student_ids,
+                completion_status='ONGOING'
+            ).select_related('student', 'class_instance')
+            
+            if existing_enrollments.exists():
+                duplicates = [
+                    f"{e.student.get_full_name()} (in {e.class_instance})"
+                    for e in existing_enrollments[:5]
+                ]
+                
+                error_msg = 'Already enrolled:\n' + '\n'.join(duplicates)
+                if existing_enrollments.count() > 5:
+                    error_msg += f'\n... and {existing_enrollments.count() - 5} more'
+                
+                raise ValidationError(error_msg)
+        
+        return cleaned_data
+
+
+class StudentEnrollmentForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
+    """Form for enrolling a single student into a class"""
     
     class Meta:
         model = StudentClassEnrollment
         fields = [
-            'student', 'class_instance', 'academic_session',
-            'enrollment_date', 'enrollment_type', 'roll_number',
-            'progression_type', 'is_active', 'auto_create_invoice',
+            'academic_session',
+            'student',
+            'class_instance',
+            'enrollment_date',
+            'enrollment_type',
+            # 'roll_number',  # ❌ EXCLUDED - auto-generated by signal
+            'auto_create_invoice',
             'enrollment_notes',
         ]
         widgets = {
             'enrollment_date': DatePickerInput(),
-            'roll_number': forms.TextInput(attrs={'placeholder': 'Roll number'}),
             'enrollment_notes': forms.Textarea(attrs={'rows': 3}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set default enrollment date (school timezone) ⭐
-        if not self.is_bound and not self.instance.pk:
-            from core.utils import get_school_today
+        # Set default enrollment date for new enrollments
+        if not self.instance.pk:
             self.fields['enrollment_date'].initial = get_school_today()
         
         # Set querysets
-        try:
-            from students.models import Student
-            self.fields['student'].queryset = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).order_by('last_name', 'first_name')
-        except Exception as e:
-            logger.error(f"Error setting student queryset: {e}")
+        self.fields['academic_session'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        )
+        self.fields['class_instance'].queryset = Class.objects.filter(
+            is_active=True
+        )
+        self.fields['student'].queryset = Student.objects.filter(
+            enrollment_status='ACTIVE'
+        )
+    
+    def clean(self):
+        """Validate enrollment"""
+        cleaned_data = super().clean()
         
-        try:
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-        except Exception as e:
-            logger.error(f"Error setting session queryset: {e}")
+        student = cleaned_data.get('student')
+        class_instance = cleaned_data.get('class_instance')
+        academic_session = cleaned_data.get('academic_session')
+        
+        # Check for duplicate enrollment
+        if student and class_instance and academic_session:
+            existing = StudentClassEnrollment.objects.filter(
+                student=student,
+                class_instance=class_instance,
+                academic_session=academic_session
+            )
+            
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            
+            if existing.exists():
+                raise ValidationError(
+                    f"{student.get_full_name()} is already enrolled in "
+                    f"{class_instance.get_display_name()} for {academic_session.name}"
+                )
+        
+        return cleaned_data
+
+
+class QuickEnrollmentForm(BootstrapFormMixin, forms.Form):
+    """Quick enrollment form with minimal fields"""
+    
+    student = forms.ModelChoiceField(
+        queryset=Student.objects.filter(enrollment_status='ACTIVE'),
+        required=True,
+        label='Student',
+        widget=forms.Select(attrs={
+            'class': 'form-select select2',
+            'data-placeholder': 'Select student...'
+        })
+    )
+    
+    enrollment_type = forms.ChoiceField(
+        choices=StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES,
+        initial='PROMOTED',
+        required=True,
+        label='Type'
+    )
+    
+    def __init__(self, *args, academic_session=None, class_instance=None, **kwargs):
+        self.academic_session = academic_session
+        self.class_instance = class_instance
+        
+        super().__init__(*args, **kwargs)
+    
+    def save(self):
+        """Create enrollment record"""
+        enrollment = StudentClassEnrollment.objects.create(
+            student=self.cleaned_data['student'],
+            academic_session=self.academic_session,
+            class_instance=self.class_instance,
+            enrollment_type=self.cleaned_data['enrollment_type'],
+            enrollment_date=get_school_today(),  # ⭐ SCHOOL TIMEZONE
+            is_active=True,
+            completion_status='ONGOING'
+        )
+        
+        return enrollment
+
+
+class BulkEnrollmentForm(BootstrapFormMixin, forms.Form):
+    """Form for bulk student enrollment"""
+    
+    class_instance = forms.ModelChoiceField(
+        label='Class',
+        queryset=None,
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    students = forms.ModelMultipleChoiceField(
+        label='Students',
+        queryset=None,
+        required=True,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '10'})
+    )
+    
+    enrollment_date = forms.DateField(
+        label='Enrollment Date',
+        required=True,
+        widget=DatePickerInput()
+    )
+    
+    enrollment_type = forms.ChoiceField(
+        label='Enrollment Type',
+        choices=StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set default date using school timezone ⭐
+        if not self.is_bound:
+            self.fields['enrollment_date'].initial = get_school_today()  # ⭐ SCHOOL TIMEZONE
         
         try:
             self.fields['class_instance'].queryset = Class.objects.filter(
@@ -1460,385 +2050,161 @@ class StudentClassEnrollmentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.
             ).select_related('academic_level', 'academic_session')
         except Exception as e:
             logger.error(f"Error setting class queryset: {e}")
-    
-    def clean_enrollment_date(self):
-        """Validate enrollment date using school timezone ⭐"""
-        enrollment_date = self.cleaned_data.get('enrollment_date')
-        if enrollment_date:
-            from core.utils import get_school_today
-            from datetime import timedelta
-            
-            today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Validate not in future
-            if enrollment_date > today:
-                raise ValidationError("Enrollment date cannot be in the future.")
-            
-            # Validate not too far in past (2 years)
-            if enrollment_date < (today - timedelta(days=2*365)):
-                raise ValidationError(
-                    "Enrollment date seems too far in the past. Please verify."
-                )
         
-        return enrollment_date
-
-
-class StudentClassEnrollmentQuickForm(BootstrapFormMixin, forms.ModelForm):
-    """Quick enrollment form (minimal fields)."""
-    
-    class Meta:
-        model = StudentClassEnrollment
-        fields = ['student', 'class_instance', 'enrollment_date']
-        widgets = {
-            'enrollment_date': DatePickerInput()
-        }
-    
-    def __init__(self, *args, **kwargs):
-        # Pre-set class_instance if provided
-        class_instance = kwargs.pop('class_instance', None)
-        super().__init__(*args, **kwargs)
-        
-        if class_instance:
-            self.fields['class_instance'].initial = class_instance
-            self.fields['class_instance'].widget = forms.HiddenInput()
-        
-        # Set default date (school timezone) ⭐
-        if not self.is_bound and not self.instance.pk:
-            from core.utils import get_school_today
-            self.fields['enrollment_date'].initial = get_school_today()
-        
-        # Set student queryset
         try:
-            from students.models import Student
-            self.fields['student'].queryset = Student.objects.filter(
+            self.fields['students'].queryset = Student.objects.filter(
                 enrollment_status='ACTIVE'
             ).order_by('last_name', 'first_name')
         except Exception as e:
             logger.error(f"Error setting student queryset: {e}")
 
-# =============================================================================
-# BULK ENROLLMENT FORMS (Updated to use utils/forms.py properly!)
-# =============================================================================
 
-class BulkEnrollmentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Form):
-    """
-    Enhanced bulk enrollment form using your utils/forms.py components.
-    Now properly integrated with all your form utilities!
-    """
-    
-    ENROLLMENT_TYPE_CHOICES = [
-        ('BULK', 'Bulk Enrollment'),
-        ('NEW', 'New Student'),
-        ('PROMOTED', 'Promoted'),
-        ('TRANSFERRED', 'Transfer In'),
-        ('READMIT', 'Readmission'),
-    ]
-    
-    # Core fields using your custom widgets
-    academic_session = forms.ModelChoiceField(
-        queryset=AcademicSession.objects.filter(is_active=True),
-        label="Academic Session",
-        help_text="Select the academic session for enrollment",
-        widget=forms.Select(attrs={
-            'class': 'form-control select2',
-            'data-placeholder': 'Select Academic Session'
-        })
-    )
-    
-    class_instance = forms.ModelChoiceField(
-        queryset=Class.objects.none(),
-        label="Class",
-        help_text="Select the class to enroll students in",
-        widget=forms.Select(attrs={
-            'class': 'form-control select2',
-            'data-placeholder': 'Select Class'
-        })
-    )
-    
-    students = forms.ModelMultipleChoiceField(
-        queryset=Student.objects.none(),
-        label="Students",
-        help_text="Select students to enroll (hold Ctrl/Cmd for multiple selection)",
-        widget=forms.SelectMultiple(attrs={
-            'class': 'form-control select2-multiple',
-            'data-placeholder': 'Select Students',
-            'multiple': True,
-            'size': '10'
-        })
-    )
-    
-    enrollment_type = forms.ChoiceField(
-        choices=ENROLLMENT_TYPE_CHOICES,
-        initial='BULK',
-        label="Enrollment Type",
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
-    
-    auto_create_invoices = forms.BooleanField(
-        required=False,
-        initial=True,
-        label="Create Fee Invoices",
-        help_text="Automatically create fee invoices for enrolled students",
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
-    )
-    
-    enrollment_notes = forms.CharField(
-        required=False,
-        label="Enrollment Notes",
-        help_text="Optional notes for this bulk enrollment",
-        widget=forms.Textarea(attrs={
-            'class': 'form-control',
-            'rows': 3,
-            'placeholder': 'Add any notes about this bulk enrollment...'
-        })
-    )
-    
-    # ✅ Use your ConfirmationForm pattern
-    confirm_enrollment = forms.BooleanField(
-        required=True,
-        label="I confirm this bulk enrollment",
-        help_text="Check this box to confirm you want to proceed with the bulk enrollment",
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
-    )
-    
-    def __init__(self, *args, user=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.user = user
-        
-        # Populate querysets based on available data
-        self._populate_academic_sessions()
-        self._populate_classes()
-        self._populate_available_students()
-    
-    def _populate_academic_sessions(self):
-        """Populate academic session choices"""
-        try:
-            sessions = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-is_current', '-start_date')
-            
-            self.fields['academic_session'].queryset = sessions
-            
-            # Set current session as initial if available
-            current_session = sessions.filter(is_current=True).first()
-            if current_session and not self.initial.get('academic_session'):
-                self.initial['academic_session'] = current_session
-                
-        except Exception as e:
-            logger.error(f"Error populating academic sessions: {e}")
-            self.fields['academic_session'].queryset = AcademicSession.objects.none()
-    
-    def _populate_classes(self):
-        """Populate class choices"""
-        try:
-            classes = Class.objects.filter(
-                academic_session__is_active=True,
-                is_active=True
-            ).select_related(
-                'academic_level', 'academic_session'
-            ).order_by('academic_level__order', 'section')
-            
-            self.fields['class_instance'].queryset = classes
-            
-        except Exception as e:
-            logger.error(f"Error populating classes: {e}")
-            self.fields['class_instance'].queryset = Class.objects.none()
-    
-    def _populate_available_students(self):
-        """Populate students available for enrollment"""
-        try:
-            available_students = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).exclude(
-                class_enrollments__is_active=True,
-                class_enrollments__completion_status='ONGOING'
-            ).order_by('last_name', 'first_name')
-            
-            self.fields['students'].queryset = available_students
-            
-        except Exception as e:
-            logger.error(f"Error populating available students: {e}")
-            self.fields['students'].queryset = Student.objects.none()
-    
-    def clean(self):
-        """Enhanced validation using your validation patterns"""
-        cleaned_data = super().clean()
-        
-        class_instance = cleaned_data.get('class_instance')
-        students = cleaned_data.get('students')
-        academic_session = cleaned_data.get('academic_session')
-        
-        if not class_instance or not students or not academic_session:
-            return cleaned_data
-        
-        # Validate class capacity using your utilities
-        self._validate_class_capacity(class_instance, students)
-        
-        # Validate session compatibility
-        self._validate_session_compatibility(class_instance, academic_session)
-        
-        # Validate individual student enrollments
-        self._validate_student_enrollments(students, class_instance, academic_session)
-        
-        return cleaned_data
-    
-    def _validate_class_capacity(self, class_instance, students):
-        """Validate that class has sufficient capacity"""
-        try:
-            from .utils import get_class_capacity_summary
-            
-            capacity_info = get_class_capacity_summary(class_instance)
-            selected_count = students.count() if hasattr(students, 'count') else len(students)
-            available_capacity = capacity_info['available_capacity']
-            
-            if selected_count > available_capacity:
-                raise ValidationError(
-                    f"Cannot enroll {selected_count} students. "
-                    f"Class {class_instance} only has {available_capacity} available spots "
-                    f"(capacity: {class_instance.max_students}, "
-                    f"current: {capacity_info['current_enrollment']})."
-                )
-                
-        except Exception as e:
-            logger.error(f"Error validating class capacity: {e}")
-            raise ValidationError(f"Error checking class capacity: {str(e)}")
-    
-    def _validate_session_compatibility(self, class_instance, academic_session):
-        """Validate that class belongs to the selected session"""
-        if class_instance.academic_session != academic_session:
-            raise ValidationError(
-                f"Class {class_instance} belongs to {class_instance.academic_session}, "
-                f"not {academic_session}. Please select a class from the chosen academic session."
-            )
-    
-    def _validate_student_enrollments(self, students, class_instance, academic_session):
-        """Validate individual student enrollment eligibility"""
-        errors = []
-        
-        for student in students:
-            # Check if student already has an active enrollment in this session
-            existing_enrollment = StudentClassEnrollment.objects.filter(
-                student=student,
-                academic_session=academic_session,
-                is_active=True,
-                completion_status='ONGOING'
-            ).first()
-            
-            if existing_enrollment:
-                errors.append(
-                    f"{student.get_full_name()} is already enrolled in "
-                    f"{existing_enrollment.class_instance} for {academic_session}."
-                )
-            
-            # Check if student is active
-            if student.enrollment_status != 'ACTIVE':
-                errors.append(
-                    f"{student.get_full_name()} has status '{student.get_enrollment_status_display()}' "
-                    f"and cannot be enrolled."
-                )
-            
-            # Limit error messages to avoid overwhelming the user
-            if len(errors) >= 5:
-                errors.append(f"...and {len(students) - 5} more validation errors.")
-                break
-        
-        if errors:
-            raise ValidationError(errors)
-    
-    def save(self):
-        """Process the bulk enrollment using services"""
-        try:
-            from .services import BulkEnrollmentService
-            
-            students = self.cleaned_data['students']
-            class_instance = self.cleaned_data['class_instance']
-            academic_session = self.cleaned_data['academic_session']
-            enrollment_type = self.cleaned_data['enrollment_type']
-            auto_create_invoices = self.cleaned_data['auto_create_invoices']
-            notes = self.cleaned_data.get('enrollment_notes', '')
-            
-            # Use the bulk enrollment service
-            result = BulkEnrollmentService.bulk_enroll_students(
-                students=students,
-                class_instance=class_instance,
-                session=academic_session,
-                enrollment_type=enrollment_type,
-                auto_create_invoices=auto_create_invoices,
-                notes=notes,
-                user=self.user
-            )
-            
-            return {
-                'success': True,
-                'success_count': len(result['enrolled']),
-                'failure_count': len(result['failed']),
-                'enrolled_students': result['enrolled'],
-                'failed_students': result['failed'],
-                'invoices_created': result['invoices'],
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in bulk enrollment save: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'success_count': 0,
-                'failure_count': 0,
-            }
-        
 # =============================================================================
-# CLASS SUBJECT FORM
+# CLASS SUBJECT FORMS
 # =============================================================================
 
 class ClassSubjectForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for assigning subjects to classes."""
+    """Form for creating or editing individual class subject assignments"""
     
     continuous_assessment_weight = PercentageField(
         label='Continuous Assessment Weight (%)',
-        help_text='Percentage weight of continuous assessment'
+        help_text='Percentage weight of continuous assessment',
+        required=True,
+        initial=40.00
     )
     
     final_exam_weight = PercentageField(
         label='Final Exam Weight (%)',
-        help_text='Percentage weight of final examination'
+        help_text='Percentage weight of final examination',
+        required=True,
+        initial=60.00
     )
     
     class Meta:
         model = ClassSubject
         fields = [
-            'class_instance', 'subject', 'teacher',
-            'is_optional', 'hours_per_week', 'total_hours',
-            'continuous_assessment_weight', 'final_exam_weight',
-            'textbook', 'reference_materials', 'required_equipment',
-            'syllabus', 'learning_objectives', 'assessment_criteria',
+            'class_instance', 
+            'subject', 
+            'teacher',
+            'is_optional', 
+            'hours_per_week', 
+            'total_hours',
+            'continuous_assessment_weight', 
+            'final_exam_weight',
+            'textbook', 
+            'reference_materials', 
+            'required_equipment',
+            'syllabus', 
+            'learning_objectives', 
+            'assessment_criteria',
             'is_active',
         ]
         widgets = {
-            'hours_per_week': forms.NumberInput(attrs={'min': '1', 'value': '3'}),
-            'total_hours': forms.NumberInput(attrs={'min': '0', 'value': '0'}),
-            'textbook': forms.TextInput(attrs={'placeholder': 'Textbook name'}),
-            'reference_materials': forms.Textarea(attrs={'rows': 2}),
-            'required_equipment': forms.Textarea(attrs={'rows': 2}),
-            'syllabus': forms.Textarea(attrs={'rows': 4}),
-            'learning_objectives': forms.Textarea(attrs={'rows': 3}),
-            'assessment_criteria': forms.Textarea(attrs={'rows': 3}),
+            'hours_per_week': forms.NumberInput(attrs={
+                'min': '1', 
+                'value': '3',
+                'class': 'form-control'
+            }),
+            'total_hours': forms.NumberInput(attrs={
+                'min': '0', 
+                'value': '0',
+                'class': 'form-control'
+            }),
+            'textbook': forms.TextInput(attrs={
+                'placeholder': 'Enter textbook name',
+                'class': 'form-control'
+            }),
+            'reference_materials': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'List reference materials...',
+                'class': 'form-control'
+            }),
+            'required_equipment': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'List required equipment...',
+                'class': 'form-control'
+            }),
+            'syllabus': forms.Textarea(attrs={
+                'rows': 4,
+                'placeholder': 'Enter syllabus overview...',
+                'class': 'form-control'
+            }),
+            'learning_objectives': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Enter learning objectives...',
+                'class': 'form-control'
+            }),
+            'assessment_criteria': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Enter assessment criteria...',
+                'class': 'form-control'
+            }),
+            'class_instance': forms.Select(attrs={'class': 'form-select'}),
+            'subject': forms.Select(attrs={'class': 'form-select'}),
+            'teacher': forms.Select(attrs={'class': 'form-select'}),
+            'is_optional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set teacher queryset
         try:
             from hr.models import Teacher
-            self.fields['teacher'].queryset = Teacher.objects.filter(
-                is_active=True
+            
+            self.fields['teacher'].queryset = Teacher.objects.select_related(
+                'staff'
+            ).filter(
+                staff__is_active=True
+            ).order_by(
+                'staff__first_name',
+                'staff__last_name'
             )
+            
+            self.fields['teacher'].label_from_instance = lambda obj: (
+                f"{obj.staff.full_name()} ({obj.staff.staff_id})"
+            )
+            
+        except ImportError:
+            logger.error("Teacher model not found - hr app may not be installed")
+            self.fields['teacher'].widget = forms.HiddenInput()
+            self.fields['teacher'].required = False
         except Exception as e:
             logger.error(f"Error setting teacher queryset: {e}")
+            try:
+                from hr.models import Teacher
+                self.fields['teacher'].queryset = Teacher.objects.none()
+            except:
+                pass
+        
+        try:
+            self.fields['class_instance'].queryset = Class.objects.filter(
+                is_active=True
+            ).select_related(
+                'academic_level',
+                'academic_session'
+            ).order_by(
+                '-academic_session__start_date',
+                'academic_level__order',
+                'section'
+            )
+        except Exception as e:
+            logger.error(f"Error setting class queryset: {e}")
+        
+        try:
+            self.fields['subject'].queryset = Subject.objects.filter(
+                is_active=True
+            ).order_by('subject_type', 'name')
+        except Exception as e:
+            logger.error(f"Error setting subject queryset: {e}")
+        
+        self.fields['teacher'].required = False
+        self.fields['teacher'].help_text = 'Select teacher for this subject (optional, can be assigned later)'
     
     def clean(self):
         """Validate assessment weights"""
         cleaned_data = super().clean()
+        
         ca_weight = cleaned_data.get('continuous_assessment_weight')
         exam_weight = cleaned_data.get('final_exam_weight')
         
@@ -1852,23 +2218,164 @@ class ClassSubjectForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm)
         return cleaned_data
 
 
+class BulkClassSubjectForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Form):
+    """Form for assigning multiple subjects to a single class"""
+    
+    class_instance = forms.ModelChoiceField(
+        label='Target Class',
+        queryset=Class.objects.none(),
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Select the class to assign subjects to'
+    )
+    
+    subjects = forms.ModelMultipleChoiceField(
+        label='Subjects to Assign',
+        queryset=Subject.objects.none(),
+        required=True,
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select',
+            'size': '12'
+        }),
+        help_text='Select one or more subjects to assign to this class (hold Ctrl/Cmd to select multiple)'
+    )
+    
+    default_hours_per_week = forms.IntegerField(
+        label='Hours Per Week',
+        initial=3,
+        min_value=1,
+        max_value=20,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': '1',
+            'max': '20'
+        }),
+        help_text='Default weekly teaching hours for all selected subjects'
+    )
+    
+    default_total_hours = forms.IntegerField(
+        label='Total Hours (Optional)',
+        initial=0,
+        min_value=0,
+        required=False,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': '0'
+        }),
+        help_text='Total course hours for the term/year (0 = not set)'
+    )
+    
+    continuous_assessment_weight = PercentageField(
+        label='Continuous Assessment Weight (%)',
+        initial=Decimal('40.00'),
+        help_text='Default CA weight for all subjects (must total 100% with exam weight)'
+    )
+    
+    final_exam_weight = PercentageField(
+        label='Final Exam Weight (%)',
+        initial=Decimal('60.00'),
+        help_text='Default exam weight for all subjects (must total 100% with CA weight)'
+    )
+    
+    mark_all_optional = forms.BooleanField(
+        label='Mark all subjects as optional',
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Check this if all selected subjects should be marked as optional (not compulsory)'
+    )
+    
+    skip_existing = forms.BooleanField(
+        label='Skip existing assignments',
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Skip subjects that are already assigned to this class (recommended to avoid duplicates)'
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        try:
+            self.fields['class_instance'].queryset = Class.objects.filter(
+                is_active=True
+            ).select_related(
+                'academic_level',
+                'academic_session'
+            ).order_by(
+                '-academic_session__start_date',
+                'academic_level__order',
+                'section'
+            )
+            
+            self.fields['class_instance'].label_from_instance = lambda obj: (
+                f"{obj.academic_level.name}"
+                f"{f' {obj.section}' if obj.section else ''}"
+                f" - {obj.academic_session.year_name} {obj.academic_session.term_name}"
+            )
+        except Exception as e:
+            logger.error(f"Error setting class queryset: {e}")
+            self.fields['class_instance'].queryset = Class.objects.none()
+        
+        try:
+            self.fields['subjects'].queryset = Subject.objects.filter(
+                is_active=True
+            ).order_by('subject_type', 'name')
+            
+            self.fields['subjects'].label_from_instance = lambda obj: (
+                f"{obj.code} - {obj.name}"
+                f"{' ⭐ (Compulsory)' if obj.is_compulsory else ' (Optional)'}"
+            )
+        except Exception as e:
+            logger.error(f"Error setting subjects queryset: {e}")
+            self.fields['subjects'].queryset = Subject.objects.none()
+    
+    def clean(self):
+        """Validate form data"""
+        cleaned_data = super().clean()
+        
+        ca_weight = cleaned_data.get('continuous_assessment_weight')
+        exam_weight = cleaned_data.get('final_exam_weight')
+        
+        if ca_weight is not None and exam_weight is not None:
+            total = ca_weight + exam_weight
+            if total != 100:
+                raise ValidationError(
+                    f'Assessment weights must total 100%. '
+                    f'Current total: {total}% (CA: {ca_weight}%, Exam: {exam_weight}%)'
+                )
+        
+        class_instance = cleaned_data.get('class_instance')
+        if class_instance and not class_instance.is_active:
+            raise ValidationError({
+                'class_instance': 'Cannot assign subjects to an inactive class. '
+                                'Please select an active class.'
+            })
+        
+        subjects = cleaned_data.get('subjects')
+        if not subjects or subjects.count() == 0:
+            raise ValidationError({
+                'subjects': 'Please select at least one subject to assign.'
+            })
+        
+        hours_per_week = cleaned_data.get('default_hours_per_week')
+        if hours_per_week and hours_per_week < 1:
+            raise ValidationError({
+                'default_hours_per_week': 'Hours per week must be at least 1.'
+            })
+        
+        return cleaned_data
+
+
 # =============================================================================
-# ACADEMIC PROGRESS FORM
+# ACADEMIC PROGRESS FORMS
 # =============================================================================
 
 class AcademicProgressForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """
-    Form for recording academic progress.
-    Uses school timezone for date validations. ⭐
-    """
+    """Form for recording academic progress"""
     
     attendance_percentage = PercentageField(
         label='Attendance Percentage',
-        required=False
-    )
-    
-    pass_rate = PercentageField(
-        label='Pass Rate',
         required=False
     )
     
@@ -1911,16 +2418,13 @@ class AcademicProgressForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelF
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set querysets
         try:
-            from students.models import Student
             self.fields['student'].queryset = Student.objects.filter(
                 enrollment_status='ACTIVE'
             ).order_by('last_name', 'first_name')
         except Exception as e:
             logger.error(f"Error setting student queryset: {e}")
         
-        # Read-only fields if record is finalized
         if self.instance.pk and self.instance.is_final:
             for field_name in self.fields:
                 if field_name not in ['teacher_comments', 'head_teacher_comments']:
@@ -1929,7 +2433,7 @@ class AcademicProgressForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelF
 
 
 class AcademicProgressQuickForm(BootstrapFormMixin, forms.ModelForm):
-    """Quick form for basic progress entry."""
+    """Quick form for basic progress entry"""
     
     class Meta:
         model = AcademicProgress
@@ -1953,63 +2457,8 @@ class AcademicProgressQuickForm(BootstrapFormMixin, forms.ModelForm):
 # BULK OPERATIONS FORMS
 # =============================================================================
 
-class BulkEnrollmentForm(BootstrapFormMixin, forms.Form):
-    """Form for bulk student enrollment."""
-    
-    class_instance = forms.ModelChoiceField(
-        label='Class',
-        queryset=None,
-        required=True,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    students = forms.ModelMultipleChoiceField(
-        label='Students',
-        queryset=None,
-        required=True,
-        widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '10'})
-    )
-    
-    enrollment_date = forms.DateField(
-        label='Enrollment Date',
-        required=True,
-        widget=DatePickerInput()
-    )
-    
-    enrollment_type = forms.ChoiceField(
-        label='Enrollment Type',
-        choices=StudentClassEnrollment.ENROLLMENT_TYPE_CHOICES,
-        required=True,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # Set default date (school timezone) ⭐
-        if not self.is_bound:
-            from core.utils import get_school_today
-            self.fields['enrollment_date'].initial = get_school_today()
-        
-        # Set querysets
-        try:
-            self.fields['class_instance'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level', 'academic_session')
-        except Exception as e:
-            logger.error(f"Error setting class queryset: {e}")
-        
-        try:
-            from students.models import Student
-            self.fields['students'].queryset = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).order_by('last_name', 'first_name')
-        except Exception as e:
-            logger.error(f"Error setting student queryset: {e}")
-
-
 class CloseSessionForm(BootstrapFormMixin, forms.Form):
-    """Form for closing academic sessions."""
+    """Form for closing academic sessions"""
     
     confirm = forms.BooleanField(
         label='I confirm that I want to close this academic session',
@@ -2028,7 +2477,7 @@ class CloseSessionForm(BootstrapFormMixin, forms.Form):
 
 
 class PromoteStudentsForm(BootstrapFormMixin, forms.Form):
-    """Form for promoting students to next level."""
+    """Form for promoting students to next level"""
     
     from_level = forms.ModelChoiceField(
         label='From Level',
@@ -2061,7 +2510,6 @@ class PromoteStudentsForm(BootstrapFormMixin, forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set querysets
         try:
             self.fields['from_level'].queryset = AcademicLevel.objects.filter(
                 is_active=True

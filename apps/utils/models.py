@@ -12,17 +12,33 @@ Key Features:
 - Change reason tracking
 - Financial audit logging with compliance features
 
-Updated to use school timezone for all timestamp operations.
+CRITICAL TIMEZONE BEHAVIOR:
+- All timestamps use the school's operational timezone (e.g., Africa/Kampala)
+- NOT Django's default TIME_ZONE (UTC)
+- This ensures consistency for schools operating across different time zones
+- Parents/staff see timestamps in their school's local time
+- Fee deadlines, attendance records, and reports use consistent school time
+
+Example:
+    If a payment is made at 11:30 PM East Africa Time (EAT):
+    - Without school timezone: Stored as next day in UTC (wrong!)
+    - With school timezone: Correctly stored as 11:30 PM in school time (correct!)
+
+Updated: January 2025
+- Removed auto_now/auto_now_add in favor of manual timezone setting
+- All timestamps now use get_school_current_time() from core.utils
+- Enhanced documentation and safety checks
 """
 
 from django.db import models
-from schoolara.managers import get_current_db, SchoolManager
-from datetime import date
-import uuid
+from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-import logging
+from schoolara.managers import get_current_db, SchoolManager
+from datetime import date
 from decimal import Decimal, InvalidOperation
+import uuid
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -51,28 +67,89 @@ class BaseModel(models.Model):
     - Parents/staff see timestamps in their school's local time
     - Fee deadlines, attendance records, and reports use consistent school time
     
+    Why blank=True and null=True on timestamp fields?
+    - Django's auto_now/auto_now_add use server timezone (UTC)
+    - We need manual control to use school timezone instead
+    - Fields are optional for form validation
+    - save() method ensures they're ALWAYS set before database write
+    - So timestamps are never actually NULL in the database
+    
     Example:
-        If a payment is made at 11:30 PM East Africa Time (EAT):
-        - Without timezone support: Stored as next day in UTC
-        - With timezone support: Correctly stored as 11:30 PM in school time
+        If a fee invoice is created at 11:30 PM East Africa Time (EAT):
+        - Server time: 08:30 PM UTC (3 hours behind)
+        - Django's auto_now_add would store: 08:30 PM UTC (next day in date format!)
+        - Our approach stores: 11:30 PM EAT (correct date and time!)
+        
+        This prevents:
+        - Fee deadlines appearing on wrong day
+        - Attendance marked for wrong date
+        - Reports showing incorrect timestamps
+        - Parents seeing confusing transaction times
+    
+    Usage:
+        class Student(BaseModel):
+            name = models.CharField(max_length=200)
+            # Don't need to define created_at, updated_at - inherited!
+        
+        # In forms, don't include timestamp fields:
+        class StudentForm(forms.ModelForm):
+            class Meta:
+                model = Student
+                fields = ['name']  # created_at/updated_at set automatically
     """
     
-    # Core identification
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # =========================================================================
+    # CORE IDENTIFICATION
+    # =========================================================================
     
-    # Timestamp fields - Use school timezone via custom save logic
+    id = models.UUIDField(
+        primary_key=True, 
+        default=uuid.uuid4, 
+        editable=False,
+        help_text="Unique identifier for this record"
+    )
+    
+    # =========================================================================
+    # TIMESTAMP FIELDS - AUTOMATICALLY MANAGED IN SAVE() METHOD
+    # =========================================================================
+    # ⭐ CRITICAL DESIGN DECISION:
+    # - These fields are blank=True, null=True to allow form validation to pass
+    # - They are ALWAYS set in save() method before database write
+    # - So they will NEVER actually be NULL in the database
+    # 
+    # Why not use auto_now_add and auto_now?
+    # - Those use Django's TIME_ZONE setting (typically UTC) automatically
+    # - We need school timezone for consistency across time zones
+    # - Manual setting in save() gives us full control over timezone
+    # 
+    # Flow:
+    # 1. Form validation passes (fields are optional)
+    # 2. save() method is called
+    # 3. Timestamps are set in school timezone using get_school_current_time()
+    # 4. Object is saved to database (timestamps are never NULL)
+    
     created_at = models.DateTimeField(
-        "Created At", 
+        "Created At",
+        blank=True,  # ⭐ Allows form validation without this field
+        null=True,   # ⭐ Allows temporary NULL (set in save())
         db_index=True,
         help_text="When this record was created (in school's operational timezone)"
     )
+    
     updated_at = models.DateTimeField(
-        "Updated At", 
+        "Updated At",
+        blank=True,  # ⭐ Allows form validation without this field
+        null=True,   # ⭐ Allows temporary NULL (set in save())
         db_index=True,
         help_text="When this record was last updated (in school's operational timezone)"
     )
     
-    # User tracking - CharField to avoid cross-database FK constraints
+    # =========================================================================
+    # USER TRACKING FIELDS
+    # =========================================================================
+    # CharField instead of ForeignKey to avoid cross-database constraints
+    # in multi-tenant setup (users in 'default' db, data in school dbs)
+    
     created_by_id = models.CharField(
         "Created By ID", 
         max_length=50, 
@@ -81,6 +158,7 @@ class BaseModel(models.Model):
         db_index=True,
         help_text="ID of user who created this record"
     )
+    
     updated_by_id = models.CharField(
         "Updated By ID", 
         max_length=50, 
@@ -90,13 +168,18 @@ class BaseModel(models.Model):
         help_text="ID of user who last updated this record"
     )
     
-    # Enhanced IP tracking - captures real client IP
+    # =========================================================================
+    # IP ADDRESS TRACKING
+    # =========================================================================
+    # Captures real client IP (handles proxies via X-Forwarded-For)
+    
     created_from_ip = models.GenericIPAddressField(
         "Created From IP", 
         null=True, 
         blank=True,
         help_text="IP address from which this record was created"
     )
+    
     updated_from_ip = models.GenericIPAddressField(
         "Updated From IP", 
         null=True, 
@@ -104,7 +187,10 @@ class BaseModel(models.Model):
         help_text="IP address from which this record was last updated"
     )
     
-    # Change reason tracking
+    # =========================================================================
+    # CHANGE REASON TRACKING
+    # =========================================================================
+    
     change_reason = models.CharField(
         "Change Reason", 
         max_length=255, 
@@ -113,8 +199,15 @@ class BaseModel(models.Model):
         help_text="Explanation for why this change was made"
     )
     
-    # Use SchoolManager for automatic database routing
+    # =========================================================================
+    # MANAGER - AUTOMATIC DATABASE ROUTING
+    # =========================================================================
+    
     objects = SchoolManager()
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
     
     class Meta:
         abstract = True
@@ -125,10 +218,14 @@ class BaseModel(models.Model):
             models.Index(fields=['updated_by_id']),
         ]
 
+    # =========================================================================
+    # SAVE METHOD - CORE LOGIC
+    # =========================================================================
+
     def save(self, *args, **kwargs):
         """
         Override save to:
-        1. Set timestamps in school timezone (not UTC!)
+        1. Set timestamps in school timezone (NOT UTC!)
         2. Populate audit trail fields (created_by, updated_by, IPs)
         3. Automatically route to correct database
         4. Track field changes
@@ -136,16 +233,31 @@ class BaseModel(models.Model):
         
         The key improvement: Uses school timezone for all timestamps
         instead of Django's default UTC behavior.
+        
+        Flow:
+        1. Form validates (created_at/updated_at can be NULL)
+        2. save() is called
+        3. Timestamps are set in school timezone
+        4. Audit fields are populated from request context
+        5. Changes are tracked (for existing objects)
+        6. Object is saved to database (timestamps never actually NULL)
+        7. Audit log entry is created
+        
+        Example:
+            >>> student = Student(name="John Doe")
+            >>> student.save()
+            >>> print(student.created_at)  # Shows time in school timezone
+            2025-01-10 14:30:00+03:00  # East Africa Time (EAT)
         """
         from utils.context import get_request_context
-        from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
+        from core.utils import get_school_current_time  
         
         # Determine if this is a new object
         is_new = self._state.adding
         
-        # =========================================================================
+        # =====================================================================
         # STEP 1: SET TIMESTAMPS IN SCHOOL TIMEZONE ⭐ CRITICAL
-        # =========================================================================
+        # =====================================================================
         # Django's auto_now/auto_now_add uses server timezone (usually UTC)
         # We override this to use the school's operational timezone
         
@@ -154,16 +266,39 @@ class BaseModel(models.Model):
             # Only set if not already provided (respects manual override)
             if not self.created_at:
                 self.created_at = get_school_current_time()
+                logger.debug(
+                    f"Set created_at for new {self.__class__.__name__}: {self.created_at}"
+                )
+            
             # New objects also need updated_at
             if not self.updated_at:
                 self.updated_at = get_school_current_time()
         else:
             # For updates, always refresh updated_at to current school time
             self.updated_at = get_school_current_time()
+            logger.debug(
+                f"Updated updated_at for {self.__class__.__name__}: {self.updated_at}"
+            )
         
-        # =========================================================================
+        # ⭐ SAFETY CHECK: Ensure timestamps are NEVER NULL before database write
+        # This guarantees data integrity even if something went wrong above
+        if not self.created_at:
+            logger.warning(
+                f"created_at was NULL for {self.__class__.__name__}, "
+                f"setting to current time"
+            )
+            self.created_at = get_school_current_time()
+        
+        if not self.updated_at:
+            logger.warning(
+                f"updated_at was NULL for {self.__class__.__name__}, "
+                f"setting to current time"
+            )
+            self.updated_at = get_school_current_time()
+        
+        # =====================================================================
         # STEP 2: POPULATE AUDIT FIELDS FROM REQUEST CONTEXT
-        # =========================================================================
+        # =====================================================================
         context = get_request_context()
         
         if context:
@@ -174,8 +309,11 @@ class BaseModel(models.Model):
             if is_new:
                 if user and not self.created_by_id:
                     self.created_by_id = str(user.id)
+                    logger.debug(f"Set created_by_id: {self.created_by_id}")
+                
                 if ip_address and not self.created_from_ip:
                     self.created_from_ip = ip_address
+                    logger.debug(f"Set created_from_ip: {self.created_from_ip}")
             
             # Always update updated_by and updated_from_ip
             if user:
@@ -187,12 +325,13 @@ class BaseModel(models.Model):
             if is_new:
                 logger.debug(
                     f"No request context available when creating {self.__class__.__name__}. "
-                    f"Audit fields will not be populated."
+                    f"Audit fields will not be populated. "
+                    f"This is normal for management commands, shell, or background tasks."
                 )
         
-        # =========================================================================
+        # =====================================================================
         # STEP 3: TRACK CHANGES FOR EXISTING OBJECTS
-        # =========================================================================
+        # =====================================================================
         changes = {}
         if not is_new and self.pk:
             try:
@@ -221,60 +360,106 @@ class BaseModel(models.Model):
                             'old': str(old_value) if old_value is not None else None,
                             'new': str(new_value) if new_value is not None else None
                         }
+                
+                if changes:
+                    logger.debug(f"Changes detected for {self.__class__.__name__}: {changes}")
+                    
             except self.__class__.DoesNotExist:
-                logger.debug(f"Old instance not found for {self.__class__.__name__} {self.pk}")
-                pass  # Object doesn't exist yet, treat as new
+                # Object doesn't exist yet in database, treat as new
+                logger.debug(
+                    f"Old instance not found for {self.__class__.__name__} {self.pk}. "
+                    f"Treating as new record."
+                )
             except Exception as e:
-                logger.error(f"Error tracking changes for {self.__class__.__name__}: {e}")
+                # Don't fail save if change tracking fails
+                logger.error(
+                    f"Error tracking changes for {self.__class__.__name__}: {e}",
+                    exc_info=True
+                )
         
-        # =========================================================================
+        # =====================================================================
         # STEP 4: AUTOMATIC DATABASE ROUTING
-        # =========================================================================
+        # =====================================================================
         current_db = get_current_db()
         
         # Only set 'using' if not already specified and we have a database context
         if current_db and 'using' not in kwargs:
             kwargs['using'] = current_db
-            logger.debug(f"Saving {self.__class__.__name__} to {current_db}")
+            logger.debug(f"Saving {self.__class__.__name__} to database: {current_db}")
         
-        # =========================================================================
-        # STEP 5: SAVE THE OBJECT
-        # =========================================================================
+        # =====================================================================
+        # STEP 5: SAVE THE OBJECT TO DATABASE
+        # =====================================================================
         result = super().save(*args, **kwargs)
         
-        # =========================================================================
-        # STEP 6: CREATE AUDIT LOG ENTRY
-        # =========================================================================
+        # =====================================================================
+        # STEP 6: CREATE AUDIT LOG ENTRY (POST-SAVE)
+        # =====================================================================
         # Only create audit log for school databases (not default)
         # ALSO skip if this IS an AuditLog to prevent infinite recursion
         if current_db and current_db != 'default' and self.__class__.__name__ != 'AuditLog':
-            self._create_audit_log(
-                action='CREATE' if is_new else 'UPDATE',
-                changes=changes if not is_new else {}
-            )
+            try:
+                self._create_audit_log(
+                    action='CREATE' if is_new else 'UPDATE',
+                    changes=changes if not is_new else {}
+                )
+            except Exception as e:
+                # Don't fail the save if audit logging fails
+                logger.error(
+                    f"Failed to create audit log for {self.__class__.__name__}: {e}",
+                    exc_info=True
+                )
         
         return result
+    
+    # =========================================================================
+    # DELETE METHOD
+    # =========================================================================
     
     def delete(self, *args, **kwargs):
         """
         Override delete to automatically route to correct database and log deletion.
         Deletion timestamp in audit log will use school timezone.
+        
+        Example:
+            >>> student = Student.objects.get(name="John Doe")
+            >>> student.delete()
+            >>> # Audit log entry created with school timezone timestamp
         """
         current_db = get_current_db()
         
         if current_db and 'using' not in kwargs:
             kwargs['using'] = current_db
-            logger.debug(f"Deleting {self.__class__.__name__} from {current_db}")
+            logger.debug(f"Deleting {self.__class__.__name__} from database: {current_db}")
         
         # Create audit log before deletion (only for school databases)
         # ALSO skip if this IS an AuditLog to prevent infinite recursion
         if current_db and current_db != 'default' and self.__class__.__name__ != 'AuditLog':
-            self._create_audit_log(action='DELETE', changes={})
+            try:
+                self._create_audit_log(action='DELETE', changes={})
+            except Exception as e:
+                # Don't fail the delete if audit logging fails
+                logger.error(
+                    f"Failed to create audit log for deletion of {self.__class__.__name__}: {e}",
+                    exc_info=True
+                )
         
         return super().delete(*args, **kwargs)
     
+    # =========================================================================
+    # REFRESH METHOD
+    # =========================================================================
+    
     def refresh_from_db(self, *args, **kwargs):
-        """Override refresh to automatically route to correct database"""
+        """
+        Override refresh to automatically route to correct database.
+        Ensures object is reloaded from the same database it was saved to.
+        
+        Example:
+            >>> student = Student.objects.first()
+            >>> student.name = "Updated Name"
+            >>> student.refresh_from_db()  # Reloads from correct database
+        """
         current_db = get_current_db()
         
         if current_db and 'using' not in kwargs:
@@ -282,9 +467,9 @@ class BaseModel(models.Model):
         
         return super().refresh_from_db(*args, **kwargs)
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # AUDIT TRAIL HELPER METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     def get_created_by(self):
         """
@@ -292,15 +477,22 @@ class BaseModel(models.Model):
         
         Returns:
             User object or None
+            
+        Example:
+            >>> fiscal_year = FiscalYear.objects.first()
+            >>> creator = fiscal_year.get_created_by()
+            >>> if creator:
+            >>>     print(f"Created by: {creator.get_full_name()}")
         """
         if not self.created_by_id:
             return None
         try:
             from django.contrib.auth import get_user_model
             User = get_user_model()
+            # Always get users from default database
             return User.objects.using('default').get(id=self.created_by_id)
         except Exception as e:
-            logger.error(f"Error fetching created_by user: {e}")
+            logger.debug(f"Error fetching created_by user for {self.__class__.__name__}: {e}")
             return None
     
     def get_updated_by(self):
@@ -309,15 +501,22 @@ class BaseModel(models.Model):
         
         Returns:
             User object or None
+            
+        Example:
+            >>> fiscal_year = FiscalYear.objects.first()
+            >>> updater = fiscal_year.get_updated_by()
+            >>> if updater:
+            >>>     print(f"Last updated by: {updater.get_full_name()}")
         """
         if not self.updated_by_id:
             return None
         try:
             from django.contrib.auth import get_user_model
             User = get_user_model()
+            # Always get users from default database
             return User.objects.using('default').get(id=self.updated_by_id)
         except Exception as e:
-            logger.error(f"Error fetching updated_by user: {e}")
+            logger.debug(f"Error fetching updated_by user for {self.__class__.__name__}: {e}")
             return None
     
     def get_audit_trail(self):
@@ -326,15 +525,24 @@ class BaseModel(models.Model):
         All timestamps are in school timezone.
         
         Returns:
-            dict: Audit trail information
+            dict: Audit trail information including timestamps, users, IPs
+            
+        Example:
+            >>> fiscal_year = FiscalYear.objects.first()
+            >>> audit = fiscal_year.get_audit_trail()
+            >>> print(f"Created: {audit['created_at']}")
+            >>> print(f"By: {audit['created_by_name']}")
+            >>> print(f"From IP: {audit['created_from_ip']}")
         """
         return {
             'id': str(self.id),
             'created_at': self.created_at,  # Already in school timezone
             'created_by_id': self.created_by_id,
+            'created_by_name': self.created_by_name,
             'created_from_ip': self.created_from_ip,
             'updated_at': self.updated_at,  # Already in school timezone
             'updated_by_id': self.updated_by_id,
+            'updated_by_name': self.updated_by_name,
             'updated_from_ip': self.updated_from_ip,
             'last_change_reason': self.change_reason,
         }
@@ -346,6 +554,10 @@ class BaseModel(models.Model):
         
         Returns:
             str: User's full name or "System"
+            
+        Example:
+            >>> print(f"Created by: {fiscal_year.created_by_name}")
+            Created by: John Doe
         """
         user = self.get_created_by()
         if user:
@@ -359,6 +571,10 @@ class BaseModel(models.Model):
         
         Returns:
             str: User's full name or "System"
+            
+        Example:
+            >>> print(f"Updated by: {fiscal_year.updated_by_name}")
+            Updated by: Jane Smith
         """
         user = self.get_updated_by()
         if user:
@@ -374,6 +590,11 @@ class BaseModel(models.Model):
         
         Returns:
             datetime: Created timestamp in school timezone
+            
+        Example:
+            >>> local_time = fiscal_year.get_created_at_local()
+            >>> print(local_time.strftime('%Y-%m-%d %H:%M:%S %Z'))
+            2024-01-15 14:30:00 EAT
         """
         from core.utils import localize_datetime
         return localize_datetime(self.created_at)
@@ -387,6 +608,11 @@ class BaseModel(models.Model):
         
         Returns:
             datetime: Updated timestamp in school timezone
+            
+        Example:
+            >>> local_time = fiscal_year.get_updated_at_local()
+            >>> print(local_time.strftime('%Y-%m-%d %H:%M:%S %Z'))
+            2024-01-15 14:30:00 EAT
         """
         from core.utils import localize_datetime
         return localize_datetime(self.updated_at)
@@ -396,9 +622,15 @@ class BaseModel(models.Model):
         Create an audit log entry for this change.
         Audit log timestamp will automatically use school timezone.
         
+        This is an internal method called automatically by save() and delete().
+        
         Args:
             action: 'CREATE', 'UPDATE', or 'DELETE'
             changes: Dict of field changes
+            
+        Note:
+            This method is called automatically. You don't need to call it directly.
+            Audit logs are created automatically during save() and delete() operations.
         """
         try:
             # Import here to avoid circular imports
@@ -427,7 +659,7 @@ class BaseModel(models.Model):
             audit_log = AuditLog(
                 content_type=f"{self._meta.app_label}.{self._meta.model_name}",
                 object_id=str(self.pk),
-                object_repr=str(self)[:200],
+                object_repr=str(self)[:200],  # Truncate to fit in field
                 action=action,
                 changes=changes,
                 user_id=user_id,
@@ -446,11 +678,19 @@ class BaseModel(models.Model):
             else:
                 audit_log.save()
             
-            logger.debug(f"Created audit log for {action} on {self._meta.label} {self.pk}")
+            logger.debug(
+                f"Created audit log for {action} on "
+                f"{self._meta.label} {self.pk} in database {current_db or 'default'}"
+            )
             
         except Exception as e:
             # Don't fail the save/delete if audit logging fails
-            logger.error(f"Failed to create audit log: {e}", exc_info=True)
+            # This is important for system stability
+            logger.error(
+                f"Failed to create audit log for {action} on "
+                f"{self._meta.label} {self.pk}: {e}",
+                exc_info=True
+            )
     
     def get_history(self, limit=10):
         """
@@ -458,10 +698,18 @@ class BaseModel(models.Model):
         All timestamps in history will be in school timezone.
         
         Args:
-            limit: Maximum number of history entries to return
+            limit: Maximum number of history entries to return (default: 10)
             
         Returns:
-            QuerySet of AuditLog entries
+            QuerySet of AuditLog entries, ordered by timestamp (newest first)
+            
+        Example:
+            >>> fiscal_year = FiscalYear.objects.first()
+            >>> history = fiscal_year.get_history(limit=5)
+            >>> for entry in history:
+            >>>     print(f"{entry.action} at {entry.timestamp} by {entry.user_name}")
+            UPDATE at 2024-01-15 14:30:00+03:00 by John Doe
+            CREATE at 2024-01-10 09:00:00+03:00 by Jane Smith
         """
         try:
             from utils.models import AuditLog
@@ -478,23 +726,69 @@ class BaseModel(models.Model):
             
             return queryset.order_by('-timestamp')[:limit]
         except Exception as e:
-            logger.error(f"Error fetching history: {e}")
+            logger.error(
+                f"Error fetching history for {self._meta.label} {self.pk}: {e}",
+                exc_info=True
+            )
             return []
     
     def set_change_reason(self, reason):
         """
         Set the reason for the next change to this object.
-        
-        Usage:
-            student = Student.objects.get(id=some_id)
-            student.status = "GRADUATED"
-            student.set_change_reason("Student completed all requirements")
-            student.save()
+        This will be recorded in the audit log.
         
         Args:
             reason: String explaining why the change was made
+            
+        Example:
+            >>> fiscal_year = FiscalYear.objects.get(name='2024')
+            >>> fiscal_year.is_closed = True
+            >>> fiscal_year.set_change_reason("End of academic year - all periods closed")
+            >>> fiscal_year.save()
+            
+        Note:
+            The change reason is only used for the NEXT save operation.
+            After saving, it will be reset to None.
         """
         self.change_reason = reason
+    
+    def get_time_since_created(self):
+        """
+        Get human-readable time since creation.
+        
+        Returns:
+            str: Human-readable time difference (e.g., "5 days ago")
+            
+        Example:
+            >>> print(fiscal_year.get_time_since_created())
+            5 days ago
+        """
+        from django.utils.timesince import timesince
+        from core.utils import get_school_current_time
+        
+        if self.created_at:
+            now = get_school_current_time()
+            return timesince(self.created_at, now)
+        return "Unknown"
+    
+    def get_time_since_updated(self):
+        """
+        Get human-readable time since last update.
+        
+        Returns:
+            str: Human-readable time difference (e.g., "2 hours ago")
+            
+        Example:
+            >>> print(fiscal_year.get_time_since_updated())
+            2 hours ago
+        """
+        from django.utils.timesince import timesince
+        from core.utils import get_school_current_time
+        
+        if self.updated_at:
+            now = get_school_current_time()
+            return timesince(self.updated_at, now)
+        return "Unknown"
 
 
 # =============================================================================
@@ -514,26 +808,51 @@ class DefaultDatabaseModel(models.Model):
     This model includes basic audit fields but forces all operations
     to the default database regardless of thread-local context.
     
-    Note: Timestamps for default database models use Django's TIME_ZONE setting
-    (typically UTC), not individual school timezones.
+    Timezone Note:
+    - Timestamps for default database models use Django's TIME_ZONE setting
+    - Typically UTC for system-wide data
+    - This is intentional - system data uses consistent global timezone
+    - School-specific data (BaseModel) uses school timezone
+    
+    Example:
+        class School(DefaultDatabaseModel):
+            name = models.CharField(max_length=200)
+            database_alias = models.CharField(max_length=100)
+            # This school registry data always in default DB with UTC timestamps
     """
     
-    # Core identification
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # =========================================================================
+    # CORE IDENTIFICATION
+    # =========================================================================
     
-    # Timestamp fields - Use Django's default timezone (UTC)
+    id = models.UUIDField(
+        primary_key=True, 
+        default=uuid.uuid4, 
+        editable=False,
+        help_text="Unique identifier for this record"
+    )
+    
+    # =========================================================================
+    # TIMESTAMP FIELDS - USE DJANGO'S DEFAULT TIMEZONE (UTC)
+    # =========================================================================
+    
     created_at = models.DateTimeField(
         "Created At", 
         auto_now_add=True, 
         db_index=True,
-        help_text="When this record was created (UTC)"
+        help_text="When this record was created (UTC for system-wide data)"
     )
+    
     updated_at = models.DateTimeField(
         "Updated At", 
         auto_now=True, 
         db_index=True,
-        help_text="When this record was last updated (UTC)"
+        help_text="When this record was last updated (UTC for system-wide data)"
     )
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
     
     class Meta:
         abstract = True
@@ -541,6 +860,10 @@ class DefaultDatabaseModel(models.Model):
             models.Index(fields=['created_at']),
             models.Index(fields=['updated_at']),
         ]
+    
+    # =========================================================================
+    # DATABASE ROUTING METHODS
+    # =========================================================================
     
     def save(self, *args, **kwargs):
         """Force save to default database"""
@@ -577,10 +900,26 @@ class AuditLog(models.Model):
     so each school database has its own audit trail.
     
     Timezone Behavior:
-    - Timestamps use school timezone (not UTC)
+    - Timestamps use school timezone (NOT UTC)
     - Ensures audit logs match school's operational context
     - Reports and analytics use consistent school time
+    - Compliance audits show transactions in school's local time
+    
+    Example:
+        >>> # Audit log automatically created when you save a model
+        >>> student = Student(name="John Doe")
+        >>> student.save()
+        >>> 
+        >>> # View audit trail
+        >>> history = student.get_history()
+        >>> for entry in history:
+        >>>     print(f"{entry.action} at {entry.timestamp}")
+        CREATE at 2025-01-10 14:30:00+03:00
     """
+    
+    # =========================================================================
+    # ACTION CHOICES
+    # =========================================================================
     
     ACTION_CHOICES = (
         ('CREATE', 'Created'),
@@ -588,14 +927,52 @@ class AuditLog(models.Model):
         ('DELETE', 'Deleted'),
     )
     
-    # What was changed
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    content_type = models.CharField("Model Type", max_length=100, db_index=True)
-    object_id = models.CharField("Object ID", max_length=100, db_index=True)
-    object_repr = models.CharField("Object Representation", max_length=200)
-    action = models.CharField("Action", max_length=10, choices=ACTION_CHOICES, db_index=True)
+    # =========================================================================
+    # CORE IDENTIFICATION
+    # =========================================================================
     
-    # Field-level changes (JSON format)
+    id = models.UUIDField(
+        primary_key=True, 
+        default=uuid.uuid4, 
+        editable=False
+    )
+    
+    # =========================================================================
+    # WHAT WAS CHANGED
+    # =========================================================================
+    
+    content_type = models.CharField(
+        "Model Type", 
+        max_length=100, 
+        db_index=True,
+        help_text="Type of model that was changed (e.g., 'students.student')"
+    )
+    
+    object_id = models.CharField(
+        "Object ID", 
+        max_length=100, 
+        db_index=True,
+        help_text="ID of the object that was changed"
+    )
+    
+    object_repr = models.CharField(
+        "Object Representation", 
+        max_length=200,
+        help_text="String representation of the object"
+    )
+    
+    action = models.CharField(
+        "Action", 
+        max_length=10, 
+        choices=ACTION_CHOICES, 
+        db_index=True,
+        help_text="Type of action performed"
+    )
+    
+    # =========================================================================
+    # FIELD-LEVEL CHANGES
+    # =========================================================================
+    
     changes = models.JSONField(
         "Changes",
         help_text="Dictionary of field changes: {'field_name': {'old': 'value', 'new': 'value'}}",
@@ -603,7 +980,11 @@ class AuditLog(models.Model):
         blank=True
     )
     
-    # Who made the change - CharField to avoid cross-database FK
+    # =========================================================================
+    # WHO MADE THE CHANGE
+    # =========================================================================
+    # CharField to avoid cross-database FK
+    
     user_id = models.CharField(
         "User ID", 
         max_length=50, 
@@ -612,29 +993,86 @@ class AuditLog(models.Model):
         blank=True,
         help_text="ID of user who performed this action"
     )
-    user_email = models.EmailField("User Email", max_length=255, blank=True)
-    user_name = models.CharField("User Name", max_length=255, blank=True)
     
-    # When it happened - Stored in school timezone ⭐
+    user_email = models.EmailField(
+        "User Email", 
+        max_length=255, 
+        blank=True,
+        help_text="Email of user who performed this action"
+    )
+    
+    user_name = models.CharField(
+        "User Name", 
+        max_length=255, 
+        blank=True,
+        help_text="Name of user who performed this action"
+    )
+    
+    # =========================================================================
+    # WHEN IT HAPPENED - SCHOOL TIMEZONE ⭐
+    # =========================================================================
+    
     timestamp = models.DateTimeField(
         "Timestamp", 
         db_index=True,
         help_text="When this action occurred (in school's operational timezone)"
     )
     
-    # Where it came from
-    ip_address = models.GenericIPAddressField("IP Address", null=True, blank=True)
-    user_agent = models.TextField("User Agent", blank=True)
+    # =========================================================================
+    # WHERE IT CAME FROM
+    # =========================================================================
     
-    # Why it changed
-    change_reason = models.CharField("Change Reason", max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(
+        "IP Address", 
+        null=True, 
+        blank=True,
+        help_text="IP address from which this action was performed"
+    )
     
-    # Additional context
-    session_key = models.CharField("Session Key", max_length=100, blank=True)
-    request_path = models.CharField("Request Path", max_length=255, blank=True)
+    user_agent = models.TextField(
+        "User Agent", 
+        blank=True,
+        help_text="Browser/client information"
+    )
     
-    # Use SchoolManager for automatic database routing
+    # =========================================================================
+    # WHY IT CHANGED
+    # =========================================================================
+    
+    change_reason = models.CharField(
+        "Change Reason", 
+        max_length=255, 
+        blank=True,
+        help_text="Explanation for why this change was made"
+    )
+    
+    # =========================================================================
+    # ADDITIONAL CONTEXT
+    # =========================================================================
+    
+    session_key = models.CharField(
+        "Session Key", 
+        max_length=100, 
+        blank=True,
+        help_text="Session key for tracking user sessions"
+    )
+    
+    request_path = models.CharField(
+        "Request Path", 
+        max_length=255, 
+        blank=True,
+        help_text="URL path where action was performed"
+    )
+    
+    # =========================================================================
+    # MANAGER - AUTOMATIC DATABASE ROUTING
+    # =========================================================================
+    
     objects = SchoolManager()
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
     
     class Meta:
         ordering = ['-timestamp']
@@ -647,14 +1085,29 @@ class AuditLog(models.Model):
         verbose_name = "Audit Log"
         verbose_name_plural = "Audit Logs"
     
+    # =========================================================================
+    # STRING REPRESENTATION
+    # =========================================================================
+    
     def __str__(self):
         return f"{self.action} {self.content_type} {self.object_id} at {self.timestamp}"
+    
+    # =========================================================================
+    # SAVE METHOD
+    # =========================================================================
     
     def save(self, *args, **kwargs):
         """
         Override save to:
         1. Set timestamp in school timezone ⭐
         2. Route to current database
+        
+        Example:
+            >>> # Audit log automatically created with school timezone
+            >>> audit = AuditLog(action='CREATE', ...)
+            >>> audit.save()
+            >>> print(audit.timestamp)  # School timezone
+            2025-01-10 14:30:00+03:00
         """
         from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         
@@ -669,6 +1122,10 @@ class AuditLog(models.Model):
         
         return super().save(*args, **kwargs)
     
+    # =========================================================================
+    # DELETE METHOD
+    # =========================================================================
+    
     def delete(self, *args, **kwargs):
         """Route to current database"""
         current_db = get_current_db()
@@ -676,12 +1133,17 @@ class AuditLog(models.Model):
             kwargs['using'] = current_db
         return super().delete(*args, **kwargs)
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # AUDIT LOG HELPER METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     def get_user(self):
-        """Get the user who made this change"""
+        """
+        Get the user who made this change.
+        
+        Returns:
+            User object or None
+        """
         if not self.user_id:
             return None
         try:
@@ -689,11 +1151,21 @@ class AuditLog(models.Model):
             User = get_user_model()
             return User.objects.using('default').get(id=self.user_id)
         except Exception as e:
-            logger.error(f"Error fetching audit log user: {e}")
+            logger.debug(f"Error fetching audit log user: {e}")
             return None
     
     def get_changes_display(self):
-        """Get a human-readable display of changes"""
+        """
+        Get a human-readable display of changes.
+        
+        Returns:
+            str: Formatted string showing field changes
+            
+        Example:
+            >>> print(audit.get_changes_display())
+            name: 'John' → 'John Doe'
+            email: 'old@email.com' → 'new@email.com'
+        """
         if not self.changes:
             return "No field changes recorded"
         
@@ -706,7 +1178,16 @@ class AuditLog(models.Model):
         return "\n".join(lines)
     
     def get_summary(self):
-        """Get a brief summary of this audit entry"""
+        """
+        Get a brief summary of this audit entry.
+        
+        Returns:
+            str: One-line summary of the audit entry
+            
+        Example:
+            >>> print(audit.get_summary())
+            John Doe created students.student
+        """
         user_display = self.user_name or self.user_email or self.user_id or "Unknown User"
         return f"{user_display} {self.get_action_display().lower()} {self.content_type}"
     
@@ -723,28 +1204,62 @@ class AuditLog(models.Model):
         from core.utils import localize_datetime
         return localize_datetime(self.timestamp)
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # CLASS METHODS - QUERYING AUDIT LOGS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     @classmethod
     def get_recent_activity(cls, limit=50):
-        """Get recent audit activity across all models"""
+        """
+        Get recent audit activity across all models.
+        
+        Args:
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: Recent audit log entries
+        """
         return cls.objects.all().order_by('-timestamp')[:limit]
     
     @classmethod
     def get_user_activity(cls, user_id, limit=50):
-        """Get recent activity for a specific user"""
+        """
+        Get recent activity for a specific user.
+        
+        Args:
+            user_id: User ID
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: User's audit log entries
+        """
         return cls.objects.filter(user_id=str(user_id)).order_by('-timestamp')[:limit]
     
     @classmethod
     def get_model_history(cls, model_label, limit=50):
-        """Get history for a specific model type"""
+        """
+        Get history for a specific model type.
+        
+        Args:
+            model_label: Model label (e.g., 'students.student')
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: Audit log entries for the model
+        """
         return cls.objects.filter(content_type=model_label).order_by('-timestamp')[:limit]
     
     @classmethod
     def get_object_history(cls, obj):
-        """Get complete history for a specific object"""
+        """
+        Get complete history for a specific object.
+        
+        Args:
+            obj: Model instance
+            
+        Returns:
+            QuerySet: All audit log entries for the object
+        """
         content_type = f"{obj._meta.app_label}.{obj._meta.model_name}"
         return cls.objects.filter(
             content_type=content_type,
@@ -762,6 +1277,12 @@ class AuditLog(models.Model):
             
         Returns:
             QuerySet: Audit logs within date range
+            
+        Example:
+            >>> from datetime import date
+            >>> start = date(2025, 1, 1)
+            >>> end = date(2025, 1, 31)
+            >>> january_activity = AuditLog.get_activity_by_date_range(start, end)
         """
         from core.utils import get_school_timezone
         from datetime import datetime
@@ -792,9 +1313,32 @@ class FinancialAuditLog(models.Model):
     - Financial reports show transactions in school's operational time
     - Compliance audits use consistent school time
     - Parent portals show transaction times in school timezone
+    - Critical for accurate financial reporting and compliance
+    
+    Features:
+    - Enhanced tracking for financial operations
+    - Risk level classification
+    - Compliance flagging
+    - Student context tracking
+    - Academic session linking
+    - Bulk operation tracking
+    
+    Example:
+        >>> FinancialAuditLog.log_financial_action(
+        >>>     action='PAYMENT_RECEIVE',
+        >>>     user=request.user,
+        >>>     request=request,
+        >>>     target_object=payment,
+        >>>     amount=payment.amount,
+        >>>     student=payment.student,
+        >>>     risk_level='LOW'
+        >>> )
     """
     
-    # Financial-specific action types
+    # =========================================================================
+    # FINANCIAL-SPECIFIC ACTION TYPES
+    # =========================================================================
+    
     FINANCIAL_ACTIONS = [
         # Student financial actions
         ('INVOICE_CREATE', 'Invoice Created'),
@@ -834,7 +1378,10 @@ class FinancialAuditLog(models.Model):
         ('BUDGET_APPROVE', 'Budget Approved'),
     ]
     
-    # Core audit fields
+    # =========================================================================
+    # CORE AUDIT FIELDS
+    # =========================================================================
+    
     id = models.AutoField(primary_key=True)
     
     # When it happened - Stored in school timezone ⭐
@@ -843,9 +1390,18 @@ class FinancialAuditLog(models.Model):
         help_text="When this financial action occurred (in school's operational timezone)"
     )
     
-    action = models.CharField(max_length=30, choices=FINANCIAL_ACTIONS, db_index=True)
+    action = models.CharField(
+        max_length=30, 
+        choices=FINANCIAL_ACTIONS, 
+        db_index=True,
+        help_text="Type of financial action performed"
+    )
     
-    # User information - CharField to avoid cross-database FK
+    # =========================================================================
+    # USER INFORMATION
+    # =========================================================================
+    # CharField to avoid cross-database FK
+    
     user_id = models.CharField(
         max_length=100, 
         null=True, 
@@ -853,26 +1409,77 @@ class FinancialAuditLog(models.Model):
         db_index=True,
         help_text="ID of user who performed this action"
     )
-    user_name = models.CharField(max_length=200, null=True, blank=True)
-    user_role = models.CharField(max_length=100, null=True, blank=True)
     
-    # Session and request context
-    session_key = models.CharField(max_length=40, null=True, blank=True)
-    ip_address = models.GenericIPAddressField(null=True, blank=True, db_index=True)
-    user_agent = models.TextField(null=True, blank=True)
+    user_name = models.CharField(
+        max_length=200, 
+        null=True, 
+        blank=True,
+        help_text="Name of user who performed this action"
+    )
     
-    # Target object (what was changed)
+    user_role = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text="Role of user who performed this action"
+    )
+    
+    # =========================================================================
+    # SESSION AND REQUEST CONTEXT
+    # =========================================================================
+    
+    session_key = models.CharField(
+        max_length=40, 
+        null=True, 
+        blank=True,
+        help_text="Session key for tracking user sessions"
+    )
+    
+    ip_address = models.GenericIPAddressField(
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="IP address from which action was performed"
+    )
+    
+    user_agent = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Browser/client information"
+    )
+    
+    # =========================================================================
+    # TARGET OBJECT (WHAT WAS CHANGED)
+    # =========================================================================
+    
     content_type = models.ForeignKey(
         ContentType, 
         on_delete=models.CASCADE, 
         null=True, 
-        blank=True
+        blank=True,
+        help_text="Type of object that was changed"
     )
-    object_id = models.CharField(max_length=100, null=True, blank=True)
-    content_object = GenericForeignKey('content_type', 'object_id')
-    object_description = models.CharField(max_length=500, null=True, blank=True)
     
-    # Financial-specific fields
+    object_id = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text="ID of object that was changed"
+    )
+    
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    object_description = models.CharField(
+        max_length=500, 
+        null=True, 
+        blank=True,
+        help_text="Description of object that was changed"
+    )
+    
+    # =========================================================================
+    # FINANCIAL-SPECIFIC FIELDS
+    # =========================================================================
+    
     amount_involved = models.DecimalField(
         max_digits=15, 
         decimal_places=2, 
@@ -880,23 +1487,85 @@ class FinancialAuditLog(models.Model):
         blank=True,
         help_text="Monetary amount involved in the action"
     )
-    currency = models.CharField(max_length=3, null=True, blank=True, default='UGX')
     
-    # Student context (for student-related financial actions)
-    student_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
-    student_name = models.CharField(max_length=200, null=True, blank=True)
-    student_admission_number = models.CharField(max_length=50, null=True, blank=True)
+    currency = models.CharField(
+        max_length=3, 
+        null=True, 
+        blank=True, 
+        default='UGX',
+        help_text="Currency code (e.g., UGX, USD, EUR)"
+    )
     
-    # Academic context
-    academic_session_id = models.CharField(max_length=100, null=True, blank=True)
-    academic_session_name = models.CharField(max_length=100, null=True, blank=True)
+    # =========================================================================
+    # STUDENT CONTEXT
+    # =========================================================================
     
-    # Change tracking
-    old_values = models.JSONField(null=True, blank=True, help_text="Values before change")
-    new_values = models.JSONField(null=True, blank=True, help_text="Values after change")
-    changes_summary = models.TextField(null=True, blank=True, help_text="Human-readable summary of changes")
+    student_id = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="ID of student related to this action"
+    )
     
-    # Risk and compliance
+    student_name = models.CharField(
+        max_length=200, 
+        null=True, 
+        blank=True,
+        help_text="Name of student related to this action"
+    )
+    
+    student_admission_number = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text="Admission number of student"
+    )
+    
+    # =========================================================================
+    # ACADEMIC CONTEXT
+    # =========================================================================
+    
+    academic_session_id = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text="ID of related academic session"
+    )
+    
+    academic_session_name = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text="Name of related academic session"
+    )
+    
+    # =========================================================================
+    # CHANGE TRACKING
+    # =========================================================================
+    
+    old_values = models.JSONField(
+        null=True, 
+        blank=True, 
+        help_text="Values before change"
+    )
+    
+    new_values = models.JSONField(
+        null=True, 
+        blank=True, 
+        help_text="Values after change"
+    )
+    
+    changes_summary = models.TextField(
+        null=True, 
+        blank=True, 
+        help_text="Human-readable summary of changes"
+    )
+    
+    # =========================================================================
+    # RISK AND COMPLIANCE
+    # =========================================================================
+    
     risk_level = models.CharField(
         max_length=10,
         choices=[
@@ -906,27 +1575,41 @@ class FinancialAuditLog(models.Model):
             ('CRITICAL', 'Critical Risk'),
         ],
         default='LOW',
-        db_index=True
+        db_index=True,
+        help_text="Risk level of this action"
     )
+    
     compliance_flags = models.JSONField(
         default=list, 
         blank=True,
         help_text="Compliance-related flags or concerns"
     )
     
-    # Additional context
+    # =========================================================================
+    # ADDITIONAL CONTEXT
+    # =========================================================================
+    
     additional_data = models.JSONField(
         default=dict, 
         blank=True,
         help_text="Additional context-specific data"
     )
-    notes = models.TextField(null=True, blank=True)
     
-    # Processing information
+    notes = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Additional notes about this action"
+    )
+    
+    # =========================================================================
+    # PROCESSING INFORMATION
+    # =========================================================================
+    
     is_automated = models.BooleanField(
         default=False,
         help_text="Whether this action was performed automatically by the system"
     )
+    
     batch_id = models.CharField(
         max_length=100, 
         null=True, 
@@ -934,8 +1617,15 @@ class FinancialAuditLog(models.Model):
         help_text="For grouping related bulk operations"
     )
     
-    # Use SchoolManager for automatic database routing
+    # =========================================================================
+    # MANAGER - AUTOMATIC DATABASE ROUTING
+    # =========================================================================
+    
     objects = SchoolManager()
+    
+    # =========================================================================
+    # META CLASS
+    # =========================================================================
     
     class Meta:
         verbose_name = "Financial Audit Log"
@@ -950,8 +1640,16 @@ class FinancialAuditLog(models.Model):
             models.Index(fields=['academic_session_id', 'action']),
         ]
     
+    # =========================================================================
+    # STRING REPRESENTATION
+    # =========================================================================
+    
     def __str__(self):
         return f"{self.get_action_display()} at {self.timestamp}"
+    
+    # =========================================================================
+    # SAVE METHOD
+    # =========================================================================
     
     def save(self, *args, **kwargs):
         """
@@ -972,9 +1670,9 @@ class FinancialAuditLog(models.Model):
         
         return super().save(*args, **kwargs)
     
-    # -------------------------------------------------------------------------
-    # CLASS METHODS - Creating Financial Audit Logs
-    # -------------------------------------------------------------------------
+    # =========================================================================
+    # CLASS METHOD - CREATE FINANCIAL AUDIT LOG
+    # =========================================================================
     
     @classmethod
     def log_financial_action(
@@ -997,10 +1695,8 @@ class FinancialAuditLog(models.Model):
         """
         Class method to log financial actions with school timezone support.
 
-        Handles:
-        - Automatic school timezone for timestamps ⭐
-        - academic_session as object or string/UUID
-        - currency as object or string (or None → default from settings)
+        This is the primary way to create financial audit log entries.
+        Handles all the complexity of extracting context and setting timezone.
         
         Args:
             action: Action type from FINANCIAL_ACTIONS
@@ -1012,27 +1708,27 @@ class FinancialAuditLog(models.Model):
             academic_session: Academic session/period
             old_values: Values before change
             new_values: Values after change
-            risk_level: Risk level of the action
+            risk_level: Risk level of the action ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
             additional_data: Additional contextual data
             notes: Optional notes
             currency: Currency code or object
-            **kwargs: Additional parameters
+            **kwargs: Additional parameters (is_automated, batch_id)
             
         Returns:
             FinancialAuditLog: Created audit log entry or None if failed
         
         Example:
-            FinancialAuditLog.log_financial_action(
-                action='PAYMENT_RECEIVE',
-                user=request.user,
-                request=request,
-                target_object=payment,
-                amount=payment.amount,
-                student=payment.student,
-                academic_session=payment.academic_session,
-                risk_level='LOW',
-                notes='Payment received via mobile money'
-            )
+            >>> FinancialAuditLog.log_financial_action(
+            >>>     action='PAYMENT_RECEIVE',
+            >>>     user=request.user,
+            >>>     request=request,
+            >>>     target_object=payment,
+            >>>     amount=payment.amount,
+            >>>     student=payment.student,
+            >>>     academic_session=payment.academic_session,
+            >>>     risk_level='LOW',
+            >>>     notes='Payment received via mobile money'
+            >>> )
         """
         from django.contrib.contenttypes.models import ContentType
         from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
@@ -1165,12 +1861,17 @@ class FinancialAuditLog(models.Model):
             logger.error(f"Error creating financial audit log: {e}", exc_info=True)
             return None
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # INSTANCE METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     def get_user(self):
-        """Get the user who performed this action"""
+        """
+        Get the user who performed this action.
+        
+        Returns:
+            User object or None
+        """
         if not self.user_id:
             return None
         try:
@@ -1178,22 +1879,36 @@ class FinancialAuditLog(models.Model):
             User = get_user_model()
             return User.objects.using('default').get(id=self.user_id)
         except Exception as e:
-            logger.error(f"Error fetching financial audit user: {e}")
+            logger.debug(f"Error fetching financial audit user: {e}")
             return None
     
     def get_student(self):
-        """Get the student associated with this action"""
+        """
+        Get the student associated with this action.
+        
+        Returns:
+            Student object or None
+        """
         if not self.student_id:
             return None
         try:
             from students.models import Student
             return Student.objects.get(id=self.student_id)
         except Exception as e:
-            logger.error(f"Error fetching student: {e}")
+            logger.debug(f"Error fetching student: {e}")
             return None
     
     def get_summary(self):
-        """Get a brief summary of this financial audit entry"""
+        """
+        Get a brief summary of this financial audit entry.
+        
+        Returns:
+            str: One-line summary
+            
+        Example:
+            >>> print(audit.get_summary())
+            John Doe received payment for Jane Smith (UGX 500,000.00)
+        """
         parts = []
         
         # User
@@ -1218,7 +1933,15 @@ class FinancialAuditLog(models.Model):
         return " ".join(parts)
     
     def get_risk_badge_class(self):
-        """Get CSS class for risk level badge"""
+        """
+        Get CSS class for risk level badge.
+        
+        Returns:
+            str: Bootstrap badge class
+            
+        Example:
+            >>> print(f'<span class="{audit.get_risk_badge_class()}">{audit.risk_level}</span>')
+        """
         risk_classes = {
             'LOW': 'badge-success',
             'MEDIUM': 'badge-warning',
@@ -1240,18 +1963,34 @@ class FinancialAuditLog(models.Model):
         from core.utils import localize_datetime
         return localize_datetime(self.timestamp)
     
-    # -------------------------------------------------------------------------
+    # =========================================================================
     # QUERY METHODS
-    # -------------------------------------------------------------------------
+    # =========================================================================
     
     @classmethod
     def get_recent_activity(cls, limit=50):
-        """Get recent financial activity"""
+        """
+        Get recent financial activity.
+        
+        Args:
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: Recent financial audit log entries
+        """
         return cls.objects.all().order_by('-timestamp')[:limit]
     
     @classmethod
     def get_high_risk_actions(cls, days=30):
-        """Get high-risk actions from recent days (uses school timezone)"""
+        """
+        Get high-risk actions from recent days (uses school timezone).
+        
+        Args:
+            days: Number of days to look back
+            
+        Returns:
+            QuerySet: High-risk financial audit log entries
+        """
         from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         from datetime import timedelta
         
@@ -1263,35 +2002,83 @@ class FinancialAuditLog(models.Model):
     
     @classmethod
     def get_student_financial_history(cls, student_id, limit=50):
-        """Get financial history for a specific student"""
+        """
+        Get financial history for a specific student.
+        
+        Args:
+            student_id: Student ID
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: Student's financial audit log entries
+        """
         return cls.objects.filter(
             student_id=str(student_id)
         ).order_by('-timestamp')[:limit]
     
     @classmethod
     def get_user_financial_actions(cls, user_id, limit=50):
-        """Get financial actions performed by a specific user"""
+        """
+        Get financial actions performed by a specific user.
+        
+        Args:
+            user_id: User ID
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: User's financial audit log entries
+        """
         return cls.objects.filter(
             user_id=str(user_id)
         ).order_by('-timestamp')[:limit]
     
     @classmethod
     def get_actions_by_type(cls, action_type, limit=50):
-        """Get actions of a specific type"""
+        """
+        Get actions of a specific type.
+        
+        Args:
+            action_type: Action type (e.g., 'PAYMENT_RECEIVE')
+            limit: Maximum number of entries to return
+            
+        Returns:
+            QuerySet: Financial audit log entries of specified type
+        """
         return cls.objects.filter(
             action=action_type
         ).order_by('-timestamp')[:limit]
     
     @classmethod
     def get_session_financial_activity(cls, session_id):
-        """Get all financial activity for an academic session"""
+        """
+        Get all financial activity for an academic session.
+        
+        Args:
+            session_id: Academic session ID
+            
+        Returns:
+            QuerySet: Financial audit log entries for the session
+        """
         return cls.objects.filter(
             academic_session_id=str(session_id)
         ).order_by('-timestamp')
     
     @classmethod
     def get_amount_summary(cls, action_type=None, days=30):
-        """Get summary of amounts involved in financial actions (uses school timezone)"""
+        """
+        Get summary of amounts involved in financial actions (uses school timezone).
+        
+        Args:
+            action_type: Optional action type to filter by
+            days: Number of days to look back
+            
+        Returns:
+            dict: Summary with total_amount, count, average_amount
+            
+        Example:
+            >>> summary = FinancialAuditLog.get_amount_summary('PAYMENT_RECEIVE', days=7)
+            >>> print(f"Total: {summary['total_amount']}, Count: {summary['count']}")
+        """
         from core.utils import get_school_current_time  # ⭐ USE SCHOOL TIMEZONE
         from datetime import timedelta
         from django.db.models import Sum, Count, Avg
@@ -1319,6 +2106,12 @@ class FinancialAuditLog(models.Model):
             
         Returns:
             QuerySet: Financial audit logs within date range
+            
+        Example:
+            >>> from datetime import date
+            >>> start = date(2025, 1, 1)
+            >>> end = date(2025, 1, 31)
+            >>> january_activity = FinancialAuditLog.get_activity_by_date_range(start, end)
         """
         from core.utils import get_school_timezone
         from datetime import datetime

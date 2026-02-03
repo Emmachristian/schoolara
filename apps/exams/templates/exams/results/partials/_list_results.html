@@ -1,0 +1,211 @@
+{% load static %}
+
+<!-- Results Table -->
+<div class="table-responsive">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Student</th>
+                <th>Examination</th>
+                <th>Subject</th>
+                <th>Score</th>
+                <th>Grade</th>
+                <th>Percentage</th>
+                <th>Status</th>
+                <th>Published</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if results_page %}
+                {% for result in results_page %}
+                <tr>
+                    <td>{{ forloop.counter|add:results_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Student Info -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">{{ result.student.get_full_name }}</h6>
+                            <small class="text-muted">{{ result.student.admission_number }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Examination -->
+                    <td>
+                        <div>
+                            {{ result.examination.name }}
+                            <small class="d-block text-muted">{{ result.examination.exam_date }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Subject -->
+                    <td>{{ result.examination.subject.name }}</td>
+                    
+                    <!-- Score -->
+                    <td>
+                        <strong>{{ result.score|default:"-" }}/{{ result.examination.total_marks }}</strong>
+                    </td>
+                    
+                    <!-- Grade -->
+                    <td>
+                        {% if result.grade %}
+                            <span class="grade-badge">{{ result.grade }}</span>
+                            {% if result.is_grade_locked %}
+                                <i class="fa fa-lock text-warning ms-1" 
+                                   data-bs-toggle="tooltip" 
+                                   title="Grade Locked"></i>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Percentage -->
+                    <td>
+                        {% if result.percentage %}
+                            {{ result.percentage }}%
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Result Status -->
+                    <td>
+                        <span class="status-badge {{ result.status|lower }}">
+                            {{ result.get_status_display }}
+                        </span>
+                    </td>
+                    
+                    <!-- Published Status -->
+                    <td>
+                        {% if result.is_published %}
+                            <span class="status-badge published">
+                                <i class="fa fa-check-circle me-1"></i>Published
+                            </span>
+                        {% else %}
+                            <span class="status-badge unpublished">
+                                <i class="fa fa-clock me-1"></i>Unpublished
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <a class="dropdown-item text-success" 
+                                   href="{% url 'exams:result_detail' result.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <a class="dropdown-item text-warning" 
+                                   href="{% url 'exams:result_edit' result.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                {% if result.is_grade_locked %}
+                                    <button type="button" class="dropdown-item text-info"
+                                            hx-get="{% url 'exams:unlock_grade_modal' result.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-unlock me-2"></i>Unlock Grade
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'exams:lock_grade_modal' result.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-lock me-2"></i>Lock Grade
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'exams:result_delete_modal' result.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No results found</p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if results_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted">
+            Showing {{ results_page.start_index }} - {{ results_page.end_index }} of {{ results_page.paginator.count }} results
+        </div>
+        
+        <nav aria-label="Results pagination">
+            <ul class="pagination mb-0">
+                {% if results_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'exams:result_list' %}" 
+                                hx-target="#results-container"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ results_page.previous_page_number }}"}'>
+                            «
+                        </button>
+                    </li>
+                {% endif %}
+                
+                {% for page_num in results_page.paginator.page_range %}
+                    {% if page_num == results_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > results_page.number|add:"-3" and page_num < results_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'exams:result_list' %}"
+                                    hx-target="#results-container"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if results_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:result_list' %}"
+                                hx-target="#results-container"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ results_page.next_page_number }}"}'>
+                            »
+                        </button>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}

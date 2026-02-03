@@ -3,7 +3,6 @@
 {% load widget_tweaks %}
 
 {% block extra_css %}
-
 <style>
     .required-field::after {
         content: " *";
@@ -49,6 +48,17 @@
     .review-value {
         flex: 1;
         color: #212529;
+    }
+    
+    /* Ensure done steps show checkmark */
+    .forms-wizard li.done a em {
+        background-color: #28a745 !important;
+        color: white !important;
+    }
+
+    .forms-wizard li.done a em:after {
+        content: "✓";
+        font-style: normal;
     }
 </style>
 {% endblock %}
@@ -754,6 +764,10 @@
                                             <div class="review-label">Relationship:</div>
                                             <div class="review-value">{{ guardian_data.relationship|default:"-------" }}</div>
                                         </div>
+                                        {% else %}
+                                        <div class="review-item">
+                                            <div class="review-value">No guardian information provided</div>
+                                        </div>
                                         {% endif %}
                                     </div>
                                     {% endif %}
@@ -881,23 +895,36 @@ $(document).ready(function() {
         wizard.smartWizard("setState", [currentStepIndex], "active");
     }, 100);
 
-    // Handle Next button
+    // Handle Next button - For forward navigation with validation
     $("#next-btn").on("click", function() {
+        // Remove novalidate to enable validation for next
+        $('#wizard-form').removeAttr('novalidate');
         $("#wizard-form").submit();
     });
 
-    // Handle Previous button
+    // Handle Previous button - Navigate backward without validation
     $("#prev-btn").on("click", function() {
         var currentIndex = wizard.smartWizard("getStepIndex");
         if (currentIndex > 0) {
             var prevStep = stepMapping[currentIndex - 1];
+            
+            // Clear any existing navigation inputs
             $('input[name="wizard_goto_step"]').remove();
-            $('<input>').attr({
-                type: 'hidden',
-                name: 'wizard_goto_step',
-                value: prevStep
-            }).appendTo('#wizard-form');
-            $("#wizard-form").submit();
+            $('button[name="wizard_goto_step"]').remove();
+            
+            // Disable validation for backward navigation
+            $('#wizard-form').attr('novalidate', 'novalidate');
+            
+            // Create and click a hidden submit button for backward navigation
+            $('<button>')
+                .attr({
+                    type: 'submit',
+                    name: 'wizard_goto_step',
+                    value: prevStep,
+                    style: 'display:none'
+                })
+                .appendTo('#wizard-form')
+                .click();
         }
     });
 
@@ -908,18 +935,20 @@ $(document).ready(function() {
         }
     });
 
-    // Update button display
+    // Update button display based on current step
     function updateButtons() {
         var currentIndex = wizard.smartWizard("getStepIndex");
         
+        // Update Next/Submit button text and style
         if (currentIndex === 5) {
-            $("#next-btn .next-text").text("Submit Registration");
+            $("#next-btn .next-text").html('<i class="fa fa-check me-2"></i>Create Student');
             $("#next-btn").removeClass("btn-primary").addClass("btn-success");
         } else {
-            $("#next-btn .next-text").text("Next");
+            $("#next-btn .next-text").html('Next <i class="fa fa-arrow-right ms-2"></i>');
             $("#next-btn").removeClass("btn-success").addClass("btn-primary");
         }
 
+        // Show/hide Previous button
         if (currentIndex === 0) {
             $("#prev-btn").hide();
         } else {
@@ -927,8 +956,10 @@ $(document).ready(function() {
         }
     }
 
+    // Initial button update
     updateButtons();
 
+    // Update buttons when step changes
     wizard.on("showStep", function(e, anchorObject, stepIndex, stepDirection, stepPosition) {
         updateButtons();
     });
@@ -984,6 +1015,10 @@ $(document).ready(function() {
             $('#existing-guardian-field').slideDown();
             $('#new-guardian-fields').slideUp();
             $('#relationship-field').slideDown();
+        } else if (value === 'skip') {
+            $('#new-guardian-fields').slideUp();
+            $('#existing-guardian-field').slideUp();
+            $('#relationship-field').slideUp();
         }
     });
 
@@ -997,7 +1032,7 @@ $(document).ready(function() {
         $('#relationship-field').show();
     }
 
-    // Prevent form submission on Enter key
+    // Prevent form submission on Enter key (except in textareas)
     $('#wizard-form').on('keypress', function(e) {
         if (e.which === 13 && e.target.tagName !== 'TEXTAREA') {
             e.preventDefault();
@@ -1006,18 +1041,4 @@ $(document).ready(function() {
     });
 });
 </script>
-
-<style>
-/* Ensure done steps show checkmark */
-.forms-wizard li.done a em {
-    background-color: #28a745 !important;
-    color: white !important;
-}
-
-.forms-wizard li.done a em:after {
-    content: "✓";
-    font-style: normal;
-}
-</style>
-
 {% endblock %}

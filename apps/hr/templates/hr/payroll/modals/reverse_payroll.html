@@ -1,0 +1,199 @@
+{# hr/templates/hr/payroll/modals/reverse_payroll.html #}
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-undo me-2"></i>Reverse Payroll
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body">
+            {# Warning Banner #}
+            <div class="alert alert-danger">
+                <h5 class="alert-heading">
+                    <i class="fa fa-exclamation-triangle me-2"></i>Critical Action
+                </h5>
+                <p class="mb-0">
+                    Reversing a payroll is a serious action that should only be done when absolutely necessary.
+                    This action will be recorded in the audit trail.
+                </p>
+            </div>
+
+            {# Payroll Information #}
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="fa fa-info-circle me-2"></i>Payroll Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1">
+                                <strong>Staff:</strong> {{ payroll.staff.full_name }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Staff ID:</strong> {{ payroll.staff.staff_id }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Department:</strong> 
+                                {{ payroll.staff.primary_department.name|default:"—" }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1">
+                                <strong>Pay Period:</strong> {{ payroll.pay_period_label }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Period Dates:</strong> 
+                                {{ payroll.pay_period_start|date:"M d" }} - 
+                                {{ payroll.pay_period_end|date:"M d, Y" }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Fiscal Period:</strong> {{ payroll.fiscal_period.name }}
+                            </p>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1">
+                                <strong>Status:</strong> 
+                                <span class="badge bg-{{ payroll.status|lower }}">
+                                    {{ payroll.get_status_display }}
+                                </span>
+                            </p>
+                            <p class="mb-1">
+                                <strong>Payment Date:</strong> 
+                                {{ payroll.payment_date|date:"F d, Y" }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1">
+                                <strong>Gross Pay:</strong> {{ payroll.gross_pay|money }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Net Pay:</strong> {{ payroll.net_pay|money }}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {# Show breakdown if has deductions #}
+                    {% if payroll.deductions.exists %}
+                        <hr class="my-2">
+                        <div class="alert alert-info mb-0 py-2">
+                            <small class="d-block mb-1">
+                                <strong>Deductions:</strong>
+                            </small>
+                            {% for deduction in payroll.deductions.all %}
+                                <small class="d-block">
+                                    • {{ deduction.get_deduction_type_display }}
+                                    {% if deduction.is_statutory %}
+                                        <span class="badge badge-sm bg-danger">Statutory</span>
+                                    {% endif %}
+                                    : {{ deduction.amount|money }}
+                                </small>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Can Reverse Check #}
+            {% if not can_reverse %}
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading">
+                        <i class="fa fa-times-circle me-2"></i>Cannot Reverse Payroll
+                    </h6>
+                    <p class="mb-0">{{ reversal_reason }}</p>
+                </div>
+            {% else %}
+                {# Statutory Deductions Warning #}
+                {% if requires_statutory %}
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading">
+                            <i class="fa fa-exclamation-triangle me-2"></i>
+                            Statutory Deductions Detected
+                        </h6>
+                        <p class="mb-2">
+                            This payroll contains statutory deductions (PAYE, NSSF, etc.) that 
+                            {% if payroll.status == 'PAID' %}
+                                <strong>were already paid and remitted</strong>
+                            {% else %}
+                                may need special handling
+                            {% endif %}.
+                        </p>
+                        <p class="mb-0">
+                            <strong>You must explain:</strong>
+                        </p>
+                        <ul class="mb-0 small">
+                            <li>How PAYE/tax will be adjusted or recovered</li>
+                            <li>How NSSF contributions will be handled</li>
+                            <li>Any required filings or amendments to statutory authorities</li>
+                            <li>Compliance with labor laws and regulations</li>
+                        </ul>
+                    </div>
+                {% endif %}
+
+                {# Reversal Form - No Action Needed, will be in full page view #}
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>Next Step:</strong> You'll be taken to a full form to complete the reversal with all required details.
+                </div>
+
+                {# What Happens After Reversal #}
+                <div class="card border-info">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">
+                            <i class="fa fa-list-check me-2"></i>
+                            What Happens After Reversal
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <ol class="mb-0 small">
+                            <li>Payroll status will change to <strong>REVERSED</strong></li>
+                            <li>Effective net pay and gross pay will become <strong>{{ 0|money }}</strong></li>
+                            <li>Original amounts remain visible for audit purposes</li>
+                            <li>All child records (allowances, deductions, bonuses) remain but show zero effective amounts</li>
+                            <li>Reversal details (who, when, why) are permanently recorded</li>
+                            {% if payroll.journal_entry %}
+                                <li>A reversal journal entry will be created</li>
+                            {% endif %}
+                            <li>The payroll cannot be edited, approved, or processed after reversal</li>
+                            <li>This record will be kept for audit trail and <strong>cannot be deleted</strong></li>
+                            {% if payroll.status == 'PAID' %}
+                                <li class="text-danger">
+                                    <strong>Important:</strong> This does NOT automatically recover the payment - 
+                                    you must handle payment recovery separately
+                                </li>
+                            {% endif %}
+                        </ol>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+        {# Footer #}
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+            {% if can_reverse %}
+                <a href="{% url 'hr:payroll_reverse' payroll.pk %}" 
+                   class="btn btn-danger">
+                    <i class="fa fa-undo me-1"></i>Continue to Reversal Form
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.badge-sm {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+}
+</style>

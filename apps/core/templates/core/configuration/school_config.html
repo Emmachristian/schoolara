@@ -1,0 +1,1640 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    .config-card {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border: none;
+    }
+    
+    .section-divider {
+        border-bottom: 2px solid #e9ecef;
+        margin: 20px 0 15px 0;
+        padding-bottom: 10px;
+    }
+    
+    .section-divider:first-of-type {
+        margin-top: 0;
+    }
+    
+    .section-divider:last-of-type {
+        margin-bottom: 0;
+        border-bottom: none;
+    }
+    
+    .section-header h6 {
+        color: #495057;
+        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    
+    .section-header p {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 0;
+    }
+    
+    .form-floating {
+        margin-bottom: 1rem;
+    }
+    
+    .config-status {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 25px;
+    }
+    
+    .config-status-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .config-status-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .config-status-icon {
+        width: 20px;
+        margin-right: 10px;
+    }
+    
+    .preview-panel {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 4px solid #667eea;
+    }
+    
+    .period-preview {
+        background-color: white;
+        border-radius: 6px;
+        padding: 15px;
+        margin-top: 15px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .period-preview-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border-left: 3px solid #667eea;
+    }
+    
+    .period-preview-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .save-indicator {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1050;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        max-width: 350px;
+    }
+    
+    .save-indicator.show {
+        opacity: 1;
+    }
+    
+    .form-help {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .form-help h6 {
+        color: #1976d2;
+        margin-bottom: 10px;
+    }
+    
+    .btn-save-group {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-top: 20px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+    }
+    
+    .form-check-input:checked {
+        background-color: #667eea;
+        border-color: #667eea;
+    }
+    
+    .form-check-input:focus {
+        border-color: #a8b3ff;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+    }
+    
+    .is-invalid {
+        border-color: #dc3545;
+    }
+    
+    .invalid-feedback {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+    }
+    
+    /* ⭐ FIXED: Select2 styling for timezone dropdown with proper height */
+    .select2-container {
+        width: 100% !important;
+    }
+    
+    .select2-container--default .select2-selection--single {
+        height: 58px !important;
+        min-height: 58px !important;
+        padding: 1rem 0.75rem !important;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 26px !important;
+        padding-left: 0;
+        padding-top: 0;
+        color: #495057;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 56px !important;
+        top: 1px !important;
+    }
+    
+    .select2-container--default.select2-container--focus .select2-selection--single {
+        border-color: #667eea;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+    }
+    
+    /* ⭐ Monospace styling for JSON fields */
+    .font-monospace {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    textarea.font-monospace {
+        background-color: #f8f9fa;
+        border-left: 3px solid #667eea;
+        transition: all 0.3s ease;
+    }
+    
+    textarea.font-monospace:focus {
+        background-color: #fff;
+        border-left-color: #4c51bf;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.1);
+    }
+    
+    /* ⭐ Read-only field styling */
+    .form-control[readonly],
+    .form-select[readonly] {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+        opacity: 0.8;
+    }
+    
+    .bg-light {
+        background-color: #e9ecef !important;
+    }
+    
+    /* ⭐ Auto-calculated badge */
+    .auto-calculated-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* ⭐ JSON validation indicator */
+    .json-valid {
+        border-left-color: #28a745 !important;
+    }
+    
+    .json-invalid {
+        border-left-color: #dc3545 !important;
+    }
+    
+    /* ⭐ Timezone info box */
+    .timezone-info {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin-top: 10px;
+        font-size: 0.9rem;
+    }
+    
+    .timezone-info i {
+        color: #856404;
+    }
+    
+    /* ⭐ Field state indicators */
+    .field-required::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .field-optional {
+        color: #6c757d;
+        font-size: 0.85rem;
+        font-style: italic;
+    }
+    
+    /* ⭐ Communication cards equal height */
+    .communication-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .communication-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .communication-icon {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        margin: 0 auto 1rem;
+    }
+    
+    @media (max-width: 768px) {
+        .section-divider {
+            padding: 15px;
+        }
+        
+        .config-status {
+            padding: 15px;
+        }
+        
+        .select2-container--default .select2-selection--single {
+            height: 50px !important;
+            min-height: 50px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-settings icon-gradient bg-mean-fruit"></i>
+            </div>
+            <div>
+                {{ title|default:"School Configuration" }}
+                <div class="page-title-subheading">
+                    Configure your school's term system, academic year settings, timezone, and operational preferences
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="dropdown d-inline">
+                <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fa fa-cog me-1"></i> Actions
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a class="dropdown-item" href="{% url 'core:fiscal_year_list' %}">
+                        <i class="fa fa-calendar me-2"></i> Manage Fiscal Years
+                    </a>
+                    <a class="dropdown-item" href="{% url 'core:fiscal_period_list' %}">
+                        <i class="fa fa-calendar-week me-2"></i> Manage Fiscal Periods
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="#" onclick="exportConfig(); return false;">
+                        <i class="fa fa-download me-2"></i> Export Configuration
+                    </a>
+                    <a class="dropdown-item" href="#" onclick="importConfig(); return false;">
+                        <i class="fa fa-upload me-2"></i> Import Configuration
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="#" onclick="validateConfigurationForm(); return false;">
+                        <i class="fa fa-check-circle me-2"></i> Validate Configuration
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Status Overview -->
+<div class="config-status">
+    <div class="row">
+        <div class="col-md-8">
+            <h6><i class="fa fa-tachometer-alt me-2"></i>Configuration Status</h6>
+            <div class="row">
+                <div class="col-sm-6">
+                    <div class="config-status-item">
+                        <div class="config-status-icon">
+                            {% if config and config.term_system %}
+                                <i class="fa fa-check-circle"></i>
+                            {% else %}
+                                <i class="fa fa-exclamation-circle"></i>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>Term System:</strong>
+                            <span class="ms-1">{{ config.get_term_system_display|default:"Not set" }}</span>
+                        </div>
+                    </div>
+                    <div class="config-status-item">
+                        <div class="config-status-icon">
+                            {% if config and config.operational_timezone %}
+                                <i class="fa fa-check-circle"></i>
+                            {% else %}
+                                <i class="fa fa-exclamation-circle"></i>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>Timezone:</strong>
+                            <span class="ms-1">{{ config.operational_timezone|default:"Not set" }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="config-status-item">
+                        <div class="config-status-icon">
+                            {% if config and config.academic_year_type %}
+                                <i class="fa fa-check-circle"></i>
+                            {% else %}
+                                <i class="fa fa-exclamation-circle"></i>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>Academic Year Type:</strong>
+                            <span class="ms-1">{{ config.get_academic_year_type_display|default:"Not set" }}</span>
+                        </div>
+                    </div>
+                    <div class="config-status-item">
+                        <div class="config-status-icon">
+                            <i class="fa fa-check-circle"></i>
+                        </div>
+                        <div>
+                            <strong>Periods Per Year:</strong>
+                            <span class="ms-1">{{ config.periods_per_year|default:"Not set" }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="h4 mb-0">
+                {% if config and config.term_system and config.operational_timezone %}95{% else %}35{% endif %}%
+            </div>
+            <small>Configuration Complete</small>
+        </div>
+    </div>
+</div>
+
+<!-- ⭐ ENHANCED: Better help section with timezone emphasis -->
+<div class="form-help">
+    <h6><i class="fa fa-lightbulb me-1"></i> Configuration Guide</h6>
+    <div class="row">
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Term System:</strong> Choose how your school organizes academic periods (terms, semesters, quarters)</li>
+                <li><strong>Academic Year:</strong> Define when your academic year starts (e.g., February for East Africa)</li>
+                <li><strong>⭐ Timezone:</strong> <span class="text-danger">Critical</span> for fee deadlines, exam schedules, attendance, and all time-based operations</li>
+            </ul>
+        </div>
+        <div class="col-md-6">
+            <ul class="mb-0">
+                <li><strong>Period Naming:</strong> Customize how periods are named (numeric, ordinal, seasonal, etc.)</li>
+                <li><strong>JSON Fields:</strong> Use exact format shown in placeholders - validate before saving</li>
+                <li><strong>Communication:</strong> Enable automated reminders and notifications for parents/students</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Main Configuration Card -->
+<div class="col-12">
+    <div class="main-card mb-3 card config-card">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="fa fa-cogs me-2"></i>School Configuration Settings
+            </h5>
+            
+            <!-- Save Status Area -->
+            <div id="save-status-area"></div>
+            
+            <!-- Display any form errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger alert-dismissible fade show">
+                    <i class="fa fa-exclamation-triangle me-2"></i>
+                    <strong>Form Errors:</strong>
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endif %}
+            
+            <!-- Configuration Form -->
+            <form method="post" id="config-form" novalidate>
+                {% csrf_token %}
+                
+                <!-- ====================================================================== -->
+                <!-- TERM SYSTEM CONFIGURATION SECTION -->
+                <!-- ====================================================================== -->
+                <div class="section-divider">
+                    <div class="section-header">
+                        <h6><i class="fa fa-calendar-alt me-2"></i>Term System Configuration</h6>
+                        <p>Define how your school organizes academic and operational periods</p>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Term System -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.term_system }}
+                                <label for="id_term_system" class="field-required">Term System</label>
+                                {% if form.term_system.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.term_system.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    {{ form.term_system.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Periods Per Year -->
+                        <div class="col-md-6">
+                            <div class="form-floating position-relative">
+                                {{ form.periods_per_year }}
+                                <label for="id_periods_per_year">Periods Per Year</label>
+                                
+                                <!-- ⭐ AUTO-CALCULATED INDICATOR -->
+                                <span class="badge bg-info auto-calculated-badge" id="auto-calc-badge" style="display: none;">
+                                    <i class="fa fa-calculator me-1"></i>Auto
+                                </span>
+                                
+                                {% if form.periods_per_year.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.periods_per_year.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text" id="periods-help-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    {{ form.periods_per_year.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Period Naming Convention -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.period_naming_convention }}
+                                <label for="id_period_naming_convention">Period Naming Convention</label>
+                                {% if form.period_naming_convention.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.period_naming_convention.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    {{ form.period_naming_convention.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Custom Period Names (JSON) -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.custom_period_names }}
+                                <label for="id_custom_period_names">
+                                    Custom Period Names (JSON)
+                                    <span class="field-optional ms-1">(Optional)</span>
+                                </label>
+                                {% if form.custom_period_names.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.custom_period_names.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-code me-1"></i>
+                                    {{ form.custom_period_names.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ⭐ PERIOD NAMES PREVIEW (FIXED - Accurate for all naming conventions) -->
+                    <div class="preview-panel">
+                        <h6><i class="fa fa-eye me-2"></i>Period Names Preview</h6>
+                        <p class="text-muted mb-3">Live preview of how your periods will be named</p>
+                        <div class="period-preview" id="period-preview">
+                            <div class="text-center text-muted py-3">
+                                <i class="fa fa-info-circle me-2"></i>Select term system to see preview
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ====================================================================== -->
+                <!-- ACADEMIC YEAR CONFIGURATION SECTION -->
+                <!-- ====================================================================== -->
+                <div class="section-divider">
+                    <div class="section-header">
+                        <h6><i class="fa fa-calendar-check me-2"></i>Academic Year Configuration</h6>
+                        <p>Define your school's academic year parameters</p>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Academic Year Type -->
+                        <div class="col-md-4">
+                            <div class="form-floating">
+                                {{ form.academic_year_type }}
+                                <label for="id_academic_year_type">Academic Year Type</label>
+                                {% if form.academic_year_type.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.academic_year_type.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    {{ form.academic_year_type.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Start Month -->
+                        <div class="col-md-4">
+                            <div class="form-floating">
+                                {{ form.academic_year_start_month }}
+                                <label for="id_academic_year_start_month">Start Month</label>
+                                {% if form.academic_year_start_month.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.academic_year_start_month.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-calendar me-1"></i>
+                                    Month when academic year begins (e.g., February for East Africa)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Start Day -->
+                        <div class="col-md-4">
+                            <div class="form-floating">
+                                {{ form.academic_year_start_day }}
+                                <label for="id_academic_year_start_day">Start Day</label>
+                                {% if form.academic_year_start_day.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.academic_year_start_day.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-calendar-day me-1"></i>
+                                    Day of month (1-31)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Regional Season Type -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.regional_season_type }}
+                                <label for="id_regional_season_type">Regional Season Type</label>
+                                {% if form.regional_season_type.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.regional_season_type.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-cloud-sun me-1"></i>
+                                    {{ form.regional_season_type.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Custom Season Names (JSON) -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.custom_season_names }}
+                                <label for="id_custom_season_names">
+                                    Custom Season Names (JSON)
+                                    <span class="field-optional ms-1">(Optional)</span>
+                                </label>
+                                {% if form.custom_season_names.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.custom_season_names.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-code me-1"></i>
+                                    {{ form.custom_season_names.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ====================================================================== -->
+                <!-- OPERATIONAL SETTINGS SECTION -->
+                <!-- ====================================================================== -->
+                <div class="section-divider">
+                    <div class="section-header">
+                        <h6><i class="fa fa-globe me-2"></i>Operational Settings</h6>
+                        <p>Configure timezone and period duration settings</p>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- ⭐ OPERATIONAL TIMEZONE - CRITICAL FIELD -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.operational_timezone }}
+                                <label for="id_operational_timezone" class="field-required">
+                                    Operational Timezone
+                                    <i class="fa fa-star text-warning ms-1" title="Critical setting"></i>
+                                </label>
+                                {% if form.operational_timezone.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.operational_timezone.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-exclamation-triangle me-1 text-warning"></i>
+                                    {{ form.operational_timezone.help_text }}
+                                </div>
+                            </div>
+                            
+                            <!-- ⭐ TIMEZONE INFO BOX -->
+                            <div class="timezone-info">
+                                <i class="fa fa-info-circle me-2"></i>
+                                <strong>Current timezone:</strong> 
+                                <span id="current-timezone">{{ config.operational_timezone|default:"Not set" }}</span>
+                                <br>
+                                <small>
+                                    This affects all date/time calculations. Choose your school's physical location timezone.
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- Default Period Duration -->
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                {{ form.default_period_duration_weeks }}
+                                <label for="id_default_period_duration_weeks">Default Period Duration (weeks)</label>
+                                {% if form.default_period_duration_weeks.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        <i class="fa fa-exclamation-circle me-1"></i>
+                                        {{ form.default_period_duration_weeks.errors.0 }}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <i class="fa fa-info-circle me-1"></i>
+                                    {{ form.default_period_duration_weeks.help_text }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Communication Settings Section -->
+                <div class="section-divider">
+                    <div class="section-header">
+                        <h6><i class="fa fa-bell me-2"></i>Communication Settings</h6>
+                        <p>Configure notification and communication preferences</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center py-3">
+                                    <div class="form-check form-switch d-flex justify-content-center mb-2">
+                                        {{ form.enable_automatic_reminders }}
+                                        <label class="form-check-label ms-2" for="id_enable_automatic_reminders">
+                                            <strong>Automatic Reminders</strong>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mb-0">{{ form.enable_automatic_reminders.help_text }}</p>
+                                    {% if form.enable_automatic_reminders.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.enable_automatic_reminders.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center py-3">
+                                    <div class="form-check form-switch d-flex justify-content-center mb-2">
+                                        {{ form.enable_sms }}
+                                        <label class="form-check-label ms-2" for="id_enable_sms">
+                                            <strong>SMS Notifications</strong>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mb-0">{{ form.enable_sms.help_text }}</p>
+                                    {% if form.enable_sms.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.enable_sms.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center py-3">
+                                    <div class="form-check form-switch d-flex justify-content-center mb-2">
+                                        {{ form.enable_email_notifications }}
+                                        <label class="form-check-label ms-2" for="id_enable_email_notifications">
+                                            <strong>Email Notifications</strong>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mb-0">{{ form.enable_email_notifications.help_text }}</p>
+                                    {% if form.enable_email_notifications.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.enable_email_notifications.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ====================================================================== -->
+                <!-- SAVE BUTTON GROUP -->
+                <!-- ====================================================================== -->
+                <div class="btn-save-group">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetForm(); return false;">
+                                <i class="fa fa-undo me-1"></i> Reset Form
+                            </button>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline-info me-2" onclick="validateConfigurationForm(); return false;">
+                                <i class="fa fa-check-circle me-1"></i> Validate Settings
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-lg" id="save-config">
+                                <i class="fa fa-save me-1" id="save-icon"></i>
+                                <span class="spinner-border spinner-border-sm me-1" style="display: none;" id="save-spinner"></span>
+                                <span id="save-text">{{ submit_text|default:"Save Configuration" }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ⭐ SAVE INDICATOR -->
+<div class="save-indicator" id="save-indicator">
+    <div class="alert alert-success mb-0">
+        <i class="fa fa-check me-1"></i> Configuration saved successfully!
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- ⭐ Include Select2 for timezone dropdown -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Initializing School Configuration Form...');
+    
+    // ⭐ SHOW SUCCESS ALERT IF PRESENT
+    {% if messages %}
+        {% for message in messages %}
+            {% if message.tags == 'success' %}
+                showSaveIndicator('{{ message }}', 'success');
+            {% elif message.tags == 'error' %}
+                showSaveIndicator('{{ message }}', 'error');
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    
+    // Initialize components
+    initializeSelect2();
+    initializeConfigForm();
+    setupFormValidation();
+    setupJSONValidation();
+    updatePeriodPreview();
+});
+
+// ⭐ INITIALIZE SELECT2 FOR TIMEZONE
+function initializeSelect2() {
+    $('#id_operational_timezone').select2({
+        placeholder: 'Select operational timezone...',
+        allowClear: false,
+        width: '100%',
+        templateResult: formatTimezoneOption,
+        templateSelection: formatTimezoneSelection
+    });
+    
+    // Update current timezone display when changed
+    $('#id_operational_timezone').on('change', function() {
+        const selectedTz = $(this).val();
+        $('#current-timezone').text(selectedTz || 'Not set');
+    });
+}
+
+// Format timezone options in dropdown
+function formatTimezoneOption(timezone) {
+    if (!timezone.id) return timezone.text;
+    
+    // Highlight popular timezones
+    if (timezone.text.includes('(EAT)') || timezone.text.includes('(CAT)')) {
+        return $('<span class="text-primary fw-bold">' + timezone.text + '</span>');
+    }
+    
+    return timezone.text;
+}
+
+// Format selected timezone
+function formatTimezoneSelection(timezone) {
+    return timezone.text || timezone.id;
+}
+
+// ⭐ INITIALIZE CONFIGURATION FORM
+function initializeConfigForm() {
+    const termSystemSelect = document.getElementById('id_term_system');
+    const periodsPerYearInput = document.getElementById('id_periods_per_year');
+    const namingConventionSelect = document.getElementById('id_period_naming_convention');
+    const customNamesTextarea = document.getElementById('id_custom_period_names');
+    const customSeasonsTextarea = document.getElementById('id_custom_season_names');
+    const seasonTypeSelect = document.getElementById('id_regional_season_type');
+    const startMonthSelect = document.getElementById('id_academic_year_start_month');
+    
+    // Term system change handler
+    if (termSystemSelect) {
+        termSystemSelect.addEventListener('change', function() {
+            updatePeriodsPerYear();
+            updatePeriodPreview();
+        });
+    }
+    
+    // Naming convention change handler
+    if (namingConventionSelect) {
+        namingConventionSelect.addEventListener('change', function() {
+            toggleCustomNamesField();
+            updatePeriodPreview();
+        });
+    }
+    
+    // Custom names input handler with debounce
+    if (customNamesTextarea) {
+        customNamesTextarea.addEventListener('input', debounce(function() {
+            validateJSON(customNamesTextarea);
+            updatePeriodPreview();
+        }, 500));
+    }
+    
+    // Periods per year input handler
+    if (periodsPerYearInput) {
+        periodsPerYearInput.addEventListener('input', debounce(function() {
+            updatePeriodPreview();
+        }, 300));
+    }
+    
+    // Season type change handler
+    if (seasonTypeSelect) {
+        seasonTypeSelect.addEventListener('change', function() {
+            toggleCustomSeasonsField();
+        });
+    }
+    
+    // Custom seasons input handler
+    if (customSeasonsTextarea) {
+        customSeasonsTextarea.addEventListener('input', debounce(function() {
+            validateJSON(customSeasonsTextarea);
+        }, 500));
+    }
+    
+    // Start month change handler (for monthly naming)
+    if (startMonthSelect) {
+        startMonthSelect.addEventListener('change', function() {
+            updatePeriodPreview();
+        });
+    }
+    
+    // Initial setup
+    updatePeriodsPerYear();
+    toggleCustomNamesField();
+    toggleCustomSeasonsField();
+}
+
+// ⭐ UPDATE PERIODS PER YEAR BASED ON TERM SYSTEM
+function updatePeriodsPerYear() {
+    const termSystemSelect = document.getElementById('id_term_system');
+    const periodsPerYearInput = document.getElementById('id_periods_per_year');
+    const autoBadge = document.getElementById('auto-calc-badge');
+    const helpText = document.getElementById('periods-help-text');
+    
+    if (!termSystemSelect || !periodsPerYearInput) return;
+    
+    const systemPeriods = {
+        'term': 3,
+        'semester': 2,
+        'quarter': 4,
+        'trimester': 3,
+        'module': 6,
+        'block': 4,
+        'yearlong': 1,
+        'intensive': 10,
+        'custom': parseInt(periodsPerYearInput.value) || 3
+    };
+    
+    const selectedSystem = termSystemSelect.value;
+    
+    if (selectedSystem && selectedSystem !== 'custom') {
+        const newValue = systemPeriods[selectedSystem] || 3;
+        periodsPerYearInput.value = newValue;
+        periodsPerYearInput.readOnly = true;
+        periodsPerYearInput.classList.add('bg-light');
+        
+        // Show auto-calculated badge
+        if (autoBadge) {
+            autoBadge.style.display = 'inline-block';
+        }
+        
+        // Update help text
+        if (helpText) {
+            helpText.innerHTML = `
+                <i class="fa fa-info-circle me-1"></i>
+                Auto-calculated based on ${termSystemSelect.options[termSystemSelect.selectedIndex].text}. 
+                Change to "Custom" to edit manually.
+            `;
+        }
+    } else {
+        periodsPerYearInput.readOnly = false;
+        periodsPerYearInput.classList.remove('bg-light');
+        
+        // Hide auto-calculated badge
+        if (autoBadge) {
+            autoBadge.style.display = 'none';
+        }
+        
+        // Reset help text
+        if (helpText) {
+            helpText.innerHTML = `
+                <i class="fa fa-info-circle me-1"></i>
+                Number of academic periods in one academic year (1-20)
+            `;
+        }
+    }
+}
+
+// ⭐ TOGGLE CUSTOM NAMES FIELD
+function toggleCustomNamesField() {
+    const namingConventionSelect = document.getElementById('id_period_naming_convention');
+    const customNamesTextarea = document.getElementById('id_custom_period_names');
+    
+    if (!namingConventionSelect || !customNamesTextarea) return;
+    
+    const customNamesContainer = customNamesTextarea.closest('.form-floating');
+    const selectedConvention = namingConventionSelect.value;
+    
+    if (selectedConvention === 'custom') {
+        customNamesTextarea.disabled = false;
+        customNamesTextarea.required = true;
+        if (customNamesContainer) {
+            customNamesContainer.style.opacity = '1';
+        }
+        customNamesTextarea.classList.remove('bg-light');
+    } else {
+        customNamesTextarea.disabled = true;
+        customNamesTextarea.required = false;
+        if (customNamesContainer) {
+            customNamesContainer.style.opacity = '0.6';
+        }
+        customNamesTextarea.classList.add('bg-light');
+    }
+}
+
+// ⭐ TOGGLE CUSTOM SEASONS FIELD
+function toggleCustomSeasonsField() {
+    const seasonTypeSelect = document.getElementById('id_regional_season_type');
+    const customSeasonsTextarea = document.getElementById('id_custom_season_names');
+    
+    if (!seasonTypeSelect || !customSeasonsTextarea) return;
+    
+    const customSeasonsContainer = customSeasonsTextarea.closest('.form-floating');
+    const selectedType = seasonTypeSelect.value;
+    
+    if (selectedType === 'custom_regional') {
+        customSeasonsTextarea.disabled = false;
+        customSeasonsTextarea.required = true;
+        if (customSeasonsContainer) {
+            customSeasonsContainer.style.opacity = '1';
+        }
+        customSeasonsTextarea.classList.remove('bg-light');
+    } else {
+        customSeasonsTextarea.disabled = true;
+        customSeasonsTextarea.required = false;
+        if (customSeasonsContainer) {
+            customSeasonsContainer.style.opacity = '0.6';
+        }
+        customSeasonsTextarea.classList.add('bg-light');
+    }
+}
+
+// ⭐ JSON VALIDATION SETUP
+function setupJSONValidation() {
+    const jsonFields = [
+        document.getElementById('id_custom_period_names'),
+        document.getElementById('id_custom_season_names')
+    ];
+    
+    jsonFields.forEach(field => {
+        if (field) {
+            field.addEventListener('blur', function() {
+                validateJSON(field);
+            });
+        }
+    });
+}
+
+// ⭐ VALIDATE JSON FIELD
+function validateJSON(textarea) {
+    if (!textarea || !textarea.value.trim()) {
+        textarea.classList.remove('json-valid', 'json-invalid');
+        return true;
+    }
+    
+    try {
+        JSON.parse(textarea.value);
+        textarea.classList.remove('json-invalid');
+        textarea.classList.add('json-valid');
+        return true;
+    } catch (e) {
+        textarea.classList.remove('json-valid');
+        textarea.classList.add('json-invalid');
+        return false;
+    }
+}
+
+// ⭐ FIXED: UPDATE PERIOD NAMES PREVIEW - Accurate for ALL naming conventions
+function updatePeriodPreview() {
+    const termSystemSelect = document.getElementById('id_term_system');
+    const periodsPerYearInput = document.getElementById('id_periods_per_year');
+    const namingConventionSelect = document.getElementById('id_period_naming_convention');
+    const customNamesTextarea = document.getElementById('id_custom_period_names');
+    const startMonthSelect = document.getElementById('id_academic_year_start_month');
+    
+    if (!termSystemSelect || !periodsPerYearInput) return;
+    
+    const previewContainer = document.getElementById('period-preview');
+    
+    if (!termSystemSelect.value || !periodsPerYearInput.value) {
+        previewContainer.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <i class="fa fa-info-circle me-2"></i>
+                Select term system to see preview
+            </div>
+        `;
+        return;
+    }
+    
+    const periods = [];
+    const periodCount = parseInt(periodsPerYearInput.value) || 3;
+    const termSystemValue = termSystemSelect.value;
+    const namingConventionValue = namingConventionSelect ? namingConventionSelect.value : 'numeric';
+    const systemName = getSystemName(termSystemValue);
+    const startMonth = startMonthSelect ? parseInt(startMonthSelect.value) || 2 : 2;
+    
+    for (let i = 1; i <= Math.min(periodCount, 12); i++) {
+        let periodName;
+        
+        // ⭐ FIXED: Handle ALL naming conventions properly
+        switch (namingConventionValue) {
+            case 'custom':
+                // Custom names from JSON
+                if (customNamesTextarea && customNamesTextarea.value) {
+                    try {
+                        const customNamesObj = JSON.parse(customNamesTextarea.value);
+                        periodName = customNamesObj[i.toString()] || `${systemName} ${i}`;
+                    } catch (e) {
+                        periodName = `${systemName} ${i}`;
+                    }
+                } else {
+                    periodName = `${systemName} ${i}`;
+                }
+                break;
+                
+            case 'ordinal':
+                // First Term, Second Term, etc.
+                periodName = `${getOrdinalName(i)} ${systemName}`;
+                break;
+                
+            case 'alpha':
+                // Term A, Term B, etc.
+                periodName = `${systemName} ${getAlphaName(i)}`;
+                break;
+                
+            case 'roman':
+                // Term I, Term II, etc.
+                periodName = `${systemName} ${getRomanName(i)}`;
+                break;
+                
+            case 'seasonal':
+                // Fall Semester, Spring Semester, etc.
+                periodName = `${getSeasonalName(i, periodCount)} ${systemName}`;
+                break;
+                
+            case 'monthly':
+                // January Term, February Term, etc.
+                periodName = `${getMonthlyName(i, startMonth)} ${systemName}`;
+                break;
+                
+            default:
+                // Numeric: Term 1, Term 2, etc.
+                periodName = `${systemName} ${i}`;
+                break;
+        }
+        
+        periods.push({ number: i, name: periodName });
+    }
+    
+    let html = '';
+    periods.forEach(period => {
+        html += `
+            <div class="period-preview-item">
+                <span><strong>Period ${period.number}:</strong> ${period.name}</span>
+            </div>
+        `;
+    });
+    
+    if (periodCount > 12) {
+        html += `
+            <div class="text-center text-muted mt-2">
+                <small><i class="fa fa-ellipsis-h me-1"></i>Showing first 12 of ${periodCount} periods</small>
+            </div>
+        `;
+    }
+    
+    previewContainer.innerHTML = html;
+}
+
+// ⭐ HELPER FUNCTIONS FOR PERIOD NAMING
+
+// Get system name from term system value
+function getSystemName(systemValue) {
+    const names = {
+        'term': 'Term',
+        'semester': 'Semester',
+        'quarter': 'Quarter',
+        'trimester': 'Term',
+        'module': 'Module',
+        'block': 'Block',
+        'yearlong': 'Year',
+        'intensive': 'Session',
+        'custom': 'Period'
+    };
+    return names[systemValue] || 'Period';
+}
+
+// Get ordinal name (First, Second, Third, etc.)
+function getOrdinalName(position) {
+    const ordinals = [
+        '', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 
+        'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth',
+        'Eleventh', 'Twelfth'
+    ];
+    return ordinals[position] || position + 'th';
+}
+
+// Get alpha name (A, B, C, etc.)
+function getAlphaName(position) {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    if (position <= 26) {
+        return letters[position - 1];
+    } else {
+        const firstLetter = letters[Math.floor((position - 1) / 26)];
+        const secondLetter = letters[(position - 1) % 26];
+        return firstLetter + secondLetter;
+    }
+}
+
+// Get roman numeral name (I, II, III, etc.)
+function getRomanName(position) {
+    const romanNumerals = {
+        1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
+        6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X',
+        11: 'XI', 12: 'XII'
+    };
+    return romanNumerals[position] || position.toString();
+}
+
+// Get seasonal name (Fall, Spring, Summer, etc.)
+function getSeasonalName(position, periodCount) {
+    if (periodCount === 2) {
+        return position === 1 ? 'Fall' : 'Spring';
+    } else if (periodCount === 3) {
+        const seasons = ['Fall', 'Spring', 'Summer'];
+        return seasons[position - 1] || 'Period ' + position;
+    } else if (periodCount === 4) {
+        const seasons = ['Fall', 'Winter', 'Spring', 'Summer'];
+        return seasons[position - 1] || 'Period ' + position;
+    } else {
+        return 'Period ' + position;
+    }
+}
+
+// Get monthly name (January, February, March, etc.)
+function getMonthlyName(position, startMonth) {
+    const months = [
+        '', 'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    const monthIndex = ((startMonth - 1 + position - 1) % 12) + 1;
+    return months[monthIndex] || 'Period ' + position;
+}
+
+// ⭐ SETUP FORM VALIDATION
+function setupFormValidation() {
+    const form = document.getElementById('config-form');
+    
+    form.addEventListener('submit', function(e) {
+        // Show loading state
+        const saveBtn = document.getElementById('save-config');
+        const saveIcon = document.getElementById('save-icon');
+        const saveSpinner = document.getElementById('save-spinner');
+        const saveText = document.getElementById('save-text');
+        
+        if (saveBtn && !saveBtn.disabled) {
+            saveBtn.disabled = true;
+            if (saveIcon) saveIcon.style.display = 'none';
+            if (saveSpinner) saveSpinner.style.display = 'inline-block';
+            if (saveText) saveText.textContent = 'Saving...';
+        }
+        
+        if (!validateConfiguration()) {
+            e.preventDefault();
+            
+            // Reset button state
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                if (saveIcon) saveIcon.style.display = 'inline';
+                if (saveSpinner) saveSpinner.style.display = 'none';
+                if (saveText) saveText.textContent = '{{ submit_text|default:"Save Configuration" }}';
+            }
+            
+            return false;
+        }
+    });
+}
+
+// ⭐ VALIDATE CONFIGURATION
+function validateConfiguration() {
+    const form = document.getElementById('config-form');
+    let isValid = true;
+    const errors = [];
+    
+    // Clear previous validation
+    form.querySelectorAll('.is-invalid').forEach(field => {
+        field.classList.remove('is-invalid');
+    });
+    
+    // Validate term system
+    const termSystemField = document.getElementById('id_term_system');
+    if (termSystemField && !termSystemField.value) {
+        errors.push('Term system is required');
+        termSystemField.classList.add('is-invalid');
+        isValid = false;
+    }
+    
+    // Validate operational timezone
+    const timezoneField = document.getElementById('id_operational_timezone');
+    if (timezoneField && (!timezoneField.value || timezoneField.value === '---')) {
+        errors.push('Operational timezone is required');
+        timezoneField.classList.add('is-invalid');
+        isValid = false;
+    }
+    
+    // Validate periods per year
+    const periodsPerYearField = document.getElementById('id_periods_per_year');
+    const periodsPerYear = periodsPerYearField ? parseInt(periodsPerYearField.value) : null;
+    if (periodsPerYear && (periodsPerYear < 1 || periodsPerYear > 20)) {
+        errors.push('Periods per year must be between 1 and 20');
+        periodsPerYearField.classList.add('is-invalid');
+        isValid = false;
+    }
+    
+    // Validate custom period names if using custom naming
+    const namingConventionField = document.getElementById('id_period_naming_convention');
+    const customNamesField = document.getElementById('id_custom_period_names');
+    
+    if (namingConventionField && customNamesField && namingConventionField.value === 'custom') {
+        if (!customNamesField.value.trim()) {
+            errors.push('Custom period names are required when using custom naming convention');
+            customNamesField.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            try {
+                const customNamesObj = JSON.parse(customNamesField.value);
+                const periodCount = periodsPerYear || 3;
+                
+                // Check all periods have names
+                const missingPeriods = [];
+                for (let i = 1; i <= periodCount; i++) {
+                    if (!customNamesObj[i.toString()] || !customNamesObj[i.toString()].trim()) {
+                        missingPeriods.push(i);
+                    }
+                }
+                
+                if (missingPeriods.length > 0) {
+                    errors.push(`Missing custom names for period(s): ${missingPeriods.join(', ')}`);
+                    customNamesField.classList.add('is-invalid');
+                    isValid = false;
+                }
+            } catch (e) {
+                errors.push('Custom period names must be valid JSON');
+                customNamesField.classList.add('is-invalid');
+                isValid = false;
+            }
+        }
+    }
+    
+    // Validate custom season names if using custom regional seasons
+    const seasonTypeField = document.getElementById('id_regional_season_type');
+    const customSeasonsField = document.getElementById('id_custom_season_names');
+    
+    if (seasonTypeField && customSeasonsField && seasonTypeField.value === 'custom_regional') {
+        if (!customSeasonsField.value.trim()) {
+            errors.push('Custom season names are required when using custom regional season type');
+            customSeasonsField.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            if (!validateJSON(customSeasonsField)) {
+                errors.push('Custom season names must be valid JSON');
+                customSeasonsField.classList.add('is-invalid');
+                isValid = false;
+            }
+        }
+    }
+    
+    // Validate academic year start date
+    const startMonthField = document.getElementById('id_academic_year_start_month');
+    const startDayField = document.getElementById('id_academic_year_start_day');
+    
+    if (startMonthField && startDayField) {
+        const month = parseInt(startMonthField.value);
+        const day = parseInt(startDayField.value);
+        
+        if (month && day) {
+            const daysInMonth = new Date(2024, month, 0).getDate();
+            if (day > daysInMonth) {
+                errors.push(`Day ${day} is not valid for month ${month}`);
+                startDayField.classList.add('is-invalid');
+                isValid = false;
+            }
+        }
+    }
+    
+    if (!isValid) {
+        showSaveStatus(
+            '<strong>Validation Failed:</strong><br>' + errors.join('<br>'), 
+            'error'
+        );
+        
+        // Scroll to first error
+        const firstError = form.querySelector('.is-invalid');
+        if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus();
+        }
+    }
+    
+    return isValid;
+}
+
+// ⭐ VALIDATE CONFIGURATION FORM (BUTTON ACTION)
+function validateConfigurationForm() {
+    if (validateConfiguration()) {
+        showSaveStatus(
+            '<i class="fa fa-check-circle me-2"></i>' +
+            '<strong>Validation Passed!</strong><br>' +
+            'All configuration settings are valid. You can now save your changes.',
+            'success'
+        );
+    }
+}
+
+// ⭐ SAVE STATUS FUNCTIONS
+function showSaveStatus(message, type = 'info') {
+    const statusArea = document.getElementById('save-status-area');
+    const alertClass = {
+        'success': 'alert-success',
+        'error': 'alert-danger',
+        'info': 'alert-info',
+        'warning': 'alert-warning'
+    }[type] || 'alert-info';
+    
+    const iconClass = {
+        'success': 'fa-check-circle',
+        'error': 'fa-exclamation-triangle',
+        'info': 'fa-info-circle',
+        'warning': 'fa-exclamation-circle'
+    }[type] || 'fa-info-circle';
+    
+    statusArea.innerHTML = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            <i class="fa ${iconClass} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Scroll to status area
+    statusArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+    // Auto-dismiss success/info messages
+    if (type === 'info' || type === 'success') {
+        setTimeout(() => {
+            const alert = statusArea.querySelector('.alert');
+            if (alert) {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
+        }, 5000);
+    }
+}
+
+// ⭐ FIXED: Success indicator with proper message display
+function showSaveIndicator(message = 'Configuration saved successfully!', type = 'success') {
+    const indicator = document.getElementById('save-indicator');
+    
+    const alertClass = type === 'error' ? 'alert-danger' : 'alert-success';
+    const icon = type === 'error' ? 'fa-exclamation-triangle' : 'fa-check';
+    
+    indicator.innerHTML = `
+        <div class="alert ${alertClass} mb-0">
+            <i class="fa ${icon} me-1"></i> ${message}
+        </div>
+    `;
+    
+    indicator.classList.add('show');
+    
+    setTimeout(() => {
+        indicator.classList.remove('show');
+    }, 4000);
+}
+
+// ⭐ HELPER FUNCTIONS
+function resetForm() {
+    if (confirm('Reset form to last saved values? This will discard all unsaved changes.')) {
+        window.location.reload();
+    }
+}
+
+function exportConfig() {
+    const form = document.getElementById('config-form');
+    const formData = new FormData(form);
+    const config = {};
+    
+    for (let [key, value] of formData.entries()) {
+        if (key !== 'csrfmiddlewaretoken') {
+            config[key] = value;
+        }
+    }
+    
+    const backup = {
+        version: '1.0',
+        timestamp: new Date().toISOString(),
+        configuration: config
+    };
+    
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `school-config-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showSaveStatus('Configuration exported successfully!', 'success');
+}
+
+function importConfig() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const backup = JSON.parse(e.target.result);
+                
+                if (!backup.configuration) {
+                    throw new Error('Invalid backup file format');
+                }
+                
+                Object.entries(backup.configuration).forEach(([key, value]) => {
+                    const field = document.getElementById('id_' + key);
+                    if (field) {
+                        if (field.type === 'checkbox') {
+                            field.checked = value === true || value === 'on';
+                        } else {
+                            field.value = value;
+                            
+                            // Trigger Select2 change for timezone
+                            if (key === 'operational_timezone') {
+                                $(field).val(value).trigger('change');
+                            }
+                        }
+                    }
+                });
+                
+                updatePeriodsPerYear();
+                toggleCustomNamesField();
+                toggleCustomSeasonsField();
+                updatePeriodPreview();
+                
+                showSaveStatus(
+                    '<i class="fa fa-check-circle me-2"></i>' +
+                    '<strong>Configuration Imported!</strong><br>' +
+                    'Please review the settings and click Save to apply changes.',
+                    'success'
+                );
+                
+            } catch (error) {
+                showSaveStatus(
+                    '<strong>Import Error:</strong><br>' + error.message,
+                    'error'
+                );
+            }
+        };
+        
+        reader.readAsText(file);
+    };
+    
+    input.click();
+}
+
+// Debounce function for input handlers
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+console.log('✅ School Configuration Form initialized successfully!');
+</script>
+{% endblock %}
+

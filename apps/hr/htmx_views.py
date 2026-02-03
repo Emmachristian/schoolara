@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from datetime import timedelta, date
 from decimal import Decimal
+from django.db.models import Prefetch
 import logging
 
 from .models import (
@@ -15,6 +16,7 @@ from .models import (
     Designation,
     Contract,
     Staff,
+    StaffDesignation,
     Teacher,
     SalaryHistory,
     ContractBenefit,
@@ -55,13 +57,24 @@ def department_search(request):
         sub_department_count=Count('sub_departments', distinct=True)
     ).order_by('department_type', 'name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        departments = departments.filter(
-            Q(name__icontains=query) |
-            Q(code__icontains=query) |
-            Q(description__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(name__icontains=word) |
+                    Q(code__icontains=word) |
+                    Q(description__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            departments = departments.filter(combined_q)
     
     # Apply filters
     if department_type:
@@ -84,7 +97,7 @@ def department_search(request):
         departments = departments.filter(parent_department_id=parent_department)
     
     # Paginate
-    departments_page, paginator = paginate_queryset(request, departments, per_page=20)
+    departments_page, paginator = paginate_queryset(request, departments, per_page=10)
     
     # Calculate stats
     total = departments.count()
@@ -137,13 +150,24 @@ def designation_search(request):
         subordinate_count=Count('subordinate_designations', distinct=True)
     ).order_by('rank_order', 'name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        designations = designations.filter(
-            Q(name__icontains=query) |
-            Q(code__icontains=query) |
-            Q(description__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(name__icontains=word) |
+                    Q(code__icontains=word) |
+                    Q(description__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            designations = designations.filter(combined_q)
     
     # Apply filters
     if department:
@@ -161,17 +185,17 @@ def designation_search(request):
     if min_salary:
         try:
             designations = designations.filter(min_salary__gte=Decimal(min_salary))
-        except:
+        except (ValueError, TypeError):
             pass
     
     if max_salary:
         try:
             designations = designations.filter(max_salary__lte=Decimal(max_salary))
-        except:
+        except (ValueError, TypeError):
             pass
     
     # Paginate
-    designations_page, paginator = paginate_queryset(request, designations, per_page=20)
+    designations_page, paginator = paginate_queryset(request, designations, per_page=10)
     
     # Calculate stats
     total = designations.count()
@@ -194,6 +218,119 @@ def designation_search(request):
         'stats': stats,
     })
 
+# =============================================================================
+# STAFF DESIGNATION SEARCH
+# =============================================================================
+
+def staff_designation_search(request):
+    """HTMX-compatible staff designation search with pagination and stats"""
+    
+    # Parse filters
+    filters = parse_filters(request, [
+        'q', 'staff', 'designation', 'department', 'is_primary',
+        'assignment_type', 'is_active', 'start_date', 'end_date'
+    ])
+    
+    query = filters['q']
+    staff = filters['staff']
+    designation = filters['designation']
+    department = filters['department']
+    is_primary = filters['is_primary']
+    assignment_type = filters['assignment_type']
+    is_active = filters['is_active']
+    start_date = filters['start_date']
+    end_date = filters['end_date']
+    
+    # Build queryset
+    staff_designations = StaffDesignation.objects.select_related(
+        'staff__primary_department',
+        'designation__department'
+    ).annotate(
+        days_in_role=Case(
+            When(end_date__isnull=True, then=F('start_date')),
+            default=F('end_date') - F('start_date'),
+            output_field=DecimalField()
+        )
+    ).order_by('-is_primary', '-is_active', '-start_date', 'staff__first_name')
+    
+    # Apply text search with multi-word support
+    if query:
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(designation__name__icontains=word) |
+                    Q(designation__code__icontains=word) |
+                    Q(notes__icontains=word) |
+                    Q(assignment_order_number__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            staff_designations = staff_designations.filter(combined_q)
+    
+    # Apply filters
+    if staff:
+        staff_designations = staff_designations.filter(staff_id=staff)
+    
+    if designation:
+        staff_designations = staff_designations.filter(designation_id=designation)
+    
+    if department:
+        staff_designations = staff_designations.filter(designation__department_id=department)
+    
+    if is_primary is not None:
+        staff_designations = staff_designations.filter(is_primary=(is_primary.lower() == 'true'))
+    
+    if assignment_type:
+        staff_designations = staff_designations.filter(assignment_type=assignment_type)
+    
+    if is_active is not None:
+        staff_designations = staff_designations.filter(is_active=(is_active.lower() == 'true'))
+    
+    if start_date:
+        staff_designations = staff_designations.filter(start_date__gte=start_date)
+    
+    if end_date:
+        staff_designations = staff_designations.filter(
+            Q(end_date__lte=end_date) | Q(end_date__isnull=True)
+        )
+    
+    # Paginate
+    staff_designations_page, paginator = paginate_queryset(request, staff_designations, per_page=20)
+    
+    # Calculate stats
+    total = staff_designations.count()
+    
+    stats = {
+        'total': total,
+        'active': staff_designations.filter(is_active=True).count(),
+        'primary': staff_designations.filter(is_primary=True, is_active=True).count(),
+        'additional': staff_designations.filter(is_primary=False, is_active=True).count(),
+        'permanent': staff_designations.filter(assignment_type='PERMANENT').count(),
+        'acting': staff_designations.filter(assignment_type='ACTING').count(),
+        'temporary': staff_designations.filter(assignment_type='TEMPORARY').count(),
+        'secondment': staff_designations.filter(assignment_type='SECONDMENT').count(),
+        'total_allowances': staff_designations.filter(
+            is_active=True
+        ).aggregate(Sum('role_allowance'))['role_allowance__sum'] or 0,
+        'avg_allowance': staff_designations.filter(
+            is_active=True,
+            role_allowance__gt=0
+        ).aggregate(Avg('role_allowance'))['role_allowance__avg'] or 0,
+    }
+    
+    return render(request, 'hr/staff_designations/_staff_designation_results.html', {
+        'staff_designations_page': staff_designations_page,
+        'stats': stats,
+    })
 
 # =============================================================================
 # CONTRACT SEARCH
@@ -223,15 +360,26 @@ def contract_search(request):
         'staff'
     ).order_by('-start_date', 'staff__first_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        contracts = contracts.filter(
-            Q(contract_number__icontains=query) |
-            Q(staff__first_name__icontains=query) |
-            Q(staff__last_name__icontains=query) |
-            Q(staff__staff_id__icontains=query) |
-            Q(job_title__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(contract_number__icontains=word) |
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(job_title__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            contracts = contracts.filter(combined_q)
     
     # Apply filters
     if contract_type:
@@ -316,28 +464,49 @@ def staff_search(request):
     marital_status = filters['marital_status']
     nationality = filters['nationality']
     
-    # Build queryset
+    # Build queryset with primary designation prefetch
+    from django.db.models import Prefetch
+    
     staff = Staff.objects.select_related(
         'primary_department'
     ).prefetch_related(
-        'designations',
+        # ⭐ Prefetch primary designation
+        Prefetch(
+            'staffdesignation_set',
+            queryset=StaffDesignation.objects.filter(
+                is_primary=True,
+                is_active=True
+            ).select_related('designation'),
+            to_attr='primary_staff_designation'
+        ),
         'contracts'
     ).annotate(
         active_contract_count=Count('contracts', filter=Q(contracts__status='ACTIVE'), distinct=True),
         designation_count=Count('staffdesignation', filter=Q(staffdesignation__is_active=True), distinct=True)
     ).order_by('first_name', 'last_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        staff = staff.filter(
-            Q(first_name__icontains=query) |
-            Q(middle_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(staff_id__icontains=query) |
-            Q(phone_number__icontains=query) |
-            Q(personal_email__icontains=query) |
-            Q(national_id__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(first_name__icontains=word) |
+                    Q(middle_name__icontains=word) |
+                    Q(last_name__icontains=word) |
+                    Q(staff_id__icontains=word) |
+                    Q(phone_number__icontains=word) |
+                    Q(personal_email__icontains=word) |
+                    Q(national_id__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            staff = staff.filter(combined_q)
     
     # Apply filters
     if employment_status:
@@ -359,7 +528,7 @@ def staff_search(request):
         staff = staff.filter(is_active=(is_active.lower() == 'true'))
     
     # Paginate
-    staff_page, paginator = paginate_queryset(request, staff, per_page=20)
+    staff_page, paginator = paginate_queryset(request, staff, per_page=10)
     
     # Calculate stats
     total = staff.count()
@@ -381,7 +550,6 @@ def staff_search(request):
         'stats': stats,
     })
 
-
 # =============================================================================
 # TEACHER SEARCH
 # =============================================================================
@@ -391,82 +559,206 @@ def teacher_search(request):
     
     # Parse filters
     filters = parse_filters(request, [
-        'q', 'is_class_teacher', 'can_teach_online',
-        'digital_literacy_level', 'max_hours', 'min_hours'
+        'q', 'department', 'specialization', 'is_class_teacher',
+        'digital_literacy_level', 'can_teach_online', 'is_active',
+        'max_hours', 'min_hours'  # ⭐ Added these for completeness
     ])
     
     query = filters['q']
+    department = filters['department']
+    specialization = filters['specialization']
     is_class_teacher = filters['is_class_teacher']
-    can_teach_online = filters['can_teach_online']
     digital_literacy_level = filters['digital_literacy_level']
-    max_hours = filters['max_hours']
-    min_hours = filters['min_hours']
+    can_teach_online = filters['can_teach_online']
+    is_active = filters.get('is_active')  # ⭐ Soft delete filter
+    max_hours = filters.get('max_hours')
+    min_hours = filters.get('min_hours')
     
-    # Build queryset
+    # Build queryset with optimized relations
     teachers = Teacher.objects.select_related(
+        'staff',
         'staff__primary_department'
     ).prefetch_related(
+        'assigned_classes',
+        'assigned_classes__academic_level',
         'qualified_subjects',
         'preferred_academic_levels',
-        'assigned_classes'
-    ).annotate(
-        subject_count=Count('qualified_subjects', distinct=True),
-        class_count=Count('assigned_classes', distinct=True)
-    ).order_by('staff__first_name', 'staff__last_name')
-    
-    # Apply text search
-    if query:
-        teachers = teachers.filter(
-            Q(staff__first_name__icontains=query) |
-            Q(staff__last_name__icontains=query) |
-            Q(staff__staff_id__icontains=query) |
-            Q(specialization__icontains=query)
+        Prefetch(
+            'staff__staffdesignation_set',
+            queryset=StaffDesignation.objects.filter(
+                is_primary=True,
+                is_active=True
+            ).select_related('designation'),
+            to_attr='primary_staff_designation'
         )
+    ).annotate(
+        assigned_classes_count=Count('assigned_classes', distinct=True),
+        qualified_subjects_count=Count('qualified_subjects', distinct=True)
+    )
     
-    # Apply filters
+    # ⭐ Filter by active status (default to active only)
+    if is_active is not None:
+        if is_active.lower() == 'true':
+            teachers = teachers.filter(is_active=True)
+        elif is_active.lower() == 'false':
+            teachers = teachers.filter(is_active=False)
+        elif is_active.lower() == 'all':
+            # Show all teachers (active and inactive)
+            pass
+    else:
+        # Default: show only active teachers
+        teachers = teachers.filter(is_active=True)
+    
+    # Apply text search with multi-word support
+    if query:
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__middle_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(specialization__icontains=word) |
+                    Q(teaching_philosophy__icontains=word) |
+                    Q(staff__phone_number__icontains=word) |
+                    Q(staff__personal_email__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            teachers = teachers.filter(combined_q)
+    
+    # Apply department filter
+    if department:
+        teachers = teachers.filter(staff__primary_department_id=department)
+    
+    # Apply specialization filter (partial match)
+    if specialization:
+        teachers = teachers.filter(specialization__icontains=specialization)
+    
+    # Apply boolean filters
     if is_class_teacher is not None:
         teachers = teachers.filter(is_class_teacher=(is_class_teacher.lower() == 'true'))
     
     if can_teach_online is not None:
         teachers = teachers.filter(can_teach_online=(can_teach_online.lower() == 'true'))
     
+    # Apply digital literacy level filter
     if digital_literacy_level:
         teachers = teachers.filter(digital_literacy_level=digital_literacy_level)
     
+    # Apply teaching hours filters
     if max_hours:
         try:
             teachers = teachers.filter(max_hours_per_week__lte=int(max_hours))
-        except:
-            pass
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid max_hours value: {max_hours}")
     
     if min_hours:
         try:
             teachers = teachers.filter(current_teaching_load__gte=int(min_hours))
-        except:
-            pass
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid min_hours value: {min_hours}")
+    
+    # Order by active status first, then by name
+    teachers = teachers.order_by('-is_active', 'staff__first_name', 'staff__last_name')
     
     # Paginate
     teachers_page, paginator = paginate_queryset(request, teachers, per_page=20)
     
-    # Calculate stats
+    # Calculate comprehensive stats
     total = teachers.count()
     
+    # ⭐ Get all teachers for overall stats (before pagination)
+    all_teachers = teachers
+    
     stats = {
+        # ⭐ Core stats with active/inactive breakdown
         'total': total,
-        'active': teachers.filter(staff__is_active=True).count(),
-        'class_teachers': teachers.filter(is_class_teacher=True).count(),
-        'can_teach_online': teachers.filter(can_teach_online=True).count(),
-        'basic_literacy': teachers.filter(digital_literacy_level='BASIC').count(),
-        'advanced_literacy': teachers.filter(digital_literacy_level='ADVANCED').count(),
-        'avg_teaching_load': teachers.aggregate(Avg('current_teaching_load'))['current_teaching_load__avg'] or 0,
-        'total_classes': sum(t.class_count for t in teachers),
+        'active': all_teachers.filter(is_active=True).count(),
+        'inactive': all_teachers.filter(is_active=False).count(),
+        
+        # ⭐ Active staff status (different from teacher active status)
+        'active_staff': all_teachers.filter(staff__is_active=True).count(),
+        
+        # Role-based stats
+        'class_teachers': all_teachers.filter(is_class_teacher=True, is_active=True).count(),
+        'non_class_teachers': all_teachers.filter(is_class_teacher=False, is_active=True).count(),
+        
+        # Online teaching capability
+        'can_teach_online': all_teachers.filter(can_teach_online=True, is_active=True).count(),
+        'cannot_teach_online': all_teachers.filter(can_teach_online=False, is_active=True).count(),
+        
+        # Digital literacy breakdown
+        'basic_literacy': all_teachers.filter(
+            digital_literacy_level='BASIC',
+            is_active=True
+        ).count(),
+        'intermediate_literacy': all_teachers.filter(
+            digital_literacy_level='INTERMEDIATE',
+            is_active=True
+        ).count(),
+        'advanced_literacy': all_teachers.filter(
+            digital_literacy_level='ADVANCED',
+            is_active=True
+        ).count(),
+        'expert_literacy': all_teachers.filter(
+            digital_literacy_level='EXPERT',
+            is_active=True
+        ).count(),
+        
+        # Teaching load statistics (active teachers only)
+        'avg_teaching_load': all_teachers.filter(
+            is_active=True
+        ).aggregate(
+            Avg('current_teaching_load')
+        )['current_teaching_load__avg'] or 0,
+        
+        'avg_max_hours': all_teachers.filter(
+            is_active=True
+        ).aggregate(
+            Avg('max_hours_per_week')
+        )['max_hours_per_week__avg'] or 0,
+        
+        # ⭐ Total classes assigned (active teachers only)
+        'total_classes': all_teachers.filter(
+            is_active=True
+        ).aggregate(
+            total=Sum('assigned_classes_count')
+        )['total'] or 0,
+        
+        # ⭐ Overloaded teachers (current load > max hours)
+        'overloaded': all_teachers.filter(
+            is_active=True,
+            current_teaching_load__gt=F('max_hours_per_week')
+        ).count(),
+        
+        # ⭐ Underutilized teachers (current load < 50% of max hours)
+        'underutilized': all_teachers.filter(
+            is_active=True,
+            current_teaching_load__lt=F('max_hours_per_week') * 0.5
+        ).count(),
+        
+        # ⭐ Teachers with no teaching designation (inconsistency)
+        'no_designation': all_teachers.filter(
+            is_active=True,
+            staff__staffdesignation__designation__is_teaching=False
+        ).distinct().count() if all_teachers.filter(is_active=True).exists() else 0,
     }
+    
+    # ⭐ Round decimal values for display
+    stats['avg_teaching_load'] = round(stats['avg_teaching_load'], 2)
+    stats['avg_max_hours'] = round(stats['avg_max_hours'], 2)
     
     return render(request, 'hr/teachers/_teacher_results.html', {
         'teachers_page': teachers_page,
         'stats': stats,
     })
-
 
 # =============================================================================
 # SALARY HISTORY SEARCH
@@ -496,14 +788,25 @@ def salary_history_search(request):
         'effective_period'
     ).order_by('-effective_date', 'staff__first_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        salary_changes = salary_changes.filter(
-            Q(staff__first_name__icontains=query) |
-            Q(staff__last_name__icontains=query) |
-            Q(staff__staff_id__icontains=query) |
-            Q(reason__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(reason__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            salary_changes = salary_changes.filter(combined_q)
     
     # Apply filters
     if staff:
@@ -574,13 +877,24 @@ def attendance_search(request):
         'staff__primary_department'
     ).order_by('-date', 'staff__first_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        attendance_records = attendance_records.filter(
-            Q(staff__first_name__icontains=query) |
-            Q(staff__last_name__icontains=query) |
-            Q(staff__staff_id__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            attendance_records = attendance_records.filter(combined_q)
     
     # Apply filters
     if staff:
@@ -662,14 +976,25 @@ def payroll_search(request):
         bonus_count=Count('bonuses', distinct=True)
     ).order_by('-payment_date', 'staff__first_name')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        payrolls = payrolls.filter(
-            Q(staff__first_name__icontains=query) |
-            Q(staff__last_name__icontains=query) |
-            Q(staff__staff_id__icontains=query) |
-            Q(payment_reference__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(payment_reference__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            payrolls = payrolls.filter(combined_q)
     
     # Apply filters
     if staff:
@@ -743,15 +1068,26 @@ def contract_benefit_search(request):
         'contract__staff'
     ).order_by('contract', 'benefit_type')
     
-    # Apply text search
+    # Apply text search with multi-word support
     if query:
-        benefits = benefits.filter(
-            Q(description__icontains=query) |
-            Q(provider__icontains=query) |
-            Q(policy_number__icontains=query) |
-            Q(contract__staff__first_name__icontains=query) |
-            Q(contract__staff__last_name__icontains=query)
-        )
+        # Split query into words and search for each word across fields
+        words = query.strip().split()
+        
+        if words:
+            # Build combined query: each word must match at least one field
+            combined_q = Q()
+            
+            for word in words:
+                word_q = (
+                    Q(description__icontains=word) |
+                    Q(provider__icontains=word) |
+                    Q(policy_number__icontains=word) |
+                    Q(contract__staff__first_name__icontains=word) |
+                    Q(contract__staff__last_name__icontains=word)
+                )
+                combined_q &= word_q  # AND logic between words
+            
+            benefits = benefits.filter(combined_q)
     
     # Apply filters
     if contract:

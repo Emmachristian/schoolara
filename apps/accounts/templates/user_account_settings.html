@@ -3,10 +3,10 @@
 {% load widget_tweaks %}
 
 {% block extra_css %}
-<!-- CSS for CropperJS, SweetAlert2, MagnifiPopup -->
+<!-- CSS for CropperJS, SweetAlert2 -->
 <link href="{% static 'vendors/cropperjs/dist/cropper.min.css' %}" rel="stylesheet">
 <link href="{% static 'vendors/sweetalert2/dist/sweetalert2.min.css' %}" rel="stylesheet">
-<link href="{% static 'vendors/magnific-popup/magnific-popup.css' %}" rel="stylesheet">
+
 <style>
     .form-section {
         background-color: #fff;
@@ -17,8 +17,8 @@
     }
     
     .section-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        color: #495057;
         padding: 15px 20px;
         border-radius: 8px 8px 0 0;
         margin: 0;
@@ -49,7 +49,7 @@
         font-weight: 500;
     }
     
-    .form-control:focus {
+    .form-control:focus, .form-select:focus {
         border-color: #667eea;
         box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.15);
     }
@@ -87,7 +87,6 @@
         border: 1px solid #dee2e6;
     }
     
-    /* Profile Image Styling */
     .profile-image-container {
         position: relative;
         width: 150px;
@@ -147,20 +146,10 @@
         font-size: 28px;
     }
 
-    /* Image Cropper Modal Styling */
-    #image-container {
-        max-width: 100%;
-        margin: 0 auto;
-    }
-
     #imagePreview {
         max-width: 100%;
         max-height: 400px;
         display: block;
-        margin: 0 auto;
-    }
-
-    .cropper-container {
         margin: 0 auto;
     }
     
@@ -212,22 +201,6 @@
         margin-bottom: 5px;
     }
 
-    .field-group {
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 20px;
-        background-color: #fdfdfe;
-    }
-    
-    .field-group-header {
-        font-weight: 600;
-        color: #495057;
-        margin-bottom: 15px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #e9ecef;
-    }
-
     .info-display {
         background-color: #f8f9fa;
         border-radius: 6px;
@@ -266,45 +239,35 @@
     <div class="page-title-wrapper">
         <div class="page-title-heading">
             <div class="page-title-icon">
-                <i class="pe-7s-config icon-gradient bg-mean-fruit"></i>
+                <i class="pe-7s-user icon-gradient bg-mean-fruit"></i>
             </div>
             <div>
-                Account Settings
+                My Account Settings
                 <div class="page-title-subheading">
-                    Manage your profile information and account preferences
+                    View and update your profile information
                 </div>
             </div>
         </div>
         <div class="page-title-actions">
-            <button type="button" class="btn btn-outline-secondary" onclick="window.history.back()">
-                <i class="fa fa-arrow-left me-1"></i> Back
-            </button>
+            <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
         </div>
     </div>
 </div>
 
 <!-- Form Help Section -->
 <div class="form-help">
-    <h6><i class="fa fa-info-circle me-1"></i> Account Settings Guidelines</h6>
-    <div class="row">
-        <div class="col-md-6">
-            <ul class="mb-0">
-                <li><strong>Username and Email</strong> cannot be changed (contact administrator)</li>
-                <li><strong>School assignment</strong> is managed by administrators</li>
-                <li><strong>Profile photo</strong> should be a clear headshot (max 5MB)</li>
-            </ul>
-        </div>
-        <div class="col-md-6">
-            <ul class="mb-0">
-                <li><strong>Password changes</strong> require entering a new password twice</li>
-                <li><strong>Leave password blank</strong> if you don't want to change it</li>
-                <li>Click "Save Changes" to apply all modifications</li>
-            </ul>
-        </div>
-    </div>
+    <h6><i class="fa fa-info-circle me-2"></i> Profile Guidelines</h6>
+    <ul class="mb-0">
+        <li>Fields marked with <span class="text-danger">*</span> are required</li>
+        <li>Your profile photo should be a clear headshot (max 5MB)</li>
+        <li>Contact your administrator to change your email, school, or role</li>
+        <li>Click "Save Changes" to apply all modifications</li>
+    </ul>
 </div>
 
-<!-- Enhanced Error Display Section -->
+<!-- Error Display Section -->
 {% if form.errors or form.non_field_errors %}
 <div class="error-summary">
     <h6><i class="fa fa-exclamation-triangle me-2"></i>Please correct the following errors:</h6>
@@ -340,7 +303,7 @@
 {% endif %}
 
 <!-- Main Form -->
-<form method="post" enctype="multipart/form-data" id="account-settings-form" novalidate>
+<form method="post" enctype="multipart/form-data" id="profile-form" novalidate>
     {% csrf_token %}
     
     <!-- Profile Photo Section -->
@@ -351,40 +314,48 @@
         </div>
         <div class="section-body">
             <div class="row align-items-center">
-                <div class="col-md-3 text-center">
-                    <div class="profile-image-container mb-3">
+                <div class="col-md-6 text-center">
+                    <div class="profile-image-container mb-3" id="profileImageContainer">
                         {% if user_profile.photo %}
-                            <img id="currentProfileImage" src="{{ user_profile.photo.url }}" alt="{{ user.get_full_name }}" class="profile-avatar">
+                            <img id="currentProfileImage" src="{{ user_profile.photo.url }}" alt="{{ user_full_name }}" class="profile-avatar">
                         {% else %}
                             <div class="avatar-placeholder">
                                 <div class="avatar-title">
-                                    {{ user.first_name|first|upper }}{{ user.last_name|first|upper }}
+                                    {{ user.first_name|first|upper|default:"U" }}{{ user.last_name|first|upper|default:"" }}
                                 </div>
                             </div>
                         {% endif %}
-                        <div class="profile-image-overlay" data-bs-toggle="modal" data-bs-target="#profileImageModal">
-                            <i class="fas fa-camera"></i>
+                        <div class="profile-image-overlay" id="openImageModal">
+                            <i class="fa fa-camera"></i>
                         </div>
                     </div>
                     <div class="small text-muted">Click to change photo</div>
                 </div>
-                <div class="col-md-9">
-                    <div class="mt-2">
-                        <strong>Profile Photo Guidelines</strong>
-                        <div class="small text-muted mt-1">
-                            Click on the image to update your photo.<br>
-                            Supported formats: JPG, PNG, GIF (Max: 5MB)<br>
-                            Recommended: Square image, minimum 300x300 pixels
-                        </div>
+                <div class="col-md-6">
+                    <!-- Read-only Information Display -->
+                    <div class="info-display">
+                        <div class="info-label">Email / Username (Read-Only)</div>
+                        <div class="info-value">{{ user_email }}</div>
+                        <small class="text-muted">Contact administrator to change your email or username</small>
                     </div>
-                    <!-- Hidden file input for form submission -->
-                    {{ form.photo|add_class:"d-none" }}
-                    {% if form.photo.errors %}
-                        <div class="invalid-feedback d-block">
-                            {% for error in form.photo.errors %}
-                                {{ error }}{% if not forloop.last %}<br>{% endif %}
-                            {% endfor %}
-                        </div>
+                    
+                    <div class="info-display">
+                        <div class="info-label">School (Read-Only)</div>
+                        <div class="info-value">{{ user_school_name|default:"No School Assigned" }}</div>
+                        <small class="text-muted">Contact administrator to change school</small>
+                    </div>
+                    
+                    <div class="info-display">
+                        <div class="info-label">Role (Read-Only)</div>
+                        <div class="info-value">{{ user_role_display|default:"No Role Assigned" }}</div>
+                        <small class="text-muted">Contact administrator to change role</small>
+                    </div>
+                    
+                    {% if user_employee_id %}
+                    <div class="info-display">
+                        <div class="info-label">Employee ID (Read-Only)</div>
+                        <div class="info-value">{{ user_employee_id }}</div>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -395,128 +366,260 @@
     <div class="form-section">
         <div class="section-header">
             <h6><i class="fa fa-user me-2"></i>Basic Information</h6>
-            <p>Your personal details and identification</p>
+            <p>Your personal details</p>
         </div>
         <div class="section-body">
-            <!-- Read-only fields -->
-            <div class="field-group">
-                <div class="field-group-header">
-                    <i class="fa fa-lock me-2"></i>Account Information (Read-Only)
-                </div>
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="info-display">
-                            <div class="info-label">Username</div>
-                            <div class="info-value">{{ user.username }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="info-display">
-                            <div class="info-label">Email Address</div>
-                            <div class="info-value">{{ user.email|default:"Not set" }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="info-display">
-                            <div class="info-label">School</div>
-                            <div class="info-value">{{ user_profile.school|default:"Not assigned" }}</div>
-                        </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        <input type="text" 
+                               class="form-control {% if form.errors.first_name %}is-invalid{% endif %}" 
+                               id="id_first_name" 
+                               name="first_name" 
+                               value="{{ user.first_name }}"
+                               placeholder="First Name">
+                        <label for="id_first_name" class="required-field">First Name</label>
+                        {% if form.errors.first_name %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.errors.first_name %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
-                <div class="form-text">
-                    <i class="fa fa-info-circle me-1"></i>
-                    Contact your administrator to change username, email, or school assignment
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        <input type="text" 
+                               class="form-control {% if form.errors.last_name %}is-invalid{% endif %}" 
+                               id="id_last_name" 
+                               name="last_name" 
+                               value="{{ user.last_name }}"
+                               placeholder="Last Name">
+                        <label for="id_last_name" class="required-field">Last Name</label>
+                        {% if form.errors.last_name %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.errors.last_name %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
 
-            <!-- Editable fields -->
-            <div class="field-group">
-                <div class="field-group-header">
-                    <i class="fa fa-edit me-2"></i>Personal Details
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.mobile|add_class:"form-control" }}
+                        <label for="{{ form.mobile.id_for_label }}">Mobile Phone</label>
+                        {% if form.mobile.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.mobile.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="text-muted">Format: +256123456789</small>
+                    </div>
                 </div>
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="form-floating">
-                            {{ form.first_name|add_class:"form-control" }}
-                            <label for="{{ form.first_name.id_for_label }}">First Name</label>
-                            {% if form.first_name.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.first_name.errors %}
-                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.gender|add_class:"form-select" }}
+                        <label for="{{ form.gender.id_for_label }}">Gender</label>
+                        {% if form.gender.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.gender.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
-                    <div class="col-md-4">
-                        <div class="form-floating">
-                            {{ form.last_name|add_class:"form-control" }}
-                            <label for="{{ form.last_name.id_for_label }}">Last Name</label>
-                            {% if form.last_name.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.last_name.errors %}
-                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.date_of_birth|add_class:"form-control"|attr:"type:date" }}
+                        <label for="{{ form.date_of_birth.id_for_label }}">Date of Birth</label>
+                        {% if form.date_of_birth.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.date_of_birth.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
-                    <div class="col-md-4">
-                        <div class="form-floating">
-                            {{ form.role|add_class:"form-select" }}
-                            <label for="{{ form.role.id_for_label }}" class="{% if form.role.field.required %}required-field{% endif %}">Role</label>
-                            {% if form.role.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.role.errors %}
-                                        {{ error }}{% if not forloop.last %}<br>{% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-floating">
+                        {{ form.national_id|add_class:"form-control" }}
+                        <label for="{{ form.national_id.id_for_label }}">National ID / Passport Number</label>
+                        {% if form.national_id.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.national_id.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Security Section -->
+    <!-- Contact Information Section -->
     <div class="form-section">
         <div class="section-header">
-            <h6><i class="fa fa-lock me-2"></i>Security</h6>
-            <p>Change your password (leave blank to keep current password)</p>
+            <h6><i class="fa fa-map-marker me-2"></i>Contact Information</h6>
+            <p>Your location and address details</p>
+        </div>
+        <div class="section-body">
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="form-floating">
+                        {{ form.address|add_class:"form-control" }}
+                        <label for="{{ form.address.id_for_label }}">Home Address</label>
+                        {% if form.address.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.address.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.city|add_class:"form-control" }}
+                        <label for="{{ form.city.id_for_label }}">City/Town</label>
+                        {% if form.city.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.city.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.state_province|add_class:"form-control" }}
+                        <label for="{{ form.state_province.id_for_label }}">State/Province/Region</label>
+                        {% if form.state_province.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.state_province.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.country|add_class:"form-select" }}
+                        <label for="{{ form.country.id_for_label }}">Country</label>
+                        {% if form.country.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.country.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency Contact Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-phone me-2"></i>Emergency Contact</h6>
+            <p>In case of emergency, we'll contact this person</p>
+        </div>
+        <div class="section-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.emergency_contact_name|add_class:"form-control" }}
+                        <label for="{{ form.emergency_contact_name.id_for_label }}">Contact Name</label>
+                        {% if form.emergency_contact_name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.emergency_contact_name.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.emergency_contact_phone|add_class:"form-control" }}
+                        <label for="{{ form.emergency_contact_phone.id_for_label }}">Contact Phone</label>
+                        {% if form.emergency_contact_phone.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.emergency_contact_phone.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        {{ form.emergency_contact_relationship|add_class:"form-control" }}
+                        <label for="{{ form.emergency_contact_relationship.id_for_label }}">Relationship</label>
+                        {% if form.emergency_contact_relationship.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.emergency_contact_relationship.errors %}
+                                    {{ error }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="text-muted">e.g., Spouse, Parent, Sibling</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preferences Section -->
+    <div class="form-section">
+        <div class="section-header">
+            <h6><i class="fa fa-cog me-2"></i>Preferences</h6>
+            <p>Your language and timezone settings</p>
         </div>
         <div class="section-body">
             <div class="row">
                 <div class="col-md-6">
                     <div class="form-floating">
-                        {{ form.password|add_class:"form-control" }}
-                        <label for="{{ form.password.id_for_label }}">New Password</label>
-                        {% if form.password.errors %}
+                        {{ form.language|add_class:"form-select" }}
+                        <label for="{{ form.language.id_for_label }}">Preferred Language</label>
+                        {% if form.language.errors %}
                             <div class="invalid-feedback d-block">
-                                {% for error in form.password.errors %}
+                                {% for error in form.language.errors %}
                                     {{ error }}{% if not forloop.last %}<br>{% endif %}
                                 {% endfor %}
                             </div>
                         {% endif %}
-                        <div class="form-text">
-                            Leave blank if you don't want to change your password. Must be at least 8 characters.
-                        </div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-floating">
-                        {{ form.confirm_password|add_class:"form-control" }}
-                        <label for="{{ form.confirm_password.id_for_label }}">Confirm New Password</label>
-                        {% if form.confirm_password.errors %}
+                        {{ form.timezone|add_class:"form-select" }}
+                        <label for="{{ form.timezone.id_for_label }}">Timezone</label>
+                        {% if form.timezone.errors %}
                             <div class="invalid-feedback d-block">
-                                {% for error in form.confirm_password.errors %}
+                                {% for error in form.timezone.errors %}
                                     {{ error }}{% if not forloop.last %}<br>{% endif %}
                                 {% endfor %}
                             </div>
                         {% endif %}
-                        <div class="form-text">
-                            Re-enter your new password to confirm
-                        </div>
                     </div>
                 </div>
             </div>
@@ -528,13 +631,13 @@
         <button type="submit" class="btn btn-success btn-lg px-5">
             <i class="fa fa-save me-2"></i>Save Changes
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-lg px-4 ms-2" onclick="window.history.back()">
+        <a href="{% url 'core:home' %}" class="btn btn-outline-secondary btn-lg px-4 ms-2">
             <i class="fa fa-times me-2"></i>Cancel
-        </button>
+        </a>
     </div>
 </form>
 
-<!-- Profile Image Modal -->
+<!-- Profile Image Upload Modal -->
 <div class="modal fade" id="profileImageModal" tabindex="-1" role="dialog" aria-labelledby="profileImageModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
@@ -562,14 +665,14 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fa fa-times me-1"></i>Cancel
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancel">
+                    <i class="fa fa-times me-2"></i>Cancel
                 </button>
                 <button type="button" id="btnCrop" class="btn btn-primary" style="display: none;">
-                    <i class="fas fa-crop me-1"></i>Crop Image
+                    <i class="fa fa-crop me-2"></i>Crop Image
                 </button>
                 <button type="button" id="btnSave" class="btn btn-success" style="display: none;">
-                    <i class="fas fa-save me-1"></i>Use This Photo
+                    <i class="fa fa-save me-2"></i>Use This Photo
                 </button>
             </div>
         </div>
@@ -577,119 +680,125 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
-
-<!-- Scripts for CropperJS, SweetAlert2, MagnifiPopup -->
+{% block extra_scripts %}
 <script src="{% static 'vendors/cropperjs/dist/cropper.min.js' %}"></script>
 <script src="{% static 'vendors/sweetalert2/dist/sweetalert2.all.min.js' %}"></script>
-<script src="{% static 'vendors/magnific-popup/jquery.magnific-popup.min.js' %}"></script>
-  
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    setupImageHandling();
-});
-
-// Setup image handling with cropper
-function setupImageHandling() {
-    const uploadImageInput = document.getElementById("uploadImage");
-    const imagePreview = document.getElementById("imagePreview");
-    const btnCrop = document.getElementById("btnCrop");
-    const btnSave = document.getElementById("btnSave");
-    const browseSection = document.getElementById("browse-section");
-    const imageContainer = document.getElementById("image-container");
-    const profileImageModal = document.getElementById('profileImageModal');
+(function() {
+    'use strict';
     
-    if (!profileImageModal) {
-        console.error("Profile image modal not found!");
-        return;
-    }
+    console.log('=== Profile Image Handler Loading ===');
     
-    // Variable to store cropper instance and cropped image data
-    let cropper = null;
-    let croppedImageData = null;
-
-    // Function to show alerts
-    function showAlert(type, message) {
-        const alert = document.createElement('div');
-        alert.className = `alert alert-${type} alert-dismissible fade show`;
-        alert.innerHTML = `
-            <i class="fa fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
+    function initImageHandling() {
+        console.log('Initializing image handling...');
         
-        // Insert at top of form
-        const form = document.getElementById('account-settings-form');
-        form.insertAdjacentElement('afterbegin', alert);
+        var uploadImageInput = document.getElementById("uploadImage");
+        var imagePreview = document.getElementById("imagePreview");
+        var btnCrop = document.getElementById("btnCrop");
+        var btnSave = document.getElementById("btnSave");
+        var browseSection = document.getElementById("browse-section");
+        var imageContainer = document.getElementById("image-container");
+        var openImageModalBtn = document.getElementById('openImageModal');
         
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (alert.parentNode) {
-                alert.remove();
-            }
-        }, 5000);
-    }
-    
-    // Function to reset cropper and modal state
-    function resetCropper() {
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
+        if (!openImageModalBtn) {
+            console.error('❌ Open modal button not found!');
+            return;
         }
-        if (imagePreview) imagePreview.src = '';
-        if (browseSection) browseSection.style.display = "block";
-        if (imageContainer) imageContainer.style.display = "none";
-        if (btnCrop) btnCrop.style.display = "none";
-        if (btnSave) btnSave.style.display = "none";
         
-        // Reset the file input
+        var cropper = null;
+        var croppedImageData = null;
+        var profileImageModal = new bootstrap.Modal(document.getElementById('profileImageModal'));
+
+        // Open modal on click
+        openImageModalBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Opening profile image modal');
+            profileImageModal.show();
+        });
+
+        function showAlert(type, message) {
+            console.log('Alert:', type, '-', message);
+            
+            var alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.setAttribute('role', 'alert');
+            alertDiv.innerHTML = `
+                <i class="fa fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            
+            var form = document.getElementById('profile-form');
+            form.insertBefore(alertDiv, form.firstChild);
+            
+            setTimeout(function() {
+                alertDiv.remove();
+            }, 5000);
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        function resetCropper() {
+            console.log('Resetting cropper');
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            if (imagePreview) imagePreview.src = '';
+            if (browseSection) browseSection.style.display = "block";
+            if (imageContainer) imageContainer.style.display = "none";
+            if (btnCrop) btnCrop.style.display = "none";
+            if (btnSave) btnSave.style.display = "none";
+            if (uploadImageInput) uploadImageInput.value = '';
+            croppedImageData = null;
+        }
+        
+        // Reset on modal hide
+        document.getElementById('profileImageModal').addEventListener('hidden.bs.modal', function() {
+            console.log('Modal hidden');
+            resetCropper();
+        });
+
+        // File input change handler
         if (uploadImageInput) {
-            uploadImageInput.value = '';
-        }
-        
-        // Clear cropped image data
-        croppedImageData = null;
-    }
-    
-    // Reset modal when it's hidden (Bootstrap event)
-    profileImageModal.addEventListener('hidden.bs.modal', function() {
-        resetCropper();
-    });
-
-    // Handle file input change inside the modal
-    if (uploadImageInput) {
-        uploadImageInput.addEventListener("change", function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            // File size validation
-            if (file.size > 5 * 1024 * 1024) {
-                showAlert('danger', 'File size must be less than 5MB.');
-                uploadImageInput.value = '';
-                return;
-            }
-            
-            // File type validation
-            if (!file.type.startsWith('image/')) {
-                showAlert('danger', 'Please select a valid image file.');
-                uploadImageInput.value = '';
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                if (browseSection) browseSection.style.display = "none";
-                if (imageContainer) imageContainer.style.display = "block";
-                if (imagePreview) imagePreview.src = e.target.result;
+            uploadImageInput.addEventListener("change", function(e) {
+                console.log('File selected');
+                var file = e.target.files[0];
+                if (!file) return;
                 
-                // Initialize cropper
-                if (cropper) {
-                    cropper.destroy();
+                console.log('File:', file.name, file.type, file.size);
+                
+                if (file.size > 5 * 1024 * 1024) {
+                    showAlert('danger', 'File size must be less than 5MB.');
+                    uploadImageInput.value = '';
+                    return;
                 }
                 
-                if (imagePreview) {
-                    setTimeout(() => {
+                var allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                if (allowedTypes.indexOf(file.type) === -1) {
+                    showAlert('danger', 'Please select a valid image file (JPG, PNG, or GIF).');
+                    uploadImageInput.value = '';
+                    return;
+                }
+                
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    console.log('File loaded, initializing cropper');
+                    
+                    if (browseSection) browseSection.style.display = "none";
+                    if (imageContainer) imageContainer.style.display = "block";
+                    if (imagePreview) imagePreview.src = e.target.result;
+                    
+                    if (cropper) {
+                        console.log('Destroying existing cropper');
+                        cropper.destroy();
+                    }
+                    
+                    setTimeout(function() {
                         try {
+                            console.log('Creating new cropper instance');
                             cropper = new Cropper(imagePreview, {
                                 aspectRatio: 1,
                                 viewMode: 2,
@@ -698,138 +807,165 @@ function setupImageHandling() {
                                 responsive: true,
                                 autoCropArea: 0.8,
                                 ready: function() {
+                                    console.log('Cropper ready');
                                     if (btnCrop) btnCrop.style.display = "inline-block";
                                 }
                             });
                         } catch (err) {
-                            console.error("Cropper initialization error:", err);
-                            showAlert('danger', 'Error initializing image cropper. Please try again.');
+                            console.error("Cropper error:", err);
+                            showAlert('danger', 'Error initializing image cropper: ' + err.message);
                         }
                     }, 200);
+                };
+                
+                reader.onerror = function(error) {
+                    console.error('FileReader error:', error);
+                    showAlert('danger', 'Error reading file.');
+                };
+                
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Crop button handler
+        if (btnCrop) {
+            btnCrop.addEventListener('click', function() {
+                console.log('Crop button clicked');
+                if (!cropper) {
+                    console.error('Cropper not initialized');
+                    return;
                 }
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    // Handle Image cropping
-    if (btnCrop) {
-        btnCrop.addEventListener("click", function() {
-            if (!cropper) return;
-            
-            try {
-                const canvas = cropper.getCroppedCanvas({
-                    width: 300,
-                    height: 300,
-                    imageSmoothingEnabled: true,
-                    imageSmoothingQuality: 'high',
-                });
                 
-                croppedImageData = canvas.toDataURL("image/jpeg", 0.9);
-                if (imagePreview) imagePreview.src = croppedImageData;
-                
-                // Destroy cropper after cropping
-                cropper.destroy();
-                cropper = null;
-                
-                // Show save button, hide crop button
-                if (btnCrop) btnCrop.style.display = "none";
-                if (btnSave) btnSave.style.display = "inline-block";
-            } catch (err) {
-                console.error("Cropping error:", err);
-                showAlert('danger', 'Error cropping image. Please try again.');
-            }
-        });
-    }
-
-    // Save the cropped image
-    if (btnSave) {
-        btnSave.addEventListener("click", function() {
-            if (!croppedImageData) return;
-
-            // Show loading state
-            btnSave.disabled = true;
-            btnSave.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Saving...';
-
-            try {
-                // Convert base64 to blob
-                const blobBin = atob(croppedImageData.split(',')[1]);
-                const array = [];
-                for(let i = 0; i < blobBin.length; i++) {
-                    array.push(blobBin.charCodeAt(i));
+                try {
+                    var canvas = cropper.getCroppedCanvas({
+                        width: 300,
+                        height: 300,
+                        imageSmoothingEnabled: true,
+                        imageSmoothingQuality: 'high',
+                    });
+                    
+                    croppedImageData = canvas.toDataURL("image/jpeg", 0.9);
+                    console.log('Image cropped');
+                    
+                    if (imagePreview) imagePreview.src = croppedImageData;
+                    
+                    cropper.destroy();
+                    cropper = null;
+                    
+                    if (btnCrop) btnCrop.style.display = "none";
+                    if (btnSave) btnSave.style.display = "inline-block";
+                } catch (err) {
+                    console.error("Cropping error:", err);
+                    showAlert('danger', 'Error cropping image: ' + err.message);
                 }
-                const file = new Blob([new Uint8Array(array)], {type: 'image/jpeg'});
+            });
+        }
 
-                // Create a File object and set it to the hidden input
-                const dt = new DataTransfer();
-                dt.items.add(new File([file], 'profile.jpg', {type: 'image/jpeg'}));
-                
-                const hiddenFileInput = document.querySelector('input[name="photo"]');
-                if (hiddenFileInput) {
-                    hiddenFileInput.files = dt.files;
+        // Save button handler - Note: You'll need to create this URL and view
+        if (btnSave) {
+            btnSave.addEventListener('click', function() {
+                console.log('Save button clicked');
+                if (!croppedImageData) {
+                    console.error('No cropped image data');
+                    return;
                 }
 
-                // Update the profile image preview on the page
-                const currentProfileImage = document.getElementById("currentProfileImage");
-                if (currentProfileImage) {
-                    currentProfileImage.src = croppedImageData;
-                } else {
-                    // If there was no image before (using avatar placeholder), replace with new image
-                    const placeholder = document.querySelector('.avatar-placeholder');
-                    if (placeholder) {
-                        const container = placeholder.parentElement;
-                        container.innerHTML = `
-                            <img id="currentProfileImage" src="${croppedImageData}" alt="Profile Picture" class="profile-avatar">
-                            <div class="profile-image-overlay" data-bs-toggle="modal" data-bs-target="#profileImageModal">
-                                <i class="fas fa-camera"></i>
-                            </div>
-                        `;
+                btnSave.disabled = true;
+                btnSave.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i> Uploading...';
+
+                var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+                fetch("{% url 'accounts:update_profile_picture' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrfToken
+                    },
+                    body: JSON.stringify({
+                        image: croppedImageData
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Response:', data);
+                    if (data.success) {
+                        var currentProfileImage = document.getElementById("currentProfileImage");
+                        var timestamp = new Date().getTime();
+                        
+                        if (currentProfileImage) {
+                            currentProfileImage.src = data.image_url + '?t=' + timestamp;
+                        } else {
+                            var placeholder = document.querySelector('.avatar-placeholder');
+                            if (placeholder) {
+                                var container = placeholder.parentElement;
+                                container.innerHTML = `
+                                    <img id="currentProfileImage" src="${data.image_url}?t=${timestamp}" alt="Profile" class="profile-avatar">
+                                    <div class="profile-image-overlay" id="openImageModal">
+                                        <i class="fa fa-camera"></i>
+                                    </div>
+                                `;
+                                
+                                // Re-attach event listener
+                                document.getElementById('openImageModal').addEventListener('click', function(e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    profileImageModal.show();
+                                });
+                            }
+                        }
+                        
+                        showAlert('success', data.message);
+                        profileImageModal.hide();
+                        resetCropper();
+                    } else {
+                        showAlert('danger', data.message || 'Error updating profile picture.');
                     }
-                }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    showAlert('danger', 'Error uploading image.');
+                })
+                .finally(() => {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = '<i class="fa fa-save me-2"></i>Use This Photo';
+                });
+            });
+        }
+        
+        // Drag and drop
+        var uploadArea = document.querySelector('.image-upload-area');
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
                 
-                // Show success message
-                showAlert('success', 'Profile photo updated! Remember to save the form to apply changes.');
-                
-                // Close modal using Bootstrap's modal method
-                const modalInstance = bootstrap.Modal.getInstance(profileImageModal);
-                if (modalInstance) {
-                    modalInstance.hide();
+                var files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadImageInput.files = files;
+                    uploadImageInput.dispatchEvent(new Event('change'));
                 }
-            } catch (err) {
-                console.error("Error preparing image:", err);
-                showAlert('danger', 'Error preparing image. Please try again.');
-            } finally {
-                // Reset button state
-                btnSave.disabled = false;
-                btnSave.innerHTML = '<i class="fas fa-save me-1"></i>Use This Photo';
-            }
-        });
+            });
+        }
+        
+        console.log('✅ Image handling setup complete');
     }
     
-    // Drag and drop functionality
-    const uploadArea = document.querySelector('.image-upload-area');
-    if (uploadArea) {
-        uploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                uploadImageInput.files = files;
-                uploadImageInput.dispatchEvent(new Event('change'));
-            }
-        });
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initImageHandling);
+    } else {
+        initImageHandling();
     }
-}
+})();
 </script>
 {% endblock %}

@@ -1,0 +1,358 @@
+{# exams/templates/exams/categories/partials/_category_results.html #}
+
+{% load static %}
+
+<!-- Categories Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Code</th>
+                <th>Category Name</th>
+                <th>Type</th>
+                <th>Frequency</th>
+                <th>Weight %</th>
+                <th>Requirements</th>
+                <th>Status</th>
+                <th>Exams</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if categories_page %}
+                {% for category in categories_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:categories_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Category Code -->
+                    <td>
+                        <span class="category-code">{{ category.code }}</span>
+                    </td>
+                    
+                    <!-- Category Name & Description -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">{{ category.name }}</h6>
+                            <small class="text-muted">{{ category.abbreviation }}</small>
+                            {% if category.description %}
+                                <div>
+                                    <small class="text-muted">{{ category.description|truncatewords:10 }}</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Category Type -->
+                    <td>
+                        <span class="category-type-badge {{ category.category_type|lower }}">
+                            {{ category.get_category_type_display }}
+                        </span>
+                    </td>
+                    
+                    <!-- Frequency -->
+                    <td>
+                        <span class="frequency-badge">
+                            {{ category.get_frequency_display }}
+                        </span>
+                    </td>
+                    
+                    <!-- Weight Percentage -->
+                    <td>
+                        <span class="weight-badge">
+                            <strong>{{ category.weight_percentage }}%</strong>
+                        </span>
+                    </td>
+                    
+                    <!-- Requirements -->
+                    <td>
+                        {% if category.requires_registration %}
+                            <span class="requirement-badge registration" data-bs-toggle="tooltip" 
+                                  title="Registration required {{ category.registration_deadline_days }} days before">
+                                <i class="fa fa-user-check me-1"></i>Registration
+                            </span>
+                        {% endif %}
+                        
+                        {% if category.required_payment_percentage > 0 %}
+                            <span class="requirement-badge payment" data-bs-toggle="tooltip" 
+                                  title="{{ category.required_payment_percentage }}% payment required">
+                                <i class="fa fa-money-bill me-1"></i>{{ category.required_payment_percentage }}% Payment
+                            </span>
+                        {% endif %}
+                        
+                        {% if not category.requires_registration and category.required_payment_percentage == 0 %}
+                            <small class="text-muted">None</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Badge -->
+                    <td>
+                        {% if category.is_active %}
+                            <span class="status-badge active">Active</span>
+                        {% else %}
+                            <span class="status-badge inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Exams Count -->
+                    <td>
+                        <span class="weight-badge">
+                            <i class="fa fa-file-alt me-1"></i>
+                            {{ category.examinations.count|default:0 }}
+                        </span>
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'exams:category_detail' category.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'exams:category_quick_view_modal' category.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'exams:category_edit' category.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Status Actions</h6>
+                                
+                                {% if category.is_active %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i>Deactivate
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Activate
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Category Features -->
+                                <h6 class="dropdown-header">Features</h6>
+                                
+                                {% if category.allows_retakes %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-success">
+                                            <i class="fa fa-check-circle me-1"></i>Allows Retakes (Max: {{ category.max_retakes }})
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                {% if category.includes_in_report_cards %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-success">
+                                            <i class="fa fa-check-circle me-1"></i>Included in Report Cards
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                {% if category.public_results %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-info">
+                                            <i class="fa fa-globe me-1"></i>Public Results
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'exams:category_print_detail' category.pk %}" 
+                                   target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print Details
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'exams:category_delete_modal' category.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No exam categories found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or create a new category.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if categories_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ categories_page.start_index }} - {{ categories_page.end_index }} of {{ categories_page.paginator.count }} categories
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Category pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if categories_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'exams:category_list' %}" 
+                                hx-target="#category-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ categories_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in categories_page.paginator.page_range %}
+                    {% if page_num == categories_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > categories_page.number|add:"-3" and page_num < categories_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'exams:category_list' %}"
+                                    hx-target="#category-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if categories_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:category_list' %}"
+                                hx-target="#category-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ categories_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-folder"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Categories</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Categories</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-note2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Formative</div>
+                <h3>{{ stats.formative|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-medal"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Summative</div>
+                <h3>{{ stats.summative|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'category-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

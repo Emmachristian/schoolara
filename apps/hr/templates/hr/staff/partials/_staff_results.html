@@ -1,0 +1,605 @@
+{# hr/templates/hr/partials/_staff_results.html #}
+
+{% load static %}
+{% load humanize %}
+{% load widget_tweaks %}
+
+<!-- Staff Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Staff Member</th>
+                <th>Staff ID</th>
+                <th>Role/Designation</th>
+                <th>Department</th>
+                <th>Employment</th>
+                <th>Contact</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="staffTableBody">
+            {% if staff_page %}
+                {% for staff in staff_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:staff_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Staff Info with Photo/Icon -->
+                    <td>
+                        <div class="d-flex align-items-center">
+                            {% if staff.photo %}
+                                <img src="{{ staff.photo.url }}" 
+                                     alt="{{ staff.full_name }}"
+                                     class="staff-photo me-2">
+                            {% else %}
+                                <div class="staff-icon">
+                                    {{ staff.first_name|first }}{{ staff.last_name|first }}
+                                </div>
+                            {% endif %}
+                            <div>
+                                <h6 class="mb-0">
+                                    {% if staff.salutation %}{{ staff.get_salutation_display }} {% endif %}
+                                    {{ staff.full_name }}
+                                </h6>
+                                <div class="mt-1">
+                                    {% if staff.gender %}
+                                        <span class="badge badge-gender-{{ staff.gender|lower }} me-1">
+                                            <i class="fa fa-{% if staff.gender == 'M' %}mars{% else %}venus{% endif %} me-1"></i>
+                                            {{ staff.get_gender_display }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Staff ID -->
+                    <td>
+                        <code class="text-primary fw-bold">{{ staff.staff_id }}</code>
+                        {% if staff.date_of_joining %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fa fa-calendar me-1"></i>
+                                    Joined {{ staff.date_of_joining|date:"M Y" }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Role/Designation Column -->
+                    <td>
+                        {% if staff.primary_staff_designation %}
+                            <div class="fw-bold text-primary">
+                                <i class="fa fa-briefcase me-1"></i>
+                                {{ staff.primary_staff_designation.0.designation.name }}
+                            </div>
+                            {% if staff.primary_staff_designation.0.designation.code %}
+                                <div class="mt-1">
+                                    <code class="text-muted small">{{ staff.primary_staff_designation.0.designation.code }}</code>
+                                </div>
+                            {% endif %}
+                            {% if staff.designation_count > 1 %}
+                                <div class="mt-1">
+                                    <span class="badge bg-secondary" style="font-size: 0.65rem;">
+                                        <i class="fa fa-plus-circle me-1"></i>
+                                        +{{ staff.designation_count|add:"-1" }} more role{{ staff.designation_count|add:"-1"|pluralize }}
+                                    </span>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted fst-italic">
+                                <i class="fa fa-exclamation-triangle text-warning me-1"></i>
+                                No designation assigned
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Department -->
+                    <td>
+                        {% if staff.primary_department %}
+                            <a href="{% url 'hr:department_edit' staff.primary_department.pk %}" 
+                               class="text-decoration-none">
+                                <i class="pe-7s-culture text-primary me-1"></i>
+                                {{ staff.primary_department.name }}
+                            </a>
+                            {% if staff.primary_department.code %}
+                                <div class="mt-1">
+                                    <code class="text-muted small">{{ staff.primary_department.code }}</code>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Employment Status -->
+                    <td>
+                        <span class="badge employment-badge employment-{{ staff.employment_status|lower }}">
+                            {{ staff.get_employment_status_display }}
+                        </span>
+                        {% if staff.active_contract_count > 0 %}
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="fa fa-file-contract me-1"></i>
+                                    Active Contract
+                                </small>
+                            </div>
+                        {% else %}
+                            <div class="mt-1">
+                                <small class="text-warning">
+                                    <i class="fa fa-exclamation-triangle me-1"></i>
+                                    No Contract
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Contact Info -->
+                    <td>
+                        {% if staff.phone_number %}
+                            <div class="mb-1">
+                                <i class="fa fa-phone text-primary me-1"></i>
+                                <small>{{ staff.phone_number }}</small>
+                            </div>
+                        {% endif %}
+                        {% if staff.personal_email %}
+                            <div>
+                                <i class="fa fa-envelope text-info me-1"></i>
+                                <small class="text-truncate d-inline-block" style="max-width: 150px;">
+                                    {{ staff.personal_email }}
+                                </small>
+                            </div>
+                        {% endif %}
+                        {% if not staff.phone_number and not staff.personal_email %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Active Status Badge -->
+                    <td class="text-center">
+                        {% if staff.is_active %}
+                            <span class="badge status-badge active">
+                                <i class="fa fa-check-circle me-1"></i>Active
+                            </span>
+                        {% else %}
+                            <span class="badge status-badge inactive">
+                                <i class="fa fa-times-circle me-1"></i>Inactive
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Profile -->
+                                <a class="dropdown-item text-success" href="{% url 'hr:staff_profile' staff.pk %}">
+                                    <i class="fa fa-user me-2"></i> View Profile
+                                </a>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'hr:staff_edit' staff.pk %}">
+                                    <i class="fa fa-edit me-2"></i> Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Quick Links -->
+                                <h6 class="dropdown-header">Manage</h6>
+                                
+                                <!-- Assign/Manage Designations -->
+                                <a class="dropdown-item" href="{% url 'hr:staff_assign_designation' staff.pk %}">
+                                    <i class="fa fa-briefcase me-2"></i> 
+                                    {% if staff.designation_count > 0 %}
+                                        Manage Designations ({{ staff.designation_count }})
+                                    {% else %}
+                                        Assign Designation
+                                    {% endif %}
+                                </a>
+                                
+                                {% if staff.teacher %}
+                                    <a class="dropdown-item" href="{% url 'hr:teacher_profile' staff.teacher.pk %}">
+                                        <i class="fa fa-chalkboard-teacher me-2"></i> Teacher Profile
+                                    </a>
+                                {% else %}
+                                    <a class="dropdown-item" href="{% url 'hr:teacher_create' %}?staff={{ staff.pk }}">
+                                        <i class="fa fa-chalkboard-teacher me-2"></i> Create Teacher Profile
+                                    </a>
+                                {% endif %}
+                                
+                                <a class="dropdown-item" href="{% url 'hr:contract_list' %}?staff={{ staff.id }}">
+                                    <i class="fa fa-file-contract me-2"></i> Contracts ({{ staff.active_contract_count }})
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'hr:attendance_list' %}?staff={{ staff.id }}">
+                                    <i class="fa fa-calendar-check me-2"></i> Attendance
+                                </a>
+                                
+                                <a class="dropdown-item" href="{% url 'hr:payroll_list' %}?staff={{ staff.id }}">
+                                    <i class="fa fa-money-bill-wave me-2"></i> Payroll
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Status Actions -->
+                                <h6 class="dropdown-header">Actions</h6>
+                                
+                                {% if staff.is_active %}
+                                    <button type="button" class="dropdown-item text-warning" 
+                                            hx-get="{% url 'hr:staff_deactivate_modal' staff.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-ban me-2"></i> Deactivate
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="dropdown-item text-success" 
+                                            hx-get="{% url 'hr:staff_activate_modal' staff.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i> Activate
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger" 
+                                        hx-get="{% url 'hr:staff_delete_modal' staff.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="pe-7s-search"></i>
+                            </div>
+                            <h4 class="text-muted mb-2">No Staff Members Found</h4>
+                            <p class="text-muted">
+                                Try adjusting your search filters or 
+                                <a href="{% url 'hr:staff_create' %}" class="text-primary">add a new staff member</a>.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if staff_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ staff_page.start_index }} - {{ staff_page.end_index }} of {{ staff_page.paginator.count }} staff members
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Staff pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if staff_page.has_previous %}
+                    <li class="page-item">
+                        <button type="button" class="page-link" 
+                                hx-get="{% url 'hr:staff_list' %}" 
+                                hx-target="#staff-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ staff_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                            <span class="visually-hidden">Previous</span>
+                        </span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in staff_page.paginator.page_range %}
+                    {% if page_num == staff_page.number %}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > staff_page.number|add:"-3" and page_num < staff_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button type="button" class="page-link"
+                                    hx-get="{% url 'hr:staff_list' %}"
+                                    hx-target="#staff-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if staff_page.has_next %}
+                    <li class="page-item">
+                        <button type="button" class="page-link"
+                                hx-get="{% url 'hr:staff_list' %}"
+                                hx-target="#staff-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ staff_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" tabindex="-1" aria-disabled="true" aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                            <span class="visually-hidden">Next</span>
+                        </span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Staff Photo/Icon Styles */
+.staff-photo {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e9ecef;
+}
+
+.staff-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+    background: #ffffff;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    color: #556ee6;
+    font-size: 1.2rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Gender Badges */
+.badge-gender-m {
+    background-color: #cfe2ff;
+    color: #084298;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+.badge-gender-f {
+    background-color: #f8d7da;
+    color: #842029;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+.badge-teacher {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+/* Employment Status Badges */
+.employment-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.employment-badge.employment-ft {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.employment-badge.employment-pt {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.employment-badge.employment-ct {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.employment-badge.employment-pr {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+.employment-badge.employment-in {
+    background-color: #e7f3ff;
+    color: #004085;
+}
+
+.employment-badge.employment-vo {
+    background-color: #fff0f5;
+    color: #856404;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+}
+
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.status-badge.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* Fix for table responsive overflow with dropdowns */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+/* Empty State */
+.empty-state {
+    padding: 60px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+/* Table Improvements */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Responsive handling for mobile devices */
+@media (max-width: 768px) {
+    .table-responsive {
+        overflow-x: scroll;
+        overflow-y: visible;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+    
+    .staff-photo,
+    .staff-icon {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Staff</div>
+                <h3>{{ stats.total_staff|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active</div>
+                <h3>{{ stats.active_staff|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-id"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Full-Time</div>
+                <h3>{{ stats.full_time_staff|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Teachers</div>
+                <h3>{{ stats.teachers|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Initialize tooltips after HTMX swap
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
+});
+
+// Re-initialize tooltips after HTMX updates
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'staff-list') {
+        initializeTooltips();
+    }
+});
+
+function initializeTooltips() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+</script>

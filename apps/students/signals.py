@@ -181,6 +181,79 @@ def log_student_creation(sender, instance, created, **kwargs):
             f"({instance.admission_number})"
         )
 
+# =============================================================================
+# STUDENT ACCOUNT AUTO-CREATION
+# =============================================================================
+
+@receiver(post_save, sender=Student)
+def create_student_financial_account(sender, instance, created, **kwargs):
+    """
+    Automatically create a StudentAccount when a new Student is created.
+    This ensures every student has a financial account for fee tracking.
+    
+    The account is created with:
+    - Status: ACTIVE
+    - Credit Limit: 0.00 (can be updated later by finance team)
+    - Balance: 0.00 (calculated from transactions)
+    
+    Example:
+        When a new student is admitted:
+        - Student record created
+        - This signal fires automatically
+        - StudentAccount is created and linked
+        - Ready for invoicing and payments
+    """
+    if created:
+        try:
+            from fees.models import StudentAccount
+            
+            # Check if account already exists (shouldn't happen, but be safe)
+            if hasattr(instance, 'financial_account'):
+                logger.info(
+                    f"Financial account already exists for {instance.get_full_name()}"
+                )
+                return
+            
+            # Create the financial account
+            account = StudentAccount.objects.create(
+                student=instance,
+                status='ACTIVE',
+                credit_limit=Decimal('0.00'),  # Default: no credit limit
+            )
+            
+            logger.info(
+                f"✓ Created financial account for student: {instance.get_full_name()} "
+                f"({instance.admission_number})"
+            )
+            
+        except ImportError:
+            # fees app might not be installed yet (during migrations)
+            logger.warning(
+                f"Could not import StudentAccount model - fees app may not be installed yet"
+            )
+        except Exception as e:
+            logger.error(
+                f"✗ Failed to create financial account for student {instance.get_full_name()}: {e}",
+                exc_info=True
+            )
+
+
+# =============================================================================
+# OPTIONAL: DELETE STUDENT ACCOUNT WHEN STUDENT IS DELETED
+# =============================================================================
+
+@receiver(post_delete, sender=Student)
+def log_student_deletion(sender, instance, **kwargs):
+    """
+    Log when a student is deleted.
+    
+    Note: StudentAccount will be automatically deleted due to CASCADE relationship,
+    but we log it here for audit purposes.
+    """
+    logger.warning(
+        f"Student deleted: {instance.get_full_name()} ({instance.admission_number}). "
+        f"Associated financial account will be deleted automatically."
+    )
 
 # =============================================================================
 # GUARDIAN SIGNALS

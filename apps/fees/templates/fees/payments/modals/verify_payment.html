@@ -1,0 +1,101 @@
+{# fees/templates/fees/payments/modals/verify_payment.html #}
+{% load currency_filters %}  {# ✅ ADD THIS LINE #}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-check-circle me-2"></i>Verify Payment
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center py-4">
+            {% if can_verify %}
+                <div class="mb-3">
+                    <i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="mb-3">Verify Payment</h4>
+                <p class="text-muted mb-3">
+                    You are about to verify payment:
+                </p>
+                <div class="alert alert-info">
+                    <strong>{{ payment.payment_number }}</strong><br>
+                    <small>Student: {{ payment.student.get_full_name }}</small><br>
+                    <small>Amount: {{ payment.amount|money }}</small><br>
+                    <small>Date: {{ payment.payment_date|date:"M d, Y" }}</small><br>
+                    {% if payment.invoice %}
+                        <small>Invoice: {{ payment.invoice.invoice_number }}</small><br>
+                    {% endif %}
+                    {% if payment.payment_method %}
+                        <small>Method: {{ payment.payment_method.name }}</small><br>
+                    {% endif %}
+                    {% if payment.reference_number %}
+                        <small>Reference: {{ payment.reference_number }}</small>
+                    {% endif %}
+                </div>
+                
+                {% if warnings %}
+                    <div class="alert alert-warning">
+                        {% for warning in warnings %}
+                            <div class="mb-2">
+                                <i class="fa fa-exclamation-circle me-2"></i>{{ warning }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                <div class="alert alert-success">
+                    <i class="fa fa-info-circle me-2"></i>
+                    Verifying this payment confirms that the funds have been received and reconciled.
+                </div>
+            {% else %}
+                <div class="mb-3">
+                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="mb-3 text-danger">Cannot Verify Payment</h4>
+                <div class="alert alert-danger">
+                    {% for warning in warnings %}
+                        <div class="mb-2">
+                            <i class="fa fa-exclamation-circle me-2"></i>{{ warning }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        {% if can_verify %}
+            <form hx-post="{% url 'fees:payment_verify' payment.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                
+                {# Optional verification notes #}
+                <div class="modal-body pt-0">
+                    <div class="form-group">
+                        <label for="verification_notes" class="form-label">Verification Notes (Optional)</label>
+                        <textarea class="form-control" 
+                                  id="verification_notes" 
+                                  name="verification_notes" 
+                                  rows="2" 
+                                  placeholder="Add any notes about this verification..."></textarea>
+                        <small class="text-muted">These notes will be added to the payment's internal notes.</small>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fa fa-check-circle me-1"></i>Yes, Verify Payment
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

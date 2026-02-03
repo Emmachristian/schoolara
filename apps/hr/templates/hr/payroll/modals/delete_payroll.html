@@ -1,0 +1,114 @@
+{# hr/templates/hr/payroll/modals/delete_payroll.html #}
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-trash me-2"></i>Delete Payroll
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body text-center py-4">
+            <div class="mb-3">
+                <i class="fa fa-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+            </div>
+            <h4 class="mb-3">Are you sure?</h4>
+            
+            {# Payroll Information #}
+            <div class="alert alert-info">
+                <div class="mb-2">
+                    <strong>{{ payroll.staff.full_name }}</strong>
+                </div>
+                <small class="d-block">
+                    <strong>Pay Period:</strong> {{ payroll.pay_period_label|default:"N/A" }}
+                </small>
+                <small class="d-block">
+                    {{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}
+                </small>
+                <small class="d-block mt-1">
+                    <strong>Fiscal Period:</strong> {{ payroll.fiscal_period.name }}
+                </small>
+                <small class="d-block">
+                    <strong>Fiscal Year:</strong> {{ payroll.fiscal_year.name }}
+                </small>
+                <hr class="my-2">
+                <small class="d-block">
+                    <strong>Net Pay:</strong> {{ payroll.net_pay|money }}
+                </small>
+                <small class="d-block mt-1">
+                    <strong>Status:</strong> 
+                    <span class="badge bg-{{ payroll.status|lower }}">
+                        {{ payroll.get_status_display }}
+                    </span>
+                </small>
+                {% if payroll.reversed %}
+                    <small class="d-block mt-1">
+                        <span class="badge bg-danger">REVERSED</span>
+                    </small>
+                {% endif %}
+                {% if payroll.is_prorated %}
+                    <small class="d-block mt-1">
+                        <span class="badge bg-warning">PRORATED</span>
+                    </small>
+                {% endif %}
+            </div>
+            
+            {# Error Messages or Warning #}
+            {% if not can_delete %}
+                <div class="alert alert-danger text-start">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    <strong>Cannot Delete:</strong>
+                    <p class="mb-0 mt-2">{{ message }}</p>
+                </div>
+            {% else %}
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle me-2"></i>
+                    <strong>This action cannot be undone!</strong>
+                </div>
+                
+                {# Additional warnings if allowances/deductions/bonuses exist #}
+                {% if payroll.allowances.exists or payroll.deductions.exists or payroll.bonuses.exists %}
+                    <div class="alert alert-warning text-start">
+                        <strong>This will also delete:</strong>
+                        <ul class="mb-0 mt-2 small">
+                            {% if payroll.allowances.exists %}
+                                <li>{{ payroll.allowances.count }} allowance(s)</li>
+                            {% endif %}
+                            {% if payroll.deductions.exists %}
+                                <li>{{ payroll.deductions.count }} deduction(s)</li>
+                            {% endif %}
+                            {% if payroll.bonuses.exists %}
+                                <li>{{ payroll.bonuses.count }} bonus(es)</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        
+        {# Footer with Actions #}
+        {% if can_delete %}
+            <form hx-post="{% url 'hr:payroll_delete' payroll.pk %}" 
+                  hx-target="#payroll-results" 
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fa fa-trash me-1"></i>Yes, Delete
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Close
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>

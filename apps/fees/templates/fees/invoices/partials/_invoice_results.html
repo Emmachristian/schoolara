@@ -1,0 +1,592 @@
+{# fees/templates/fees/invoices/partials/_invoice_results.html #}
+
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+<!-- Fee Invoices Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th width="140">Invoice Number</th>
+                <th width="200">Student</th>
+                <th width="130">Issue Date</th>
+                <th width="130">Due Date</th>
+                <th width="130" class="text-end">Total Amount</th>
+                <th width="130" class="text-end">Paid Amount</th>
+                <th width="130" class="text-end">Balance</th>
+                <th width="140" class="text-center">Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="invoiceTableBody">
+            {% if invoices_page %}
+                {% for invoice in invoices_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:invoices_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Invoice Number -->
+                    <td>
+                        <div>
+                            <a href="{% url 'fees:invoice_detail' invoice.pk %}" class="text-primary fw-bold">
+                                {{ invoice.invoice_number }}
+                            </a>
+                        </div>
+                    </td>
+                    
+                    <!-- Student -->
+                    <td>
+                        <div class="d-flex flex-column">
+                            <a href="{% url 'students:student_profile' invoice.student.pk %}" class="text-dark fw-bold">
+                                {{ invoice.student.get_full_name }}
+                            </a>
+                            <small class="text-muted">{{ invoice.student.admission_number }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Issue Date -->
+                    <td>
+                        <div class="text-dark">{{ invoice.issue_date|date:"M d, Y" }}</div>
+                        {% if invoice.fiscal_period %}
+                            <small class="text-muted">{{ invoice.fiscal_period.name }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Due Date -->
+                    <td>
+                        <div class="text-dark">{{ invoice.due_date|date:"M d, Y" }}</div>
+                        {% now "Y-m-d" as today %}
+                        {% if invoice.due_date|date:"Y-m-d" < today and invoice.status != 'PAID' %}
+                            <small class="text-danger">
+                                <i class="fa fa-exclamation-triangle me-1"></i>Overdue
+                            </small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Total Amount -->
+                    <td class="text-end">
+                        <strong>{{ invoice.total_amount|money }}</strong>
+                        {% if invoice.has_scholarships_applied %}
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="bi bi-award me-1"></i>
+                                    {{ invoice.scholarship_discount_amount|money }} discount
+                                </small>
+                            </div>
+                        {% endif %}
+                        {% if invoice.item_count %}
+                            <div class="mt-1">
+                                <small class="text-muted">{{ invoice.item_count }} item{{ invoice.item_count|pluralize }}</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Paid Amount -->
+                    <td class="text-end">
+                        <span class="text-success">{{ invoice.paid_amount|money }}</span>
+                        {% if invoice.payment_count > 0 %}
+                            <div class="mt-1">
+                                <small class="text-muted">{{ invoice.payment_count }} payment{{ invoice.payment_count|pluralize }}</small>
+                            </div>
+                        {% endif %}
+                        {% if invoice.paid_amount|is_positive %}
+                            <div class="mt-1">
+                                <small class="text-info">
+                                    {{ invoice.paid_amount|percentage_of:invoice.total_amount }} paid
+                                </small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Balance -->
+                    <td class="text-end">
+                        {% if invoice.balance|is_positive %}
+                            <strong class="{{ invoice.balance|balance_color_class }}">
+                                {{ invoice.balance|money }}
+                            </strong>
+                        {% elif invoice.balance|is_negative %}
+                            <strong class="{{ invoice.balance|balance_color_class }}">
+                                {{ invoice.balance|money }}
+                            </strong>
+                            <div class="mt-1">
+                                <small class="text-info">Overpaid</small>
+                            </div>
+                        {% else %}
+                            <strong class="text-success">{{ 0|money }}</strong>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status Column -->
+                    <td class="text-center status-cell">
+                        {% if invoice.status == 'DRAFT' %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="bi bi-file-earmark me-1"></i>Draft
+                            </span>
+                        {% elif invoice.status == 'PENDING' %}
+                            <span class="badge bg-warning status-badge">
+                                <i class="fa fa-clock me-1"></i>Pending
+                            </span>
+                        {% elif invoice.status == 'PARTIALLY_PAID' %}
+                            <span class="badge bg-info status-badge">
+                                <i class="fa fa-hourglass-half me-1"></i>Partial
+                            </span>
+                        {% elif invoice.status == 'PAID' %}
+                            <span class="badge bg-success status-badge">
+                                <i class="fa fa-check-circle me-1"></i>Paid
+                            </span>
+                        {% elif invoice.status == 'OVERDUE' %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-exclamation-triangle me-1"></i>Overdue
+                            </span>
+                        {% elif invoice.status == 'VOID' %}
+                            <span class="badge bg-dark status-badge">
+                                <i class="fa fa-ban me-1"></i>Void
+                            </span>
+                        {% elif invoice.status == 'CANCELLED' %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="fa fa-times me-1"></i>Cancelled
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary status-badge">
+                                <i class="bi bi-question-circle me-1"></i>{{ invoice.status|title }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'fees:invoice_detail' invoice.pk %}">
+                                    <i class="fa fa-eye me-2"></i> View Details
+                                </a>
+                                
+                                <!-- ============================================= -->
+                                <!-- ✅ UPDATED: EDIT SECTION WITH RE-CALCULATE -->
+                                <!-- ============================================= -->
+                                {% if invoice.status == 'DRAFT' %}
+                                    <a class="dropdown-item text-warning" href="{% url 'fees:invoice_edit' invoice.pk %}">
+                                        <i class="fa fa-edit me-2"></i> Edit Invoice
+                                    </a>
+                                    
+                                    <!-- ✅ NEW: Re-calculate Scholarships & Discounts -->
+                                    {% if invoice.auto_scholarships_applied or invoice.auto_discounts_applied %}
+                                        <button type="button" 
+                                                class="dropdown-item text-info"
+                                                onclick="reapplyScholarships('{{ invoice.pk }}', '{{ invoice.invoice_number }}')">
+                                            <i class="fa fa-sync me-2"></i> Re-calculate Scholarships
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item" href="{% url 'fees:invoice_print' invoice.pk %}" target="_blank">
+                                    <i class="fa fa-print me-2"></i> Print Invoice
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ============================================= -->
+                                <!-- INVOICE STATUS ACTIONS -->
+                                <!-- ============================================= -->
+                                <h6 class="dropdown-header">Invoice Status</h6>
+                                
+                                <!-- Finalize Invoice (if DRAFT) -->
+                                {% if invoice.status == 'DRAFT' %}
+                                    <button type="button" class="dropdown-item text-primary"
+                                            hx-get="{% url 'fees:invoice_finalize_modal' invoice.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="bi bi-check-circle me-2"></i> Finalize Invoice
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Revert to Draft (if PENDING with no payments) -->
+                                {% if invoice.status == 'PENDING' and invoice.paid_amount == 0 %}
+                                    <button type="button" class="dropdown-item text-warning"
+                                            hx-get="{% url 'fees:invoice_revert_to_draft_modal' invoice.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="bi bi-arrow-counterclockwise me-2"></i> Revert to Draft
+                                    </button>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ============================================= -->
+                                <!-- SCHOLARSHIP MANAGEMENT -->
+                                <!-- ============================================= -->
+                                <h6 class="dropdown-header">Scholarships</h6>
+
+                                {% if invoice.status in 'DRAFT,PENDING' %}
+                                    {% if invoice.has_scholarships_applied %}
+                                        <!-- Has scholarships - only show Remove -->
+                                        <button type="button" class="dropdown-item text-warning"
+                                                hx-get="{% url 'fees:remove_scholarship_from_invoice_modal' invoice.pk %}"
+                                                hx-target="#modal-container">
+                                            <i class="bi bi-x-circle me-2"></i> Remove Scholarship
+                                        </button>
+                                    {% else %}
+                                        <!-- No scholarships - only show Apply -->
+                                        <button type="button" class="dropdown-item text-success"
+                                                hx-get="{% url 'fees:apply_scholarship_to_invoice_modal' invoice.pk %}"
+                                                hx-target="#modal-container">
+                                            <i class="bi bi-plus-circle me-2"></i> Apply Scholarship
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ============================================= -->
+                                <!-- QUICK ACTIONS -->
+                                <!-- ============================================= -->
+                                <h6 class="dropdown-header">Quick Actions</h6>
+                                
+                                <!-- Record Payment (if not paid/void/draft) -->
+                                {% if invoice.status not in 'DRAFT,PAID,VOID,CANCELLED' %}
+                                    <a class="dropdown-item text-primary" href="{% url 'fees:payment_create' %}?invoice={{ invoice.id }}">
+                                        <i class="fa fa-money-bill-wave me-2"></i> Record Payment
+                                    </a>
+                                {% elif invoice.status == 'DRAFT' %}
+                                    <span class="dropdown-item text-muted disabled" title="Finalize invoice first">
+                                        <i class="fa fa-money-bill-wave me-2"></i> Record Payment
+                                        <small class="d-block text-muted">Finalize first</small>
+                                    </span>
+                                {% endif %}
+                                
+                                <!-- View Student -->
+                                <a class="dropdown-item" href="{% url 'students:student_profile' invoice.student.pk %}">
+                                    <i class="fa fa-user me-2"></i> View Student
+                                </a>
+                                
+                                <!-- View Payments -->
+                                {% if invoice.payment_count > 0 %}
+                                    <a class="dropdown-item" href="{% url 'fees:payment_list' %}?invoice={{ invoice.id }}">
+                                        <i class="fa fa-list me-2"></i> View Payments ({{ invoice.payment_count }})
+                                    </a>
+                                {% endif %}
+                                
+                                <!-- View Journal Entry -->
+                                {% if invoice.journal_entry %}
+                                    <a class="dropdown-item" href="{% url 'finance:journal_entry_detail' invoice.journal_entry.pk %}">
+                                        <i class="bi bi-journal-text me-2"></i> View Journal Entry
+                                        {% if invoice.journal_entry.status == 'DRAFT' %}
+                                            <span class="badge badge-sm bg-warning ms-1">Draft</span>
+                                        {% else %}
+                                            <span class="badge badge-sm bg-success ms-1">Posted</span>
+                                        {% endif %}
+                                    </a>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- ============================================= -->
+                                <!-- DANGER ZONE -->
+                                <!-- ============================================= -->
+                                <h6 class="dropdown-header text-danger">Danger Zone</h6>
+                                
+                                <!-- Void Invoice -->
+                                {% if invoice.status not in 'VOID,CANCELLED' %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'fees:invoice_void_modal' invoice.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-ban me-2"></i> Void Invoice
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Delete Action (only DRAFT with no payments) -->
+                                {% if invoice.status == 'DRAFT' and invoice.payment_count == 0 %}
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'fees:invoice_delete_modal' invoice.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash me-2"></i> Delete
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted">
+                        <div class="empty-state py-5">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <h5 class="mt-3">No Fee Invoices Found</h5>
+                            <p class="text-muted">Try adjusting your filters or create a new invoice.</p>
+                            <a href="{% url 'fees:invoice_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Invoice
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if invoices_page.paginator.num_pages > 1 %}
+<div id="paginationContainer" class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div id="resultsCount" class="text-muted">
+            Showing {{ invoices_page.start_index }} - {{ invoices_page.end_index }} of {{ invoices_page.paginator.count|format_number }} invoices
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Invoice pagination">
+            <ul class="pagination mb-0" id="paginationNav">
+                <!-- Previous Button -->
+                {% if invoices_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:invoice_list' %}"
+                                hx-target="#invoice-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ invoices_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in invoices_page.paginator.page_range %}
+                    {% if page_num == invoices_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > invoices_page.number|add:"-3" and page_num < invoices_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'fees:invoice_list' %}"
+                                    hx-target="#invoice-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if invoices_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:invoice_list' %}"
+                                hx-target="#invoice-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ invoices_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Simplified Status Badge Styling */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.status-cell {
+    min-width: 100px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.dropdown {
+    position: static !important;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.dropdown-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.5rem 1rem 0.25rem;
+    color: #6c757d;
+}
+
+.dropdown-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.empty-state {
+    padding: 40px 20px;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        right: 0 !important;
+        left: auto !important;
+    }
+}
+</style>
+
+<!-- ============================================================================ -->
+<!-- ✅ NEW: JavaScript for Re-calculate Scholarships with SweetAlert -->
+<!-- ============================================================================ -->
+<script>
+/**
+ * Re-apply scholarships and discounts to an invoice
+ * Shows confirmation dialog before proceeding
+ */
+function reapplyScholarships(invoiceId, invoiceNumber) {
+    Swal.fire({
+        title: 'Re-calculate Scholarships & Discounts?',
+        html: `
+            <p class="mb-3">This will recalculate scholarships and discounts for invoice <strong>${invoiceNumber}</strong> based on the current item amounts.</p>
+            <div class="alert alert-info text-start">
+                <i class="fa fa-info-circle me-2"></i>
+                <strong>What this does:</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Resets all scholarship and discount amounts</li>
+                    <li>Re-applies scholarships based on current item amounts</li>
+                    <li>Re-applies automatic discounts</li>
+                    <li>Recalculates invoice total</li>
+                </ul>
+            </div>
+            <div class="alert alert-warning text-start">
+                <i class="fa fa-exclamation-triangle me-2"></i>
+                <strong>Note:</strong> Manual adjustments to scholarship/discount amounts will be replaced with auto-calculated values.
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#17a2b8',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fa fa-sync me-1"></i> Yes, Re-calculate',
+        cancelButtonText: 'Cancel',
+        width: '600px',
+        customClass: {
+            popup: 'text-start'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Show loading state
+            Swal.fire({
+                title: 'Processing...',
+                html: 'Re-calculating scholarships and discounts...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // Create form and submit
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/fees/invoices/${invoiceId}/reapply-scholarships/`;
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            // Add to body and submit
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+}
+</script>
+
+<!-- Out of Band Update for Stats (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-file"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Invoices</div>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-clock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Pending</div>
+                <h3>{{ stats.pending|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Paid</div>
+                <h3>{{ stats.paid|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-danger">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Overdue</div>
+                <h3>{{ stats.overdue|default:0|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
