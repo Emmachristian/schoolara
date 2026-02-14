@@ -64,6 +64,9 @@ from .forms import (
     TeacherForm,
     AttendanceForm,
     PayrollForm,
+    PayrollAllowanceFormSet,
+    PayrollBonusFormSet,
+    PayrollDeductionFormSet,
     StaffDesignationForm,
     
     # Filter forms
@@ -495,102 +498,6 @@ def get_filtered_teachers(request):
     teachers = teachers.order_by('-is_active', 'staff__first_name', 'staff__last_name')
     
     return teachers
-
-def get_filtered_payrolls(request):
-    """Helper function to get filtered payrolls queryset with updated field names"""
-    payrolls = Payroll.objects.select_related(
-        'staff__primary_department',
-        'fiscal_period', 
-        'payment_method'
-    ).prefetch_related(
-        'allowances',
-        'deductions',
-        'bonuses'
-    ).annotate(
-        allowance_count=Count('allowances', distinct=True),
-        deduction_count=Count('deductions', distinct=True),
-        bonus_count=Count('bonuses', distinct=True)
-    ).order_by('-payment_date', 'staff__first_name')
-    
-    # Get filter parameters - UPDATED
-    query = request.GET.get('q', '').strip()
-    staff = request.GET.get('staff', '')
-    fiscal_period = request.GET.get('fiscal_period', '')  # ⭐ RENAMED
-    fiscal_year = request.GET.get('fiscal_year', '')
-    pay_frequency = request.GET.get('pay_frequency', '')  # ⭐ NEW
-    status = request.GET.get('status', '')
-    payment_method = request.GET.get('payment_method', '')
-    
-    # ⭐ NEW: Reversal filters
-    include_reversed = request.GET.get('include_reversed', '')
-    only_reversed = request.GET.get('only_reversed', '')
-    only_prorated = request.GET.get('only_prorated', '')
-    
-    # ⭐ NEW: Date range filters
-    payment_date_from = request.GET.get('payment_date_from', '')
-    payment_date_to = request.GET.get('payment_date_to', '')
-    pay_period_from = request.GET.get('pay_period_from', '')
-    pay_period_to = request.GET.get('pay_period_to', '')
-    
-    # Apply text search
-    if query:
-        words = query.strip().split()
-        if words:
-            combined_q = Q()
-            for word in words:
-                word_q = (
-                    Q(staff__first_name__icontains=word) |
-                    Q(staff__last_name__icontains=word) |
-                    Q(staff__staff_id__icontains=word) |
-                    Q(payment_reference__icontains=word) |
-                    Q(pay_period_label__icontains=word)  # ⭐ NEW
-                )
-                combined_q &= word_q
-            payrolls = payrolls.filter(combined_q)
-    
-    # Apply filters
-    if staff:
-        payrolls = payrolls.filter(staff_id=staff)
-    
-    if fiscal_period:  # ⭐ RENAMED
-        payrolls = payrolls.filter(fiscal_period_id=fiscal_period)
-    
-    if fiscal_year:
-        payrolls = payrolls.filter(fiscal_year_id=fiscal_year)
-    
-    if pay_frequency:  # ⭐ NEW
-        payrolls = payrolls.filter(pay_frequency=pay_frequency)
-    
-    if status:
-        payrolls = payrolls.filter(status=status)
-    
-    if payment_method:
-        payrolls = payrolls.filter(payment_method_id=payment_method)
-    
-    # ⭐ NEW: Reversal filters
-    if only_reversed and only_reversed.lower() == 'true':
-        payrolls = payrolls.filter(reversed=True)
-    elif not include_reversed or include_reversed.lower() == 'false':
-        # By default, exclude reversed payrolls
-        payrolls = payrolls.filter(reversed=False)
-    # If include_reversed is True, no filter applied (show all)
-    
-    if only_prorated and only_prorated.lower() == 'true':  # ⭐ NEW
-        payrolls = payrolls.filter(is_prorated=True)
-    
-    # ⭐ NEW: Date range filters
-    if payment_date_from:
-        payrolls = payrolls.filter(payment_date__gte=payment_date_from)
-    if payment_date_to:
-        payrolls = payrolls.filter(payment_date__lte=payment_date_to)
-    
-    # Pay period filters (find overlapping periods)
-    if pay_period_from:
-        payrolls = payrolls.filter(pay_period_end__gte=pay_period_from)
-    if pay_period_to:
-        payrolls = payrolls.filter(pay_period_start__lte=pay_period_to)
-    
-    return payrolls
 
 # =============================================================================
 # STAFF VIEWS
@@ -2715,6 +2622,203 @@ def attendance_delete(request, pk):
 # PAYROLL ACTIONS
 # =============================================================================
 
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core.paginator import Paginator
+from django.db.models import Sum, Avg, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from decimal import Decimal
+
+
+# =============================================================================
+# HELPER FUNCTION
+# =============================================================================
+
+def get_filtered_payrolls(request):
+    """
+    Filter payrolls based on request parameters.
+
+    Returns an optimised QuerySet with select_related and prefetch_related
+    to minimise database queries. All new fields (nssf_employer,
+    employer_total_cost, currency, etc.) are included automatically since
+    they live on the Payroll model itself.
+    """
+    payrolls = Payroll.objects.select_related(
+        'staff',
+        'staff__primary_department',
+        'fiscal_period',
+        'fiscal_period__fiscal_year',
+        'payment_method',
+    ).prefetch_related(
+        'allowances',
+        'deductions',
+        'bonuses',
+    ).order_by('-payment_date', 'staff__first_name')
+
+    # -------------------------------------------------------------------------
+    # FILTER PARAMETERS
+    # -------------------------------------------------------------------------
+
+    query             = request.GET.get('q', '').strip()
+    staff             = request.GET.get('staff', '')
+    fiscal_period     = request.GET.get('fiscal_period', '')
+    fiscal_year       = request.GET.get('fiscal_year', '')
+    pay_frequency     = request.GET.get('pay_frequency', '')
+    status            = request.GET.get('status', '')
+    payment_method    = request.GET.get('payment_method', '')
+    currency          = request.GET.get('currency', '')
+
+    # Date range filters
+    payment_date_from = request.GET.get('payment_date_from', '')
+    payment_date_to   = request.GET.get('payment_date_to', '')
+    pay_period_from   = request.GET.get('pay_period_from', '')
+    pay_period_to     = request.GET.get('pay_period_to', '')
+
+    # Quick filter
+    quick_filter = request.GET.get('quick_filter', '')
+
+    # Checkbox filters
+    only_reversed_checked = request.GET.get('only_reversed') == 'on'
+    only_prorated_checked = request.GET.get('only_prorated') == 'on'
+
+    # -------------------------------------------------------------------------
+    # TEXT SEARCH
+    # -------------------------------------------------------------------------
+
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(staff__first_name__icontains=word) |
+                    Q(staff__last_name__icontains=word) |
+                    Q(staff__staff_id__icontains=word) |
+                    Q(payment_reference__icontains=word) |
+                    Q(pay_period_label__icontains=word)
+                )
+                combined_q &= word_q
+            payrolls = payrolls.filter(combined_q)
+
+    # -------------------------------------------------------------------------
+    # DROPDOWN FILTERS
+    # -------------------------------------------------------------------------
+
+    if staff:
+        payrolls = payrolls.filter(staff_id=staff)
+    if fiscal_period:
+        payrolls = payrolls.filter(fiscal_period_id=fiscal_period)
+    if fiscal_year:
+        payrolls = payrolls.filter(fiscal_period__fiscal_year_id=fiscal_year)
+    if pay_frequency:
+        payrolls = payrolls.filter(pay_frequency=pay_frequency)
+    if status:
+        payrolls = payrolls.filter(status=status)
+    if payment_method:
+        payrolls = payrolls.filter(payment_method_id=payment_method)
+    if currency:
+        payrolls = payrolls.filter(currency=currency.upper())
+
+    # -------------------------------------------------------------------------
+    # QUICK FILTERS
+    # -------------------------------------------------------------------------
+
+    if quick_filter:
+        from datetime import date
+        from calendar import monthrange
+
+        today = date.today()
+
+        if quick_filter == 'current_month':
+            first_day = today.replace(day=1)
+            last_day = today.replace(day=monthrange(today.year, today.month)[1])
+            payrolls = payrolls.filter(
+                pay_period_start__gte=first_day,
+                pay_period_end__lte=last_day,
+            )
+
+        elif quick_filter == 'last_month':
+            from datetime import timedelta
+            first_of_current  = today.replace(day=1)
+            last_of_previous  = first_of_current - timedelta(days=1)
+            first_of_previous = last_of_previous.replace(day=1)
+            payrolls = payrolls.filter(
+                pay_period_start__gte=first_of_previous,
+                pay_period_end__lte=last_of_previous,
+            )
+
+        elif quick_filter == 'current_quarter':
+            quarter     = (today.month - 1) // 3 + 1
+            first_month = (quarter - 1) * 3 + 1
+            first_day   = today.replace(month=first_month, day=1)
+            last_month  = first_month + 2
+            last_year   = today.year
+            if last_month > 12:
+                last_month -= 12
+                last_year  += 1
+            last_day = date(last_year, last_month, monthrange(last_year, last_month)[1])
+            payrolls = payrolls.filter(
+                pay_period_start__gte=first_day,
+                pay_period_end__lte=last_day,
+            )
+
+        elif quick_filter == 'last_quarter':
+            current_quarter = (today.month - 1) // 3 + 1
+            if current_quarter == 1:
+                first_month = 10
+                year = today.year - 1
+            else:
+                first_month = ((current_quarter - 2) * 3) + 1
+                year = today.year
+            first_day  = date(year, first_month, 1)
+            last_month = first_month + 2
+            last_day   = date(year, last_month, monthrange(year, last_month)[1])
+            payrolls = payrolls.filter(
+                pay_period_start__gte=first_day,
+                pay_period_end__lte=last_day,
+            )
+
+        elif quick_filter == 'current_year':
+            payrolls = payrolls.filter(
+                pay_period_start__gte=today.replace(month=1, day=1),
+                pay_period_end__lte=today.replace(month=12, day=31),
+            )
+
+        elif quick_filter == 'last_year':
+            last_year = today.year - 1
+            payrolls = payrolls.filter(
+                pay_period_start__gte=date(last_year, 1, 1),
+                pay_period_end__lte=date(last_year, 12, 31),
+            )
+
+    # -------------------------------------------------------------------------
+    # CHECKBOX FILTERS
+    # -------------------------------------------------------------------------
+
+    if only_reversed_checked:
+        payrolls = payrolls.filter(reversed=True)
+
+    if only_prorated_checked:
+        payrolls = payrolls.filter(is_prorated=True)
+
+    # -------------------------------------------------------------------------
+    # DATE RANGE FILTERS
+    # -------------------------------------------------------------------------
+
+    if payment_date_from:
+        payrolls = payrolls.filter(payment_date__gte=payment_date_from)
+    if payment_date_to:
+        payrolls = payrolls.filter(payment_date__lte=payment_date_to)
+
+    # Overlapping pay-period filter
+    if pay_period_from:
+        payrolls = payrolls.filter(pay_period_end__gte=pay_period_from)
+    if pay_period_to:
+        payrolls = payrolls.filter(pay_period_start__lte=pay_period_to)
+
+    return payrolls
+
 @login_required
 def payroll_list(request):
     """Handle BOTH full page loads AND HTMX search/filter requests - UPDATED"""
@@ -2776,231 +2880,386 @@ def payroll_list(request):
         return render(request, 'hr/payroll/partials/_payroll_results.html', context)
     else:
         return render(request, 'hr/payroll/list.html', context)
-    
+
 @login_required
+@transaction.atomic
 def payroll_create(request):
-    """Create payroll record"""
+    """
+    Create a payroll record together with its allowances, deductions,
+    and bonuses in a single page submission.
+
+    ⭐ SIMPLIFIED WORKFLOW (Signals Handle Recalculation):
+        1. Save the Payroll header (commit=False first to get a PK)
+        2. Save all three formsets (they FK back to the payroll)
+        3. Signals automatically recalculate all summary fields
+        4. Refresh from DB to get latest calculated values
+        
+    No manual recalculate_all() needed - signals handle everything!
+    """
     if request.method == 'POST':
-        form = PayrollForm(request.POST)
-        if form.is_valid():
-            payroll = form.save()
+        form               = PayrollForm(request.POST)
+        allowance_formset  = PayrollAllowanceFormSet(request.POST, prefix='allowances')
+        deduction_formset  = PayrollDeductionFormSet(request.POST, prefix='deductions')
+        bonus_formset      = PayrollBonusFormSet(request.POST, prefix='bonuses')
+
+        all_valid = (
+            form.is_valid() and
+            allowance_formset.is_valid() and
+            deduction_formset.is_valid() and
+            bonus_formset.is_valid()
+        )
+
+        if all_valid:
+            # ================================================================
+            # STEP 1: Save payroll header to get PK
+            # ================================================================
+            payroll = form.save(commit=False)
+            payroll.save()
+            # ⭐ Payroll number auto-generated by signal if not set
+
+            # ================================================================
+            # STEP 2: Save formsets - signals will auto-recalculate
+            # ================================================================
+            allowance_formset.instance = payroll
+            deduction_formset.instance = payroll
+            bonus_formset.instance     = payroll
             
+            # Each save() triggers signals that recalculate payroll totals
+            allowance_formset.save()  # ⭐ Signal: recalculate_payroll_on_allowance_change
+            deduction_formset.save()  # ⭐ Signal: recalculate_payroll_on_deduction_change
+            bonus_formset.save()      # ⭐ Signal: recalculate_payroll_on_bonus_change
+
+            # ================================================================
+            # STEP 3: Refresh to get latest calculated values from signals
+            # ================================================================
+            payroll.refresh_from_db()
+            
+            # ⭐ Optional: Explicit recalculation for extra safety
+            # (Signals already did this, but doesn't hurt to ensure consistency)
+            # Uncomment if you want double-checking:
+            # payroll.recalculate_all()
+            # payroll.save(update_fields=[
+            #     'total_allowances', 'total_bonuses', 'gross_pay',
+            #     'taxable_income', 'paye_amount', 'nssf_employee', 'local_service_tax',
+            #     'total_statutory_deductions', 'total_voluntary_deductions',
+            #     'total_deductions', 'net_pay', 'employer_total_cost', 'updated_at',
+            # ])
+
             messages.success(
                 request,
-                f"Payroll created for {payroll.staff.full_name()} ({payroll.pay_period_label})",  # ⭐ UPDATED: Added period label
-                extra_tags='sweetalert'
+                f"Payroll created for {payroll.staff.full_name()} "
+                f"({payroll.pay_period_label}) - "
+                f"Gross: {payroll.gross_pay:,.0f}, Net: {payroll.net_pay:,.0f}",
+                extra_tags='sweetalert',
             )
             return redirect('hr:payroll_detail', pk=payroll.pk)
+
         else:
             messages.error(
                 request,
-                "Please correct the errors in the form",
-                extra_tags='sweetalert-error'
+                "Please correct the errors below.",
+                extra_tags='sweetalert-error',
             )
+
     else:
-        form = PayrollForm()
-    
+        form              = PayrollForm()
+        allowance_formset = PayrollAllowanceFormSet(prefix='allowances')
+        deduction_formset = PayrollDeductionFormSet(prefix='deductions')
+        bonus_formset     = PayrollBonusFormSet(prefix='bonuses')
+
     context = {
-        'form': form,
-        'title': 'Create Payroll',
+        'form':               form,
+        'allowance_formset':  allowance_formset,
+        'deduction_formset':  deduction_formset,
+        'bonus_formset':      bonus_formset,
+        'title':              'Create Payroll',
+        'is_create':          True,
     }
-    
     return render(request, 'hr/payroll/form.html', context)
 
 
 @login_required
+@transaction.atomic
 def payroll_edit(request, pk):
-    """Edit payroll record - UPDATED with restrictions"""
+    """
+    Edit a payroll record and its allowances, deductions, and bonuses.
+
+    ⭐ SIMPLIFIED WORKFLOW (Signals Handle Recalculation):
+        1. Validate payroll is editable (not reversed, not in closed period)
+        2. Save payroll header and formsets
+        3. Signals automatically recalculate all summary fields
+        4. Refresh from DB to get latest calculated values
+
+    Guards:
+    - Reversed payrolls: redirect immediately (form disables fields, but we
+      also block at the view level)
+    - Closed fiscal period: redirect immediately
+    - Paid payrolls: allowed through (PayrollForm disables most fields;
+      only notes/payment_reference remain editable)
+
+    After saving, signals recalculate_all() automatically so summary fields stay
+    consistent with any line-item changes.
+    """
     payroll = get_object_or_404(Payroll, pk=pk)
-    
-    # ⭐ NEW: Check if payroll can be edited
+
+    # =========================================================================
+    # GUARD 1: REVERSED PAYROLLS
+    # =========================================================================
     if payroll.reversed:
         messages.error(
             request,
-            f"Cannot edit reversed payroll for {payroll.staff.full_name()} ({payroll.pay_period_label})",
-            extra_tags='sweetalert-error'
+            f"Cannot edit reversed payroll for {payroll.staff.full_name()} "
+            f"({payroll.pay_period_label}). "
+            f"Reversal reason: {payroll.reversal_reason}",
+            extra_tags='sweetalert-error',
         )
         return redirect('hr:payroll_detail', pk=payroll.pk)
-    
-    # ⭐ NEW: Check status - only DRAFT payrolls should be fully editable
-    if payroll.status not in ['DRAFT', 'APPROVED']:
+
+    # =========================================================================
+    # GUARD 2: CLOSED FISCAL PERIOD
+    # =========================================================================
+    if payroll.fiscal_period and getattr(payroll.fiscal_period, 'is_closed', False):
+        messages.error(
+            request,
+            f"Cannot edit payroll from closed fiscal period "
+            f"({payroll.fiscal_period.name}). "
+            "Please contact the finance department if changes are needed.",
+            extra_tags='sweetalert-error',
+        )
+        return redirect('hr:payroll_detail', pk=payroll.pk)
+
+    # =========================================================================
+    # GUARD 3: PAID PAYROLLS (Warning, not blocking)
+    # =========================================================================
+    if payroll.status == 'PAID':
         messages.warning(
             request,
-            f"Payroll is {payroll.get_status_display()} and has limited editing. "
-            f"Only notes and reference fields can be updated.",
-            extra_tags='sweetalert'
+            f"Payroll is {payroll.get_status_display()}. "
+            "Only notes and payment reference can be updated. "
+            "Salary amounts are locked.",
+            extra_tags='sweetalert',
         )
-        # You might want to use a different form or disable certain fields
-    
-    # ⭐ NEW: Check if fiscal period is closed
-    if payroll.fiscal_period and hasattr(payroll.fiscal_period, 'is_closed'):
-        if payroll.fiscal_period.is_closed:
-            messages.error(
-                request,
-                f"Cannot edit payroll from closed fiscal period ({payroll.fiscal_period.name})",
-                extra_tags='sweetalert-error'
-            )
-            return redirect('hr:payroll_detail', pk=payroll.pk)
-    
+    elif payroll.status == 'PROCESSING':
+        messages.info(
+            request,
+            f"Payroll is {payroll.get_status_display()}. "
+            "Be cautious when making changes.",
+            extra_tags='sweetalert',
+        )
+
+    # =========================================================================
+    # FORM PROCESSING
+    # =========================================================================
     if request.method == 'POST':
-        form = PayrollForm(request.POST, instance=payroll)
-        if form.is_valid():
-            payroll = form.save()
+        form              = PayrollForm(request.POST, instance=payroll)
+        allowance_formset = PayrollAllowanceFormSet(
+            request.POST, instance=payroll, prefix='allowances'
+        )
+        deduction_formset = PayrollDeductionFormSet(
+            request.POST, instance=payroll, prefix='deductions'
+        )
+        bonus_formset     = PayrollBonusFormSet(
+            request.POST, instance=payroll, prefix='bonuses'
+        )
+
+        all_valid = (
+            form.is_valid() and
+            allowance_formset.is_valid() and
+            deduction_formset.is_valid() and
+            bonus_formset.is_valid()
+        )
+
+        if all_valid:
+            # =================================================================
+            # STEP 1: Save payroll header
+            # =================================================================
+            payroll = form.save(commit=False)
+            payroll.save()
+            # ⭐ If basic_salary changed, signal recalculates automatically
+
+            # =================================================================
+            # STEP 2: Save formsets - signals auto-recalculate
+            # =================================================================
+            allowance_formset.save()  # ⭐ Signal: recalculate_payroll_on_allowance_change
+            deduction_formset.save()  # ⭐ Signal: recalculate_payroll_on_deduction_change
+            bonus_formset.save()      # ⭐ Signal: recalculate_payroll_on_bonus_change
+
+            # =================================================================
+            # STEP 3: Refresh to get latest calculated values from signals
+            # =================================================================
+            payroll.refresh_from_db()
             
+            # ⭐ Optional: Explicit recalculation for extra safety
+            # (Signals already did this, but doesn't hurt for critical data)
+            # Uncomment if you want double-checking:
+            # payroll.recalculate_all()
+            # payroll.save(update_fields=[
+            #     'total_allowances', 'total_bonuses', 'gross_pay',
+            #     'taxable_income', 'paye_amount', 'nssf_employee', 'local_service_tax',
+            #     'total_statutory_deductions', 'total_voluntary_deductions',
+            #     'total_deductions', 'net_pay', 'employer_total_cost', 'updated_at',
+            # ])
+
             messages.success(
                 request,
-                f"Payroll updated for {payroll.staff.full_name()} ({payroll.pay_period_label})",  # ⭐ UPDATED: Added period label
-                extra_tags='sweetalert'
+                f"Payroll updated for {payroll.staff.full_name()} "
+                f"({payroll.pay_period_label}) - "
+                f"Gross: {payroll.gross_pay:,.0f}, Net: {payroll.net_pay:,.0f}",
+                extra_tags='sweetalert',
             )
             return redirect('hr:payroll_detail', pk=payroll.pk)
+
         else:
             messages.error(
                 request,
-                "Please correct the errors in the form",
-                extra_tags='sweetalert-error'
+                "Please correct the errors below.",
+                extra_tags='sweetalert-error',
             )
-    else:
-        form = PayrollForm(instance=payroll)
-    
-    context = {
-        'form': form,
-        'payroll': payroll,
-        'title': f'Update Payroll - {payroll.pay_period_label}',  # ⭐ UPDATED: More specific title
-        'is_editable': payroll.status == 'DRAFT',  # ⭐ NEW: Pass to template
-    }
-    
-    return render(request, 'hr/payroll/form.html', context)
 
+    else:
+        form              = PayrollForm(instance=payroll)
+        allowance_formset = PayrollAllowanceFormSet(instance=payroll, prefix='allowances')
+        deduction_formset = PayrollDeductionFormSet(instance=payroll, prefix='deductions')
+        bonus_formset     = PayrollBonusFormSet(instance=payroll, prefix='bonuses')
+
+    context = {
+        'form':               form,
+        'allowance_formset':  allowance_formset,
+        'deduction_formset':  deduction_formset,
+        'bonus_formset':      bonus_formset,
+        'payroll':            payroll,
+        'title':              f'Edit Payroll — {payroll.pay_period_label}',
+        'is_create':          False,
+        'is_editable':        payroll.status in ('DRAFT', 'APPROVED'),
+        'is_paid':            payroll.status == 'PAID',
+        'is_reversed':        payroll.reversed,
+    }
+    return render(request, 'hr/payroll/form.html', context)
 
 @login_required
 def payroll_detail(request, pk):
-    """View payroll details - UPDATED"""
+    """
+    Display payroll details.
+
+    Uses denormalised summary fields from the model directly — no manual
+    aggregation needed. The prefetch_related for allowances/deductions/bonuses
+    is kept so the template can still iterate individual line items.
+    """
     payroll = get_object_or_404(
         Payroll.objects.select_related(
             'staff__primary_department',
-            'fiscal_period',  # ⭐ RENAMED from 'period'
-            'fiscal_year',
+            'fiscal_period',
             'payment_method',
-            'journal_entry',  # ⭐ NEW
-            'payment_journal_entry',  # ⭐ NEW
-            'reversal_journal_entry',  # ⭐ NEW
+            'journal_entry',
+            'payment_journal_entry',
+            'reversal_journal_entry',
         ).prefetch_related('allowances', 'deductions', 'bonuses'),
-        pk=pk
+        pk=pk,
     )
-    
-    # Calculate totals
-    total_allowances = sum(a.amount for a in payroll.allowances.all())
-    total_deductions = sum(d.amount for d in payroll.deductions.all())
-    total_bonuses = sum(b.amount for b in payroll.bonuses.all())
-    
-    # ⭐ NEW: Get effective amounts (0 if reversed)
-    effective_net_pay = payroll.effective_net_pay
-    effective_gross_pay = payroll.effective_gross_pay
-    
-    # ⭐ NEW: Get reversal info
-    can_reverse, reversal_reason = payroll.can_be_reversed()
-    requires_statutory = payroll.requires_statutory_adjustments()
-    
-    # ⭐ NEW: Get users who took actions
-    approved_by = payroll.get_approved_by_user()
-    paid_by = payroll.get_paid_by_user()
-    reversed_by = payroll.get_reversed_by_user()
-    reversal_approved_by = payroll.get_reversal_approved_by_user()
-    
+
+    can_reverse, reversal_message = payroll.can_be_reversed()
+
     context = {
         'payroll': payroll,
-        'total_allowances': total_allowances,
-        'total_deductions': total_deductions,
-        'total_bonuses': total_bonuses,
-        
-        # ⭐ NEW context
-        'effective_net_pay': effective_net_pay,
-        'effective_gross_pay': effective_gross_pay,
-        'can_reverse': can_reverse,
-        'reversal_reason': reversal_reason,
-        'requires_statutory': requires_statutory,
-        'approved_by': approved_by,
-        'paid_by': paid_by,
-        'reversed_by': reversed_by,
-        'reversal_approved_by': reversal_approved_by,
-    }
-    
-    return render(request, 'hr/payroll/detail.html', context)
 
+        # Summary fields — read directly from denormalised model fields
+        'total_allowances':           payroll.total_allowances,
+        'total_bonuses':              payroll.total_bonuses,
+        'gross_pay':                  payroll.gross_pay,
+        'taxable_income':             payroll.taxable_income,
+        'paye_amount':                payroll.paye_amount,
+        'nssf_employee':              payroll.nssf_employee,
+        'local_service_tax':          payroll.local_service_tax,
+        'total_statutory_deductions': payroll.total_statutory_deductions,
+        'total_voluntary_deductions': payroll.total_voluntary_deductions,
+        'total_deductions':           payroll.total_deductions,
+        'net_pay':                    payroll.net_pay,
+        'nssf_employer':              payroll.nssf_employer,
+        'employer_total_cost':        payroll.employer_total_cost,
+
+        # Effective amounts (0 if reversed / cancelled)
+        'effective_net_pay':   payroll.effective_net_pay,
+        'effective_gross_pay': payroll.effective_gross_pay,
+        'effective_employer_cost': payroll.effective_employer_cost,
+
+        # Reversal info
+        'can_reverse':          can_reverse,
+        'reversal_message':     reversal_message,
+        'requires_statutory':   payroll.requires_statutory_adjustments(),
+
+        # Audit trail users
+        'approved_by':          payroll.get_approved_by_user(),
+        'paid_by':              payroll.get_paid_by_user(),
+        'reversed_by':          payroll.get_reversed_by_user(),
+        'reversal_approved_by': payroll.get_reversal_approved_by_user(),
+    }
+    return render(request, 'hr/payroll/detail.html', context)
 
 @login_required
 def payroll_approve(request, pk):
-    """Approve payroll - UPDATED"""
+    """Approve a DRAFT payroll"""
     payroll = get_object_or_404(Payroll, pk=pk)
-    
+
     if request.method == 'POST':
-        # ⭐ NEW: Check if reversed
         if payroll.reversed:
             messages.error(
                 request,
-                "Cannot approve a reversed payroll",
-                extra_tags='sweetalert-error'
+                "Cannot approve a reversed payroll.",
+                extra_tags='sweetalert-error',
             )
-            return redirect('hr:payroll_detail', pk=payroll.pk)
-        
-        if payroll.status == 'DRAFT':
-            payroll.status = 'APPROVED'
+        elif payroll.status == 'DRAFT':
+            payroll.status      = 'APPROVED'
             payroll.approved_at = timezone.now()
             payroll.approved_by_id = str(request.user.id)
-            payroll.save()
-            
+            payroll.save(update_fields=['status', 'approved_at', 'approved_by_id', 'updated_at'])
+
             messages.success(
                 request,
-                f"Payroll for {payroll.staff.full_name()} ({payroll.pay_period_label}) approved successfully",  # ⭐ UPDATED
-                extra_tags='sweetalert'
+                f"Payroll for {payroll.staff.full_name()} "
+                f"({payroll.pay_period_label}) approved.",
+                extra_tags='sweetalert',
             )
         else:
             messages.warning(
                 request,
-                f"Payroll is already {payroll.get_status_display()}",
-                extra_tags='sweetalert'
+                f"Payroll is already {payroll.get_status_display()}.",
+                extra_tags='sweetalert',
             )
-        
-        return redirect('hr:payroll_detail', pk=payroll.pk)
-    
-    return redirect('hr:payroll_detail', pk=payroll.pk)
 
+    return redirect('hr:payroll_detail', pk=payroll.pk)
 
 @login_required
 def payroll_process_payment(request, pk):
-    """Process payroll payment - UPDATED"""
+    """Mark an APPROVED payroll as PAID"""
     payroll = get_object_or_404(Payroll, pk=pk)
-    
+
     if request.method == 'POST':
-        # ⭐ NEW: Check if reversed
         if payroll.reversed:
             messages.error(
                 request,
-                "Cannot process payment for a reversed payroll",
-                extra_tags='sweetalert-error'
+                "Cannot process payment for a reversed payroll.",
+                extra_tags='sweetalert-error',
             )
-            return redirect('hr:payroll_detail', pk=payroll.pk)
-        
-        if payroll.status == 'APPROVED':
-            payroll.status = 'PAID'
-            payroll.paid_at = timezone.now()  # ⭐ NEW
-            payroll.paid_by_id = str(request.user.id)  # ⭐ NEW
-            payroll.save()
-            
+        elif payroll.status == 'APPROVED':
+            payroll.status    = 'PAID'
+            payroll.paid_at   = timezone.now()
+            payroll.paid_by_id = str(request.user.id)
+            payroll.save(update_fields=['status', 'paid_at', 'paid_by_id', 'updated_at'])
+
             messages.success(
                 request,
-                f"Payment processed for {payroll.staff.full_name()} ({payroll.pay_period_label})",  # ⭐ UPDATED
-                extra_tags='sweetalert'
+                f"Payment processed for {payroll.staff.full_name()} "
+                f"({payroll.pay_period_label}).",
+                extra_tags='sweetalert',
             )
         else:
             messages.warning(
                 request,
-                f"Payroll must be approved before payment. Current status: {payroll.get_status_display()}",
-                extra_tags='sweetalert'
+                f"Payroll must be approved before payment. "
+                f"Current status: {payroll.get_status_display()}.",
+                extra_tags='sweetalert',
             )
-        
-        return redirect('hr:payroll_detail', pk=payroll.pk)
-    
+
     return redirect('hr:payroll_detail', pk=payroll.pk)
 
 
@@ -3156,142 +3415,169 @@ def payroll_delete(request, pk):
 # =============================================================================
 # BULK OPERATIONS - UPDATED
 # =============================================================================
-
+            
 @login_required
 @transaction.atomic
-def bulk_payroll_generation(request):
-    """Bulk generate payroll with HTMX support - UPDATED"""
+def payroll_bulk_create(request):
+    """
+    ⭐ ADVANCED: Bulk create payrolls for multiple staff members.
+    
+    When creating many payrolls at once, you can disable signals
+    for performance and then recalculate at the end.
+    """
+    from .signals import disable_payroll_calculation_signals
+    from .models import Staff
+    from core.models import FiscalPeriod
+    from datetime import date
     
     if request.method == 'POST':
-        fiscal_period_id = request.POST.get('fiscal_period')  # ⭐ RENAMED
-        fiscal_year_id = request.POST.get('fiscal_year')
-        pay_period_start = request.POST.get('pay_period_start')  # ⭐ NEW
-        pay_period_end = request.POST.get('pay_period_end')  # ⭐ NEW
-        pay_frequency = request.POST.get('pay_frequency', 'MONTHLY')  # ⭐ NEW
+        # Get form data
+        fiscal_period_id = request.POST.get('fiscal_period')
+        staff_ids = request.POST.getlist('staff_ids')
+        pay_period_start = request.POST.get('pay_period_start')
+        pay_period_end = request.POST.get('pay_period_end')
+        payment_date = request.POST.get('payment_date')
         
-        if not fiscal_period_id or not fiscal_year_id:  # ⭐ UPDATED
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = "Fiscal Period and Fiscal Year are required"
-                response['HX-Alert-Type'] = 'error'
-                response['HX-Close-Modal'] = 'true'
-                return response
-            else:
-                messages.error(request, "Fiscal Period and Fiscal Year are required", extra_tags='sweetalert-error')
-                return redirect('hr:payroll_list')
+        fiscal_period = get_object_or_404(FiscalPeriod, pk=fiscal_period_id)
+        staff_members = Staff.objects.filter(pk__in=staff_ids, is_active=True)
         
-        # ⭐ NEW: Validate pay period dates
-        if not pay_period_start or not pay_period_end:
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = "Pay period start and end dates are required"
-                response['HX-Alert-Type'] = 'error'
-                response['HX-Close-Modal'] = 'true'
-                return response
-            else:
-                messages.error(request, "Pay period start and end dates are required", extra_tags='sweetalert-error')
-                return redirect('hr:payroll_list')
-        
-        try:
-            from datetime import datetime
-            from core.models import FiscalPeriod, FiscalYear
-            
-            fiscal_period = FiscalPeriod.objects.get(pk=fiscal_period_id)
-            fiscal_year = FiscalYear.objects.get(pk=fiscal_year_id)
-            
-            # Parse dates
-            pay_start = datetime.strptime(pay_period_start, '%Y-%m-%d').date()
-            pay_end = datetime.strptime(pay_period_end, '%Y-%m-%d').date()
-            
-            # Get staff with active contracts
-            staff_with_contracts = Staff.objects.filter(
-                is_active=True,
-                contracts__status='ACTIVE'
-            ).distinct()
-            
-            # Check for existing payroll for this pay period
-            existing = Payroll.objects.filter(
-                staff__in=staff_with_contracts,
-                pay_period_start=pay_start,  # ⭐ UPDATED
-                pay_period_end=pay_end,  # ⭐ UPDATED
-                reversed=False  # ⭐ NEW
+        if not staff_members.exists():
+            messages.error(
+                request,
+                "No valid staff members selected.",
+                extra_tags='sweetalert-error',
             )
-            
-            if existing.exists():
-                is_htmx = request.headers.get('HX-Request') == 'true'
-                
-                if is_htmx:
-                    response = HttpResponse()
-                    response['HX-Alert-Message'] = f"Payroll already exists for {existing.count()} staff for this pay period"
-                    response['HX-Alert-Type'] = 'warning'
-                    response['HX-Close-Modal'] = 'true'
-                    return response
-                else:
-                    messages.warning(
-                        request,
-                        f"Payroll already exists for {existing.count()} staff for this pay period",
-                        extra_tags='sweetalert'
-                    )
-                    return redirect('hr:payroll_list')
-                
-            from core.models import PaymentMethod
-            
-            # Generate payroll records
-            count = 0
-            for staff in staff_with_contracts:
-                # Get active contract
-                contract = staff.contracts.filter(status='ACTIVE').first()
-                if contract:
-                    Payroll.objects.create(
+            return redirect('hr:payroll_bulk_create')
+        
+        created_count = 0
+        errors = []
+        
+        # ⭐ Disable signals for bulk operation (performance optimization)
+        with disable_payroll_calculation_signals():
+            for staff in staff_members:
+                try:
+                    # Get active contract
+                    contract = staff.get_active_contract()
+                    if not contract:
+                        errors.append(f"{staff.full_name()} has no active contract")
+                        continue
+                    
+                    # Create payroll
+                    payroll = Payroll.objects.create(
                         staff=staff,
-                        fiscal_period=fiscal_period,  # ⭐ RENAMED
-                        fiscal_year=fiscal_year,
-                        pay_period_start=pay_start,  # ⭐ NEW
-                        pay_period_end=pay_end,  # ⭐ NEW
-                        payment_date=pay_end,  # Default to end of period
-                        pay_frequency=pay_frequency,  # ⭐ NEW
+                        fiscal_period=fiscal_period,
+                        pay_period_start=pay_period_start,
+                        pay_period_end=pay_period_end,
+                        payment_date=payment_date,
+                        pay_frequency='MONTHLY',
                         basic_salary=contract.basic_salary,
-                        payment_method=PaymentMethod.objects.first(),  # Default
+                        currency='UGX',
+                        exchange_rate=1.000000,
+                        payment_method=staff.preferred_payment_method or fiscal_period.default_payment_method,
                         status='DRAFT',
                     )
-                    count += 1
-            
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = f"Payroll generated for {count} staff members for period {pay_start} to {pay_end}"
-                response['HX-Alert-Type'] = 'success'
-                response['HX-Close-Modal'] = 'true'
-                response['HX-Redirect'] = reverse('hr:payroll_list')
-                return response
-            else:
-                messages.success(
-                    request,
-                    f"Payroll generated for {count} staff members for period {pay_start} to {pay_end}",
-                    extra_tags='sweetalert'
-                )
-                return redirect('hr:payroll_list')
-            
-        except Exception as e:
-            logger.error(f"Error in bulk payroll generation: {e}")
-            
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = f"Error: {str(e)}"
-                response['HX-Alert-Type'] = 'error'
-                response['HX-Close-Modal'] = 'true'
-                return response
-            else:
-                messages.error(request, f"Error: {str(e)}", extra_tags='sweetalert-error')
-                return redirect('hr:payroll_list')
+                    
+                    # ⭐ Manually recalculate (signals are disabled)
+                    payroll.recalculate_all()
+                    payroll.save()
+                    
+                    created_count += 1
+                    
+                except Exception as e:
+                    errors.append(f"{staff.full_name()}: {str(e)}")
+        
+        # Show results
+        if created_count > 0:
+            messages.success(
+                request,
+                f"Successfully created {created_count} payroll(s).",
+                extra_tags='sweetalert',
+            )
+        
+        if errors:
+            messages.warning(
+                request,
+                f"Errors: {'; '.join(errors[:5])}{'...' if len(errors) > 5 else ''}",
+                extra_tags='sweetalert',
+            )
+        
+        return redirect('hr:payroll_list')
+    
+    # GET request - show form
+    from core.models import FiscalPeriod
+    from .models import Staff
+    
+    context = {
+        'title': 'Bulk Create Payrolls',
+        'fiscal_periods': FiscalPeriod.objects.filter(is_closed=False),
+        'staff_members': Staff.objects.filter(is_active=True).order_by('first_name', 'last_name'),
+    }
+    return render(request, 'hr/payroll/bulk_create.html', context)
 
+@login_required
+def payroll_recalculate(request, pk):
+    """
+    ⭐ MANUAL RECALCULATION ENDPOINT
+    
+    Force recalculation of a payroll's summary fields.
+    Useful for fixing data inconsistencies or after manual DB edits.
+    """
+    payroll = get_object_or_404(Payroll, pk=pk)
+    
+    # Check permissions
+    if payroll.reversed:
+        messages.error(
+            request,
+            "Cannot recalculate a reversed payroll.",
+            extra_tags='sweetalert-error',
+        )
+        return redirect('hr:payroll_detail', pk=payroll.pk)
+    
+    if payroll.status == 'PAID':
+        messages.warning(
+            request,
+            "This payroll is already paid. Recalculation may cause inconsistencies.",
+            extra_tags='sweetalert',
+        )
+    
+    try:
+        # Get values before recalculation
+        old_gross = payroll.gross_pay
+        old_net = payroll.net_pay
+        
+        # Recalculate
+        payroll.recalculate_all()
+        payroll.save(update_fields=[
+            'total_allowances', 'total_bonuses', 'gross_pay',
+            'taxable_income', 'paye_amount', 'nssf_employee', 'local_service_tax',
+            'total_statutory_deductions', 'total_voluntary_deductions',
+            'total_deductions', 'net_pay', 'employer_total_cost', 'updated_at',
+        ])
+        
+        # Show what changed
+        if old_gross != payroll.gross_pay or old_net != payroll.net_pay:
+            messages.success(
+                request,
+                f"Payroll recalculated. "
+                f"Gross: {old_gross:,.0f} → {payroll.gross_pay:,.0f}, "
+                f"Net: {old_net:,.0f} → {payroll.net_pay:,.0f}",
+                extra_tags='sweetalert',
+            )
+        else:
+            messages.info(
+                request,
+                "Payroll recalculated. No changes detected.",
+                extra_tags='sweetalert',
+            )
+        
+    except Exception as e:
+        messages.error(
+            request,
+            f"Error recalculating payroll: {str(e)}",
+            extra_tags='sweetalert-error',
+        )
+    
+    return redirect('hr:payroll_detail', pk=payroll.pk)
 
 # =============================================================================
 # SALARY HISTORY VIEWS
@@ -3535,112 +3821,6 @@ def bulk_attendance_record(request):
             else:
                 messages.error(request, f"Error: {str(e)}", extra_tags='sweetalert-error')
                 return redirect('hr:attendance_list')
-
-
-@login_required
-@transaction.atomic
-def bulk_payroll_generation(request):
-    """Bulk generate payroll with HTMX support"""
-    
-    if request.method == 'POST':
-        period_id = request.POST.get('period')
-        fiscal_year_id = request.POST.get('fiscal_year')
-        
-        if not period_id or not fiscal_year_id:
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = "Period and Fiscal Year are required"
-                response['HX-Alert-Type'] = 'error'
-                response['HX-Close-Modal'] = 'true'
-                return response
-            else:
-                messages.error(request, "Period and Fiscal Year are required", extra_tags='sweetalert-error')
-                return redirect('hr:payroll_list')
-        
-        try:
-            # Get staff with active contracts
-            staff_with_contracts = Staff.objects.filter(
-                is_active=True,
-                contracts__status='ACTIVE'
-            ).distinct()
-            
-            # Check for existing payroll
-            from core.models import FiscalPeriod, FiscalYear
-            period = FiscalPeriod.objects.get(pk=period_id)
-            fiscal_year = FiscalYear.objects.get(pk=fiscal_year_id)
-            
-            existing = Payroll.objects.filter(
-                staff__in=staff_with_contracts,
-                period=period,
-                fiscal_year=fiscal_year
-            )
-            
-            if existing.exists():
-                is_htmx = request.headers.get('HX-Request') == 'true'
-                
-                if is_htmx:
-                    response = HttpResponse()
-                    response['HX-Alert-Message'] = f"Payroll already exists for {existing.count()} staff in this period"
-                    response['HX-Alert-Type'] = 'warning'
-                    response['HX-Close-Modal'] = 'true'
-                    return response
-                else:
-                    messages.warning(
-                        request,
-                        f"Payroll already exists for {existing.count()} staff in this period",
-                        extra_tags='sweetalert'
-                    )
-                    return redirect('hr:payroll_list')
-            
-            # Generate payroll records
-            count = 0
-            for staff in staff_with_contracts:
-                # Get active contract
-                contract = staff.contracts.filter(status='ACTIVE').first()
-                if contract:
-                    Payroll.objects.create(
-                        staff=staff,
-                        period=period,
-                        fiscal_year=fiscal_year,
-                        basic_salary=contract.basic_salary,
-                        status='DRAFT',
-                    )
-                    count += 1
-            
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = f"Payroll generated for {count} staff members"
-                response['HX-Alert-Type'] = 'success'
-                response['HX-Close-Modal'] = 'true'
-                response['HX-Redirect'] = reverse('hr:payroll_list')
-                return response
-            else:
-                messages.success(
-                    request,
-                    f"Payroll generated for {count} staff members",
-                    extra_tags='sweetalert'
-                )
-                return redirect('hr:payroll_list')
-            
-        except Exception as e:
-            logger.error(f"Error in bulk payroll generation: {e}")
-            
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Alert-Message'] = f"Error: {str(e)}"
-                response['HX-Alert-Type'] = 'error'
-                response['HX-Close-Modal'] = 'true'
-                return response
-            else:
-                messages.error(request, f"Error: {str(e)}", extra_tags='sweetalert-error')
-                return redirect('hr:payroll_list')
-
 
 # =============================================================================
 # REPORTS AND ANALYTICS

@@ -356,7 +356,7 @@ class PayrollFilterForm(DateRangeFilterForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    fiscal_period = forms.ModelChoiceField(  # ⭐ RENAMED from 'period'
+    fiscal_period = forms.ModelChoiceField(
         label=_('Fiscal Period'),
         queryset=None,
         required=False,
@@ -371,7 +371,7 @@ class PayrollFilterForm(DateRangeFilterForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    pay_frequency = forms.ChoiceField(  # ⭐ NEW
+    pay_frequency = forms.ChoiceField(
         label=_('Pay Frequency'),
         choices=[('', _('All Frequencies'))] + list(Payroll.PAY_FREQUENCY_CHOICES),
         required=False,
@@ -392,26 +392,18 @@ class PayrollFilterForm(DateRangeFilterForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # ⭐ NEW: Filter for reversed payrolls
-    include_reversed = forms.BooleanField(
-        label=_('Include Reversed Payrolls'),
-        required=False,
-        initial=False,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text=_('Show payrolls that have been reversed')
-    )
+    # ⭐ REMOVED: include_reversed field - showing all by default now
     
     only_reversed = forms.BooleanField(
-        label=_('Only Reversed Payrolls'),
+        label=_('Only Reversed'),
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         help_text=_('Show only reversed payrolls')
     )
     
-    # ⭐ NEW: Proration filter
     only_prorated = forms.BooleanField(
-        label=_('Only Prorated Payrolls'),
+        label=_('Only Prorated'),
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -436,7 +428,7 @@ class PayrollFilterForm(DateRangeFilterForm):
         widget=DatePickerInput()
     )
     
-    # ⭐ NEW: Pay period date range (work period)
+    # Pay period date range (work period)
     pay_period_from = forms.DateField(
         label=_('Pay Period From'),
         required=False,
@@ -451,7 +443,7 @@ class PayrollFilterForm(DateRangeFilterForm):
         help_text=_('Filter by pay period end date')
     )
     
-    # ⭐ NEW: Quick filters for common periods
+    # Quick filters for common periods
     quick_filter = forms.ChoiceField(
         label=_('Quick Filter'),
         choices=[
@@ -503,7 +495,7 @@ class PayrollFilterForm(DateRangeFilterForm):
         
         quick_filter = cleaned_data.get('quick_filter')
         
-        # ⭐ Apply quick filters using school timezone
+        # Apply quick filters using school timezone
         if quick_filter:
             from core.utils import get_school_today
             from datetime import timedelta
@@ -578,7 +570,7 @@ class PayrollFilterForm(DateRangeFilterForm):
                 cleaned_data['pay_period_from'] = today.replace(year=last_year, month=1, day=1)
                 cleaned_data['pay_period_to'] = today.replace(year=last_year, month=12, day=31)
         
-        # ⭐ Validate date ranges
+        # Validate date ranges
         payment_from = cleaned_data.get('payment_date_from')
         payment_to = cleaned_data.get('payment_date_to')
         
@@ -596,14 +588,6 @@ class PayrollFilterForm(DateRangeFilterForm):
                 raise ValidationError({
                     'pay_period_to': _('Pay period "to" date cannot be before "from" date')
                 })
-        
-        # ⭐ Validate reversed filter logic
-        include_reversed = cleaned_data.get('include_reversed')
-        only_reversed = cleaned_data.get('only_reversed')
-        
-        if only_reversed and include_reversed:
-            # If only_reversed is True, include_reversed is redundant
-            cleaned_data['include_reversed'] = False
         
         return cleaned_data
     
@@ -645,16 +629,11 @@ class PayrollFilterForm(DateRangeFilterForm):
         if data.get('payment_method'):
             queryset = queryset.filter(payment_method=data['payment_method'])
         
-        # Reversed payroll filters
-        only_reversed = data.get('only_reversed')
-        include_reversed = data.get('include_reversed')
-        
-        if only_reversed:
+        # ⭐ UPDATED: Only filter if only_reversed is checked
+        # By default, show ALL (reversed + active)
+        if data.get('only_reversed'):
             queryset = queryset.filter(reversed=True)
-        elif not include_reversed:
-            # By default, exclude reversed payrolls
-            queryset = queryset.filter(reversed=False)
-        # If include_reversed is True, no filter applied (show all)
+        # No else clause - show all by default
         
         # Prorated filter
         if data.get('only_prorated'):
@@ -676,7 +655,6 @@ class PayrollFilterForm(DateRangeFilterForm):
             queryset = queryset.filter(pay_period_start__lte=data['pay_period_to'])
         
         return queryset
-
 
 class StaffDesignationFilterForm(BaseFilterForm):
     """Filter form for staff designation search"""
@@ -1319,161 +1297,209 @@ class AttendanceForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
 # PAYROLL FORMS
 # =============================================================================
 
+# =============================================================================
+# PAYROLL FORMS
+# =============================================================================
+
 class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, forms.ModelForm):
     """
-    Form for creating/editing payroll records.
+    Form for creating/editing the core payroll record.
+
+    This form handles ONLY the payroll header — staff, period, basic salary,
+    payment details, and currency. Allowances, deductions, and bonuses are
+    managed via their own inline formsets (PayrollAllowanceFormSet,
+    PayrollDeductionFormSet, PayrollBonusFormSet) and saved separately in the
+    view.
     
-    Features:
-    - Uses school timezone and fiscal periods
-    - Supports pay period tracking (multiple payrolls per fiscal period)
-    - Auto-calculates gross pay, deductions, net pay
-    - Validates against closed periods
-    - Handles reversal restrictions
+    ⭐ AUTOMATIC CALCULATION (via Signals):
+    After the formsets are saved, SIGNALS automatically recalculate all 
+    summary fields:
+        - gross_pay = basic_salary + total_allowances + total_bonuses
+        - total_deductions = statutory + voluntary deductions
+        - net_pay = gross_pay - total_deductions
+        - employer_total_cost = gross_pay + nssf_employer
+        
+    Signals triggered:
+        - recalculate_on_basic_salary_change (when basic_salary changes)
+        - recalculate_payroll_on_allowance_change (when allowances saved)
+        - recalculate_payroll_on_deduction_change (when deductions saved)
+        - recalculate_payroll_on_bonus_change (when bonuses saved)
+
+    These summary fields are NOT included in Meta.fields — they are rendered
+    in the template as a read-only summary panel, updated automatically by
+    signals and re-rendered from the instance after save.
+
+    EDITING RULES:
+    - Reversed payrolls:  all fields disabled
+    - Paid payrolls:      only notes and payment_reference are editable
+    - Signals skip recalculation for reversed/cancelled/paid payrolls
     """
-    
+
     basic_salary = MoneyField(label=_("Basic Salary"))
-    gross_pay = MoneyField(label=_("Gross Pay"), required=False)  # Auto-calculated
-    total_deductions = MoneyField(label=_("Total Deductions"), required=False)  # Auto-calculated
-    net_pay = MoneyField(label=_("Net Pay"), required=False)  # Auto-calculated
-    
+
     class Meta:
         model = Payroll
         fields = [
-            # Staff and period info
-            'staff', 'fiscal_period', 'pay_frequency',
-            # Pay period dates
-            'pay_period_start', 'pay_period_end', 'payment_date',
-            # Salary components
-            'basic_salary', 'gross_pay', 'total_deductions', 'net_pay',
-            # Working days (optional)
-            'total_working_days', 'days_worked', 'is_prorated',
-            # Payment details
-            'payment_method', 'bank_account', 'payment_reference',
-            # Status and notes
-            'status', 'notes'
+            # ---- Who and when ----
+            'staff',
+            'fiscal_period',
+            'pay_frequency',
+
+            # ---- Pay period dates ----
+            'pay_period_start',
+            'pay_period_end',
+            'payment_date',
+
+            # ---- Core earning ----
+            'basic_salary',
+
+            # ---- Currency ----
+            'currency',
+            'exchange_rate',
+
+            # ---- Employer contribution (editable — not derived from formsets) ----
+            'nssf_employer',
+
+            # ---- Working days (optional, for proration) ----
+            'total_working_days',
+            'days_worked',
+            'is_prorated',
+
+            # ---- Payment details ----
+            'payment_method',
+            'bank_account',
+            'payment_reference',
+
+            # ---- Status and notes ----
+            'status',
+            'notes',
         ]
-        
+
         widgets = {
             'staff': forms.Select(attrs={'class': 'form-select'}),
             'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
             'pay_frequency': forms.Select(attrs={'class': 'form-select'}),
-            
-            # Date pickers for pay period
+
             'pay_period_start': DatePickerInput(),
             'pay_period_end': DatePickerInput(),
             'payment_date': DatePickerInput(),
-            
-            # Working days
+
+            'currency': forms.TextInput(attrs={
+                'class': 'form-control text-uppercase',
+                'placeholder': _('e.g. UGX, USD, KES'),
+                'maxlength': 3,
+            }),
+            'exchange_rate': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.000001',
+                'placeholder': _('1.000000 for UGX payrolls'),
+            }),
+
             'total_working_days': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'placeholder': _('Total working days in period')
+                'placeholder': _('Total scheduled working days'),
             }),
             'days_worked': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'placeholder': _('Actual days worked')
+                'placeholder': _('Actual days worked'),
             }),
-            'is_prorated': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            
-            # Payment details
+            'is_prorated': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+            }),
+
             'payment_method': forms.Select(attrs={'class': 'form-select'}),
             'bank_account': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': _('Bank account number for salary payment')
+                'placeholder': _('Bank account number for salary payment'),
             }),
             'payment_reference': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': _('Payment reference/transaction ID')
+                'placeholder': _('Payment reference / transaction ID'),
             }),
-            
-            # Status and notes
+
             'status': forms.Select(attrs={'class': 'form-select'}),
             'notes': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
-                'placeholder': _('Additional notes about this payroll...')
+                'placeholder': _('Additional notes about this payroll...'),
             }),
         }
-    
+
+    # Fields that cannot be changed once a payroll is PAID
+    # notes and payment_reference remain editable intentionally
+    _PAID_LOCKED_FIELDS = [
+        'staff', 'fiscal_period', 'pay_frequency',
+        'pay_period_start', 'pay_period_end', 'payment_date',
+        'basic_salary', 'nssf_employer',
+        'currency', 'exchange_rate',
+        'total_working_days', 'days_worked', 'is_prorated',
+        'payment_method', 'bank_account',
+        'status',
+    ]
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # =====================================================================
         # FILTER QUERYSETS
         # =====================================================================
-        
-        # Filter active staff only
+
         self.fields['staff'].queryset = Staff.objects.filter(
             is_active=True
         ).order_by('first_name', 'last_name')
-        
-        # Filter open fiscal periods only (can't create payroll in closed periods)
+
         from core.models import FiscalPeriod, PaymentMethod
         self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
             is_closed=False
         ).order_by('-start_date')
-        
+
         self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
             is_active=True
         ).order_by('name')
-        
+
         # =====================================================================
-        # SET DEFAULTS USING SCHOOL TIMEZONE ⭐
+        # DEFAULTS FOR NEW PAYROLLS
         # =====================================================================
-        
+
         if not self.is_bound and not self.instance.pk:
             from core.utils import get_school_today
-            from datetime import timedelta
             from calendar import monthrange
-            
+
             today = get_school_today()
-            
-            # Default to current month
             first_day = today.replace(day=1)
-            last_day_num = monthrange(today.year, today.month)[1]
-            last_day = today.replace(day=last_day_num)
-            
+            last_day = today.replace(day=monthrange(today.year, today.month)[1])
+
             self.fields['pay_period_start'].initial = first_day
             self.fields['pay_period_end'].initial = last_day
             self.fields['payment_date'].initial = last_day
             self.fields['pay_frequency'].initial = 'MONTHLY'
-        
+            self.fields['currency'].initial = 'UGX'
+            self.fields['exchange_rate'].initial = Decimal('1.000000')
+            self.fields['nssf_employer'].initial = Decimal('0.00')
+
         # =====================================================================
-        # DISABLE EDITING FOR REVERSED OR PAID PAYROLLS
+        # LOCK FIELDS FOR REVERSED OR PAID PAYROLLS
         # =====================================================================
-        
+
         if self.instance.pk:
             if self.instance.reversed:
-                # Make all fields read-only for reversed payroll
                 for field in self.fields:
                     self.fields[field].disabled = True
-                    self.fields[field].help_text = _("Cannot edit reversed payroll")
-            
+                    self.fields[field].help_text = _("Cannot edit a reversed payroll")
+
             elif self.instance.status == 'PAID':
-                # Restrict editing for paid payroll (only notes can be updated)
-                restricted_fields = [
-                    'staff', 'fiscal_period', 'pay_period_start', 'pay_period_end',
-                    'basic_salary', 'gross_pay', 'total_deductions', 'net_pay',
-                    'payment_date', 'total_working_days', 'days_worked'
-                ]
-                for field in restricted_fields:
-                    if field in self.fields:
-                        self.fields[field].disabled = True
-                        self.fields[field].help_text = _("Cannot modify paid payroll")
-        
+                for field_name in self._PAID_LOCKED_FIELDS:
+                    if field_name in self.fields:
+                        self.fields[field_name].disabled = True
+                        self.fields[field_name].help_text = _("Cannot modify a paid payroll")
+
         # =====================================================================
-        # MAKE CALCULATED FIELDS READ-ONLY
+        # HELP TEXT
         # =====================================================================
-        
-        self.fields['gross_pay'].widget.attrs['readonly'] = True
-        self.fields['total_deductions'].widget.attrs['readonly'] = True
-        self.fields['net_pay'].widget.attrs['readonly'] = True
-        
-        # =====================================================================
-        # ADD HELPFUL TOOLTIPS
-        # =====================================================================
-        
+
         self.fields['fiscal_period'].help_text = _(
-            "Accounting period (e.g., Term 1). Multiple payrolls can exist in one fiscal period."
+            "Accounting period (e.g., Term 1). "
+            "Multiple monthly payrolls can exist within one fiscal period."
         )
         self.fields['pay_frequency'].help_text = _(
             "How often this employee is paid (usually monthly for schools)"
@@ -1485,157 +1511,116 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
             "End of the period being paid (e.g., Jan 31 for January salary)"
         )
         self.fields['payment_date'].help_text = _(
-            "Date when salary will be/was actually paid"
+            "Date when salary will be / was actually paid"
         )
         self.fields['basic_salary'].help_text = _(
-            "Base salary for this period (without allowances)"
+            "Base salary for this period, before allowances and bonuses. "
+            "Changes automatically trigger recalculation of gross and net pay."
         )
-        self.fields['gross_pay'].help_text = _(
-            "Calculated: Basic salary + allowances + bonuses"
+        self.fields['nssf_employer'].help_text = _(
+            "School's NSSF contribution — not deducted from employee. "
+            "Included in employer total cost reporting. "
+            "Changes automatically trigger recalculation."
         )
-        self.fields['total_deductions'].help_text = _(
-            "Calculated: All deductions (statutory + voluntary)"
+        self.fields['currency'].help_text = _(
+            "ISO 4217 code (e.g., UGX, USD, KES). Leave as UGX for local payroll."
         )
-        self.fields['net_pay'].help_text = _(
-            "Calculated: Gross pay - Total deductions"
+        self.fields['exchange_rate'].help_text = _(
+            "Exchange rate to UGX at time of payment. Use 1.000000 for UGX payrolls."
         )
         self.fields['total_working_days'].help_text = _(
-            "Total working days in this pay period (for proration)"
+            "Total scheduled working days in this pay period (used for proration)"
         )
         self.fields['days_worked'].help_text = _(
-            "Actual days worked (leave blank for full period)"
+            "Actual days worked — leave blank for a full-period payroll"
         )
         self.fields['is_prorated'].help_text = _(
             "Check if salary should be prorated based on days worked"
         )
-    
-    def clean_pay_period_start(self):
-        """Validate pay period start date"""
-        pay_period_start = self.cleaned_data.get('pay_period_start')
-        
-        if pay_period_start:
-            from core.utils import get_school_today
-            today = get_school_today()
-            
-            # Allow reasonable past dates (up to 12 months)
-            if pay_period_start < (today - timedelta(days=365)):
-                raise ValidationError(
-                    _("Pay period start seems too far in the past. "
-                    "Please verify the date.")
-                )
-            
-            # Allow some future dates (for advance payroll creation)
-            if pay_period_start > (today + timedelta(days=90)):
-                raise ValidationError(
-                    _("Pay period start seems too far in the future. "
-                    "Maximum 90 days allowed.")
-                )
-        
-        return pay_period_start
-    
-    def clean_pay_period_end(self):
-        """Validate pay period end date"""
-        pay_period_end = self.cleaned_data.get('pay_period_end')
-        
-        if pay_period_end:
-            from core.utils import get_school_today
-            today = get_school_today()
-            
-            # Allow reasonable past/future dates
-            if pay_period_end < (today - timedelta(days=365)):
-                raise ValidationError(
-                    _("Pay period end seems too far in the past.")
-                )
-            
-            if pay_period_end > (today + timedelta(days=90)):
-                raise ValidationError(
-                    _("Pay period end seems too far in the future.")
-                )
-        
-        return pay_period_end
-    
-    def clean_payment_date(self):
-        """Validate payment date using school timezone ⭐"""
-        payment_date = self.cleaned_data.get('payment_date')
-        
-        if payment_date:
-            from core.utils import get_school_today
-            today = get_school_today()  # ⭐ USE SCHOOL TIMEZONE
-            
-            # Allow reasonable past/future dates
-            if payment_date < (today - timedelta(days=90)):
-                raise ValidationError(
-                    _("Payment date seems too far in the past. "
-                    "Please verify the date or contact administrator.")
-                )
-            
-            if payment_date > (today + timedelta(days=90)):
-                raise ValidationError(
-                    _("Payment date seems too far in the future. "
-                    "Maximum 90 days allowed.")
-                )
-        
-        return payment_date
-    
+        self.fields['notes'].help_text = _(
+            "Any additional notes visible to HR and finance staff"
+        )
+
+    # =========================================================================
+    # FIELD-LEVEL VALIDATION
+    # =========================================================================
+
     def clean_fiscal_period(self):
-        """Validate fiscal period is not closed"""
         fiscal_period = self.cleaned_data.get('fiscal_period')
-        
-        if fiscal_period and hasattr(fiscal_period, 'is_closed'):
-            if fiscal_period.is_closed:
-                raise ValidationError(
-                    _(f"Cannot create payroll in closed period: {fiscal_period.name}. "
-                    "Please select an open fiscal period.")
-                )
-        
+
+        if fiscal_period and getattr(fiscal_period, 'is_closed', False):
+            raise ValidationError(_(
+                f"Cannot create payroll in closed period: {fiscal_period.name}. "
+                "Please select an open fiscal period."
+            ))
+
         return fiscal_period
-    
+
+    def clean_exchange_rate(self):
+        exchange_rate = self.cleaned_data.get('exchange_rate')
+
+        if exchange_rate is not None and exchange_rate <= Decimal('0'):
+            raise ValidationError(_("Exchange rate must be greater than zero."))
+
+        return exchange_rate
+
+    def clean_currency(self):
+        currency = self.cleaned_data.get('currency', 'UGX')
+        return currency.upper().strip() if currency else 'UGX'
+
+    def clean_nssf_employer(self):
+        nssf_employer = self.cleaned_data.get('nssf_employer')
+
+        if nssf_employer is not None and nssf_employer < Decimal('0'):
+            raise ValidationError(_("NSSF employer contribution cannot be negative."))
+
+        return nssf_employer
+
+    # =========================================================================
+    # CROSS-FIELD VALIDATION
+    # =========================================================================
+
     def clean(self):
-        """Additional validation"""
         cleaned_data = super().clean()
-        
+
         staff = cleaned_data.get('staff')
         fiscal_period = cleaned_data.get('fiscal_period')
         pay_period_start = cleaned_data.get('pay_period_start')
         pay_period_end = cleaned_data.get('pay_period_end')
         payment_date = cleaned_data.get('payment_date')
-        
+
         # =====================================================================
-        # PAY PERIOD VALIDATION
+        # PAY PERIOD ORDERING
         # =====================================================================
-        
+
         if pay_period_start and pay_period_end:
             if pay_period_end < pay_period_start:
                 raise ValidationError({
                     'pay_period_end': _("Pay period end cannot be before start")
                 })
-        
+
         # =====================================================================
-        # FISCAL PERIOD VALIDATION (All dates must be within fiscal period)
+        # ALL DATES MUST FALL WITHIN FISCAL PERIOD
         # =====================================================================
-        
+
         if fiscal_period and pay_period_start and pay_period_end:
-            # Pay period must be within fiscal period
             if pay_period_start < fiscal_period.start_date:
                 raise ValidationError({
                     'pay_period_start': _(
-                        f"Pay period cannot start before fiscal period start date "
+                        f"Pay period cannot start before fiscal period "
                         f"({fiscal_period.start_date})"
                     )
                 })
-            
+
             if pay_period_end > fiscal_period.end_date:
                 raise ValidationError({
                     'pay_period_end': _(
-                        f"Pay period cannot end after fiscal period end date "
+                        f"Pay period cannot end after fiscal period "
                         f"({fiscal_period.end_date})"
                     )
                 })
-            
-            # Payment date validation (with grace period)
+
             if payment_date:
-                from datetime import timedelta
-                
                 if payment_date < fiscal_period.start_date:
                     raise ValidationError({
                         'payment_date': _(
@@ -1643,101 +1628,277 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
                             f"({fiscal_period.start_date})"
                         )
                     })
-                
-                # Calculate max allowed payment date (including grace period)
-                max_allowed_date = fiscal_period.end_date
-                if hasattr(fiscal_period, 'grace_period_days') and fiscal_period.grace_period_days > 0:
-                    max_allowed_date = (
-                        fiscal_period.end_date + 
-                        timedelta(days=fiscal_period.grace_period_days)
-                    )
-                
+
+                grace_days = getattr(fiscal_period, 'grace_period_days', 0)
+                max_allowed_date = (
+                    fiscal_period.end_date + timedelta(days=grace_days)
+                    if grace_days > 0 else fiscal_period.end_date
+                )
+
                 if payment_date > max_allowed_date:
-                    grace_note = ""
-                    if hasattr(fiscal_period, 'grace_period_days') and fiscal_period.grace_period_days > 0:
-                        grace_note = f" (including {fiscal_period.grace_period_days} days grace period)"
-                    
+                    grace_note = (
+                        f" (including {grace_days} days grace period)"
+                        if grace_days > 0 else ""
+                    )
                     raise ValidationError({
                         'payment_date': _(
-                            f"Payment date cannot be after fiscal period end date "
+                            f"Payment date cannot be after fiscal period end "
                             f"({fiscal_period.end_date}){grace_note}"
                         )
                     })
-        
+
         # =====================================================================
-        # CHECK FOR DUPLICATE PAYROLL
+        # DUPLICATE PAYROLL CHECK
         # =====================================================================
-        
+
         if staff and pay_period_start and pay_period_end:
-            duplicate = Payroll.objects.filter(
+            duplicate_qs = Payroll.objects.filter(
                 staff=staff,
                 pay_period_start=pay_period_start,
                 pay_period_end=pay_period_end,
-                reversed=False  # Don't count reversed payrolls
+                reversed=False
             )
-            
-            # Exclude current instance if editing
+
             if self.instance.pk:
-                duplicate = duplicate.exclude(pk=self.instance.pk)
-            
-            if duplicate.exists():
-                existing = duplicate.first()
-                raise ValidationError(
-                    _(f"Payroll already exists for {staff.full_name()} "
-                    f"for pay period {pay_period_start} to {pay_period_end}. "
-                    f"Status: {existing.get_status_display()}. "
-                    "Each staff member can only have one active payroll per pay period.")
-                )
-        
+                duplicate_qs = duplicate_qs.exclude(pk=self.instance.pk)
+
+            if duplicate_qs.exists():
+                existing = duplicate_qs.first()
+                raise ValidationError(_(
+                    f"A payroll already exists for {staff.full_name()} "
+                    f"covering {pay_period_start} to {pay_period_end} "
+                    f"(status: {existing.get_status_display()}). "
+                    "Each staff member can only have one active payroll per pay period."
+                ))
+
         # =====================================================================
-        # WORKING DAYS VALIDATION
+        # PRORATION REQUIRES BOTH DAYS FIELDS
         # =====================================================================
-        
+
+        is_prorated = cleaned_data.get('is_prorated')
         days_worked = cleaned_data.get('days_worked')
         total_working_days = cleaned_data.get('total_working_days')
-        is_prorated = cleaned_data.get('is_prorated')
-        
-        if is_prorated:
-            if not days_worked or not total_working_days:
-                raise ValidationError({
-                    'is_prorated': _(
-                        "If salary is prorated, you must specify both "
-                        "'Days Worked' and 'Total Working Days'"
-                    )
-                })
-        
+
+        if is_prorated and not (days_worked and total_working_days):
+            raise ValidationError({
+                'is_prorated': _(
+                    "Prorated salary requires both 'Days Worked' "
+                    "and 'Total Working Days' to be filled in."
+                )
+            })
+
         if days_worked is not None and total_working_days is not None:
             if days_worked > total_working_days:
                 raise ValidationError({
                     'days_worked': _("Days worked cannot exceed total working days")
                 })
-        
-        # =====================================================================
-        # AMOUNT VALIDATION
-        # =====================================================================
-        
-        basic_salary = cleaned_data.get('basic_salary')
-        gross_pay = cleaned_data.get('gross_pay')
-        total_deductions = cleaned_data.get('total_deductions')
-        net_pay = cleaned_data.get('net_pay')
-        
-        if all([basic_salary, gross_pay, total_deductions, net_pay]):
-            # Gross pay should be >= basic salary
-            if gross_pay < basic_salary:
-                raise ValidationError({
-                    'gross_pay': _("Gross pay cannot be less than basic salary")
-                })
-            
-            # Net pay should equal gross pay minus deductions
-            expected_net_pay = gross_pay - total_deductions
-            if abs(net_pay - expected_net_pay) > Decimal('0.01'):  # Allow for rounding
-                raise ValidationError({
-                    'net_pay': _(f"Net pay should be {expected_net_pay:,.2f} "
-                              f"(Gross pay - Total deductions)")
-                })
-        
+
         return cleaned_data
 
+
+# =============================================================================
+# PAYROLL LINE ITEM FORMS
+# =============================================================================
+
+class PayrollAllowanceForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, forms.ModelForm):
+    """
+    Form for adding allowances to payroll.
+    
+    ⭐ When saved, automatically triggers signal to recalculate:
+    - total_allowances
+    - gross_pay
+    - taxable_income
+    - net_pay
+    """
+    
+    amount = MoneyField(label=_("Amount"))
+    
+    class Meta:
+        model = PayrollAllowance
+        fields = [
+            'allowance_type', 'description', 'amount', 'is_taxable',
+            'is_recurring', 'reference_number'
+        ]
+        
+        widgets = {
+            'allowance_type': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('E.g., Housing allowance for January 2024')
+            }),
+            'is_taxable': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_recurring': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'reference_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Reference number (if applicable)')
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Add helpful help text
+        self.fields['is_taxable'].help_text = _(
+            "Check if this allowance should be included in taxable income. "
+            "Affects PAYE calculation automatically."
+        )
+        self.fields['is_recurring'].help_text = _(
+            "Check if this allowance recurs every pay period"
+        )
+        self.fields['reference_number'].help_text = _(
+            "Policy reference, approval number, etc."
+        )
+
+
+class PayrollDeductionForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, forms.ModelForm):
+    """
+    Form for adding deductions to payroll.
+    
+    ⭐ When saved, automatically triggers signal to recalculate:
+    - total_deductions
+    - total_statutory_deductions (if PAYE/NSSF/LST)
+    - total_voluntary_deductions (if other types)
+    - net_pay
+    """
+    
+    amount = MoneyField(label=_("Amount"))
+    
+    class Meta:
+        model = PayrollDeduction
+        fields = [
+            'deduction_type', 'description', 'amount', 'is_pretax',
+            'reference_number', 'is_recurring', 'loan_balance_remaining'
+        ]
+        
+        widgets = {
+            'deduction_type': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('E.g., PAYE for January 2024')
+            }),
+            'is_pretax': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'reference_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Reference number (if applicable)')
+            }),
+            'is_recurring': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'loan_balance_remaining': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Remaining balance after this deduction')
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Add helpful help text
+        self.fields['is_pretax'].help_text = _(
+            "Check if this deduction is taken before calculating PAYE/tax. "
+            "Affects taxable income calculation automatically."
+        )
+        self.fields['reference_number'].help_text = _(
+            "E.g., loan number, NSSF reference, etc."
+        )
+        self.fields['is_recurring'].help_text = _(
+            "Check if this deduction recurs every pay period"
+        )
+        self.fields['loan_balance_remaining'].help_text = _(
+            "For loan deductions: remaining balance after this payment"
+        )
+        
+        # Make loan_balance_remaining optional
+        self.fields['loan_balance_remaining'].required = False
+
+
+class PayrollBonusForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, forms.ModelForm):
+    """
+    Form for adding bonuses to payroll.
+    
+    ⭐ When saved, automatically triggers signal to recalculate:
+    - total_bonuses
+    - gross_pay
+    - taxable_income (if bonus is taxable)
+    - net_pay
+    """
+    
+    amount = MoneyField(label=_("Amount"))
+    
+    class Meta:
+        model = PayrollBonus
+        fields = [
+            'bonus_type', 'description', 'amount', 'is_taxable',
+            'is_recurring', 'reference_number', 'overtime_hours', 'overtime_rate'
+        ]
+        
+        widgets = {
+            'bonus_type': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('E.g., Performance bonus for Q4 2023')
+            }),
+            'is_taxable': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_recurring': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'reference_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Reference number (if applicable)')
+            }),
+            'overtime_hours': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Hours of overtime')
+            }),
+            'overtime_rate': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': _('Rate per hour')
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Add helpful help text
+        self.fields['is_taxable'].help_text = _(
+            "Most bonuses are taxable. Uncheck only if exempt by law. "
+            "Affects PAYE calculation automatically."
+        )
+        self.fields['is_recurring'].help_text = _(
+            "Check if this bonus recurs every pay period"
+        )
+        self.fields['reference_number'].help_text = _(
+            "Approval number, performance review reference, etc."
+        )
+        self.fields['overtime_hours'].help_text = _(
+            "For overtime bonuses: number of hours worked"
+        )
+        self.fields['overtime_rate'].help_text = _(
+            "For overtime bonuses: hourly rate"
+        )
+        
+        # Make optional fields truly optional
+        self.fields['overtime_hours'].required = False
+        self.fields['overtime_rate'].required = False
+    
+    def clean(self):
+        """Validate overtime bonus calculations"""
+        cleaned_data = super().clean()
+        
+        bonus_type = cleaned_data.get('bonus_type')
+        amount = cleaned_data.get('amount')
+        overtime_hours = cleaned_data.get('overtime_hours')
+        overtime_rate = cleaned_data.get('overtime_rate')
+        
+        # If overtime bonus, validate hours and rate match amount
+        if bonus_type == 'OVERTIME':
+            if overtime_hours and overtime_rate:
+                calculated_amount = overtime_hours * overtime_rate
+                if abs(calculated_amount - amount) > Decimal('0.01'):
+                    raise ValidationError({
+                        'amount': _(
+                            f"Amount ({amount}) doesn't match calculated overtime "
+                            f"({calculated_amount} = {overtime_hours}h × {overtime_rate})"
+                        )
+                    })
+        
+        return cleaned_data
 
 class PayrollReversalForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Form):
     """
@@ -2246,6 +2407,36 @@ class PayrollCalculationForm(BootstrapFormMixin, forms.Form):
             
             self.fields['pay_period_start'].initial = first_day
             self.fields['pay_period_end'].initial = last_day
+
+# =============================================================================
+# INLINE FORMSETS
+# =============================================================================
+
+from django.forms import inlineformset_factory
+
+PayrollAllowanceFormSet = inlineformset_factory(
+    Payroll,
+    PayrollAllowance,
+    form=PayrollAllowanceForm,
+    extra=1,
+    can_delete=True,
+)
+
+PayrollDeductionFormSet = inlineformset_factory(
+    Payroll,
+    PayrollDeduction,
+    form=PayrollDeductionForm,
+    extra=1,
+    can_delete=True,
+)
+
+PayrollBonusFormSet = inlineformset_factory(
+    Payroll,
+    PayrollBonus,
+    form=PayrollBonusForm,
+    extra=1,
+    can_delete=True,
+)
 
 # =============================================================================
 # STAFF WIZARD FORMS

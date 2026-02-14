@@ -151,6 +151,17 @@
     .sidebar-sticky::-webkit-scrollbar-thumb:hover {
         background: #999;
     }
+    
+    .auto-info-badge {
+        display: inline-block;
+        background-color: #e3f2fd;
+        color: #1976d2;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -243,12 +254,23 @@
                     <h5>Sale Details</h5>
                 </div>
                 
+                {% if not sale %}
+                <div class="alert alert-info mb-3">
+                    <i class="fa fa-info-circle me-2"></i>
+                    <strong>Sale Number:</strong> Will be generated automatically upon creation
+                    <span class="auto-info-badge">AUTO-GENERATED</span>
+                </div>
+                {% endif %}
+                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.sale_type.id_for_label }}" class="form-label required-field">
                             {{ form.sale_type.label }}
                         </label>
                         {% render_field form.sale_type class="form-select" %}
+                        <small class="form-help-text">
+                            <i class="fa fa-info-circle me-1"></i>Select the type of transaction
+                        </small>
                         {{ form.sale_type.errors }}
                     </div>
                     
@@ -257,6 +279,9 @@
                             {{ form.sale_date.label }}
                         </label>
                         {% render_field form.sale_date class="form-control" %}
+                        <small class="form-help-text">
+                            <i class="fa fa-calendar me-1"></i>Date cannot be in the future
+                        </small>
                         {{ form.sale_date.errors }}
                     </div>
                     
@@ -265,15 +290,22 @@
                             {{ form.fiscal_period.label }}
                         </label>
                         {% render_field form.fiscal_period class="form-select" %}
+                        {% if not form.fiscal_period.initial and not sale %}
+                            <small class="form-help-text">
+                                <i class="fa fa-info-circle me-1"></i>Current fiscal period will be set automatically
+                            </small>
+                        {% endif %}
                         {{ form.fiscal_period.errors }}
                     </div>
                     
-                    <div class="col-md-6 mb-3" id="return-date-field">
+                    <div class="col-md-6 mb-3" id="return-date-field" style="display: none;">
                         <label for="{{ form.return_date.id_for_label }}" class="form-label">
                             {{ form.return_date.label }}
                         </label>
                         {% render_field form.return_date class="form-control" %}
-                        <small class="form-help-text">Required for loaned items</small>
+                        <small class="form-help-text text-warning">
+                            <i class="fa fa-exclamation-triangle me-1"></i>Required for loaned items
+                        </small>
                         {{ form.return_date.errors }}
                     </div>
                 </div>
@@ -286,12 +318,20 @@
                     <h5>Discount Information</h5>
                 </div>
                 
+                <div class="form-section-description">
+                    <i class="fa fa-lightbulb"></i>
+                    Apply discounts at the sale level. Item-level discounts can be applied when adding items.
+                </div>
+                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.discount_amount.id_for_label }}" class="form-label">
                             {{ form.discount_amount.label }}
                         </label>
                         {% render_field form.discount_amount class="form-control" placeholder="0.00" %}
+                        <small class="form-help-text">
+                            <i class="fa fa-tag me-1"></i>Fixed amount discount for this sale
+                        </small>
                         {{ form.discount_amount.errors }}
                     </div>
                     
@@ -299,7 +339,10 @@
                         <label for="{{ form.discount_reason.id_for_label }}" class="form-label">
                             {{ form.discount_reason.label }}
                         </label>
-                        {% render_field form.discount_reason class="form-control" placeholder="Reason for discount" %}
+                        {% render_field form.discount_reason class="form-control" placeholder="e.g., Staff discount, Bulk purchase..." %}
+                        <small class="form-help-text">
+                            <i class="fa fa-comment me-1"></i>Explain why discount is being applied
+                        </small>
                         {{ form.discount_reason.errors }}
                     </div>
                 </div>
@@ -314,7 +357,7 @@
                 
                 <div class="form-section-description">
                     <i class="fa fa-info-circle"></i>
-                    Configure payment method and reference for immediate payment
+                    Payment details are optional during creation. You can record payment later or leave blank for credit sales.
                 </div>
                 
                 <div class="row">
@@ -333,7 +376,7 @@
                         <label for="{{ form.payment_reference.id_for_label }}" class="form-label">
                             {{ form.payment_reference.label }}
                         </label>
-                        {% render_field form.payment_reference class="form-control" placeholder="Payment reference" %}
+                        {% render_field form.payment_reference class="form-control" placeholder="e.g., Cheque #, Transaction ID..." %}
                         {% if form.payment_reference.help_text %}
                             <small class="form-help-text">{{ form.payment_reference.help_text }}</small>
                         {% endif %}
@@ -349,16 +392,26 @@
                     <h5>Financial Integration</h5>
                 </div>
                 
+                <div class="form-section-description">
+                    <i class="fa fa-magic"></i>
+                    Automatic financial integration creates invoices and journal entries in the accounting system
+                </div>
+                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <div class="form-check form-switch">
                             {% render_field form.auto_create_invoice class="form-check-input" id="id_auto_create_invoice" role="switch" %}
                             <label class="form-check-label" for="id_auto_create_invoice">
                                 {{ form.auto_create_invoice.label }}
+                                <span class="auto-info-badge">RECOMMENDED</span>
                             </label>
                         </div>
                         {% if form.auto_create_invoice.help_text %}
                             <small class="form-help-text">{{ form.auto_create_invoice.help_text }}</small>
+                        {% else %}
+                            <small class="form-help-text">
+                                <i class="fa fa-file-invoice me-1"></i>Creates student fee invoice automatically when sale is finalized
+                            </small>
                         {% endif %}
                         {{ form.auto_create_invoice.errors }}
                     </div>
@@ -368,13 +421,23 @@
                             {% render_field form.auto_create_journal_entry class="form-check-input" id="id_auto_create_journal_entry" role="switch" %}
                             <label class="form-check-label" for="id_auto_create_journal_entry">
                                 {{ form.auto_create_journal_entry.label }}
+                                <span class="auto-info-badge">RECOMMENDED</span>
                             </label>
                         </div>
                         {% if form.auto_create_journal_entry.help_text %}
                             <small class="form-help-text">{{ form.auto_create_journal_entry.help_text }}</small>
+                        {% else %}
+                            <small class="form-help-text">
+                                <i class="fa fa-book me-1"></i>Creates accounting journal entry for proper financial tracking
+                            </small>
                         {% endif %}
                         {{ form.auto_create_journal_entry.errors }}
                     </div>
+                </div>
+                
+                <div class="alert alert-warning mb-0">
+                    <i class="fa fa-exclamation-triangle me-2"></i>
+                    <strong>Note:</strong> Financial records are created when sale status changes to PENDING or PAID
                 </div>
             </div>
             
@@ -390,9 +453,13 @@
                         <label for="{{ form.notes.id_for_label }}" class="form-label">
                             {{ form.notes.label }}
                         </label>
-                        {% render_field form.notes class="form-control" rows="3" placeholder="Public notes visible to parents/students..." %}
+                        {% render_field form.notes class="form-control" rows="4" placeholder="Add any additional information about this sale..." %}
                         {% if form.notes.help_text %}
                             <small class="form-help-text">{{ form.notes.help_text }}</small>
+                        {% else %}
+                            <small class="form-help-text">
+                                <i class="fa fa-eye me-1"></i>These notes may be visible to parents/students depending on system settings
+                            </small>
                         {% endif %}
                         {{ form.notes.errors }}
                     </div>
@@ -412,20 +479,42 @@
                 <div class="info-card">
                     <h6><i class="pe-7s-info"></i> Sale Information</h6>
                     
-                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
-                        <strong>Sale Number:</strong> {{ sale.sale_number }}
+                    <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
+                        <strong>Sale Number:</strong><br>
+                        <span class="badge bg-primary">{{ sale.sale_number }}</span>
                     </div>
                     
                     <div class="alert alert-secondary mb-2" style="font-size: 0.85rem;">
-                        <strong>Status:</strong> {{ sale.get_status_display }}
+                        <strong>Current Status:</strong><br>
+                        <span class="badge bg-secondary">{{ sale.get_status_display }}</span>
                     </div>
                     
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <strong>Items:</strong> {{ sale.items.count }} item(s)
+                        <strong>Total Items:</strong> {{ sale.items.count }} item(s)
                     </div>
                     
                     <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
-                        <strong>Total:</strong> {{ sale.total_amount|floatformat:2 }}
+                        <strong>Total Amount:</strong> {{ sale.total_amount|floatformat:2 }}
+                    </div>
+                </div>
+                {% else %}
+                <!-- Creation Info -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-magic-wand"></i> Auto-Generation</h6>
+                    
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-check-circle text-success me-1"></i>
+                        Sale number generated automatically
+                    </div>
+                    
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-check-circle text-success me-1"></i>
+                        Fiscal period set to current period
+                    </div>
+                    
+                    <div class="alert alert-info mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-check-circle text-success me-1"></i>
+                        Sale date defaults to today
                     </div>
                 </div>
                 {% endif %}
@@ -435,19 +524,23 @@
                     <h6><i class="pe-7s-light"></i> Sale Type Guide</h6>
                     
                     <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
-                        <strong>SALE:</strong> Regular paid purchase
+                        <strong>SALE:</strong> Regular paid purchase<br>
+                        <small class="text-muted">Payment required, creates invoice</small>
                     </div>
                     
                     <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
-                        <strong>ISSUANCE:</strong> Free uniform distribution
+                        <strong>ISSUANCE:</strong> Free uniform distribution<br>
+                        <small class="text-muted">No payment required, for free items</small>
                     </div>
                     
                     <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
-                        <strong>LOAN:</strong> Temporary loan with return date
+                        <strong>LOAN:</strong> Temporary loan with return date<br>
+                        <small class="text-muted">Return date required, tracked separately</small>
                     </div>
                     
                     <div class="alert alert-warning mb-0" style="font-size: 0.85rem;">
-                        <strong>REPLACEMENT:</strong> Replacement for damaged items
+                        <strong>REPLACEMENT:</strong> Replacement for damaged items<br>
+                        <small class="text-muted">May have special pricing/discounts</small>
                     </div>
                 </div>
                 
@@ -456,28 +549,33 @@
                     <h6><i class="pe-7s-help1"></i> Quick Tips</h6>
                     
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning"></i>
-                        Use search to quickly find students
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
+                        Sale number is auto-generated by signals
                     </div>
                     
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning"></i>
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
+                        Use Select2 search for quick student lookup
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
                         Select correct sale type for proper accounting
                     </div>
                     
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning"></i>
-                        Add items after creating the sale
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
+                        Add uniform items after creating the sale
                     </div>
                     
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning"></i>
-                        Set return date for loaned items
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
+                        Set return date for LOAN type sales
                     </div>
                     
                     <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning"></i>
-                        Auto invoice creates fee records
+                        <i class="fa fa-lightbulb text-warning me-1"></i>
+                        Enable auto-invoice for financial integration
                     </div>
                 </div>
                 
@@ -486,19 +584,43 @@
                     <h6><i class="pe-7s-notebook"></i> Sale Workflow</h6>
                     
                     <div class="alert alert-secondary mb-2" style="font-size: 0.85rem;">
-                        <strong>1. DRAFT:</strong> Create sale and add items
+                        <strong>1. DRAFT:</strong> Create sale and add items<br>
+                        <small class="text-muted">Initial status, can be edited</small>
                     </div>
                     
                     <div class="alert alert-warning mb-2" style="font-size: 0.85rem;">
-                        <strong>2. PENDING:</strong> Awaiting payment
+                        <strong>2. PENDING:</strong> Awaiting payment<br>
+                        <small class="text-muted">Invoice created if enabled</small>
                     </div>
                     
                     <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
-                        <strong>3. PAID:</strong> Payment received
+                        <strong>3. PAID:</strong> Payment received<br>
+                        <small class="text-muted">Journal entry created if enabled</small>
                     </div>
                     
                     <div class="alert alert-primary mb-0" style="font-size: 0.85rem;">
-                        <strong>4. ISSUED:</strong> Items given to student
+                        <strong>4. ISSUED:</strong> Items given to student<br>
+                        <small class="text-muted">Stock updated, transaction complete</small>
+                    </div>
+                </div>
+                
+                <!-- Important Notes -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-attention"></i> Important Notes</h6>
+                    
+                    <div class="alert alert-danger mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-exclamation-circle me-1"></i>
+                        Sale date cannot be in the future
+                    </div>
+                    
+                    <div class="alert alert-warning mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-exclamation-triangle me-1"></i>
+                        Return date must be after sale date
+                    </div>
+                    
+                    <div class="alert alert-info mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-info-circle me-1"></i>
+                        Only DRAFT sales can be edited
                     </div>
                 </div>
                 
@@ -519,7 +641,7 @@
                 <i class="fa fa-times"></i> Cancel
             </a>
         {% endif %}
-        <button type="submit" class="btn btn-primary btn-lg">
+        <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
             <i class="fa fa-save"></i> {{ submit_text|default:"Create Sale" }}
         </button>
     </div>
@@ -538,6 +660,7 @@
 $(document).ready(function() {
     console.log('='.repeat(80));
     console.log('UNIFORM SALE FORM INITIALIZATION');
+    console.log('Form Mode:', '{{ sale|yesno:"EDIT,CREATE" }}');
     console.log('='.repeat(80));
     
     // =========================================================================
@@ -547,8 +670,9 @@ $(document).ready(function() {
     $('.select2-student').select2({
         theme: 'bootstrap-5',
         width: '100%',
-        placeholder: 'Search for a student...',
+        placeholder: 'Type to search for a student...',
         allowClear: true,
+        minimumInputLength: 0,
         templateResult: formatStudent,
         templateSelection: formatStudentSelection
     });
@@ -559,11 +683,9 @@ $(document).ready(function() {
             return student.text;
         }
         
-        // Extract admission number and class from the option text if available
-        // This assumes the options are formatted like "John Doe - ADM123 (Form 1A)"
         var $student = $(
             '<div class="select2-student-option">' +
-                '<div class="student-name">' + student.text + '</div>' +
+                '<div class="student-name" style="font-weight: 600;">' + student.text + '</div>' +
             '</div>'
         );
         
@@ -572,7 +694,7 @@ $(document).ready(function() {
     
     // Format selected student
     function formatStudentSelection(student) {
-        return student.text;
+        return student.text || 'Select student...';
     }
     
     console.log('✓ Select2 initialized for student search');
@@ -583,22 +705,29 @@ $(document).ready(function() {
     
     function updateSaleTypeFields() {
         const saleType = $('#id_sale_type').val();
+        const $returnDateField = $('#return-date-field');
         
         if (saleType === 'LOAN') {
-            $('#return-date-field').slideDown();
+            $returnDateField.slideDown(300);
+            console.log('→ Return date field shown (LOAN type selected)');
         } else {
-            $('#return-date-field').slideUp();
+            $returnDateField.slideUp(300);
             $('#id_return_date').val('');
+            console.log('→ Return date field hidden');
         }
         
-        console.log(`Sale type: ${saleType}`);
+        console.log(`Sale type selected: ${saleType}`);
     }
     
+    // Initialize on page load
     updateSaleTypeFields();
     
+    // Update on change
     $('#id_sale_type').on('change', function() {
         updateSaleTypeFields();
     });
+    
+    console.log('✓ Sale type conditional logic initialized');
     
     // =========================================================================
     // FORM VALIDATION
@@ -606,11 +735,14 @@ $(document).ready(function() {
     
     $('#uniform-sale-form').on('submit', function(e) {
         console.log('='.repeat(80));
-        console.log('FORM SUBMISSION STARTED');
+        console.log('FORM SUBMISSION VALIDATION');
         console.log('='.repeat(80));
         
         let isValid = true;
         const errors = [];
+        
+        // Remove any existing error alerts
+        $('.alert-danger').remove();
         
         // Required fields validation
         const requiredFields = [
@@ -628,24 +760,61 @@ $(document).ready(function() {
             
             if (trimmedValue.length === 0) {
                 errors.push(field.label + ' is required');
+                $field.addClass('is-invalid');
                 isValid = false;
+                console.error(`✗ ${field.label} is required`);
+            } else {
+                $field.removeClass('is-invalid');
+                console.log(`✓ ${field.label} validated`);
             }
         });
         
         // Validate return date for loans
         const saleType = $('#id_sale_type').val();
         const returnDate = $('#id_return_date').val();
+        const saleDate = $('#id_sale_date').val();
         
-        if (saleType === 'LOAN' && !returnDate) {
-            errors.push('Return date is required for loaned items');
+        if (saleType === 'LOAN') {
+            if (!returnDate) {
+                errors.push('Return date is required for loaned items');
+                $('#id_return_date').addClass('is-invalid');
+                isValid = false;
+                console.error('✗ Return date is required for LOAN type');
+            } else {
+                $('#id_return_date').removeClass('is-invalid');
+                console.log('✓ Return date validated');
+            }
+            
+            // Check if return date is after sale date
+            if (returnDate && saleDate) {
+                if (new Date(returnDate) < new Date(saleDate)) {
+                    errors.push('Return date cannot be before sale date');
+                    $('#id_return_date').addClass('is-invalid');
+                    isValid = false;
+                    console.error('✗ Return date is before sale date');
+                }
+            }
+        }
+        
+        // Validate discount reason if discount amount is provided
+        const discountAmount = $('#id_discount_amount').val();
+        const discountReason = $('#id_discount_reason').val();
+        
+        if (discountAmount && parseFloat(discountAmount) > 0 && !discountReason) {
+            errors.push('Discount reason is required when discount amount is provided');
+            $('#id_discount_reason').addClass('is-invalid');
             isValid = false;
+            console.error('✗ Discount reason required for discount amount');
+        } else {
+            $('#id_discount_reason').removeClass('is-invalid');
         }
         
         if (!isValid) {
             e.preventDefault();
-            console.error('❌ Form validation failed:', errors);
+            console.error('❌ Form validation failed');
+            console.error('Errors:', errors);
             
-            // Show errors
+            // Create and show error alert
             let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
             errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
             errorHtml += '<ul class="mb-0">';
@@ -656,29 +825,73 @@ $(document).ready(function() {
             errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
             errorHtml += '</div>';
             
-            // Insert at top of form
+            // Insert error alert at top of form
             $('#uniform-sale-form').prepend(errorHtml);
             
-            // Scroll to top
+            // Scroll to top to show errors
             $('html, body').animate({
-                scrollTop: 0
+                scrollTop: $('#uniform-sale-form').offset().top - 100
             }, 500);
             
             return false;
         }
         
-        console.log('✅ Form validation passed');
+        console.log('✅ All validations passed');
         console.log('Submitting form...');
+        
+        // Disable submit button to prevent double submission
+        $('#submit-btn').prop('disabled', true).html(
+            '<i class="fa fa-spinner fa-spin"></i> Saving...'
+        );
     });
     
+    console.log('✓ Form validation initialized');
+    
     // =========================================================================
-    // HELPFUL TOOLTIPS
+    // FIELD INTERACTIVITY
     // =========================================================================
     
+    // Clear is-invalid class on field change
+    $('input, select, textarea').on('change input', function() {
+        $(this).removeClass('is-invalid');
+    });
+    
+    // Auto-format discount amount
+    $('#id_discount_amount').on('blur', function() {
+        let value = $(this).val();
+        if (value && !isNaN(value)) {
+            $(this).val(parseFloat(value).toFixed(2));
+        }
+    });
+    
+    console.log('✓ Field interactivity initialized');
+    
+    // =========================================================================
+    // HELPFUL TOOLTIPS & UI ENHANCEMENTS
+    // =========================================================================
+    
+    // Initialize Bootstrap tooltips if any
     $('[data-bs-toggle="tooltip"]').tooltip();
+    
+    // Highlight auto-generated info badges on hover
+    $('.auto-info-badge').hover(
+        function() {
+            $(this).css('transform', 'scale(1.05)');
+        },
+        function() {
+            $(this).css('transform', 'scale(1)');
+        }
+    );
+    
+    console.log('✓ UI enhancements applied');
+    
+    // =========================================================================
+    // COMPLETION LOG
+    // =========================================================================
     
     console.log('='.repeat(80));
     console.log('✅ FORM INITIALIZATION COMPLETE');
+    console.log('Ready for user interaction');
     console.log('='.repeat(80));
 });
 </script>

@@ -452,13 +452,19 @@ def invoice_finalize_modal(request, pk):
     else:
         info.append("Finalizing will:")
         info.append("• Change invoice status to PENDING")
-        info.append("• Post the journal entry to General Ledger")
+        
+        # ✅ FIX: Check journal_entry_id first
+        if invoice.journal_entry_id:
+            info.append("• Update and post the journal entry to General Ledger")
+            # Now safe to access the relationship
+            journal_entry = invoice.journal_entry
+            info.append(f"• Journal Entry: {journal_entry.entry_number} (currently {journal_entry.status})")
+        else:
+            info.append("• Create and post journal entry to General Ledger")
+            info.append("• Journal Entry: Will be created during finalization")
+        
         info.append("• Allow payments to be received")
         info.append("• Lock invoice from major modifications")
-    
-    # Show what will be posted
-    if invoice.journal_entry:
-        info.append(f"• Journal Entry: {invoice.journal_entry.entry_number} (currently {invoice.journal_entry.status})")
     
     return render(request, 'fees/invoices/modals/finalize_invoice.html', {
         'invoice': invoice,
@@ -466,6 +472,7 @@ def invoice_finalize_modal(request, pk):
         'warnings': warnings,
         'info': info,
     })
+
 
 @login_required
 def invoice_revert_to_draft_modal(request, pk):
@@ -505,10 +512,13 @@ def invoice_revert_to_draft_modal(request, pk):
         can_revert = False
         warnings.append(f"Invoice has {payment_count} active payment(s)")
     
-    # Check if journal entry is posted
+    # ✅ FIX: Check journal entry status safely
     journal_posted = False
-    if invoice.journal_entry and invoice.journal_entry.status == 'POSTED':
-        journal_posted = True
+    if invoice.journal_entry_id:
+        # Safe to access now
+        journal_entry = invoice.journal_entry
+        if journal_entry.status == 'POSTED':
+            journal_posted = True
     
     # Additional checks for fiscal period
     if invoice.fiscal_period and invoice.fiscal_period.is_closed:

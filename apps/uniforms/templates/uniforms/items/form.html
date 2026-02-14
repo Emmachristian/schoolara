@@ -3,6 +3,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% load widget_tweaks %}
+{% load currency_filters %}
 
 {% block extra_css %}
 <style>
@@ -388,7 +389,7 @@
                 
                 <div class="form-section-description">
                     <i class="fa fa-info-circle"></i>
-                    Set cost and selling prices to calculate profit margins automatically
+                    Set cost and selling prices to calculate profit margins automatically. All amounts in {% get_currency_symbol %}.
                 </div>
                 
                 <div class="row">
@@ -438,7 +439,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Profit Per Unit</div>
-                            <div class="preview-amount text-success" id="profit-per-unit">0.00</div>
+                            <div class="preview-amount text-success" id="profit-per-unit">{% get_currency_symbol %} 0.00</div>
                         </div>
                     </div>
                 </div>
@@ -674,18 +675,23 @@
                     </div>
                     
                     <div class="info-row">
-                        <span class="info-label">Stock Value</span>
-                        <span class="info-value">{{ item.stock_value|floatformat:2 }}</span>
+                        <span class="info-label">Stock Value (Cost)</span>
+                        <span class="info-value">{{ item.stock_value|money }}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Stock Value (Selling)</span>
+                        <span class="info-value">{{ item.stock_value_selling|money }}</span>
                     </div>
                     
                     <div class="info-row">
                         <span class="info-label">Potential Profit</span>
-                        <span class="info-value text-success">{{ item.potential_profit|floatformat:2 }}</span>
+                        <span class="info-value text-success">{{ item.potential_profit|money }}</span>
                     </div>
                     
                     <div class="info-row">
                         <span class="info-label">Markup</span>
-                        <span class="info-value">{{ item.markup_percentage|floatformat:1 }}%</span>
+                        <span class="info-value">{{ item.markup_percentage|format_percentage }}</span>
                     </div>
                 </div>
                 {% endif %}
@@ -778,6 +784,9 @@ $(document).ready(function() {
     console.log('UNIFORM ITEM FORM INITIALIZATION');
     console.log('='.repeat(80));
     
+    // Get currency symbol from template tag
+    const currencySymbol = '{% get_currency_symbol %}';
+    
     // =========================================================================
     // SELECT2 INITIALIZATION
     // =========================================================================
@@ -841,6 +850,14 @@ $(document).ready(function() {
     // PRICING CALCULATIONS
     // =========================================================================
     
+    function formatMoney(amount) {
+        // Format with thousands separator and 2 decimal places
+        return amount.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+    
     function updatePricingCalculations() {
         const unitCost = parseFloat($('#id_unit_cost').val()) || 0;
         const sellingPrice = parseFloat($('#id_selling_price').val()) || 0;
@@ -850,10 +867,10 @@ $(document).ready(function() {
             const profit = sellingPrice - unitCost;
             
             $('#markup-percentage').text(markup.toFixed(1) + '%');
-            $('#profit-per-unit').text(profit.toFixed(2));
+            $('#profit-per-unit').text(currencySymbol + ' ' + formatMoney(profit));
             $('#markup-preview').fadeIn();
             
-            console.log(`Markup: ${markup.toFixed(1)}%, Profit: ${profit.toFixed(2)}`);
+            console.log(`Markup: ${markup.toFixed(1)}%, Profit: ${currencySymbol} ${formatMoney(profit)}`);
         } else {
             $('#markup-preview').fadeOut();
         }

@@ -553,6 +553,12 @@
                         <span class="program-info-label">Discount Type</span>
                         <span class="program-info-value">{{ application.scholarship_program.get_discount_type_display }}</span>
                     </div>
+                    {% if application.scholarship_program.discount_type == 'PERCENTAGE' and application.scholarship_program.discount_percentage %}
+                    <div class="program-info-row">
+                        <span class="program-info-label">Program Discount</span>
+                        <span class="program-info-value">{{ application.scholarship_program.discount_percentage }}%</span>
+                    </div>
+                    {% endif %}
                 </div>
                 
                 <div class="application-info-card">
@@ -679,7 +685,13 @@
             </div>
             
             <!-- ⭐ NEW: Category-Specific Discount Configuration -->
-            {% if form.scholarship_program_instance.discount_type == 'CATEGORY_SPECIFIC' or not scholarship %}
+            {% comment %}
+            Show category section if:
+            1. Creating new scholarship (not scholarship exists) OR
+            2. Program uses CATEGORY_SPECIFIC mode OR  
+            3. This scholarship has category discounts enabled
+            {% endcomment %}
+            {% if not scholarship or form.scholarship_program_instance.discount_type == 'CATEGORY_SPECIFIC' or form.instance.use_category_specific_discounts %}
             <div class="form-section" id="category-discount-config-section">
                 <div class="form-section-header">
                     <i class="pe-7s-config"></i>
@@ -709,7 +721,7 @@
                     {{ form.use_category_specific_discounts.errors }}
                 </div>
                 
-                <!-- ⭐ Category Discount Table -->
+                <!-- ⭐ Category Discount Table (Server-side rendered) -->
                 <div id="category-discount-section" class="category-discount-section" style="display: none;">
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <h6 class="mb-0">
@@ -729,7 +741,7 @@
                             <button type="button" class="btn btn-sm btn-secondary" id="preset-clear-all">
                                 <i class="fa fa-times"></i> Clear All
                             </button>
-                            {% if form.scholarship_program_instance.default_category_discounts %}
+                            {% if form.scholarship_program_instance and form.scholarship_program_instance.default_category_discounts %}
                             <button type="button" class="btn btn-sm btn-warning" id="preset-program-template">
                                 <i class="fa fa-copy"></i> Use Program Template
                             </button>
@@ -755,10 +767,52 @@
                                 </tr>
                             </thead>
                             <tbody id="category-discount-tbody">
-                                <!-- Populated by JavaScript with category forms -->
+                                {% for item in form.category_forms %}
+                                <tr class="category-row" data-category="{{ item.code }}">
+                                    <td class="category-name-cell">
+                                        {{ item.form.category_code }}
+                                        {{ item.form.category_name }}
+                                        <span class="category-code-badge">{{ item.category.code }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {{ item.form.apply_discount }}
+                                    </td>
+                                    <td>
+                                        {{ item.form.discount_type }}
+                                    </td>
+                                    <td>
+                                        <div class="input-group input-group-sm">
+                                            {{ item.form.discount_value }}
+                                            <span class="input-group-text discount-unit" data-category="{{ item.code }}">%</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-outline-success btn-full" 
+                                                data-category="{{ item.code }}" title="Set to 100%">
+                                            <i class="fa fa-check-circle"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        No fee categories available
+                                    </td>
+                                </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
+                    
+                    {% comment %}Display category form errors{% endcomment %}
+                    {% for item in form.category_forms %}
+                        {% if item.form.errors %}
+                        <div class="alert alert-danger mt-2">
+                            <strong>{{ item.category.name }}:</strong>
+                            {{ item.form.errors }}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
                     
                     <!-- Category Notes -->
                     <div class="mt-3">
@@ -1131,63 +1185,32 @@ $(document).ready(function() {
     // ⭐ CATEGORY DISCOUNT CONFIGURATION
     // =========================================================================
     
-    // Render category forms into table
-    function renderCategoryForms() {
-        const tbody = $('#category-discount-tbody');
-        tbody.empty();
-        
-        {% for item in form.category_forms %}
-        const categoryForm{{ forloop.counter }} = `
-            <tr class="category-row" data-category="{{ item.code }}">
-                <td class="category-name-cell">
-                    {{ item.form.category_code }}
-                    <strong>{{ item.category.name }}</strong>
-                    <span class="category-code-badge">{{ item.category.code }}</span>
-                </td>
-                <td class="text-center">
-                    {{ item.form.apply_discount }}
-                </td>
-                <td>
-                    {{ item.form.discount_type }}
-                </td>
-                <td>
-                    <div class="input-group input-group-sm">
-                        {{ item.form.discount_value }}
-                        <span class="input-group-text discount-unit" data-category="{{ item.code }}">%</span>
-                    </div>
-                </td>
-                <td class="text-center">
-                    <button type="button" class="btn btn-sm btn-outline-success btn-full" data-category="{{ item.code }}" title="Set to 100%">
-                        <i class="fa fa-check-circle"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-        
-        tbody.append(categoryForm{{ forloop.counter }});
-        {% endfor %}
-        
-        console.log('✓ Category discount forms rendered');
-    }
-    
     // Toggle category discount section
     function toggleCategorySection() {
         const useCategory = $('#id_use_category_specific_discounts').is(':checked');
         
         if (useCategory) {
-            $('#category-discount-section').slideDown();
-            renderCategoryForms();
+            $('#category-discount-section').show();
+            // Initialize discount unit labels based on existing types
+            $('.category-discount-type').each(function() {
+                $(this).trigger('change');
+            });
         } else {
-            $('#category-discount-section').slideUp();
+            $('#category-discount-section').hide();
         }
+        
+        console.log('Category section toggled:', useCategory ? 'visible' : 'hidden');
     }
     
     // Update discount unit based on type
     $(document).on('change', '.category-discount-type', function() {
-        const categoryCode = $(this).closest('tr').data('category');
+        const $row = $(this).closest('tr');
+        const categoryCode = $row.data('category');
         const discountType = $(this).val();
         const $unit = $(`.discount-unit[data-category="${categoryCode}"]`);
-        const $valueField = $(this).closest('tr').find('.category-discount-value');
+        const $valueField = $row.find('.category-discount-value');
+        
+        console.log(`Category ${categoryCode} type changed to:`, discountType);
         
         if (discountType === 'percentage' || discountType === 'full_waiver') {
             $unit.text('%');
@@ -1206,11 +1229,13 @@ $(document).ready(function() {
     });
     
     // Handle apply discount checkbox
-    $(document).on('change', '.category-apply-check', function() {
+    $(document).on('change', '.category-apply-discount', function() {
         const $row = $(this).closest('tr');
         const isChecked = $(this).is(':checked');
         const $typeSelect = $row.find('.category-discount-type');
         const $valueInput = $row.find('.category-discount-value');
+        
+        console.log('Apply discount changed:', isChecked);
         
         if (isChecked) {
             $typeSelect.prop('disabled', false);
@@ -1228,51 +1253,58 @@ $(document).ready(function() {
     // Full button click
     $(document).on('click', '.btn-full', function() {
         const $row = $(this).closest('tr');
-        $row.find('.category-apply-check').prop('checked', true).trigger('change');
+        const categoryCode = $row.data('category');
+        
+        console.log(`Setting ${categoryCode} to full waiver`);
+        
+        $row.find('.category-apply-discount').prop('checked', true).trigger('change');
         $row.find('.category-discount-type').val('full_waiver').trigger('change');
         $row.find('.category-discount-value').val('100');
     });
     
     // Preset buttons
     $('#preset-full-waiver').on('click', function() {
-        $('.category-apply-check').prop('checked', true).trigger('change');
+        console.log('Applying preset: Full Waiver (All 100%)');
+        $('.category-apply-discount').prop('checked', true).trigger('change');
         $('.category-discount-type').val('full_waiver').trigger('change');
         $('.category-discount-value').val('100');
-        console.log('Applied preset: Full Waiver (All 100%)');
     });
     
     $('#preset-tuition-only').on('click', function() {
-        $('.category-apply-check').prop('checked', false).trigger('change');
-        $('tr[data-category="TUITION"]').find('.category-apply-check').prop('checked', true).trigger('change');
+        console.log('Applying preset: Tuition Only');
+        $('.category-apply-discount').prop('checked', false).trigger('change');
+        $('.category-discount-type').val('none').trigger('change');
+        $('.category-discount-value').val('0');
+        
+        // Find and set tuition row
+        $('tr[data-category="TUITION"]').find('.category-apply-discount').prop('checked', true).trigger('change');
         $('tr[data-category="TUITION"]').find('.category-discount-type').val('full_waiver').trigger('change');
         $('tr[data-category="TUITION"]').find('.category-discount-value').val('100');
-        console.log('Applied preset: Tuition Only');
     });
     
     $('#preset-50-all').on('click', function() {
-        $('.category-apply-check').prop('checked', true).trigger('change');
+        console.log('Applying preset: 50% All Categories');
+        $('.category-apply-discount').prop('checked', true).trigger('change');
         $('.category-discount-type').val('percentage').trigger('change');
         $('.category-discount-value').val('50');
-        console.log('Applied preset: 50% All Categories');
     });
     
     $('#preset-clear-all').on('click', function() {
-        $('.category-apply-check').prop('checked', false).trigger('change');
+        console.log('Applying preset: Clear All');
+        $('.category-apply-discount').prop('checked', false).trigger('change');
         $('.category-discount-type').val('none').trigger('change');
         $('.category-discount-value').val('0');
-        console.log('Applied preset: Clear All');
     });
     
     $('#preset-program-template').on('click', function() {
-        // Load program template (would be from AJAX in production)
         console.log('Loading program template...');
-        alert('Program template would be loaded here');
+        alert('Program template functionality would require AJAX endpoint to load program defaults');
     });
     
     // Bind toggle event
     $('#id_use_category_specific_discounts').on('change', toggleCategorySection);
     
-    // Initialize
+    // Initialize on page load
     toggleCategorySection();
     
     // =========================================================================
@@ -1304,6 +1336,8 @@ $(document).ready(function() {
     
     function updateDistributionFields() {
         const method = $('#id_distribution_method').val();
+        
+        console.log('Distribution method changed to:', method);
         
         // Hide all conditional fields
         $('#amount-per-session-field').hide();
@@ -1469,6 +1503,8 @@ $(document).ready(function() {
         $('#student-status').text('Loading...');
         
         $('#student-info-display').slideDown();
+        
+        // TODO: Add AJAX call to load full student details
     });
     
     $('#id_scholarship_program').on('change', function() {
@@ -1491,6 +1527,8 @@ $(document).ready(function() {
         `);
         
         $('#program-info-display').slideDown();
+        
+        // TODO: Add AJAX call to load full program details
     });
     {% endif %}
     
@@ -1522,6 +1560,9 @@ $(document).ready(function() {
                 isValid = false;
             }
         });
+        
+        // Validate amount
+        const amount = parseFloat($('#id_amount_awarded').val()) || 0;
         
         // Validate distribution method specific fields
         const method = $('#id_distribution_method').val();
@@ -1557,6 +1598,16 @@ $(document).ready(function() {
         if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
             errors.push('End date cannot be before start date');
             isValid = false;
+        }
+        
+        // Validate category discounts if enabled
+        const useCategoryDiscounts = $('#id_use_category_specific_discounts').is(':checked');
+        if (useCategoryDiscounts) {
+            const hasAnyDiscount = $('.category-apply-discount:checked').length > 0;
+            if (!hasAnyDiscount) {
+                errors.push('At least one category must have a discount when using category-specific mode');
+                isValid = false;
+            }
         }
         
         if (!isValid) {

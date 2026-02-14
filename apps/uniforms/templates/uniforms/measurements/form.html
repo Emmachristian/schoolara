@@ -1,0 +1,550 @@
+<!-- uniforms/templates/uniforms/measurements/form.html -->
+
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .form-section-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .form-section-header i {
+        font-size: 1.5rem;
+        color: #007bff;
+        margin-right: 12px;
+    }
+    
+    .form-section-header h5 {
+        margin: 0;
+        color: #495057;
+        font-weight: 600;
+    }
+    
+    .form-section-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+        padding: 12px;
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+        border-radius: 4px;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .form-help-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .field-with-icon {
+        position: relative;
+    }
+    
+    .field-with-icon i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .field-with-icon input,
+    .field-with-icon select,
+    .field-with-icon textarea {
+        padding-left: 38px;
+    }
+    
+    .info-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .info-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 5px 0 0 0;
+    }
+    
+    .errorlist li {
+        color: #dc3545;
+        font-size: 0.875rem;
+        padding: 5px 10px;
+        background-color: #f8d7da;
+        border-radius: 4px;
+        margin-top: 5px;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+    }
+    
+    .sidebar-sticky {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    
+    .measurement-preview {
+        background-color: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+        text-align: center;
+    }
+    
+    .measurement-preview .value {
+        font-size: 3rem;
+        font-weight: 700;
+        color: #004085;
+        margin: 10px 0;
+    }
+    
+    .measurement-preview .unit {
+        font-size: 1.2rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ title|default:"Record Student Measurement" }}
+                <div class="page-title-subheading">
+                    {% if measurement %}
+                        Update student measurement details
+                    {% else %}
+                        Record a new measurement for a student
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:student_measurement_list' %}" class="btn btn-secondary">
+                <i class="fa fa-arrow-left"></i> Back to List
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Form Errors -->
+{% if form.non_field_errors %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Form Errors</h5>
+    <ul class="mb-0">
+        {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<form method="post" id="measurement-form" novalidate>
+    {% csrf_token %}
+    
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            
+            <!-- Student Information -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-user"></i>
+                    <h5>Student Information</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.student.id_for_label }}" class="form-label required-field">
+                            {{ form.student.label }}
+                        </label>
+                        <div class="field-with-icon">
+                            <i class="fa fa-user"></i>
+                            {% render_field form.student class="form-select" %}
+                        </div>
+                        {{ form.student.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Measurement Details -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-study"></i>
+                    <h5>Measurement Details</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.measurement_type.id_for_label }}" class="form-label required-field">
+                            {{ form.measurement_type.label }}
+                        </label>
+                        {% render_field form.measurement_type class="form-select" %}
+                        {{ form.measurement_type.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.measurement_value.id_for_label }}" class="form-label required-field">
+                            {{ form.measurement_value.label }}
+                        </label>
+                        <div class="field-with-icon">
+                            <i class="fa fa-ruler"></i>
+                            {% render_field form.measurement_value class="form-control" placeholder="0.0" step="0.1" %}
+                        </div>
+                        <small class="form-help-text" id="measurement-unit">Unit will be displayed based on measurement type</small>
+                        {{ form.measurement_value.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.measurement_date.id_for_label }}" class="form-label required-field">
+                            {{ form.measurement_date.label }}
+                        </label>
+                        {% render_field form.measurement_date class="form-control" type="date" %}
+                        {{ form.measurement_date.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.measurement_context.id_for_label }}" class="form-label required-field">
+                            {{ form.measurement_context.label }}
+                        </label>
+                        {% render_field form.measurement_context class="form-select" %}
+                        {{ form.measurement_context.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Academic Information -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-study"></i>
+                    <h5>Academic Context</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.academic_session.id_for_label }}" class="form-label">
+                            {{ form.academic_session.label }}
+                        </label>
+                        {% render_field form.academic_session class="form-select" %}
+                        <small class="form-help-text">Leave blank to use current academic session</small>
+                        {{ form.academic_session.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Verification & Notes -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-note2"></i>
+                    <h5>Verification & Notes</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check form-switch">
+                            {% render_field form.is_verified class="form-check-input" id="id_is_verified" role="switch" %}
+                            <label class="form-check-label" for="id_is_verified">
+                                {{ form.is_verified.label }}
+                            </label>
+                        </div>
+                        <small class="form-help-text">
+                            Mark as verified if measurement has been double-checked
+                        </small>
+                        {{ form.is_verified.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">
+                            {{ form.notes.label }}
+                        </label>
+                        {% render_field form.notes class="form-control" rows="3" placeholder="Any additional notes about this measurement..." %}
+                        {{ form.notes.errors }}
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Right Column - Preview & Guidelines -->
+        <div class="col-lg-4">
+            
+            <!-- Sticky Sidebar Container -->
+            <div class="sidebar-sticky">
+                
+                <!-- Measurement Preview -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-display1"></i> Measurement Preview</h6>
+                    
+                    <div class="measurement-preview">
+                        <div class="text-muted mb-2">Current Value</div>
+                        <div class="value" id="preview-value">-</div>
+                        <div class="unit" id="preview-unit">-</div>
+                    </div>
+                </div>
+                
+                <!-- Context Guide -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-light"></i> Context Guide</h6>
+                    
+                    <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
+                        <strong>ADMISSION:</strong> New student intake
+                    </div>
+                    
+                    <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
+                        <strong>ANNUAL_CHECKUP:</strong> Yearly measurements
+                    </div>
+                    
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
+                        <strong>GROWTH_MONITORING:</strong> Track growth
+                    </div>
+                    
+                    <div class="alert alert-warning mb-2" style="font-size: 0.85rem;">
+                        <strong>UNIFORM_ORDER:</strong> For ordering
+                    </div>
+                    
+                    <div class="alert alert-secondary mb-0" style="font-size: 0.85rem;">
+                        <strong>OTHER:</strong> Other purposes
+                    </div>
+                </div>
+                
+                <!-- Measurement Tips -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-help1"></i> Measurement Tips</h6>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Ensure student is standing straight
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Use calibrated measuring tools
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Take measurements in the morning
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Record measurements immediately
+                    </div>
+                    
+                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Double-check for accuracy
+                    </div>
+                </div>
+                
+                <!-- Common Measurements -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-note2"></i> Common Measurements</h6>
+                    
+                    <ul class="mb-0" style="font-size: 0.85rem;">
+                        <li class="mb-2"><strong>Height:</strong> 120-180 cm</li>
+                        <li class="mb-2"><strong>Chest:</strong> 60-100 cm</li>
+                        <li class="mb-2"><strong>Waist:</strong> 50-90 cm</li>
+                        <li class="mb-2"><strong>Hip:</strong> 70-110 cm</li>
+                        <li><strong>Weight:</strong> 25-80 kg</li>
+                    </ul>
+                </div>
+                
+            </div>
+            <!-- End Sticky Sidebar Container -->
+            
+        </div>
+    </div>
+    
+    <!-- Form Actions -->
+    <div class="form-actions">
+        <a href="{% url 'uniforms:student_measurement_list' %}" class="btn btn-secondary btn-lg">
+            <i class="fa fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fa fa-save"></i> {{ submit_text|default:"Record Measurement" }}
+        </button>
+    </div>
+    
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    console.log('='.repeat(80));
+    console.log('MEASUREMENT FORM INITIALIZATION');
+    console.log('='.repeat(80));
+    
+    // =========================================================================
+    // MEASUREMENT PREVIEW UPDATE
+    // =========================================================================
+    
+    function updatePreview() {
+        const value = $('#id_measurement_value').val();
+        const typeSelect = $('#id_measurement_type');
+        const selectedOption = typeSelect.find('option:selected');
+        
+        if (value && value !== '') {
+            $('#preview-value').text(parseFloat(value).toFixed(1));
+        } else {
+            $('#preview-value').text('-');
+        }
+        
+        // Get unit from selected type (assuming format like "Height (cm)")
+        if (selectedOption.val()) {
+            const typeText = selectedOption.text();
+            const unitMatch = typeText.match(/\(([^)]+)\)/);
+            if (unitMatch) {
+                $('#preview-unit').text(unitMatch[1]);
+                $('#measurement-unit').text('Unit: ' + unitMatch[1]);
+            }
+        } else {
+            $('#preview-unit').text('-');
+        }
+    }
+    
+    $('#id_measurement_value, #id_measurement_type').on('input change', function() {
+        updatePreview();
+    });
+    
+    // Initialize preview
+    updatePreview();
+    
+    // =========================================================================
+    // FORM VALIDATION
+    // =========================================================================
+    
+    $('#measurement-form').on('submit', function(e) {
+        console.log('='.repeat(80));
+        console.log('FORM SUBMISSION STARTED');
+        console.log('='.repeat(80));
+        
+        let isValid = true;
+        const errors = [];
+        
+        // Required fields validation
+        const student = $('#id_student').val();
+        const measurementType = $('#id_measurement_type').val();
+        const measurementValue = $('#id_measurement_value').val();
+        const measurementDate = $('#id_measurement_date').val();
+        const context = $('#id_measurement_context').val();
+        
+        if (!student) {
+            errors.push('Student is required');
+            isValid = false;
+        }
+        
+        if (!measurementType) {
+            errors.push('Measurement type is required');
+            isValid = false;
+        }
+        
+        if (!measurementValue || measurementValue === '') {
+            errors.push('Measurement value is required');
+            isValid = false;
+        } else {
+            const value = parseFloat(measurementValue);
+            if (isNaN(value) || value <= 0) {
+                errors.push('Measurement value must be a positive number');
+                isValid = false;
+            }
+        }
+        
+        if (!measurementDate) {
+            errors.push('Measurement date is required');
+            isValid = false;
+        }
+        
+        if (!context) {
+            errors.push('Measurement context is required');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            console.error('❌ Form validation failed:', errors);
+            
+            // Show errors
+            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
+            errorHtml += '<ul class="mb-0">';
+            errors.forEach(function(error) {
+                errorHtml += '<li>' + error + '</li>';
+            });
+            errorHtml += '</ul>';
+            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            errorHtml += '</div>';
+            
+            // Insert at top of form
+            $('#measurement-form').prepend(errorHtml);
+            
+            // Scroll to top
+            $('html, body').animate({
+                scrollTop: 0
+            }, 500);
+            
+            return false;
+        }
+        
+        console.log('✅ Form validation passed');
+        console.log('Submitting form...');
+    });
+    
+    console.log('='.repeat(80));
+    console.log('✅ FORM INITIALIZATION COMPLETE');
+    console.log('='.repeat(80));
+});
+</script>
+{% endblock %}

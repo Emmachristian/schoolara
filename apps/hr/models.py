@@ -1726,20 +1726,32 @@ class Attendance(BaseModel):
 class Payroll(BaseModel):
     """
     Staff payroll processing with pay period tracking and reversal support.
-    
+
     PAY PERIODS vs FISCAL PERIODS:
     - Pay Period: The time worked (e.g., Jan 1-31 for monthly salary)
     - Fiscal Period: Accounting period for reporting (e.g., Term 1 = Jan-Apr)
     - Multiple pay periods can exist within one fiscal period
-    
+
     REVERSAL RULES:
     - Only draft or approved (not yet paid) payrolls can be reversed easily
     - Paid payrolls require special approval and statutory adjustments
     - Must be reversed in same fiscal period
     - Cannot reverse if period is closed
     - Reversal affects: allowances, deductions, bonuses, journal entries
+
+    GROSS PAY BREAKDOWN:
+        gross_pay = basic_salary + total_allowances + total_bonuses
+
+    DEDUCTIONS BREAKDOWN:
+        total_deductions = total_statutory_deductions + total_voluntary_deductions
+
+    NET PAY:
+        net_pay = gross_pay - total_deductions
+
+    EMPLOYER COST:
+        employer_total_cost = gross_pay + nssf_employer (+ any other employer contributions)
     """
-    
+
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
         ('APPROVED', 'Approved'),
@@ -1748,7 +1760,7 @@ class Payroll(BaseModel):
         ('REVERSED', 'Reversed'),
         ('CANCELLED', 'Cancelled'),
     ]
-    
+
     PAY_FREQUENCY_CHOICES = [
         ('MONTHLY', 'Monthly'),
         ('WEEKLY', 'Weekly'),
@@ -1756,18 +1768,18 @@ class Payroll(BaseModel):
         ('SEMI_MONTHLY', 'Semi-Monthly'),
         ('QUARTERLY', 'Quarterly'),
     ]
-    
+
     # =========================================================================
     # CORE RELATIONSHIPS
     # =========================================================================
-    
+
     staff = models.ForeignKey(
         Staff,
         on_delete=models.CASCADE,
         related_name='payrolls',
         verbose_name="Staff Member"
     )
-    
+
     fiscal_period = models.ForeignKey(
         'core.FiscalPeriod',
         on_delete=models.PROTECT,
@@ -1775,29 +1787,38 @@ class Payroll(BaseModel):
         verbose_name="Fiscal Period",
         help_text="Fiscal period for accounting (may contain multiple monthly payrolls)"
     )
-    
+
+    payroll_number = models.CharField(
+        "Payroll Number",
+        max_length=30,
+        unique=True,
+        blank=True,
+        db_index=True,
+        help_text="Auto-generated payroll reference number (e.g. PAY/2025/12/0001)"
+    )
+
     # =========================================================================
     # PAY PERIOD (What employee actually worked)
     # =========================================================================
-    
+
     pay_period_start = models.DateField(
         "Pay Period Start",
         db_index=True,
         help_text="Start date of period being paid (e.g., Jan 1 for January salary)"
     )
-    
+
     pay_period_end = models.DateField(
         "Pay Period End",
         db_index=True,
         help_text="End date of period being paid (e.g., Jan 31 for January salary)"
     )
-    
+
     payment_date = models.DateField(
         "Payment Date",
         db_index=True,
         help_text="Date when salary is actually paid"
     )
-    
+
     pay_frequency = models.CharField(
         "Pay Frequency",
         max_length=12,
@@ -1809,7 +1830,7 @@ class Payroll(BaseModel):
             "E.g., monthly contract paid biweekly"
         )
     )
-    
+
     pay_period_label = models.CharField(
         "Pay Period Label",
         max_length=50,
@@ -1817,11 +1838,11 @@ class Payroll(BaseModel):
         db_index=True,
         help_text="Display label (e.g., 'January 2024', 'Week 1 Feb 2024')"
     )
-    
+
     # =========================================================================
-    # SALARY COMPONENTS
+    # SALARY COMPONENTS — EARNINGS
     # =========================================================================
-    
+
     basic_salary = models.DecimalField(
         "Basic Salary",
         max_digits=15,
@@ -1829,59 +1850,195 @@ class Payroll(BaseModel):
         default=Decimal('0.00'),
         help_text="Basic salary for this pay period"
     )
-    
+
+    total_allowances = models.DecimalField(
+        "Total Allowances",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Sum of all PayrollAllowance entries for this pay period"
+    )
+
+    total_bonuses = models.DecimalField(
+        "Total Bonuses",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Sum of all PayrollBonus entries for this pay period"
+    )
+
     gross_pay = models.DecimalField(
         "Gross Pay",
         max_digits=15,
         decimal_places=2,
         default=Decimal('0.00'),
-        help_text="Basic salary + allowances + bonuses"
+        help_text="basic_salary + total_allowances + total_bonuses"
     )
-    
+
+    # =========================================================================
+    # SALARY COMPONENTS — TAXABLE BASE
+    # =========================================================================
+
+    taxable_income = models.DecimalField(
+        "Taxable Income",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text=(
+            "Gross pay minus pre-tax deductions and non-taxable allowances. "
+            "This is the base used to calculate PAYE."
+        )
+    )
+
+    # =========================================================================
+    # SALARY COMPONENTS — DEDUCTIONS
+    # =========================================================================
+
+    # --- Statutory ---
+
+    paye_amount = models.DecimalField(
+        "PAYE Amount",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text=(
+            "Income tax (Pay As You Earn) withheld this period. "
+            "Stored here for quick access on payslips and P9/P10 reports."
+        )
+    )
+
+    nssf_employee = models.DecimalField(
+        "NSSF Employee Contribution",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Employee portion of NSSF contribution (deducted from gross pay)"
+    )
+
+    local_service_tax = models.DecimalField(
+        "Local Service Tax",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Local Service Tax (LST) deducted this period"
+    )
+
+    total_statutory_deductions = models.DecimalField(
+        "Total Statutory Deductions",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="PAYE + NSSF Employee + Local Service Tax (for compliance reporting)"
+    )
+
+    # --- Voluntary ---
+
+    total_voluntary_deductions = models.DecimalField(
+        "Total Voluntary Deductions",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text=(
+            "All non-statutory deductions: loans, SACCO, insurance, "
+            "pension contributions, union dues, etc."
+        )
+    )
+
+    # --- Grand total ---
+
     total_deductions = models.DecimalField(
         "Total Deductions",
         max_digits=15,
         decimal_places=2,
         default=Decimal('0.00'),
-        help_text="All deductions (statutory + voluntary)"
+        help_text="total_statutory_deductions + total_voluntary_deductions"
     )
-    
+
     net_pay = models.DecimalField(
         "Net Pay",
         max_digits=15,
         decimal_places=2,
         default=Decimal('0.00'),
-        help_text="Amount actually paid to employee (gross - deductions)"
+        help_text="Amount actually paid to employee (gross_pay - total_deductions)"
     )
-    
+
     # =========================================================================
-    # WORKING DAYS TRACKING (Optional but useful)
+    # EMPLOYER CONTRIBUTIONS (Cost to school, not deducted from employee)
     # =========================================================================
-    
+
+    nssf_employer = models.DecimalField(
+        "NSSF Employer Contribution",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text=(
+            "Employer's NSSF contribution. This is a cost to the school "
+            "and does NOT appear in the employee's net pay calculation."
+        )
+    )
+
+    employer_total_cost = models.DecimalField(
+        "Total Employer Cost",
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text=(
+            "True cost of this employee to the school for this period: "
+            "gross_pay + nssf_employer + any other employer contributions. "
+            "Use this for budget and cost-of-employment reporting."
+        )
+    )
+
+    # =========================================================================
+    # CURRENCY
+    # =========================================================================
+
+    currency = models.CharField(
+        "Currency",
+        max_length=3,
+        default='UGX',
+        help_text="ISO 4217 currency code (e.g., UGX, USD, KES)"
+    )
+
+    exchange_rate = models.DecimalField(
+        "Exchange Rate",
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal('1.000000'),
+        help_text=(
+            "Exchange rate to base currency (UGX) at time of payment. "
+            "Use 1.000000 for UGX payrolls."
+        )
+    )
+
+    # =========================================================================
+    # WORKING DAYS TRACKING
+    # =========================================================================
+
     total_working_days = models.PositiveIntegerField(
         "Total Working Days",
         null=True,
         blank=True,
         help_text="Total working days in pay period"
     )
-    
+
     days_worked = models.PositiveIntegerField(
         "Days Worked",
         null=True,
         blank=True,
         help_text="Actual days worked (for prorated salary)"
     )
-    
+
     is_prorated = models.BooleanField(
         "Is Prorated",
         default=False,
         help_text="Whether salary is prorated (partial month/period)"
     )
-    
+
     # =========================================================================
     # PAYMENT DETAILS
     # =========================================================================
-    
+
     payment_method = models.ForeignKey(
         'core.PaymentMethod',
         on_delete=models.PROTECT,
@@ -1889,25 +2046,25 @@ class Payroll(BaseModel):
         verbose_name="Payment Method",
         help_text="How the staff will be paid"
     )
-    
+
     bank_account = models.CharField(
         "Bank Account",
         max_length=100,
         blank=True,
         help_text="Bank account number for payment"
     )
-    
+
     payment_reference = models.CharField(
         "Payment Reference",
         max_length=100,
         blank=True,
         help_text="Bank transfer reference or check number"
     )
-    
+
     # =========================================================================
     # STATUS AND APPROVAL
     # =========================================================================
-    
+
     status = models.CharField(
         "Status",
         max_length=12,
@@ -1915,21 +2072,21 @@ class Payroll(BaseModel):
         default='DRAFT',
         db_index=True
     )
-    
+
     approved_by_id = models.CharField(
         "Approved By ID",
-        max_length=50, 
-        null=True, 
+        max_length=50,
+        null=True,
         blank=True,
         help_text="HR Manager who approved payroll"
     )
-    
+
     approved_at = models.DateTimeField(
         "Approved At",
         null=True,
         blank=True
     )
-    
+
     paid_by_id = models.CharField(
         "Paid By ID",
         max_length=50,
@@ -1937,17 +2094,17 @@ class Payroll(BaseModel):
         blank=True,
         help_text="User who processed payment"
     )
-    
+
     paid_at = models.DateTimeField(
         "Paid At",
         null=True,
         blank=True
     )
-    
+
     # =========================================================================
     # REVERSAL TRACKING
     # =========================================================================
-    
+
     reversed = models.BooleanField(
         "Reversed",
         default=False,
@@ -1957,14 +2114,14 @@ class Payroll(BaseModel):
             "or incorrect amounts. Employee was NOT actually paid or payment was recovered."
         )
     )
-    
+
     reversed_on = models.DateTimeField(
         "Reversed On",
         null=True,
         blank=True,
         help_text="When this payroll was reversed"
     )
-    
+
     reversed_by_id = models.CharField(
         "Reversed By ID",
         max_length=50,
@@ -1972,7 +2129,7 @@ class Payroll(BaseModel):
         blank=True,
         help_text="User who initiated reversal"
     )
-    
+
     reversal_reason = models.TextField(
         "Reversal Reason",
         blank=True,
@@ -1982,7 +2139,7 @@ class Payroll(BaseModel):
             "'Payroll generated for terminated employee', 'Duplicate payroll entry'"
         )
     )
-    
+
     # Special approval for paid payrolls
     reversal_approved_by_id = models.CharField(
         "Reversal Approved By ID",
@@ -1991,26 +2148,26 @@ class Payroll(BaseModel):
         blank=True,
         help_text="Finance Director/HR Director who approved reversal of PAID payroll"
     )
-    
+
     reversal_approved_on = models.DateTimeField(
         "Reversal Approved On",
         null=True,
         blank=True
     )
-    
+
     # Statutory implications
     statutory_reversals_required = models.BooleanField(
         "Statutory Reversals Required",
         default=False,
         help_text="Whether tax/NSSF filings need to be adjusted due to reversal"
     )
-    
+
     statutory_adjustments_notes = models.TextField(
         "Statutory Adjustments Notes",
         blank=True,
         help_text="Details of tax/NSSF adjustments needed for this reversal"
     )
-    
+
     # Journal entry for reversal
     reversal_journal_entry = models.ForeignKey(
         'finance.JournalEntry',
@@ -2021,11 +2178,11 @@ class Payroll(BaseModel):
         related_name='reversed_payrolls',
         help_text="Journal entry created when payroll was reversed"
     )
-    
+
     # =========================================================================
     # JOURNAL ENTRY INTEGRATION
     # =========================================================================
-    
+
     journal_entry = models.ForeignKey(
         'finance.JournalEntry',
         verbose_name="Journal Entry",
@@ -2035,7 +2192,7 @@ class Payroll(BaseModel):
         related_name='payrolls',
         help_text="Journal entry for payroll expense (accrual)"
     )
-    
+
     payment_journal_entry = models.ForeignKey(
         'finance.JournalEntry',
         verbose_name="Payment Journal Entry",
@@ -2045,32 +2202,32 @@ class Payroll(BaseModel):
         related_name='payroll_payments',
         help_text="Journal entry when salary was actually paid"
     )
-    
+
     auto_create_journal_entry = models.BooleanField(
         "Auto-Create Journal Entry",
         default=True,
         help_text="Automatically create journal entries for this payroll"
     )
-    
+
     # =========================================================================
     # NOTES
     # =========================================================================
-    
+
     notes = models.TextField(
         "Notes",
         blank=True,
         help_text="Additional notes about this payroll"
     )
-    
+
     # =========================================================================
     # META CLASS
     # =========================================================================
-    
+
     class Meta:
         verbose_name = "Payroll"
         verbose_name_plural = "Payrolls"
         ordering = ['-payment_date', 'staff']
-        
+
         constraints = [
             # Prevent duplicate payrolls for same staff and pay period
             models.UniqueConstraint(
@@ -2092,8 +2249,36 @@ class Payroll(BaseModel):
                 check=models.Q(net_pay__gte=0),
                 name='payroll_net_pay_non_negative'
             ),
+            models.CheckConstraint(
+                check=models.Q(total_allowances__gte=0),
+                name='payroll_total_allowances_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(total_bonuses__gte=0),
+                name='payroll_total_bonuses_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(total_deductions__gte=0),
+                name='payroll_total_deductions_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(total_statutory_deductions__gte=0),
+                name='payroll_statutory_deductions_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(total_voluntary_deductions__gte=0),
+                name='payroll_voluntary_deductions_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(nssf_employer__gte=0),
+                name='payroll_nssf_employer_non_negative'
+            ),
+            models.CheckConstraint(
+                check=models.Q(employer_total_cost__gte=0),
+                name='payroll_employer_total_cost_non_negative'
+            ),
         ]
-        
+
         indexes = [
             models.Index(fields=['staff', 'fiscal_period']),
             models.Index(fields=['staff', 'pay_period_start', 'pay_period_end']),
@@ -2105,156 +2290,183 @@ class Payroll(BaseModel):
             models.Index(fields=['statutory_reversals_required']),
             models.Index(fields=['pay_frequency']),
             models.Index(fields=['pay_period_label']),
+            models.Index(fields=['currency']),
         ]
-    
+
     # =========================================================================
     # STRING REPRESENTATION
     # =========================================================================
-    
+
     def __str__(self):
         state_suffix = ""
         if self.reversed:
             state_suffix = " [REVERSED]"
         elif self.status == 'CANCELLED':
             state_suffix = " [CANCELLED]"
-        
+
         label = self.pay_period_label or f"{self.pay_period_start} to {self.pay_period_end}"
         return f"{self.staff.full_name()} - {label}{state_suffix}"
-    
+
     # =========================================================================
     # VALIDATION
     # =========================================================================
-    
+
     def clean(self):
         """Validate payroll data"""
         super().clean()
         errors = {}
-        
+
         # =====================================================================
         # PAY PERIOD VALIDATION
         # =====================================================================
-        
+
         if self.pay_period_start and self.pay_period_end:
             if self.pay_period_end < self.pay_period_start:
                 errors['pay_period_end'] = "Pay period end cannot be before start"
-        
+
         # =====================================================================
-        # FISCAL PERIOD VALIDATION (All dates must be within fiscal period)
+        # FISCAL PERIOD VALIDATION
         # =====================================================================
-        
+
         if self.fiscal_period:
-            # Pay period start must be on or after fiscal period start
             if self.pay_period_start and self.pay_period_start < self.fiscal_period.start_date:
                 errors['pay_period_start'] = (
                     f"Pay period cannot start before fiscal period start date "
                     f"({self.fiscal_period.start_date})"
                 )
-            
-            # Pay period end must be on or before fiscal period end
+
             if self.pay_period_end and self.pay_period_end > self.fiscal_period.end_date:
                 errors['pay_period_end'] = (
                     f"Pay period cannot end after fiscal period end date "
                     f"({self.fiscal_period.end_date})"
                 )
-            
-            # Payment date validation (with grace period consideration)
+
             if self.payment_date:
                 if self.payment_date < self.fiscal_period.start_date:
                     errors['payment_date'] = (
                         f"Payment date cannot be before fiscal period start "
                         f"({self.fiscal_period.start_date})"
                     )
-                
-                # Calculate maximum allowed payment date (including grace period)
+
                 from datetime import timedelta
                 max_allowed_date = self.fiscal_period.end_date
-                
+
                 if hasattr(self.fiscal_period, 'grace_period_days') and self.fiscal_period.grace_period_days > 0:
                     max_allowed_date = (
-                        self.fiscal_period.end_date + 
+                        self.fiscal_period.end_date +
                         timedelta(days=self.fiscal_period.grace_period_days)
                     )
-                
+
                 if self.payment_date > max_allowed_date:
                     grace_note = ""
                     if hasattr(self.fiscal_period, 'grace_period_days') and self.fiscal_period.grace_period_days > 0:
                         grace_note = f" (including {self.fiscal_period.grace_period_days} days grace period)"
-                    
+
                     errors['payment_date'] = (
                         f"Payment date cannot be after fiscal period end date "
                         f"({self.fiscal_period.end_date}){grace_note}"
                     )
-            
-            # Check if fiscal period is closed
+
             if hasattr(self.fiscal_period, 'is_closed') and self.fiscal_period.is_closed:
-                if not self.pk:  # New payroll
+                if not self.pk:
                     errors['fiscal_period'] = "Cannot create payroll in a closed fiscal period"
                 elif not self.reversed and self.status != 'CANCELLED':
-                    # Allow updates to reversed/cancelled payrolls in closed periods
                     errors['fiscal_period'] = "Cannot modify active payroll in a closed fiscal period"
-        
+
         # =====================================================================
         # PAYMENT DATE LOGIC
         # =====================================================================
-        
-        if self.payment_date and self.pay_period_end:
-            # Typically payment should be on or after period ends
-            # (some schools pay in advance, so this is just a warning-level check)
+
+        if self.payment_date and self.pay_period_start:
             if self.payment_date < self.pay_period_start:
                 errors['payment_date'] = "Payment date should not be before pay period starts"
-        
+
         # =====================================================================
         # REVERSAL VALIDATION
         # =====================================================================
-        
-        # If reversed, must have reason
+
         if self.reversed and not self.reversal_reason:
             errors['reversal_reason'] = "Reversal reason is required"
-        
-        # If paid payroll reversed, must have special approval
+
         if self.reversed and self.status == 'PAID':
             if not self.reversal_approved_by_id:
                 errors['reversal_approved_by_id'] = (
                     "Finance/HR Director approval required to reverse paid payroll"
                 )
-        
-        # Cannot reverse cancelled payroll
+
         if self.reversed and self.status == 'CANCELLED':
             errors['reversed'] = "Cannot reverse a cancelled payroll"
-        
+
         # =====================================================================
         # WORKING DAYS VALIDATION
         # =====================================================================
-        
+
         if self.days_worked is not None and self.total_working_days is not None:
             if self.days_worked > self.total_working_days:
                 errors['days_worked'] = "Days worked cannot exceed total working days"
-        
+
         # =====================================================================
-        # AMOUNT VALIDATION
+        # AMOUNT CONSISTENCY VALIDATION
+        #
+        # ⭐ ONLY validates on EXISTING payrolls with a calculated gross_pay.
+        #    For NEW payrolls, amounts are 0.00 at clean() time — signals and
+        #    recalculate_all() run AFTER the initial save, so there is nothing
+        #    meaningful to check yet.
+        #
+        # ⭐ All errors here use '__all__' (NON_FIELD_ERRORS) rather than field
+        #    names like 'gross_pay' or 'total_deductions'. These are calculated
+        #    fields intentionally excluded from PayrollForm. If Django tries to
+        #    attach a ValidationError to a field that doesn't exist on the form,
+        #    it raises a hard ValueError crash — even if the model field exists.
         # =====================================================================
-        
-        if self.net_pay > self.gross_pay:
-            errors['net_pay'] = "Net pay cannot be greater than gross pay"
-        
+
+        if self.pk and self.gross_pay > Decimal('0.00'):
+
+            # --- Net pay sanity check ---
+            if self.net_pay > self.gross_pay:
+                errors.setdefault('__all__', []).append(
+                    f"Net pay ({self.net_pay}) cannot be greater than "
+                    f"gross pay ({self.gross_pay})."
+                )
+
+            # --- Gross pay breakdown consistency ---
+            # gross_pay must equal basic_salary + total_allowances + total_bonuses
+            expected_gross = self.basic_salary + self.total_allowances + self.total_bonuses
+            if abs(expected_gross - self.gross_pay) > Decimal('0.01'):
+                errors.setdefault('__all__', []).append(
+                    f"Gross pay ({self.gross_pay}) is inconsistent: "
+                    f"basic salary ({self.basic_salary}) + allowances "
+                    f"({self.total_allowances}) + bonuses ({self.total_bonuses}) "
+                    f"= {expected_gross}. Please recalculate."
+                )
+
+            # --- Deductions breakdown consistency ---
+            # total_deductions must equal statutory + voluntary
+            expected_deductions = (
+                self.total_statutory_deductions + self.total_voluntary_deductions
+            )
+            if abs(expected_deductions - self.total_deductions) > Decimal('0.01'):
+                errors.setdefault('__all__', []).append(
+                    f"Total deductions ({self.total_deductions}) is inconsistent: "
+                    f"statutory ({self.total_statutory_deductions}) + voluntary "
+                    f"({self.total_voluntary_deductions}) = {expected_deductions}. "
+                    f"Please recalculate."
+                )
+
         if errors:
             raise ValidationError(errors)
-    
+
     # =========================================================================
     # SAVE METHOD
     # =========================================================================
-    
+
     def save(self, *args, **kwargs):
         """Auto-populate fields before saving"""
-        
+
         # Auto-assign fiscal period if not set
-        if not self.fiscal_period and self.pay_period_start and self.pay_period_end:
+        if not self.fiscal_period_id and self.pay_period_start and self.pay_period_end:
             self.fiscal_period = self.get_applicable_fiscal_period()
-        
-        # Auto-populate fiscal year from fiscal period
-        if self.fiscal_period and hasattr(self.fiscal_period, 'fiscal_year'):
-            self.fiscal_year = self.fiscal_period.fiscal_year
-        
+
         # Auto-generate pay period label if not set
         if not self.pay_period_label and self.pay_period_start:
             if self.pay_frequency == 'MONTHLY':
@@ -2263,150 +2475,149 @@ class Payroll(BaseModel):
                 self.pay_period_label = (
                     f"Week of {self.pay_period_start.strftime('%b %d, %Y')}"
                 )
-            elif self.pay_frequency == 'BIWEEKLY':
-                self.pay_period_label = (
-                    f"{self.pay_period_start.strftime('%b %d')} - "
-                    f"{self.pay_period_end.strftime('%b %d, %Y')}"
-                )
             else:
                 self.pay_period_label = (
                     f"{self.pay_period_start.strftime('%b %d')} - "
                     f"{self.pay_period_end.strftime('%b %d, %Y')}"
                 )
-        
-        # Auto-detect if statutory adjustments needed
+
+        # Auto-detect if statutory adjustments needed on reversal
         if self.reversed and not self.statutory_reversals_required:
             self.statutory_reversals_required = self.requires_statutory_adjustments()
-        
+
         super().save(*args, **kwargs)
-    
+
     # =========================================================================
-    # HELPER METHODS - FISCAL PERIOD
+    # HELPER METHODS — FISCAL PERIOD
     # =========================================================================
-    
+
     def get_applicable_fiscal_period(self):
         """
         Find the correct fiscal period for this payroll based on pay period dates.
-        
+
         Returns:
             FiscalPeriod: The fiscal period this payroll should belong to
-        
+
         Raises:
             ValidationError: If no suitable fiscal period is found
         """
         from core.models import FiscalPeriod
-        
-        # Find fiscal period that contains the pay period
+
         fiscal_period = FiscalPeriod.objects.filter(
             start_date__lte=self.pay_period_start,
             end_date__gte=self.pay_period_end,
             is_active=True
         ).first()
-        
+
         if not fiscal_period:
             raise ValidationError(
                 f"No active fiscal period found for pay period "
                 f"{self.pay_period_start} to {self.pay_period_end}. "
                 f"Please create or activate the appropriate fiscal period first."
             )
-        
+
         return fiscal_period
-    
+
+    # =========================================================================
+    # BACKWARD COMPATIBILITY PROPERTIES
+    # =========================================================================
+
     @property
     def period_start(self):
         """Alias for backwards compatibility"""
         return self.pay_period_start
-    
+
     @property
     def period_end(self):
         """Alias for backwards compatibility"""
         return self.pay_period_end
-    
+
     # =========================================================================
     # STATUS PROPERTIES
     # =========================================================================
-    
+
     @property
     def is_active(self):
         """Check if payroll is still active (not reversed/cancelled)"""
         return not self.reversed and self.status != 'CANCELLED'
-    
+
     @property
     def effective_net_pay(self):
         """Get effective net pay (0 if reversed or cancelled)"""
         if not self.is_active:
             return Decimal('0.00')
         return self.net_pay
-    
+
     @property
     def effective_gross_pay(self):
         """Get effective gross pay (0 if reversed or cancelled)"""
         if not self.is_active:
             return Decimal('0.00')
         return self.gross_pay
-    
+
+    @property
+    def effective_employer_cost(self):
+        """Get effective employer cost (0 if reversed or cancelled)"""
+        if not self.is_active:
+            return Decimal('0.00')
+        return self.employer_total_cost
+
     @property
     def payroll_state(self):
         """Get human-readable payroll state"""
         if self.reversed:
             return "REVERSED"
         return self.status
-    
+
     # =========================================================================
     # REVERSAL CHECK METHODS
     # =========================================================================
-    
+
     def can_be_reversed(self):
         """
         Check if this payroll can be reversed.
-        
+
         Returns:
             tuple: (can_reverse: bool, reason: str)
         """
         if self.reversed:
             return False, "Payroll already reversed"
-        
+
         if self.status == 'CANCELLED':
             return False, "Cannot reverse a cancelled payroll"
-        
-        # Check if fiscal period is closed
+
         if self.fiscal_period and hasattr(self.fiscal_period, 'is_closed'):
             if self.fiscal_period.is_closed:
                 return False, "Cannot reverse payroll from closed fiscal period"
-        
-        # Check if payroll was paid
+
         if self.status == 'PAID':
-            # Require special approval
             if not self.reversal_approved_by_id:
                 return False, "Reversal of paid payroll requires Finance/HR Director approval"
-            
-            # Check if statutory adjustments are documented
+
             if self.statutory_reversals_required and not self.statutory_adjustments_notes:
                 return False, "Statutory adjustment plan required for paid payroll reversal"
-        
+
         return True, "OK"
-    
+
     def requires_statutory_adjustments(self):
         """
         Check if reversal requires statutory adjustments (tax, NSSF filings).
-        
+
         Returns:
             bool: True if adjustments needed
         """
-        # If payroll was paid and had statutory deductions
         if self.status == 'PAID':
             has_statutory = self.deductions.filter(
                 deduction_type__in=['PAYE', 'SOCIAL_SECURITY', 'LOCAL_TAX']
             ).exists()
-            
             return has_statutory
-        
+
         return False
-    
+
     # =========================================================================
     # USER RETRIEVAL HELPERS
     # =========================================================================
-    
+
     def get_approved_by_user(self):
         """Get user who approved payroll"""
         if not self.approved_by_id:
@@ -2418,7 +2629,7 @@ class Payroll(BaseModel):
         except Exception as e:
             logger.error(f"Error fetching approved_by user: {e}")
             return None
-    
+
     def get_paid_by_user(self):
         """Get user who processed payment"""
         if not self.paid_by_id:
@@ -2430,7 +2641,7 @@ class Payroll(BaseModel):
         except Exception as e:
             logger.error(f"Error fetching paid_by user: {e}")
             return None
-    
+
     def get_reversed_by_user(self):
         """Get user who reversed payroll"""
         if not self.reversed_by_id:
@@ -2442,7 +2653,7 @@ class Payroll(BaseModel):
         except Exception as e:
             logger.error(f"Error fetching reversed_by user: {e}")
             return None
-    
+
     def get_reversal_approved_by_user(self):
         """Get user who approved reversal"""
         if not self.reversal_approved_by_id:
@@ -2454,113 +2665,197 @@ class Payroll(BaseModel):
         except Exception as e:
             logger.error(f"Error fetching reversal_approved_by user: {e}")
             return None
-    
+
     # =========================================================================
     # CALCULATION METHODS
     # =========================================================================
-    
+
     def calculate_gross_pay(self):
         """
         Calculate gross pay from basic salary, allowances, and bonuses.
-        
+        Also updates total_allowances and total_bonuses summary fields.
+
         Returns:
             Decimal: Updated gross pay amount
         """
-        total = self.basic_salary
-        
-        # Add allowances
-        total += self.allowances.aggregate(
+        self.total_allowances = self.allowances.aggregate(
             total=models.Sum('amount')
         )['total'] or Decimal('0.00')
-        
-        # Add bonuses
-        total += self.bonuses.aggregate(
+
+        self.total_bonuses = self.bonuses.aggregate(
             total=models.Sum('amount')
         )['total'] or Decimal('0.00')
-        
-        self.gross_pay = total
+
+        self.gross_pay = self.basic_salary + self.total_allowances + self.total_bonuses
         return self.gross_pay
-    
+
+    def calculate_taxable_income(self):
+        """
+        Calculate taxable income for PAYE purposes.
+
+        Taxable income = Gross pay
+            - pre-tax deductions (pension, provident fund, etc.)
+            - non-taxable allowances
+
+        Returns:
+            Decimal: Updated taxable income
+        """
+        # Subtract pre-tax deductions
+        pretax_deductions = self.deductions.filter(
+            is_pretax=True
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+
+        # Subtract non-taxable allowances
+        non_taxable_allowances = self.allowances.filter(
+            is_taxable=False
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+
+        self.taxable_income = max(
+            self.gross_pay - pretax_deductions - non_taxable_allowances,
+            Decimal('0.00')
+        )
+        return self.taxable_income
+
     def calculate_total_deductions(self):
         """
-        Calculate total deductions from all deduction entries.
-        
+        Calculate total deductions, broken down into statutory and voluntary.
+        Also updates paye_amount, nssf_employee, and local_service_tax fields.
+
         Returns:
             Decimal: Updated total deductions amount
         """
-        total = self.deductions.aggregate(
-            total=models.Sum('amount')
-        )['total'] or Decimal('0.00')
-        
-        self.total_deductions = total
+        STATUTORY_TYPES = ['PAYE', 'SOCIAL_SECURITY', 'LOCAL_TAX']
+
+        all_deductions = self.deductions.values('deduction_type', 'amount')
+
+        statutory_total = Decimal('0.00')
+        voluntary_total = Decimal('0.00')
+        paye_total = Decimal('0.00')
+        nssf_employee_total = Decimal('0.00')
+        lst_total = Decimal('0.00')
+
+        for deduction in all_deductions:
+            amount = deduction['amount']
+            dtype = deduction['deduction_type']
+
+            if dtype in STATUTORY_TYPES:
+                statutory_total += amount
+                if dtype == 'PAYE':
+                    paye_total += amount
+                elif dtype == 'SOCIAL_SECURITY':
+                    nssf_employee_total += amount
+                elif dtype == 'LOCAL_TAX':
+                    lst_total += amount
+            else:
+                voluntary_total += amount
+
+        self.total_statutory_deductions = statutory_total
+        self.total_voluntary_deductions = voluntary_total
+        self.total_deductions = statutory_total + voluntary_total
+        self.paye_amount = paye_total
+        self.nssf_employee = nssf_employee_total
+        self.local_service_tax = lst_total
+
         return self.total_deductions
-    
+
     def calculate_net_pay(self):
         """
-        Calculate net pay (gross pay - deductions).
-        
+        Calculate net pay (gross pay - total deductions).
+
         Returns:
             Decimal: Updated net pay amount
         """
-        self.net_pay = self.gross_pay - self.total_deductions
+        self.net_pay = max(
+            self.gross_pay - self.total_deductions,
+            Decimal('0.00')
+        )
         return self.net_pay
-    
+
+    def calculate_employer_cost(self):
+        """
+        Calculate total cost of this employee to the school.
+        employer_total_cost = gross_pay + nssf_employer
+
+        Returns:
+            Decimal: Updated employer total cost
+        """
+        self.employer_total_cost = self.gross_pay + self.nssf_employer
+        return self.employer_total_cost
+
     def recalculate_all(self):
         """
-        Recalculate all amounts (gross pay, deductions, net pay).
-        
+        Recalculate all amounts in the correct order:
+            1. Gross pay (basic + allowances + bonuses)
+            2. Taxable income (gross - pre-tax items)
+            3. Deductions (statutory + voluntary breakdown)
+            4. Net pay (gross - deductions)
+            5. Employer cost (gross + employer contributions)
+
         Returns:
-            dict: Dictionary with updated amounts
+            dict: Dictionary with all updated amounts
         """
         self.calculate_gross_pay()
+        self.calculate_taxable_income()
         self.calculate_total_deductions()
         self.calculate_net_pay()
-        
+        self.calculate_employer_cost()
+
         return {
             'basic_salary': self.basic_salary,
+            'total_allowances': self.total_allowances,
+            'total_bonuses': self.total_bonuses,
             'gross_pay': self.gross_pay,
+            'taxable_income': self.taxable_income,
+            'paye_amount': self.paye_amount,
+            'nssf_employee': self.nssf_employee,
+            'local_service_tax': self.local_service_tax,
+            'total_statutory_deductions': self.total_statutory_deductions,
+            'total_voluntary_deductions': self.total_voluntary_deductions,
             'total_deductions': self.total_deductions,
             'net_pay': self.net_pay,
+            'nssf_employer': self.nssf_employer,
+            'employer_total_cost': self.employer_total_cost,
         }
-    
+
     # =========================================================================
     # PRORATION METHODS
     # =========================================================================
-    
+
     def calculate_prorated_salary(self, days_worked=None, total_days=None):
         """
         Calculate prorated salary based on days worked.
-        
+
         Args:
             days_worked: Days actually worked (uses self.days_worked if not provided)
             total_days: Total working days in period (uses self.total_working_days if not provided)
-        
+
         Returns:
             Decimal: Prorated basic salary
         """
         days_worked = days_worked or self.days_worked
         total_days = total_days or self.total_working_days
-        
+
         if not days_worked or not total_days or total_days == 0:
             return self.basic_salary
-        
-        # Get base salary from contract
+
         contract = Contract.get_staff_active_contract(self.staff)
         if not contract:
             return Decimal('0.00')
-        
+
         base_salary = contract.basic_salary
-        
-        # Calculate prorated amount
         proration_factor = Decimal(str(days_worked)) / Decimal(str(total_days))
         prorated_salary = base_salary * proration_factor
-        
+
         return prorated_salary.quantize(Decimal('0.01'))
-    
+
     def apply_proration(self, days_worked, total_days):
         """
         Apply proration to this payroll.
-        
+
         Args:
             days_worked: Days actually worked
             total_days: Total working days in period
@@ -2570,136 +2865,116 @@ class Payroll(BaseModel):
         self.is_prorated = True
         self.basic_salary = self.calculate_prorated_salary(days_worked, total_days)
         self.save()
-    
+
     # =========================================================================
     # ACCOUNT MAPPING HELPERS
     # =========================================================================
-    
+
+    def _get_payroll_mappings(self):
+        """Internal helper to retrieve payroll account mappings."""
+        from core.models import FinancialSettings
+        settings = FinancialSettings.get_instance()
+        if not settings:
+            return None
+        return getattr(settings, 'payroll_account_mappings', None)
+
     def get_salary_expense_account(self):
         """Get salary expense account from mappings"""
-        from core.models import FinancialSettings
-        settings = FinancialSettings.get_instance()
-        if settings:
-            payroll_mappings = getattr(settings, 'payroll_account_mappings', None)
-            if payroll_mappings and hasattr(payroll_mappings, 'salaries_expense_account'):
-                return payroll_mappings.salaries_expense_account
-        return None
-    
+        mappings = self._get_payroll_mappings()
+        return getattr(mappings, 'salaries_expense_account', None) if mappings else None
+
     def get_salary_payable_account(self):
         """Get wages payable account from mappings"""
-        from core.models import FinancialSettings
-        settings = FinancialSettings.get_instance()
-        if settings:
-            payroll_mappings = getattr(settings, 'payroll_account_mappings', None)
-            if payroll_mappings and hasattr(payroll_mappings, 'wages_payable_account'):
-                return payroll_mappings.wages_payable_account
-        return None
-    
+        mappings = self._get_payroll_mappings()
+        return getattr(mappings, 'wages_payable_account', None) if mappings else None
+
     def get_cash_account(self):
         """Get cash/bank account for salary payment"""
         from core.models import FinancialSettings
         settings = FinancialSettings.get_instance()
         if not settings:
             return None
-        
         mappings = settings.get_account_mappings()
         return mappings.get_cash_or_bank_account(self.payment_method)
-    
+
     def get_deduction_account(self, deduction_type):
-        """Get payable account for specific deduction type"""
-        from core.models import FinancialSettings
-        settings = FinancialSettings.get_instance()
-        if not settings:
+        """Get payable account for a specific deduction type"""
+        mappings = self._get_payroll_mappings()
+        if not mappings:
             return None
-        
-        payroll_mappings = getattr(settings, 'payroll_account_mappings', None)
-        if not payroll_mappings:
-            return None
-        
-        # Map deduction types to accounts
+
         deduction_account_map = {
-            'PAYE': getattr(payroll_mappings, 'payroll_tax_payable_account', None),
-            'SOCIAL_SECURITY': getattr(payroll_mappings, 'social_security_payable_account', None),
-            'PENSION': getattr(payroll_mappings, 'pension_payable_account', None),
-            # Add more as needed
+            'PAYE': getattr(mappings, 'payroll_tax_payable_account', None),
+            'SOCIAL_SECURITY': getattr(mappings, 'social_security_payable_account', None),
+            'PENSION': getattr(mappings, 'pension_payable_account', None),
         }
-        
         return deduction_account_map.get(deduction_type)
-    
+
     def get_allowance_expense_account(self, allowance_type):
-        """Get expense account for specific allowance type"""
-        from core.models import FinancialSettings
-        settings = FinancialSettings.get_instance()
-        if not settings:
+        """Get expense account for a specific allowance type"""
+        mappings = self._get_payroll_mappings()
+        if not mappings:
             return None
-        
-        payroll_mappings = getattr(settings, 'payroll_account_mappings', None)
-        if not payroll_mappings:
-            return None
-        
-        # Map allowance types to accounts
+
         allowance_account_map = {
-            'HOUSING': getattr(payroll_mappings, 'housing_allowance_expense_account', None),
-            'TRANSPORT': getattr(payroll_mappings, 'transport_allowance_expense_account', None),
-            'MEDICAL': getattr(payroll_mappings, 'medical_allowance_expense_account', None),
-            'OVERTIME': getattr(payroll_mappings, 'overtime_expense_account', None),
-            # Add more as needed
+            'HOUSING': getattr(mappings, 'housing_allowance_expense_account', None),
+            'TRANSPORT': getattr(mappings, 'transport_allowance_expense_account', None),
+            'MEDICAL': getattr(mappings, 'medical_allowance_expense_account', None),
+            'OVERTIME': getattr(mappings, 'overtime_expense_account', None),
         }
-        
+
         account = allowance_account_map.get(allowance_type)
         if account:
             return account
-        
+
         # Fallback to general allowance account
-        return getattr(payroll_mappings, 'general_allowance_expense_account', None)
-    
+        return getattr(mappings, 'general_allowance_expense_account', None)
+
     # =========================================================================
     # CLASS METHODS
     # =========================================================================
-    
+
     @classmethod
     def get_staff_payrolls_for_period(cls, staff, fiscal_period):
         """
-        Get all payrolls for a staff member in a fiscal period.
-        
+        Get all active payrolls for a staff member in a fiscal period.
+
         Args:
             staff: Staff instance
             fiscal_period: FiscalPeriod instance
-        
+
         Returns:
-            QuerySet: Payroll queryset
+            QuerySet: Payroll queryset ordered by pay period start
         """
         return cls.objects.filter(
             staff=staff,
             fiscal_period=fiscal_period,
             reversed=False
         ).order_by('pay_period_start')
-    
+
     @classmethod
     def get_staff_payroll_for_month(cls, staff, year, month):
         """
         Get payroll for a specific month.
-        
+
         Args:
             staff: Staff instance
             year: Year (int)
             month: Month (int, 1-12)
-        
+
         Returns:
             Payroll or None
         """
         from datetime import date
-        
-        # Find payroll where pay period contains this month
         start_of_month = date(year, month, 1)
-        
+
         return cls.objects.filter(
             staff=staff,
             pay_period_start__lte=start_of_month,
             pay_period_end__gte=start_of_month,
             reversed=False
         ).first()
-    
+
     @classmethod
     def get_pending_payrolls(cls):
         """Get all payrolls pending approval"""
@@ -2707,7 +2982,7 @@ class Payroll(BaseModel):
             status='DRAFT',
             reversed=False
         ).order_by('payment_date')
-    
+
     @classmethod
     def get_approved_unpaid_payrolls(cls):
         """Get all approved but unpaid payrolls"""

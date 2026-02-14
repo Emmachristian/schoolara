@@ -90,11 +90,21 @@ def generate_invoice_number():
         else:
             new_number = 1
         
-        # Format the number
+        # Dynamic padding: determine minimum digits needed
+        # Start with 4 digits, expand in increments
         if new_number <= 9999:
-            formatted_number = f"{new_number:04d}"
+            min_digits = 4
+        elif new_number <= 99999:
+            min_digits = 5
+        elif new_number <= 999999:
+            min_digits = 6
+        elif new_number <= 9999999:
+            min_digits = 7
         else:
-            formatted_number = str(new_number)
+            # For very large numbers, calculate required digits
+            min_digits = len(str(new_number))
+        
+        formatted_number = f"{new_number:0{min_digits}d}"
         
         # Build final invoice number
         if prefix and include_year:

@@ -206,7 +206,7 @@ urlpatterns = [
     # Action Views
     path('staff/bulk-action/', views.bulk_staff_action, name='bulk_staff_action'),
     path('attendance/bulk-record/', views.bulk_attendance_record, name='bulk_attendance_record'),
-    path('payroll/bulk-generate/', views.bulk_payroll_generation, name='bulk_payroll_generation'),
+    path('payroll/bulk-generate/', views.payroll_bulk_create, name='bulk_payroll_generation'),
     
     # Modal Views (confirmation/action modals ONLY)
     path('staff/modal/bulk-action/', modal_views.bulk_staff_action_modal, name='bulk_staff_action_modal'),

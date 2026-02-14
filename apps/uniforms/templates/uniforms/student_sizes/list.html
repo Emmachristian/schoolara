@@ -1,0 +1,556 @@
+<!-- uniforms/templates/uniforms/student_sizes/list.html -->
+
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   STATUS BADGE STYLING
+   ============================================================================ */
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid;
+    display: inline-block;
+}
+
+/* ============================================================================
+   FILTERS & SEARCH SECTION
+   ============================================================================ */
+
+.size-rec-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-header {
+    margin-bottom: 20px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-animate {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================================================
+   STATISTICS SUMMARY
+   ============================================================================ */
+
+.stats-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 28px;
+    color: white;
+}
+
+.stats-content h3 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.stats-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+/* ============================================================================
+   TABLE STYLING
+   ============================================================================ */
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+
+.table tbody td {
+    position: relative;
+    overflow: visible;
+}
+
+.dropdown-menu {
+    z-index: 1050 !important;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 15px 12px;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 80px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================================================
+   PAGINATION
+   ============================================================================ */
+
+.pagination {
+    margin: 20px 0;
+}
+
+.page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+}
+
+.page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .size-rec-filters {
+        padding: 15px;
+    }
+    
+    .stats-card {
+        padding: 15px;
+    }
+    
+    .stats-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Student Size Recommendations
+                <div class="page-title-subheading">
+                    Manage student-specific uniform size recommendations based on measurements
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'uniforms:student_uniform_size_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i>Create Recommendation
+                </a>
+                <button type="button" 
+                        class="btn btn-outline-info"
+                        hx-get="{% url 'uniforms:bulk_size_recommendation_modal' %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-users me-1"></i>Bulk Recommend
+                </button>
+                <button type="button" 
+                        class="btn btn-outline-secondary"
+                        hx-get="{% url 'uniforms:uniform_size_chart_modal' %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-ruler me-1"></i>Size Chart
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+                <a href="{% url 'uniforms:export_student_uniform_sizes_excel' %}" class="btn btn-outline-success">
+                    <i class="fa fa-file-excel me-1"></i>Export Excel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-users"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Recommendations</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Current</div>
+                <h3>{{ stats.current|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Verified</div>
+                <h3>{{ stats.verified|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-graph1"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">High Confidence</div>
+                <h3>{{ stats.high_confidence|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Section -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <!-- Results Card -->
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+                    
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-users me-2 text-primary"></i>
+                                Size Recommendations
+                            </h5>
+                            <div class="filter-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i>Reset Filters
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i>Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters with HTMX -->
+                    <div class="size-rec-filters">
+                        <form id="searchForm" 
+                            class="row g-3"
+                            hx-get="{% url 'uniforms:student_uniform_size_list' %}"
+                            hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+                            hx-target="#size-results"
+                            hx-swap="innerHTML">
+                            
+                            <!-- Search Input -->
+                            <div class="col-md-6">
+                                <label for="id_q" class="form-label small text-muted mb-1">
+                                    Search Students/Items
+                                </label>
+                                <input type="text" 
+                                       name="q" 
+                                       id="id_q" 
+                                       class="form-control" 
+                                       placeholder="Search by student name or uniform item..."
+                                       value="{{ request.GET.q }}">
+                            </div>
+                            
+                            <!-- Student Filter -->
+                            <div class="col-md-3">
+                                <label for="id_student" class="form-label small text-muted mb-1">
+                                    Student
+                                </label>
+                                <select name="student" id="id_student" class="form-select">
+                                    <option value="">All Students</option>
+                                    {% for student in students %}
+                                        <option value="{{ student.pk }}" 
+                                                {% if request.GET.student == student.pk|stringformat:"s" %}selected{% endif %}>
+                                            {{ student.get_full_name }} - {{ student.student_id }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Confidence Filter -->
+                            <div class="col-md-3">
+                                <label for="id_confidence" class="form-label small text-muted mb-1">
+                                    Confidence Level
+                                </label>
+                                <select name="confidence" id="id_confidence" class="form-select">
+                                    <option value="">All</option>
+                                    <option value="HIGH" {% if request.GET.confidence == "HIGH" %}selected{% endif %}>High</option>
+                                    <option value="MEDIUM" {% if request.GET.confidence == "MEDIUM" %}selected{% endif %}>Medium</option>
+                                    <option value="LOW" {% if request.GET.confidence == "LOW" %}selected{% endif %}>Low</option>
+                                </select>
+                            </div>
+
+                            <!-- Current Status Filter -->
+                            <div class="col-md-4">
+                                <label for="id_is_current" class="form-label small text-muted mb-1">
+                                    Status
+                                </label>
+                                <select name="is_current" id="id_is_current" class="form-select">
+                                    <option value="">All</option>
+                                    <option value="true" {% if request.GET.is_current == "true" %}selected{% endif %}>Current Only</option>
+                                    <option value="false" {% if request.GET.is_current == "false" %}selected{% endif %}>Historical Only</option>
+                                </select>
+                            </div>
+
+                            <!-- Verified Filter -->
+                            <div class="col-md-4">
+                                <label for="id_is_verified" class="form-label small text-muted mb-1">
+                                    Verification
+                                </label>
+                                <select name="is_verified" id="id_is_verified" class="form-select">
+                                    <option value="">All</option>
+                                    <option value="true" {% if request.GET.is_verified == "true" %}selected{% endif %}>Verified Only</option>
+                                    <option value="false" {% if request.GET.is_verified == "false" %}selected{% endif %}>Unverified Only</option>
+                                </select>
+                            </div>
+
+                            <!-- Measurement Based Filter -->
+                            <div class="col-md-4">
+                                <label for="id_measurement_based" class="form-label small text-muted mb-1">
+                                    Based On
+                                </label>
+                                <select name="measurement_based" id="id_measurement_based" class="form-select">
+                                    <option value="">All</option>
+                                    <option value="true" {% if request.GET.measurement_based == "true" %}selected{% endif %}>Measurement-Based</option>
+                                    <option value="false" {% if request.GET.measurement_based == "false" %}selected{% endif %}>Manual Entry</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div id="size-results">
+                        {% include 'uniforms/student_sizes/partials/_size_results.html' %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========================================== -->
+<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;">
+    <!-- Modal content loaded here via HTMX -->
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ============================================================================
+// PAGE-SPECIFIC HTMX MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+        
+        if (modalDialog) {
+            // Create a proper Bootstrap modal structure
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+            
+            // Remove existing modal wrapper if it exists
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+            
+            // Create new modal wrapper
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+            
+            // Move the modal-dialog into the wrapper
+            modalWrapper.appendChild(modalDialog);
+            
+            // Append to body (outside app-container)
+            document.body.appendChild(modalWrapper);
+            
+            // Initialize and show modal
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            currentModal.show();
+            
+            // Clean up when hidden
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+});
+
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+    
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' : 
+                                   type === 'error' ? '#dc3545' : 
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+    
+    // Close modal if instructed
+    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
+    if (closeModal === 'true') {
+        if (currentModal) {
+            currentModal.hide();
+        }
+    }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function resetFilters() {
+    window.location.href = "{% url 'uniforms:student_uniform_size_list' %}";
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

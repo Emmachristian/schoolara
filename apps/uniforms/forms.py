@@ -613,8 +613,10 @@ class UniformItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin,
             ).order_by('display_order')
             
             self.fields['unit_of_measure'].queryset = UnitOfMeasure.objects.filter(
-                is_active=True
+                is_active=True,
+                uom_type='QUANTITY'
             ).order_by('name')
+
             
             self.fields['tax_rate'].queryset = TaxRate.objects.filter(
                 is_active=True
@@ -1028,9 +1030,7 @@ class UniformSaleForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin,
                 is_active=True
             ).order_by('-start_date')
             
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
-                status__in=['OPEN', 'CURRENT']
-            ).order_by('-start_date')
+            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
             
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True

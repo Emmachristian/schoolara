@@ -104,15 +104,19 @@ def fee_invoice_post_save(sender, instance, created, **kwargs):
 @receiver(post_save, sender='fees.FeeInvoice')
 def post_journal_entry_when_invoice_finalized(sender, instance, **kwargs):
     """
-    Post journal entry when invoice is finalized.
+    Create and post journal entry when invoice is finalized.
     
     Finalized means invoice status changed from DRAFT to:
     - PENDING (manual finalization by admin)
     - PARTIALLY_PAID (payment made to DRAFT invoice)
     - PAID (full payment made to DRAFT invoice)
     
-    This ensures journal entries are posted at the right time regardless
-    of whether the invoice was manually approved or payment-triggered.
+    This ensures journal entries are created and posted at the right time 
+    regardless of whether the invoice was:
+    - Manually finalized via invoice_finalize view
+    - Auto-finalized via payment
+    - Bulk-finalized via admin action
+    - Updated programmatically via API/script
     
     NOTE: Zero-amount invoices (scholarships/waivers) don't have journal entries.
     """
@@ -122,27 +126,11 @@ def post_journal_entry_when_invoice_finalized(sender, instance, **kwargs):
     # ✅ Skip zero-amount invoices (no journal entry by design)
     if instance.total_amount <= Decimal('0.00'):
         logger.debug(
-            f"Skipping journal entry posting for zero-amount invoice {instance.invoice_number}"
-        )
-        return
-    
-    if not instance.journal_entry:
-        # This shouldn't happen for non-zero invoices
-        logger.warning(
-            f"⚠️ Non-zero invoice {instance.invoice_number} (total: {instance.total_amount}) "
-            f"has no journal entry - this may indicate an issue"
+            f"Skipping journal entry for zero-amount invoice {instance.invoice_number}"
         )
         return
     
     if not instance.pk:
-        return
-    
-    # ✅ CRITICAL FIX: Only proceed if journal entry is still DRAFT
-    if instance.journal_entry.status != 'DRAFT':
-        logger.debug(
-            f"Journal entry {instance.journal_entry.entry_number} is already "
-            f"{instance.journal_entry.status} - skipping auto-post"
-        )
         return
     
     try:
@@ -152,12 +140,59 @@ def post_journal_entry_when_invoice_finalized(sender, instance, **kwargs):
         # Define finalized statuses
         finalized_statuses = ['PENDING', 'PARTIALLY_PAID', 'PAID']
         
-        # Check if invoice was finalized (DRAFT → finalized status)
+        # Check if invoice was just finalized (DRAFT → finalized status)
         if (old_invoice.status == 'DRAFT' and 
             instance.status in finalized_statuses):
             
-            # POST the journal entry
+            # ================================================================
+            # CREATE JOURNAL ENTRY IF IT DOESN'T EXIST
+            # ================================================================
+            
+            if not instance.journal_entry_id:
+                logger.info(
+                    f"Creating journal entry for finalized invoice {instance.invoice_number} "
+                    f"(no journal entry existed)"
+                )
+                
+                from fees.invoice_generators import UnifiedStudentInvoiceGenerator
+                
+                # Create the journal entry
+                journal_entry = UnifiedStudentInvoiceGenerator._create_journal_entry(instance)
+                
+                if not journal_entry:
+                    logger.error(
+                        f"Failed to create journal entry for invoice {instance.invoice_number}"
+                    )
+                    return
+                
+                # Link it to the invoice (using update to avoid recursion)
+                sender.objects.filter(pk=instance.pk).update(
+                    journal_entry=journal_entry
+                )
+                
+                # Refresh instance to get the updated journal_entry relationship
+                instance.refresh_from_db()
+                
+                logger.info(
+                    f"✅ Created journal entry {journal_entry.entry_number} "
+                    f"for invoice {instance.invoice_number}"
+                )
+            
+            # ================================================================
+            # POST THE JOURNAL ENTRY (whether newly created or existing)
+            # ================================================================
+            
             journal_entry = instance.journal_entry
+            
+            # Only post if still DRAFT
+            if journal_entry.status != 'DRAFT':
+                logger.debug(
+                    f"Journal entry {journal_entry.entry_number} is already "
+                    f"{journal_entry.status} - skipping auto-post"
+                )
+                return
+            
+            # POST the journal entry
             journal_entry.status = 'POSTED'
             journal_entry.posted_at = timezone.now()
             journal_entry.save(update_fields=['status', 'posted_at'])
@@ -176,10 +211,11 @@ def post_journal_entry_when_invoice_finalized(sender, instance, **kwargs):
             )
     
     except sender.DoesNotExist:
+        # New invoice being created - not a finalization
         pass
     except Exception as e:
         logger.error(
-            f"Error posting journal entry for invoice {instance.invoice_number}: {e}",
+            f"Error processing journal entry for invoice {instance.invoice_number}: {e}",
             exc_info=True
         )
 

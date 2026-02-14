@@ -5,6 +5,7 @@ Human Resources Signals
 Handles automatic operations on model save/delete:
 - Staff ID generation (century-safe format)
 - Contract number generation (century-safe format)
+- Payroll number generation (century-safe format)
 - Age validation
 - Date validations using school timezone
 - Automatic field population
@@ -12,6 +13,7 @@ Handles automatic operations on model save/delete:
 - Contract status tracking
 - Designation management
 - Teacher profile synchronization
+- Payroll calculation automation (GROSS PAY, NET PAY, etc.)
 
 All number generation is delegated to utils.py for clean separation.
 Uses school timezone from core.utils for all date operations.
@@ -25,6 +27,7 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal
 from datetime import date, timedelta
 import logging
+from contextlib import contextmanager
 
 from .models import (
     Department,
@@ -35,11 +38,89 @@ from .models import (
     Teacher,
     Attendance,
     Payroll,
+    PayrollAllowance,
+    PayrollDeduction,
+    PayrollBonus,
     SalaryHistory,
     ContractBenefit,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# UTILITY: SIGNAL CONTROL
+# =============================================================================
+
+@contextmanager
+def disable_payroll_calculation_signals():
+    """
+    Context manager to temporarily disable payroll calculation signals.
+    
+    Usage:
+        with disable_payroll_calculation_signals():
+            payroll.save()  # Won't trigger recalculation
+            
+    Use this for bulk operations or when you want to manually control
+    when calculations happen.
+    """
+    # Store signal handlers
+    handlers = []
+    
+    # Disconnect signals
+    try:
+        post_save.disconnect(recalculate_payroll_on_allowance_change, sender=PayrollAllowance)
+        handlers.append(('post_save', recalculate_payroll_on_allowance_change, PayrollAllowance))
+    except:
+        pass
+    
+    try:
+        post_delete.disconnect(recalculate_payroll_on_allowance_change, sender=PayrollAllowance)
+        handlers.append(('post_delete', recalculate_payroll_on_allowance_change, PayrollAllowance))
+    except:
+        pass
+    
+    try:
+        post_save.disconnect(recalculate_payroll_on_deduction_change, sender=PayrollDeduction)
+        handlers.append(('post_save', recalculate_payroll_on_deduction_change, PayrollDeduction))
+    except:
+        pass
+    
+    try:
+        post_delete.disconnect(recalculate_payroll_on_deduction_change, sender=PayrollDeduction)
+        handlers.append(('post_delete', recalculate_payroll_on_deduction_change, PayrollDeduction))
+    except:
+        pass
+    
+    try:
+        post_save.disconnect(recalculate_payroll_on_bonus_change, sender=PayrollBonus)
+        handlers.append(('post_save', recalculate_payroll_on_bonus_change, PayrollBonus))
+    except:
+        pass
+    
+    try:
+        post_delete.disconnect(recalculate_payroll_on_bonus_change, sender=PayrollBonus)
+        handlers.append(('post_delete', recalculate_payroll_on_bonus_change, PayrollBonus))
+    except:
+        pass
+    
+    try:
+        pre_save.disconnect(recalculate_on_basic_salary_change, sender=Payroll)
+        handlers.append(('pre_save', recalculate_on_basic_salary_change, Payroll))
+    except:
+        pass
+    
+    try:
+        yield
+    finally:
+        # Reconnect signals
+        for signal_type, handler, model in handlers:
+            if signal_type == 'post_save':
+                post_save.connect(handler, sender=model)
+            elif signal_type == 'post_delete':
+                post_delete.connect(handler, sender=model)
+            elif signal_type == 'pre_save':
+                pre_save.connect(handler, sender=model)
 
 
 # =============================================================================
@@ -191,6 +272,26 @@ def update_employment_status_on_leaving(sender, instance, **kwargs):
                     
         except Staff.DoesNotExist:
             pass
+
+
+@receiver(pre_save, sender=Staff)
+def validate_phone_numbers(sender, instance, **kwargs):
+    """
+    Validate phone number formats.
+    """
+    import re
+    
+    phone_pattern = r'^\+?1?\d{9,15}$'
+    
+    if instance.phone_number:
+        cleaned = re.sub(r'[^\d+]', '', instance.phone_number)
+        if not re.match(phone_pattern, cleaned):
+            logger.warning(f"Invalid phone number format: {instance.phone_number}")
+    
+    if instance.alternative_phone:
+        cleaned = re.sub(r'[^\d+]', '', instance.alternative_phone)
+        if not re.match(phone_pattern, cleaned):
+            logger.warning(f"Invalid alternative phone format: {instance.alternative_phone}")
 
 
 # =============================================================================
@@ -345,6 +446,15 @@ def validate_contract_dates(sender, instance, **kwargs):
 
 
 @receiver(pre_save, sender=Contract)
+def validate_salary_amounts(sender, instance, **kwargs):
+    """
+    Validate salary amounts are positive.
+    """
+    if instance.basic_salary <= 0:
+        raise ValidationError("Basic salary must be greater than zero.")
+
+
+@receiver(pre_save, sender=Contract)
 def auto_populate_fiscal_year(sender, instance, **kwargs):
     """
     Auto-populate fiscal year from period if available.
@@ -487,7 +597,7 @@ def set_default_start_date(sender, instance, **kwargs):
 @receiver(post_save, sender=StaffDesignation)
 def auto_create_teacher_profile(sender, instance, created, **kwargs):
     """
-    ⭐ OPTION 3 - STEP 1: AUTO-CREATE TEACHER PROFILE
+    ⭐ AUTO-CREATE TEACHER PROFILE
     
     Automatically create teacher profile when a teaching designation is assigned.
     This ensures consistency between designations and teacher profiles.
@@ -524,52 +634,9 @@ def auto_create_teacher_profile(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=StaffDesignation)
-def log_designation_assignment(sender, instance, created, **kwargs):
-    """
-    Log when a designation is assigned to staff.
-    """
-    if created:
-        primary_str = " (PRIMARY)" if instance.is_primary else ""
-        teaching_str = " [TEACHING]" if instance.designation.is_teaching else ""
-        logger.info(
-            f"Designation assigned: {instance.staff.full_name()} → "
-            f"{instance.designation.name}{primary_str}{teaching_str}"
-        )
-
-@receiver(post_delete, sender=StaffDesignation)
-def check_teacher_profile_on_designation_delete(sender, instance, **kwargs):
-    if instance.designation.is_teaching and hasattr(instance.staff, 'teacher'):
-        other_teaching_designations = StaffDesignation.objects.filter(
-            staff=instance.staff,
-            designation__is_teaching=True,
-            is_active=True
-        ).exclude(pk=instance.pk).exists()
-        
-        if not other_teaching_designations:
-            # ⭐ OPTION C: Soft delete - mark as inactive
-            instance.staff.teacher.is_active = False
-            instance.staff.teacher.save()
-            
-            logger.info(
-                f"✓ Deactivated teacher profile for {instance.staff.full_name()} "
-                f"(no active teaching designations)"
-            )
-
-@receiver(post_delete, sender=StaffDesignation)
-def log_designation_removal(sender, instance, **kwargs):
-    """
-    Log when a designation assignment is removed.
-    """
-    teaching_str = " [TEACHING]" if instance.designation.is_teaching else ""
-    logger.info(
-        f"Designation removed: {instance.staff.full_name()} ← "
-        f"{instance.designation.name}{teaching_str}"
-    )
-
-@receiver(post_save, sender=StaffDesignation)
 def auto_reactivate_teacher_profile(sender, instance, created, **kwargs):
     """
-    ⭐ OPTION C: AUTO-REACTIVATE teacher profile when teaching designation is added
+    ⭐ AUTO-REACTIVATE teacher profile when teaching designation is added
     
     If a teacher profile exists but is inactive, reactivate it when a teaching
     designation is assigned.
@@ -585,6 +652,55 @@ def auto_reactivate_teacher_profile(sender, instance, created, **kwargs):
                     f"✓ Reactivated teacher profile for {instance.staff.full_name()} "
                     f"due to teaching designation assignment: {instance.designation.name}"
                 )
+
+
+@receiver(post_save, sender=StaffDesignation)
+def log_designation_assignment(sender, instance, created, **kwargs):
+    """
+    Log when a designation is assigned to staff.
+    """
+    if created:
+        primary_str = " (PRIMARY)" if instance.is_primary else ""
+        teaching_str = " [TEACHING]" if instance.designation.is_teaching else ""
+        logger.info(
+            f"Designation assigned: {instance.staff.full_name()} → "
+            f"{instance.designation.name}{primary_str}{teaching_str}"
+        )
+
+
+@receiver(post_delete, sender=StaffDesignation)
+def check_teacher_profile_on_designation_delete(sender, instance, **kwargs):
+    """
+    ⭐ Check if teacher profile should be deactivated when designation is removed
+    """
+    if instance.designation.is_teaching and hasattr(instance.staff, 'teacher'):
+        other_teaching_designations = StaffDesignation.objects.filter(
+            staff=instance.staff,
+            designation__is_teaching=True,
+            is_active=True
+        ).exclude(pk=instance.pk).exists()
+        
+        if not other_teaching_designations:
+            # Soft delete - mark as inactive
+            instance.staff.teacher.is_active = False
+            instance.staff.teacher.save()
+            
+            logger.info(
+                f"✓ Deactivated teacher profile for {instance.staff.full_name()} "
+                f"(no active teaching designations)"
+            )
+
+
+@receiver(post_delete, sender=StaffDesignation)
+def log_designation_removal(sender, instance, **kwargs):
+    """
+    Log when a designation assignment is removed.
+    """
+    teaching_str = " [TEACHING]" if instance.designation.is_teaching else ""
+    logger.info(
+        f"Designation removed: {instance.staff.full_name()} ← "
+        f"{instance.designation.name}{teaching_str}"
+    )
 
 
 # =============================================================================
@@ -707,16 +823,36 @@ def log_attendance_record(sender, instance, created, **kwargs):
 
 
 # =============================================================================
-# PAYROLL SIGNALS
+# PAYROLL SIGNALS - ⭐ AUTOMATIC CALCULATION
 # =============================================================================
+
+@receiver(pre_save, sender=Payroll)
+def generate_payroll_number(sender, instance, **kwargs):
+    """
+    Generate payroll number if not set.
+    Delegates to utils.generate_payroll_number() for generation logic.
+    
+    Format: PAY/YYYY/MM/NNNN or PAY/AYYY/MM/NNNN (century-safe)
+    Examples: PAY/2024/01/0001, PAY/A125/06/0001 (for year 2125)
+    """
+    if not instance.payroll_number and instance.pay_period_start:
+        from .utils import generate_payroll_number
+        
+        instance.payroll_number = generate_payroll_number(
+            pay_period_start=instance.pay_period_start,
+            pay_frequency=instance.pay_frequency
+        )
+        
+        logger.info(f"Generated payroll number: {instance.payroll_number}")
+
 
 @receiver(pre_save, sender=Payroll)
 def auto_populate_payroll_fiscal_year(sender, instance, **kwargs):
     """
     Auto-populate fiscal year from period.
     """
-    if instance.period and hasattr(instance.period, 'fiscal_year'):
-        instance.fiscal_year = instance.period.fiscal_year
+    if instance.fiscal_period and hasattr(instance.fiscal_period, 'fiscal_year'):
+        instance.fiscal_year = instance.fiscal_period.fiscal_year
 
 
 @receiver(pre_save, sender=Payroll)
@@ -738,6 +874,56 @@ def validate_payroll_date(sender, instance, **kwargs):
             logger.warning(f"Payroll payment date is far in future: {instance.payment_date}")
 
 
+@receiver(pre_save, sender=Payroll)
+def recalculate_on_basic_salary_change(sender, instance, **kwargs):
+    """
+    ⭐ AUTOMATIC RECALCULATION: Recalculate payroll when basic_salary or nssf_employer changes.
+    
+    This handles changes to the payroll header fields that affect calculations.
+    Runs BEFORE save to update all calculated fields.
+    """
+    if instance.pk:  # Only for existing payrolls
+        try:
+            old_instance = Payroll.objects.get(pk=instance.pk)
+            
+            # Check if basic_salary or nssf_employer changed
+            basic_salary_changed = (
+                old_instance.basic_salary != instance.basic_salary
+            )
+            nssf_employer_changed = (
+                old_instance.nssf_employer != instance.nssf_employer
+            )
+            
+            if basic_salary_changed or nssf_employer_changed:
+                # Skip if payroll is reversed or cancelled
+                if not instance.is_active:
+                    logger.debug(
+                        f"Skipping recalculation for inactive payroll {instance.pk}"
+                    )
+                    return
+                
+                # Skip if payroll is paid (locked)
+                if instance.status == 'PAID':
+                    logger.warning(
+                        f"⚠ Core salary fields changed on PAID payroll {instance.pk}. "
+                        f"This should not happen unless manually overridden."
+                    )
+                    return
+                
+                # ⭐ Recalculate all amounts
+                # Note: We DON'T save here - pre_save will handle the save
+                instance.recalculate_all()
+                
+                logger.info(
+                    f"✓ Recalculated payroll {instance.pk} due to header field change. "
+                    f"Basic: {instance.basic_salary}, Gross: {instance.gross_pay}, Net: {instance.net_pay}"
+                )
+                
+        except Payroll.DoesNotExist:
+            # New payroll - will be calculated in view or after formset save
+            pass
+
+
 @receiver(post_save, sender=Payroll)
 def log_payroll_creation(sender, instance, created, **kwargs):
     """
@@ -746,14 +932,15 @@ def log_payroll_creation(sender, instance, created, **kwargs):
     if created:
         logger.info(
             f"Payroll created: {instance.staff.full_name()} - "
-            f"{instance.period.name} - Net: {instance.net_pay}"
+            f"{instance.pay_period_label} - "
+            f"Gross: {instance.gross_pay}, Net: {instance.net_pay}"
         )
 
 
 @receiver(pre_save, sender=Payroll)
 def track_payroll_status_changes(sender, instance, **kwargs):
     """
-    Track payroll status changes.
+    Track payroll status changes and update timestamps.
     """
     if instance.pk:
         try:
@@ -764,17 +951,195 @@ def track_payroll_status_changes(sender, instance, **kwargs):
                 if not instance.approved_at:
                     instance.approved_at = timezone.now()
                 logger.info(
-                    f"Payroll approved for {instance.staff.full_name()} - {instance.period.name}"
+                    f"Payroll approved for {instance.staff.full_name()} - {instance.pay_period_label}"
                 )
             
             # Status changed to PAID
             if old_instance.status != 'PAID' and instance.status == 'PAID':
+                if not instance.paid_at:
+                    instance.paid_at = timezone.now()
                 logger.info(
-                    f"Payroll paid for {instance.staff.full_name()} - {instance.period.name}"
+                    f"Payroll paid for {instance.staff.full_name()} - {instance.pay_period_label}"
                 )
                 
         except Payroll.DoesNotExist:
             pass
+
+
+# =============================================================================
+# PAYROLL LINE ITEM SIGNALS - ⭐ AUTOMATIC RECALCULATION
+# =============================================================================
+
+@receiver(post_save, sender=PayrollAllowance)
+@receiver(post_delete, sender=PayrollAllowance)
+def recalculate_payroll_on_allowance_change(sender, instance, **kwargs):
+    """
+    ⭐ AUTOMATIC RECALCULATION: Recalculate payroll totals when allowances change.
+    
+    This ensures gross_pay, taxable_income, and net_pay stay consistent
+    with allowance line items.
+    
+    Triggers:
+    - After allowance is created
+    - After allowance is updated
+    - After allowance is deleted
+    """
+    if instance.payroll_id:
+        try:
+            payroll = instance.payroll
+            
+            # Skip if payroll is reversed or cancelled
+            if not payroll.is_active:
+                logger.debug(
+                    f"Skipping recalculation for inactive payroll {payroll.pk}"
+                )
+                return
+            
+            # Skip if payroll is paid (only notes/payment_ref should be editable)
+            if payroll.status == 'PAID':
+                logger.warning(
+                    f"⚠ Allowance changed on PAID payroll {payroll.pk}. "
+                    f"This should not happen unless manually overridden."
+                )
+                return
+            
+            # ⭐ Recalculate all amounts
+            payroll.recalculate_all()
+            
+            # Save with only the fields that changed
+            payroll.save(update_fields=[
+                'total_allowances', 'total_bonuses', 'gross_pay',
+                'taxable_income',
+                'paye_amount', 'nssf_employee', 'local_service_tax',
+                'total_statutory_deductions', 'total_voluntary_deductions',
+                'total_deductions', 'net_pay',
+                'employer_total_cost',
+                'updated_at',
+            ])
+            
+            logger.info(
+                f"✓ Recalculated payroll {payroll.pk} due to allowance change. "
+                f"Allowances: {payroll.total_allowances}, Gross: {payroll.gross_pay}, Net: {payroll.net_pay}"
+            )
+            
+        except Payroll.DoesNotExist:
+            logger.error(f"Payroll not found for allowance {instance.pk}")
+        except Exception as e:
+            logger.error(f"Error recalculating payroll on allowance change: {e}", exc_info=True)
+
+
+@receiver(post_save, sender=PayrollDeduction)
+@receiver(post_delete, sender=PayrollDeduction)
+def recalculate_payroll_on_deduction_change(sender, instance, **kwargs):
+    """
+    ⭐ AUTOMATIC RECALCULATION: Recalculate payroll totals when deductions change.
+    
+    This ensures total_deductions, net_pay, and statutory breakdowns
+    stay consistent with deduction line items.
+    
+    Triggers:
+    - After deduction is created
+    - After deduction is updated
+    - After deduction is deleted
+    """
+    if instance.payroll_id:
+        try:
+            payroll = instance.payroll
+            
+            # Skip if payroll is reversed or cancelled
+            if not payroll.is_active:
+                logger.debug(
+                    f"Skipping recalculation for inactive payroll {payroll.pk}"
+                )
+                return
+            
+            # Skip if payroll is paid
+            if payroll.status == 'PAID':
+                logger.warning(
+                    f"⚠ Deduction changed on PAID payroll {payroll.pk}. "
+                    f"This should not happen unless manually overridden."
+                )
+                return
+            
+            # ⭐ Recalculate all amounts
+            payroll.recalculate_all()
+            
+            payroll.save(update_fields=[
+                'total_allowances', 'total_bonuses', 'gross_pay',
+                'taxable_income',
+                'paye_amount', 'nssf_employee', 'local_service_tax',
+                'total_statutory_deductions', 'total_voluntary_deductions',
+                'total_deductions', 'net_pay',
+                'employer_total_cost',
+                'updated_at',
+            ])
+            
+            logger.info(
+                f"✓ Recalculated payroll {payroll.pk} due to deduction change. "
+                f"Deductions: {payroll.total_deductions}, Net: {payroll.net_pay}"
+            )
+            
+        except Payroll.DoesNotExist:
+            logger.error(f"Payroll not found for deduction {instance.pk}")
+        except Exception as e:
+            logger.error(f"Error recalculating payroll on deduction change: {e}", exc_info=True)
+
+
+@receiver(post_save, sender=PayrollBonus)
+@receiver(post_delete, sender=PayrollBonus)
+def recalculate_payroll_on_bonus_change(sender, instance, **kwargs):
+    """
+    ⭐ AUTOMATIC RECALCULATION: Recalculate payroll totals when bonuses change.
+    
+    This ensures gross_pay, taxable_income, and net_pay stay consistent
+    with bonus line items.
+    
+    Triggers:
+    - After bonus is created
+    - After bonus is updated
+    - After bonus is deleted
+    """
+    if instance.payroll_id:
+        try:
+            payroll = instance.payroll
+            
+            # Skip if payroll is reversed or cancelled
+            if not payroll.is_active:
+                logger.debug(
+                    f"Skipping recalculation for inactive payroll {payroll.pk}"
+                )
+                return
+            
+            # Skip if payroll is paid
+            if payroll.status == 'PAID':
+                logger.warning(
+                    f"⚠ Bonus changed on PAID payroll {payroll.pk}. "
+                    f"This should not happen unless manually overridden."
+                )
+                return
+            
+            # ⭐ Recalculate all amounts
+            payroll.recalculate_all()
+            
+            payroll.save(update_fields=[
+                'total_allowances', 'total_bonuses', 'gross_pay',
+                'taxable_income',
+                'paye_amount', 'nssf_employee', 'local_service_tax',
+                'total_statutory_deductions', 'total_voluntary_deductions',
+                'total_deductions', 'net_pay',
+                'employer_total_cost',
+                'updated_at',
+            ])
+            
+            logger.info(
+                f"✓ Recalculated payroll {payroll.pk} due to bonus change. "
+                f"Bonuses: {payroll.total_bonuses}, Gross: {payroll.gross_pay}, Net: {payroll.net_pay}"
+            )
+            
+        except Payroll.DoesNotExist:
+            logger.error(f"Payroll not found for bonus {instance.pk}")
+        except Exception as e:
+            logger.error(f"Error recalculating payroll on bonus change: {e}", exc_info=True)
 
 
 # =============================================================================
@@ -852,39 +1217,6 @@ def log_benefit_assignment(sender, instance, created, **kwargs):
 
 
 # =============================================================================
-# DATA INTEGRITY CHECKS
-# =============================================================================
-
-@receiver(pre_save, sender=Staff)
-def validate_phone_numbers(sender, instance, **kwargs):
-    """
-    Validate phone number formats.
-    """
-    import re
-    
-    phone_pattern = r'^\+?1?\d{9,15}$'
-    
-    if instance.phone_number:
-        cleaned = re.sub(r'[^\d+]', '', instance.phone_number)
-        if not re.match(phone_pattern, cleaned):
-            logger.warning(f"Invalid phone number format: {instance.phone_number}")
-    
-    if instance.alternative_phone:
-        cleaned = re.sub(r'[^\d+]', '', instance.alternative_phone)
-        if not re.match(phone_pattern, cleaned):
-            logger.warning(f"Invalid alternative phone format: {instance.alternative_phone}")
-
-
-@receiver(pre_save, sender=Contract)
-def validate_salary_amounts(sender, instance, **kwargs):
-    """
-    Validate salary amounts are positive.
-    """
-    if instance.basic_salary <= 0:
-        raise ValidationError("Basic salary must be greater than zero.")
-
-
-# =============================================================================
 # CACHE INVALIDATION (if using caching)
 # =============================================================================
 
@@ -939,8 +1271,9 @@ def invalidate_payroll_cache(sender, instance, **kwargs):
     
     cache_keys = [
         f'payroll_{instance.pk}',
-        f'staff_payroll_{instance.staff.pk}_{instance.period.pk}',
+        f'staff_payroll_{instance.staff.pk}_{instance.fiscal_period.pk}',
         'payroll_list',
+        'pending_payrolls',
     ]
     
     for key in cache_keys:

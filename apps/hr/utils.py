@@ -759,6 +759,90 @@ def validate_contract_data(contract_data):
     }
 
 # =============================================================================
+# PAYROLL NUMBER UTILITIES
+# =============================================================================
+
+def build_payroll_number_prefix(year, month, pay_frequency='MONTHLY'):
+    """
+    Build payroll number prefix WITHOUT touching database.
+    Pure function for prefix construction.
+    
+    Args:
+        year (int): Payroll year
+        month (int): Payroll month (1-12)
+        pay_frequency (str): Pay frequency code
+        
+    Returns:
+        str: Prefix like "PAY/2024/01/" or "PAY/A125/06/"
+        
+    Examples:
+        build_payroll_number_prefix(2024, 1, 'MONTHLY') → "PAY/2024/01/"
+        build_payroll_number_prefix(2125, 6, 'WEEKLY') → "PAY/A125/06/W"
+    """
+    # Get century-safe year format
+    if year < 2100:
+        year_str = str(year)
+    else:
+        # For years beyond 2099, use letter prefix
+        century = year // 100
+        century_offset = century - 20  # 21st century = 0, 22nd = 1, etc.
+        century_letter = chr(ord('A') + century_offset - 1)
+        year_str = f"{century_letter}{year}"
+    
+    freq_suffix = ""
+    if pay_frequency == 'WEEKLY':
+        freq_suffix = "/W"
+    elif pay_frequency == 'BIWEEKLY':
+        freq_suffix = "/BW"
+    
+    return f"PAY/{year_str}/{month:02d}{freq_suffix}/"
+
+
+def generate_payroll_number(pay_period_start, pay_frequency='MONTHLY'):
+    """
+    Generate payroll number based on pay period.
+    READS from database to get next sequence number.
+    
+    Format: PAY/YYYY/MM/NNNN or PAY/AYYY/MM/NNNN (century-safe)
+    Examples: 
+        PAY/2024/01/0001 (January 2024 monthly payroll)
+        PAY/A125/06/W0001 (June 2125 weekly payroll)
+    
+    Args:
+        pay_period_start (date): Start date of pay period
+        pay_frequency (str): Pay frequency code
+        
+    Returns:
+        str: Generated payroll number
+    """
+    from hr.models import Payroll
+    
+    year = pay_period_start.year
+    month = pay_period_start.month
+    
+    # Build prefix
+    prefix = build_payroll_number_prefix(year, month, pay_frequency)
+    
+    # Get last sequence number for this prefix
+    last_payroll = Payroll.objects.filter(
+        pay_period_start__year=year,
+        pay_period_start__month=month,
+        pay_frequency=pay_frequency
+    ).order_by('-created_at').first()
+    
+    if last_payroll and last_payroll.payroll_number:
+        try:
+            # Extract sequence from last payroll number
+            last_seq = int(last_payroll.payroll_number.split('/')[-1])
+            next_seq = last_seq + 1
+        except (ValueError, IndexError):
+            next_seq = 1
+    else:
+        next_seq = 1
+    
+    return f"{prefix}{next_seq:04d}"
+
+# =============================================================================
 # PAYMENT REVERSAL UTILITIES
 # =============================================================================
 

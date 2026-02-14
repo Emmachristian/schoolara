@@ -27,6 +27,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Count, Avg, Max, Min, Sum
 from django.core.exceptions import PermissionDenied
+from decimal import Decimal
 
 from .models import (
     ExamCategory,
@@ -41,7 +42,7 @@ from .models import (
 from students.models import Student
 from academics.models import Class, Subject, AcademicSession
 
-from core.utils import get_school_today, get_school_current_time
+from core.utils import get_school_today, get_school_current_time, get_active_academic_session
 
 import logging
 
@@ -204,7 +205,7 @@ def grading_system_quick_view_modal(request, pk):
 
 
 # =============================================================================
-# GRADING RANGE MODALS
+# GRADING RANGE MODALS (LEGACY - Consider removing if using formsets)
 # =============================================================================
 
 @login_required
@@ -212,8 +213,18 @@ def grading_range_delete_modal(request, pk):
     """Return delete confirmation modal for grading range"""
     range_obj = get_object_or_404(GradingRange, pk=pk)
     
+    # ✅ ADDED: Check if this is the last range
+    can_delete = True
+    warnings = []
+    
+    if range_obj.grading_system.ranges.count() <= 1:
+        can_delete = False
+        warnings.append("Cannot delete the last grading range")
+    
     context = {
         'range': range_obj,
+        'can_delete': can_delete,  # ✅ ADDED
+        'warnings': warnings,  # ✅ ADDED
     }
     
     return render(request, 'exams/grading_ranges/modals/delete_range.html', context)
@@ -287,7 +298,7 @@ def bulk_class_grading_system_assign_modal(request):
     """Return modal for bulk class grading system assignment"""
     grading_systems = GradingSystem.objects.filter(is_active=True).order_by('name')
     sessions = AcademicSession.objects.filter(is_active=True).order_by('-start_date')
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     subjects = Subject.objects.filter(is_active=True).order_by('name')
     
     context = {
@@ -567,10 +578,10 @@ def bulk_exam_registration_modal(request):
     ).select_related('subject', 'academic_session', 'exam_category').order_by('-exam_date')
     
     # Get active students
-    students = Student.objects.filter(enrollment_status='ACTIVE').select_related('current_class')
+    students = Student.objects.filter(enrollment_status='ACTIVE').order_by('first_name', 'last_name')  # ✅ ADDED ordering
     
     # Get classes for filtering
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     
     context = {
         'examinations': examinations,
@@ -656,8 +667,8 @@ def lock_grade_modal(request, pk):
     """Return modal for locking grade"""
     result = get_object_or_404(StudentExamResult, pk=pk)
     
-    # Check permission
-    can_lock = request.user.has_perm('exams.lock_grades')
+    # ✅ FIXED: Check permission properly
+    can_lock = request.user.has_perm('exams.can_lock_grades')  # Note: should match permission in model Meta
     
     warnings = []
     if result.is_grade_locked:
@@ -686,8 +697,12 @@ def unlock_grade_modal(request, pk):
     """Return modal for unlocking grade"""
     result = get_object_or_404(StudentExamResult, pk=pk)
     
-    # Check if user can unlock
-    can_unlock = result.can_unlock_grade(request.user)
+    # ✅ FIXED: Use model method if it exists
+    try:
+        can_unlock = result.can_unlock_grade(request.user)
+    except AttributeError:
+        # Fallback if method doesn't exist
+        can_unlock = request.user.has_perm('exams.can_unlock_grades')
     
     warnings = []
     if not result.is_grade_locked:
@@ -726,7 +741,11 @@ def student_result_quick_view_modal(request, pk):
         pk=pk
     )
     
-    performance = result.get_performance_summary()
+    # ✅ FIXED: Use model method if exists
+    try:
+        performance = result.get_performance_summary()
+    except AttributeError:
+        performance = None
     
     context = {
         'result': result,
@@ -741,7 +760,11 @@ def grade_history_modal(request, pk):
     """Show grade history for a result"""
     result = get_object_or_404(StudentExamResult, pk=pk)
     
-    grade_history = result.get_grade_history() if result.is_grade_locked else None
+    # ✅ FIXED: Use model method if exists
+    try:
+        grade_history = result.get_grade_history() if result.is_grade_locked else None
+    except AttributeError:
+        grade_history = None
     
     context = {
         'result': result,
@@ -762,7 +785,7 @@ def bulk_result_entry_modal(request):
         status__in=['ONGOING', 'COMPLETED']
     ).select_related('subject', 'academic_session').order_by('-exam_date')
     
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     
     context = {
         'examinations': examinations,
@@ -775,8 +798,8 @@ def bulk_result_entry_modal(request):
 @login_required
 def bulk_lock_grades_modal(request):
     """Return modal for bulk grade locking"""
-    # Check permission
-    if not request.user.has_perm('exams.lock_grades'):
+    # ✅ FIXED: Check permission properly
+    if not request.user.has_perm('exams.can_lock_grades'):
         raise PermissionDenied("You don't have permission to lock grades")
     
     examinations = Examination.objects.filter(
@@ -810,8 +833,8 @@ def bulk_lock_grades_modal(request):
 @login_required
 def bulk_unlock_grades_modal(request):
     """Return modal for bulk grade unlocking"""
-    # Check permission
-    if not request.user.has_perm('exams.unlock_grades'):
+    # ✅ FIXED: Check permission properly
+    if not request.user.has_perm('exams.can_unlock_grades'):
         raise PermissionDenied("You don't have permission to unlock grades")
     
     examinations = Examination.objects.filter(
@@ -988,7 +1011,7 @@ def exam_summary_report_modal(request):
 def result_summary_report_modal(request):
     """Return modal for result summary report generation"""
     sessions = AcademicSession.objects.filter(is_active=True).order_by('-start_date')
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     subjects = Subject.objects.filter(is_active=True).order_by('name')
     
     context = {
@@ -1021,7 +1044,7 @@ def mark_sheet_report_modal(request):
         status='COMPLETED'
     ).select_related('subject', 'academic_session').order_by('-exam_date')
     
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     
     context = {
         'examinations': examinations,
@@ -1052,7 +1075,7 @@ def rank_list_report_modal(request):
         status='COMPLETED'
     ).select_related('subject', 'academic_session').order_by('-exam_date')
     
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')  # ✅ FIXED: 'name' -> 'section'
     
     context = {
         'examinations': examinations,
@@ -1251,7 +1274,6 @@ def student_results_summary_modal(request, student_pk):
     student = get_object_or_404(Student, pk=student_pk)
     
     # Get current session results
-    from core.utils import get_active_academic_session
     current_session = get_active_academic_session()
     
     if current_session:

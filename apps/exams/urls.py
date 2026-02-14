@@ -87,12 +87,6 @@ urlpatterns = [
     # =============================================================================
     # GRADING RANGES
     # =============================================================================
-    # CRUD Views (nested under grading system)
-    path('grading-systems/<uuid:system_pk>/ranges/create/', views.grading_range_create, name='grading_range_create'),
-    path('grading-ranges/<uuid:pk>/edit/', views.grading_range_edit, name='grading_range_edit'),
-
-    # Action Views
-    path('grading-ranges/<uuid:pk>/delete/', views.grading_range_delete, name='grading_range_delete'),
 
     # Modal Views
     path('grading-ranges/<uuid:pk>/modal/delete/', modal_views.grading_range_delete_modal, name='grading_range_delete_modal'),

@@ -30,7 +30,7 @@ from django.http import JsonResponse, HttpResponse
 from django.db import transaction
 from django.core.exceptions import ValidationError, PermissionDenied
 from datetime import timedelta, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import logging
 
 from openpyxl import Workbook
@@ -66,6 +66,7 @@ from .forms import (
     GradingSystemForm,
     GradingSystemFilterForm,
     GradingRangeForm,
+    GradingRangeFormSet,
     ClassGradingSystemForm,
     ClassGradingSystemFilterForm,
     ExaminationForm,
@@ -249,6 +250,7 @@ def get_filtered_grading_systems(request):
     # Get filter parameters
     query = request.GET.get('q', '').strip()
     grading_type = request.GET.get('grading_type', '')
+    scale_type = request.GET.get('scale_type', '')  # ✅ ADDED
     is_active = request.GET.get('is_active', '')
     is_default = request.GET.get('is_default', '')
     uses_gpa = request.GET.get('uses_gpa', '')
@@ -265,6 +267,8 @@ def get_filtered_grading_systems(request):
     # Apply filters
     if grading_type:
         systems = systems.filter(grading_type=grading_type)
+    if scale_type:  # ✅ ADDED
+        systems = systems.filter(scale_type=scale_type)
     if is_active:
         systems = systems.filter(is_active=(is_active.lower() == 'true'))
     if is_default:
@@ -276,6 +280,41 @@ def get_filtered_grading_systems(request):
     
     return systems
 
+def get_filtered_class_grading_systems(request):
+    """Helper function to get filtered class grading system assignments"""
+    assignments = ClassGradingSystem.objects.select_related(
+        'class_instance__academic_level', 'grading_system', 'academic_session', 'subject'
+    ).order_by('-academic_session__start_date', 'class_instance__academic_level__order', 'priority')
+    
+    # Get filter parameters
+    query = request.GET.get('q', '').strip()
+    class_id = request.GET.get('class_id', '')
+    academic_session = request.GET.get('academic_session', '')
+    grading_system = request.GET.get('grading_system', '')
+    subject = request.GET.get('subject', '')
+    is_active = request.GET.get('is_active', '')
+    
+    # Apply text search
+    if query:
+        assignments = assignments.filter(
+            Q(class_instance__academic_level__name__icontains=query) |
+            Q(grading_system__name__icontains=query) |
+            Q(subject__name__icontains=query)
+        )
+    
+    # Apply filters
+    if class_id:
+        assignments = assignments.filter(class_instance_id=class_id)
+    if academic_session:
+        assignments = assignments.filter(academic_session_id=academic_session)
+    if grading_system:
+        assignments = assignments.filter(grading_system_id=grading_system)
+    if subject:
+        assignments = assignments.filter(subject_id=subject)
+    if is_active:
+        assignments = assignments.filter(is_active=(is_active.lower() == 'true'))
+    
+    return assignments
 
 def get_filtered_examinations(request):
     """Helper function to get filtered examinations queryset"""
@@ -289,6 +328,7 @@ def get_filtered_examinations(request):
     exam_category = request.GET.get('exam_category', '')
     subject = request.GET.get('subject', '')
     status = request.GET.get('status', '')
+    exam_mode = request.GET.get('exam_mode', '')  # ✅ ADDED
     exam_date_from = request.GET.get('exam_date_from', '')
     exam_date_to = request.GET.get('exam_date_to', '')
     
@@ -310,6 +350,8 @@ def get_filtered_examinations(request):
         examinations = examinations.filter(subject_id=subject)
     if status:
         examinations = examinations.filter(status=status)
+    if exam_mode:  # ✅ ADDED
+        examinations = examinations.filter(exam_mode=exam_mode)
     if exam_date_from:
         try:
             from_date = datetime.strptime(exam_date_from, '%Y-%m-%d').date()
@@ -339,6 +381,9 @@ def get_filtered_student_results(request):
     is_published = request.GET.get('is_published', '')
     is_grade_locked = request.GET.get('is_grade_locked', '')
     is_pass = request.GET.get('is_pass', '')
+    min_score = request.GET.get('min_score', '')  # ✅ ADDED
+    max_score = request.GET.get('max_score', '')  # ✅ ADDED
+    class_instance = request.GET.get('class_instance', '')  # ✅ ADDED
     
     # Apply text search
     if query:
@@ -367,7 +412,72 @@ def get_filtered_student_results(request):
     if is_pass:
         results = results.filter(is_pass=(is_pass.lower() == 'true'))
     
+    # ✅ ADDED: Score range filters
+    if min_score:
+        try:
+            min_val = Decimal(min_score)
+            results = results.filter(score__gte=min_val)
+        except (ValueError, TypeError, InvalidOperation):
+            pass
+    
+    if max_score:
+        try:
+            max_val = Decimal(max_score)
+            results = results.filter(score__lte=max_val)
+        except (ValueError, TypeError, InvalidOperation):
+            pass
+    
+    # ✅ ADDED: Class filter
+    if class_instance:
+        results = results.filter(
+            student__class_enrollments__class_instance_id=class_instance,
+            student__class_enrollments__is_active=True
+        )
+    
     return results
+
+
+# ✅ ADDED: Missing helper for exam registrations
+def get_filtered_exam_registrations(request):
+    """Helper function to get filtered exam registrations queryset"""
+    registrations = ExamRegistration.objects.select_related(
+        'student', 'examination__subject', 'examination__academic_session', 'registered_by'
+    ).order_by('-registration_date', 'student__first_name', 'student__last_name')
+    
+    # Get filter parameters
+    query = request.GET.get('q', '').strip()
+    examination = request.GET.get('examination', '')
+    status = request.GET.get('registration_status', '')  # Note: changed from 'status' to 'registration_status'
+    requires_assistance = request.GET.get('requires_assistance', '')
+    payment_verified = request.GET.get('payment_verified', '')
+    
+    # Apply text search
+    if query:
+        words = query.strip().split()
+        if words:
+            combined_q = Q()
+            for word in words:
+                word_q = (
+                    Q(student__first_name__icontains=word) |
+                    Q(student__last_name__icontains=word) |
+                    Q(student__middle_name__icontains=word) |
+                    Q(student__admission_number__icontains=word)
+                )
+                combined_q &= word_q
+            registrations = registrations.filter(combined_q)
+    
+    # Apply filters
+    if examination:
+        registrations = registrations.filter(examination_id=examination)
+    if status:
+        registrations = registrations.filter(status=status)
+    if requires_assistance:
+        registrations = registrations.filter(requires_assistance=(requires_assistance.lower() == 'true'))
+    if payment_verified:
+        registrations = registrations.filter(payment_verified=(payment_verified.lower() == 'true'))
+    
+    return registrations
+
 
 # =============================================================================
 # EXAM CATEGORY VIEWS
@@ -739,7 +849,7 @@ def grading_system_detail(request, pk):
     """View grading system details"""
     system = get_object_or_404(GradingSystem, pk=pk)
     
-    # Get grading ranges
+    # Get grading ranges ordered by score (descending)
     ranges = system.ranges.all().order_by('-min_score')
     
     # Get class assignments
@@ -757,7 +867,12 @@ def grading_system_detail(request, pk):
         'total_ranges': ranges.count(),
         'class_assignments': system.class_assignments.filter(is_active=True).count(),
         'examinations': system.examinations.count(),
+        'passing_ranges': ranges.filter(is_passing_grade=True).count(),
+        'failing_ranges': ranges.filter(is_passing_grade=False).count(),
     }
+    
+    # Check for coverage gaps
+    coverage_status = _check_grading_system_coverage(system, ranges)
     
     context = {
         'system': system,
@@ -765,6 +880,7 @@ def grading_system_detail(request, pk):
         'class_assignments': class_assignments,
         'examinations': examinations,
         'stats': stats,
+        'coverage_status': coverage_status,
     }
     
     return render(request, 'exams/grading_systems/detail.html', context)
@@ -772,26 +888,45 @@ def grading_system_detail(request, pk):
 
 @login_required
 def grading_system_create(request):
-    """Create new grading system"""
+    """Create new grading system with inline grading ranges"""
     if request.method == 'POST':
         form = GradingSystemForm(request.POST)
-        if form.is_valid():
+        formset = GradingRangeFormSet(request.POST)
+        
+        if form.is_valid() and formset.is_valid():
             try:
-                system = form.save()
-                messages.success(request, f'Grading system "{system.name}" created successfully')
-                return redirect('exams:grading_system_detail', pk=system.pk)
+                with transaction.atomic():
+                    # Save grading system
+                    system = form.save()
+                    
+                    # Save grading ranges
+                    formset.instance = system
+                    formset.save()
+                    
+                    messages.success(
+                        request, 
+                        f'Grading system "{system.name}" created successfully with {formset.total_form_count() - formset.initial_form_count()} grade ranges'
+                    )
+                    return redirect('exams:grading_system_detail', pk=system.pk)
             except Exception as e:
-                logger.error(f"Error creating grading system: {e}")
+                logger.error(f"Error creating grading system: {e}", exc_info=True)
                 messages.error(request, f'Error creating grading system: {str(e)}')
         else:
-            messages.error(request, 'Please correct the errors below')
+            # Consolidate form and formset errors
+            if form.errors:
+                messages.error(request, 'Please correct the errors in the grading system details')
+            if formset.errors or formset.non_form_errors():
+                messages.error(request, 'Please correct the errors in the grade ranges')
     else:
         form = GradingSystemForm()
+        formset = GradingRangeFormSet()
     
     context = {
         'form': form,
+        'formset': formset,
         'title': 'Create Grading System',
         'submit_text': 'Create Grading System',
+        'is_edit': False,
     }
     
     return render(request, 'exams/grading_systems/form.html', context)
@@ -799,7 +934,7 @@ def grading_system_create(request):
 
 @login_required
 def grading_system_edit(request, pk):
-    """Edit grading system"""
+    """Edit grading system with inline grading ranges"""
     system = get_object_or_404(GradingSystem, pk=pk)
     
     # Calculate statistics for the system
@@ -813,29 +948,65 @@ def grading_system_edit(request, pk):
         ).filter(
             Q(end_date__isnull=True) | Q(end_date__gte=get_school_today())
         ).count(),
+        'locked_grades_count': StudentExamResult.objects.filter(
+            examination__grading_system=system,
+            is_grade_locked=True
+        ).count() if hasattr(StudentExamResult, 'objects') else 0,
     }
+    
+    # Warning if system is in use
+    has_locked_grades = stats['locked_grades_count'] > 0
+    has_examinations = stats['examinations'] > 0
     
     if request.method == 'POST':
         form = GradingSystemForm(request.POST, instance=system)
-        if form.is_valid():
+        formset = GradingRangeFormSet(request.POST, instance=system)
+        
+        if form.is_valid() and formset.is_valid():
             try:
-                system = form.save()
-                messages.success(request, f'Grading system "{system.name}" updated successfully')
-                return redirect('exams:grading_system_detail', pk=system.pk)
+                with transaction.atomic():
+                    # Save grading system
+                    system = form.save()
+                    
+                    # Save grading ranges
+                    formset.save()
+                    
+                    # Show warning if grades are locked
+                    if has_locked_grades:
+                        messages.warning(
+                            request,
+                            f'Note: This system has {stats["locked_grades_count"]} locked grades. '
+                            'Changes to grade ranges will NOT affect locked grades.'
+                        )
+                    
+                    messages.success(
+                        request, 
+                        f'Grading system "{system.name}" updated successfully'
+                    )
+                    return redirect('exams:grading_system_detail', pk=system.pk)
             except Exception as e:
-                logger.error(f"Error updating grading system: {e}")
+                logger.error(f"Error updating grading system: {e}", exc_info=True)
                 messages.error(request, f'Error updating grading system: {str(e)}')
         else:
-            messages.error(request, 'Please correct the errors below')
+            # Consolidate form and formset errors
+            if form.errors:
+                messages.error(request, 'Please correct the errors in the grading system details')
+            if formset.errors or formset.non_form_errors():
+                messages.error(request, 'Please correct the errors in the grade ranges')
     else:
         form = GradingSystemForm(instance=system)
+        formset = GradingRangeFormSet(instance=system)
     
     context = {
         'form': form,
+        'formset': formset,
         'system': system,
-        'title': 'Edit Grading System',
+        'title': f'Edit {system.name}',
         'submit_text': 'Update Grading System',
+        'is_edit': True,
         'stats': stats,
+        'has_locked_grades': has_locked_grades,
+        'has_examinations': has_examinations,
     }
     
     return render(request, 'exams/grading_systems/form.html', context)
@@ -873,6 +1044,7 @@ def grading_system_delete(request, pk):
         
         try:
             system_name = system.name
+            # Grading ranges will be deleted automatically via CASCADE
             system.delete()
             
             is_htmx = request.headers.get('HX-Request') == 'true'
@@ -887,7 +1059,7 @@ def grading_system_delete(request, pk):
                 return redirect('exams:grading_system_list')
                 
         except Exception as e:
-            logger.error(f"Error deleting grading system: {e}")
+            logger.error(f"Error deleting grading system: {e}", exc_info=True)
             is_htmx = request.headers.get('HX-Request') == 'true'
             if is_htmx:
                 response = HttpResponse()
@@ -914,7 +1086,7 @@ def grading_system_toggle_active(request, pk):
             return redirect('exams:grading_system_detail', pk=pk)
                 
         except Exception as e:
-            logger.error(f"Error toggling grading system: {e}")
+            logger.error(f"Error toggling grading system: {e}", exc_info=True)
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:grading_system_detail', pk=pk)
 
@@ -926,18 +1098,20 @@ def grading_system_set_default(request, pk):
     
     if request.method == 'POST':
         try:
-            # Remove default from all systems
-            GradingSystem.objects.filter(is_default=True).update(is_default=False)
-            
-            # Set this as default
-            system.is_default = True
-            system.save()
+            with transaction.atomic():
+                # Remove default from all systems
+                GradingSystem.objects.filter(is_default=True).update(is_default=False)
+                
+                # Set this as default
+                system.is_default = True
+                system.is_active = True  # Ensure default system is active
+                system.save()
             
             messages.success(request, f'"{system.name}" set as default grading system')
             return redirect('exams:grading_system_detail', pk=pk)
                 
         except Exception as e:
-            logger.error(f"Error setting default: {e}")
+            logger.error(f"Error setting default: {e}", exc_info=True)
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:grading_system_detail', pk=pk)
 
@@ -977,30 +1151,58 @@ def export_grading_systems_excel(request):
     
     # Create workbook
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Grading Systems"
+    
+    # Sheet 1: Grading Systems
+    ws1 = wb.active
+    ws1.title = "Grading Systems"
     
     # Headers
     headers = [
-        '#', 'Name', 'Code', 'Type', 'Min Score', 'Max Score',
-        'Pass Mark', 'Uses GPA', 'Active', 'Default'
+        '#', 'Name', 'Code', 'Type', 'Scale', 'Min Score', 'Max Score',
+        'Pass Mark', 'Uses GPA', 'Active', 'Default', 'Grade Ranges'
     ]
-    ws.append(headers)
+    ws1.append(headers)
     
     # Data rows
     for idx, system in enumerate(systems, start=1):
-        ws.append([
+        ws1.append([
             idx,
             system.name,
             system.code,
             system.get_grading_type_display(),
+            system.get_scale_type_display(),
             float(system.minimum_score),
             float(system.maximum_score),
             float(system.pass_mark),
             'Yes' if system.uses_gpa else 'No',
             'Yes' if system.is_active else 'No',
             'Yes' if system.is_default else 'No',
+            system.ranges.count(),
         ])
+    
+    # Sheet 2: Grade Ranges (if needed)
+    ws2 = wb.create_sheet("Grade Ranges")
+    range_headers = [
+        '#', 'Grading System', 'Grade', 'Grade Name', 'Min Score', 'Max Score',
+        'Aggregate', 'GPA Points', 'Passing Grade'
+    ]
+    ws2.append(range_headers)
+    
+    row_num = 1
+    for system in systems:
+        for grade_range in system.ranges.all().order_by('-min_score'):
+            ws2.append([
+                row_num,
+                system.name,
+                grade_range.grade,
+                grade_range.grade_name or '',
+                float(grade_range.min_score),
+                float(grade_range.max_score),
+                grade_range.aggregate or '',
+                float(grade_range.gpa_points) if grade_range.gpa_points else '',
+                'Yes' if grade_range.is_passing_grade else 'No',
+            ])
+            row_num += 1
     
     # Create response
     response = HttpResponse(
@@ -1012,146 +1214,9 @@ def export_grading_systems_excel(request):
     wb.save(response)
     return response
 
-
-# =============================================================================
-# GRADING RANGE VIEWS
-# =============================================================================
-
-@login_required
-def grading_range_create(request, system_pk):
-    """Create new grading range for a grading system"""
-    system = get_object_or_404(GradingSystem, pk=system_pk)
-    
-    if request.method == 'POST':
-        form = GradingRangeForm(request.POST)
-        if form.is_valid():
-            try:
-                range_obj = form.save(commit=False)
-                range_obj.grading_system = system
-                range_obj.save()
-                messages.success(request, f'Grading range "{range_obj.grade}" created successfully')
-                return redirect('exams:grading_system_detail', pk=system.pk)
-            except Exception as e:
-                logger.error(f"Error creating grading range: {e}")
-                messages.error(request, f'Error creating grading range: {str(e)}')
-        else:
-            messages.error(request, 'Please correct the errors below')
-    else:
-        form = GradingRangeForm(initial={'grading_system': system})
-    
-    context = {
-        'form': form,
-        'system': system,
-        'title': f'Create Grading Range for {system.name}',
-    }
-    
-    return render(request, 'exams/grading_ranges/form.html', context)
-
-
-@login_required
-def grading_range_edit(request, pk):
-    """Edit grading range"""
-    range_obj = get_object_or_404(GradingRange, pk=pk)
-    
-    if request.method == 'POST':
-        form = GradingRangeForm(request.POST, instance=range_obj)
-        if form.is_valid():
-            try:
-                range_obj = form.save()
-                messages.success(request, f'Grading range "{range_obj.grade}" updated successfully')
-                return redirect('exams:grading_system_detail', pk=range_obj.grading_system.pk)
-            except Exception as e:
-                logger.error(f"Error updating grading range: {e}")
-                messages.error(request, f'Error updating grading range: {str(e)}')
-        else:
-            messages.error(request, 'Please correct the errors below')
-    else:
-        form = GradingRangeForm(instance=range_obj)
-    
-    context = {
-        'form': form,
-        'range': range_obj,
-        'system': range_obj.grading_system,
-        'title': f'Edit Grading Range: {range_obj.grade}',
-    }
-    
-    return render(request, 'exams/grading_ranges/form.html', context)
-
-
-@login_required
-def grading_range_delete(request, pk):
-    """Delete grading range with HTMX support"""
-    range_obj = get_object_or_404(GradingRange, pk=pk)
-    system_pk = range_obj.grading_system.pk
-    
-    if request.method == 'POST':
-        try:
-            grade_name = range_obj.grade
-            range_obj.delete()
-            
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Redirect'] = reverse('exams:grading_system_detail', kwargs={'pk': system_pk})
-                response['HX-Trigger'] = 'showAlert'
-                response['HX-Trigger-Data'] = f'{{"type": "success", "message": "Grading range \\"{grade_name}\\" deleted successfully"}}'
-                return response
-            else:
-                messages.success(request, f'Grading range "{grade_name}" deleted successfully')
-                return redirect('exams:grading_system_detail', pk=system_pk)
-                
-        except Exception as e:
-            logger.error(f"Error deleting grading range: {e}")
-            is_htmx = request.headers.get('HX-Request') == 'true'
-            if is_htmx:
-                response = HttpResponse()
-                response['HX-Trigger'] = 'showAlert'
-                response['HX-Trigger-Data'] = f'{{"type": "error", "message": "Error deleting grading range: {str(e)}"}}'
-                return response
-            else:
-                messages.error(request, f'Error deleting grading range: {str(e)}')
-                return redirect('exams:grading_system_detail', pk=system_pk)
-            
 # =============================================================================
 # CLASS GRADING SYSTEM ASSIGNMENT VIEWS
 # =============================================================================
-
-def get_filtered_class_grading_systems(request):
-    """Helper function to get filtered class grading system assignments"""
-    assignments = ClassGradingSystem.objects.select_related(
-        'class_instance__academic_level', 'grading_system', 'academic_session', 'subject'
-    ).order_by('-academic_session__start_date', 'class_instance__academic_level__order', 'priority')
-    
-    # Get filter parameters
-    query = request.GET.get('q', '').strip()
-    class_id = request.GET.get('class_id', '')
-    academic_session = request.GET.get('academic_session', '')
-    grading_system = request.GET.get('grading_system', '')
-    subject = request.GET.get('subject', '')
-    is_active = request.GET.get('is_active', '')
-    
-    # Apply text search
-    if query:
-        assignments = assignments.filter(
-            Q(class_instance__name__icontains=query) |
-            Q(grading_system__name__icontains=query) |
-            Q(subject__name__icontains=query)
-        )
-    
-    # Apply filters
-    if class_id:
-        assignments = assignments.filter(class_instance_id=class_id)
-    if academic_session:
-        assignments = assignments.filter(academic_session_id=academic_session)
-    if grading_system:
-        assignments = assignments.filter(grading_system_id=grading_system)
-    if subject:
-        assignments = assignments.filter(subject_id=subject)
-    if is_active:
-        assignments = assignments.filter(is_active=(is_active.lower() == 'true'))
-    
-    return assignments
-
 
 @login_required
 def class_grading_system_list(request):
@@ -1209,9 +1274,13 @@ def class_grading_system_detail(request, pk):
     # Get related information
     grading_ranges = assignment.grading_system.ranges.all().order_by('-min_score')
     
+    # Check if assignment is currently active
+    is_currently_active = assignment.is_currently_active()
+    
     context = {
         'assignment': assignment,
         'grading_ranges': grading_ranges,
+        'is_currently_active': is_currently_active,
     }
     
     return render(request, 'exams/class_grading_systems/detail.html', context)
@@ -1224,19 +1293,22 @@ def class_grading_system_create(request, class_pk=None):
     if class_pk:
         class_instance = get_object_or_404(Class, pk=class_pk)
         initial['class_instance'] = class_instance
+        initial['academic_session'] = class_instance.academic_session
     
     if request.method == 'POST':
         form = ClassGradingSystemForm(request.POST)
         if form.is_valid():
             try:
-                assignment = form.save(commit=False)
-                assignment.assigned_by = request.user
-                assignment.save()
-                form.save_m2m()
+                with transaction.atomic():
+                    assignment = form.save(commit=False)
+                    assignment.assigned_by = request.user
+                    assignment.save()
+                    form.save_m2m()
+                    
                 messages.success(request, 'Class grading system assignment created successfully')
                 return redirect('exams:class_grading_system_detail', pk=assignment.pk)
             except Exception as e:
-                logger.error(f"Error creating class grading system assignment: {e}")
+                logger.error(f"Error creating class grading system assignment: {e}", exc_info=True)
                 messages.error(request, f'Error creating assignment: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors below')
@@ -1260,11 +1332,13 @@ def class_grading_system_edit(request, pk):
         form = ClassGradingSystemForm(request.POST, instance=assignment)
         if form.is_valid():
             try:
-                assignment = form.save()
+                with transaction.atomic():
+                    assignment = form.save()
+                    
                 messages.success(request, 'Class grading system assignment updated successfully')
                 return redirect('exams:class_grading_system_detail', pk=assignment.pk)
             except Exception as e:
-                logger.error(f"Error updating class grading system assignment: {e}")
+                logger.error(f"Error updating class grading system assignment: {e}", exc_info=True)
                 messages.error(request, f'Error updating assignment: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors below')
@@ -1301,7 +1375,7 @@ def class_grading_system_delete(request, pk):
                 return redirect('exams:class_grading_system_list')
                 
         except Exception as e:
-            logger.error(f"Error deleting class grading system assignment: {e}")
+            logger.error(f"Error deleting class grading system assignment: {e}", exc_info=True)
             is_htmx = request.headers.get('HX-Request') == 'true'
             if is_htmx:
                 response = HttpResponse()
@@ -1328,7 +1402,7 @@ def class_grading_system_toggle_active(request, pk):
             return redirect('exams:class_grading_system_detail', pk=pk)
                 
         except Exception as e:
-            logger.error(f"Error toggling assignment: {e}")
+            logger.error(f"Error toggling assignment: {e}", exc_info=True)
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:class_grading_system_detail', pk=pk)
 
@@ -1348,6 +1422,8 @@ def bulk_class_grading_system_assign(request):
             subject = get_object_or_404(Subject, pk=subject_id) if subject_id else None
             
             created_count = 0
+            skipped_count = 0
+            
             with transaction.atomic():
                 for class_id in class_ids:
                     class_instance = get_object_or_404(Class, pk=class_id)
@@ -1370,19 +1446,31 @@ def bulk_class_grading_system_assign(request):
                             effective_date=get_school_today()
                         )
                         created_count += 1
+                    else:
+                        skipped_count += 1
             
-            messages.success(request, f'Successfully assigned grading system to {created_count} class(es)')
+            if created_count > 0:
+                messages.success(
+                    request, 
+                    f'Successfully assigned grading system to {created_count} class(es)'
+                )
+            if skipped_count > 0:
+                messages.info(
+                    request,
+                    f'Skipped {skipped_count} class(es) - assignment already exists'
+                )
+            
             return redirect('exams:class_grading_system_list')
             
         except Exception as e:
-            logger.error(f"Error in bulk grading system assignment: {e}")
+            logger.error(f"Error in bulk grading system assignment: {e}", exc_info=True)
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:class_grading_system_list')
     
     # GET request - show form
-    grading_systems = GradingSystem.objects.filter(is_active=True)
+    grading_systems = GradingSystem.objects.filter(is_active=True).order_by('name')
     sessions = AcademicSession.objects.filter(is_active=True).order_by('-start_date')
-    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'name')
+    classes = Class.objects.filter(is_active=True).select_related('academic_level').order_by('academic_level__order', 'section')
     subjects = Subject.objects.filter(is_active=True).order_by('name')
     
     context = {
@@ -1422,7 +1510,7 @@ def export_class_grading_systems_excel(request):
     # Headers
     headers = [
         '#', 'Class', 'Grading System', 'Session', 'Subject',
-        'Effective Date', 'Priority', 'Active', 'Default'
+        'Effective Date', 'End Date', 'Priority', 'Active', 'Default'
     ]
     ws.append(headers)
     
@@ -1435,6 +1523,7 @@ def export_class_grading_systems_excel(request):
             assignment.academic_session.name,
             assignment.subject.name if assignment.subject else 'All Subjects',
             assignment.effective_date.strftime('%Y-%m-%d'),
+            assignment.end_date.strftime('%Y-%m-%d') if assignment.end_date else 'N/A',
             assignment.priority,
             'Yes' if assignment.is_active else 'No',
             'Yes' if assignment.is_default_for_class else 'No',
@@ -1450,6 +1539,103 @@ def export_class_grading_systems_excel(request):
     wb.save(response)
     return response
 
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def _check_grading_system_coverage(system, ranges):
+    """
+    Check if grading ranges provide complete coverage of the grading system's score range.
+    
+    Returns:
+        dict: Coverage status information
+    """
+    if not ranges.exists():
+        return {
+            'has_coverage': False,
+            'has_gaps': True,
+            'gaps': [],
+            'message': 'No grade ranges defined'
+        }
+    
+    sorted_ranges = list(ranges.order_by('min_score'))
+    gaps = []
+    
+    # Check if ranges start at system minimum
+    if sorted_ranges[0].min_score > system.minimum_score:
+        gaps.append({
+            'start': system.minimum_score,
+            'end': sorted_ranges[0].min_score,
+            'message': f'Gap from {system.minimum_score} to {sorted_ranges[0].min_score}'
+        })
+    
+    # Check for gaps between consecutive ranges
+    for i in range(len(sorted_ranges) - 1):
+        current = sorted_ranges[i]
+        next_range = sorted_ranges[i + 1]
+        
+        gap = next_range.min_score - current.max_score
+        if gap > Decimal('0.01'):  # Allow for small floating point differences
+            gaps.append({
+                'start': current.max_score,
+                'end': next_range.min_score,
+                'message': f'Gap from {current.max_score} to {next_range.min_score}'
+            })
+    
+    # Check if ranges reach system maximum
+    if sorted_ranges[-1].max_score < system.maximum_score:
+        gaps.append({
+            'start': sorted_ranges[-1].max_score,
+            'end': system.maximum_score,
+            'message': f'Gap from {sorted_ranges[-1].max_score} to {system.maximum_score}'
+        })
+    
+    return {
+        'has_coverage': len(gaps) == 0,
+        'has_gaps': len(gaps) > 0,
+        'gaps': gaps,
+        'message': 'Complete coverage' if len(gaps) == 0 else f'{len(gaps)} gap(s) found'
+    }
+
+
+def _validate_range_against_system(range_obj, system):
+    """
+    Validate a grading range against the grading system's bounds and other ranges.
+    
+    Args:
+        range_obj: GradingRange instance
+        system: GradingSystem instance
+        
+    Raises:
+        ValidationError: If validation fails
+    """
+    from django.core.exceptions import ValidationError
+    
+    # Check system bounds
+    if range_obj.min_score < system.minimum_score:
+        raise ValidationError(
+            f'Minimum score ({range_obj.min_score}) cannot be less than '
+            f'grading system minimum ({system.minimum_score})'
+        )
+    
+    if range_obj.max_score > system.maximum_score:
+        raise ValidationError(
+            f'Maximum score ({range_obj.max_score}) cannot exceed '
+            f'grading system maximum ({system.maximum_score})'
+        )
+    
+    # Check for overlaps with other ranges
+    overlapping = system.ranges.exclude(pk=range_obj.pk if range_obj.pk else None).filter(
+        Q(min_score__lte=range_obj.max_score) & Q(max_score__gte=range_obj.min_score)
+    )
+    
+    if overlapping.exists():
+        overlap = overlapping.first()
+        raise ValidationError(
+            f'Range overlaps with existing range "{overlap.grade}" '
+            f'({overlap.min_score}-{overlap.max_score})'
+        )
 
 # =============================================================================
 # EXAMINATION VIEWS (Additional ones not in original)
@@ -2341,7 +2527,7 @@ def class_results_dashboard(request, class_pk):
         messages.warning(request, 'No current academic session found. Please select a session.')
         return redirect('academics:session_list')
     
-    # ✅ Determine display mode (dashboard or list)
+    # Determine display mode (dashboard or list)
     view_mode = request.GET.get('mode', 'dashboard')  # 'dashboard' or 'list'
     
     # Get all sessions for dropdown
@@ -2353,7 +2539,7 @@ def class_results_dashboard(request, class_pk):
         class_enrollments__academic_session=session,
         class_enrollments__is_active=True,
         class_enrollments__completion_status='ONGOING'
-    ).distinct()
+    ).distinct().order_by('first_name', 'last_name')  # ✅ ADDED ordering
     
     # Detect HTMX request
     is_htmx = request.headers.get('HX-Request') == 'true'
@@ -2379,15 +2565,21 @@ def class_results_dashboard(request, class_pk):
         for exam in examinations:
             category_abbr = exam.exam_category.abbreviation
             if category_abbr not in exams_by_category:
-                exams_by_category[category_abbr] = []
-            exams_by_category[category_abbr].append(exam)
+                exams_by_category[category_abbr] = {
+                    'category': exam.exam_category,  # ✅ ADDED category object
+                    'exams': []
+                }
+            exams_by_category[category_abbr]['exams'].append(exam)
         
         # Get results for selected category
         results_data = []
         category_subjects = []
+        selected_category = None  # ✅ ADDED
         
         if selected_category_abbr and selected_category_abbr in exams_by_category:
-            category_exams = exams_by_category[selected_category_abbr]
+            category_data = exams_by_category[selected_category_abbr]
+            category_exams = category_data['exams']
+            selected_category = category_data['category']  # ✅ ADDED
             category_subjects = [exam.subject.name for exam in category_exams]
             
             for student in students:
@@ -2409,6 +2601,7 @@ def class_results_dashboard(request, class_pk):
                         'score': result.score if result else None,
                         'grade': result.grade if result else None,
                         'is_locked': result.is_grade_locked if result else False,
+                        'is_published': result.is_published if result else False,  # ✅ ADDED
                     }
                 
                 # Calculate totals
@@ -2429,9 +2622,10 @@ def class_results_dashboard(request, class_pk):
             for i, data in enumerate(results_data, 1):
                 data['position'] = i
         
-        # Determine active tab
-        if not selected_category_abbr and exam_categories.exists():
-            selected_category_abbr = exam_categories.first().abbreviation
+        # Determine active tab - select first category if none selected
+        if not selected_category_abbr and exams_by_category:
+            selected_category_abbr = next(iter(exams_by_category.keys()))
+            selected_category = exams_by_category[selected_category_abbr]['category']
         
         # Dashboard statistics
         stats = {
@@ -2443,6 +2637,16 @@ def class_results_dashboard(request, class_pk):
                 examination__academic_session=session,
                 score__isnull=False
             ).count(),
+            'published_results': StudentExamResult.objects.filter(  # ✅ ADDED
+                examination__target_classes=class_instance,
+                examination__academic_session=session,
+                is_published=True
+            ).count(),
+            'locked_results': StudentExamResult.objects.filter(  # ✅ ADDED
+                examination__target_classes=class_instance,
+                examination__academic_session=session,
+                is_grade_locked=True
+            ).count(),
         }
         
         context = {
@@ -2451,7 +2655,8 @@ def class_results_dashboard(request, class_pk):
             'session': session,
             'all_sessions': all_sessions,
             'exam_categories': exam_categories,
-            'selected_category': selected_category_abbr,
+            'selected_category_abbr': selected_category_abbr,  # ✅ RENAMED for clarity
+            'selected_category': selected_category,  # ✅ ADDED
             'exams_by_category': exams_by_category,
             'results_data': results_data,
             'category_subjects': category_subjects,
@@ -2482,25 +2687,28 @@ def class_results_dashboard(request, class_pk):
         ).select_related(
             'student', 'examination__subject', 'examination__exam_category',
             'verified_by', 'moderator', 'grade_locked_by'
-        ).order_by('-examination__exam_date', 'student__first_name')
+        ).distinct().order_by('-examination__exam_date', 'student__first_name')  # ✅ ADDED distinct()
         
         # Apply filters from form
-        results = apply_result_filters(results, filter_form)
+        if filter_form.is_valid():  # ✅ ADDED validation check
+            from .forms import apply_result_filters
+            results = apply_result_filters(results, filter_form)
         
         # Calculate statistics
         stats = {
             'total': results.count(),
             'published': results.filter(is_published=True).count(),
             'locked': results.filter(is_grade_locked=True).count(),
-            'pass': results.filter(is_pass=True).count(),
-            'fail': results.filter(is_pass=False).count(),
+            'pass': results.filter(is_pass=True, score__isnull=False).count(),  # ✅ ADDED score check
+            'fail': results.filter(is_pass=False, score__isnull=False).count(),  # ✅ ADDED score check
             'completed': results.filter(status='COMPLETED').count(),
             'pending': results.filter(status__in=['NOT_STARTED', 'IN_PROGRESS']).count(),
         }
         
         # Calculate pass rate
-        if stats['total'] > 0:
-            stats['pass_rate'] = round((stats['pass'] / stats['total']) * 100, 1)
+        total_graded = stats['pass'] + stats['fail']  # ✅ CHANGED
+        if total_graded > 0:
+            stats['pass_rate'] = round((stats['pass'] / total_graded) * 100, 1)
         else:
             stats['pass_rate'] = 0
         
@@ -2528,7 +2736,6 @@ def class_results_dashboard(request, class_pk):
             return render(request, 'exams/results/class_dashboard.html', context)
 
 
-# Keep the selector view separate
 @login_required
 def class_results_selector(request):
     """
@@ -2633,12 +2840,14 @@ def class_results_selector(request):
     
     return render(request, 'exams/results/class_selector.html', context)
 
+
 @login_required
 def student_result_detail(request, pk):
     """View student exam result details"""
     result = get_object_or_404(
         StudentExamResult.objects.select_related(
             'student', 'examination__subject', 'examination__academic_session',
+            'examination__exam_category',  # ✅ ADDED
             'verified_by', 'moderator', 'grade_locked_by'
         ),
         pk=pk
@@ -2652,10 +2861,14 @@ def student_result_detail(request, pk):
     # Get performance summary
     performance_summary = result.get_performance_summary()
     
+    # ✅ ADDED: Get grading system being used
+    grading_system = result.examination.get_effective_grading_system()
+    
     context = {
         'result': result,
         'grade_history': grade_history,
         'performance_summary': performance_summary,
+        'grading_system': grading_system,  # ✅ ADDED
     }
     
     return render(request, 'exams/results/detail.html', context)
@@ -2676,11 +2889,13 @@ def student_result_create(request, examination_pk=None, student_pk=None):
         form = StudentExamResultForm(request.POST)
         if form.is_valid():
             try:
-                result = form.save()
+                with transaction.atomic():  # ✅ ADDED transaction
+                    result = form.save()
+                    
                 messages.success(request, f'Result for {result.student.get_full_name()} created successfully')
                 return redirect('exams:result_detail', pk=result.pk)
             except Exception as e:
-                logger.error(f"Error creating result: {e}")
+                logger.error(f"Error creating result: {e}", exc_info=True)  # ✅ ADDED exc_info
                 messages.error(request, f'Error creating result: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors below')
@@ -2709,11 +2924,13 @@ def student_result_edit(request, pk):
         form = StudentExamResultForm(request.POST, instance=result)
         if form.is_valid():
             try:
-                result = form.save()
+                with transaction.atomic():  # ✅ ADDED transaction
+                    result = form.save()
+                    
                 messages.success(request, f'Result for {result.student.get_full_name()} updated successfully')
                 return redirect('exams:result_detail', pk=result.pk)
             except Exception as e:
-                logger.error(f"Error updating result: {e}")
+                logger.error(f"Error updating result: {e}", exc_info=True)  # ✅ ADDED exc_info
                 messages.error(request, f'Error updating result: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors below')
@@ -2737,14 +2954,15 @@ def student_result_delete(request, pk):
     if request.method == 'POST':
         # Check if result is published or locked
         if result.is_published or result.is_grade_locked:
+            error_msg = 'Cannot delete published or locked results'
             is_htmx = request.headers.get('HX-Request') == 'true'
             if is_htmx:
                 response = HttpResponse()
                 response['HX-Trigger'] = 'showAlert'
-                response['HX-Trigger-Data'] = '{"type": "error", "message": "Cannot delete published or locked results"}'
+                response['HX-Trigger-Data'] = f'{{"type": "error", "message": "{error_msg}"}}'
                 return response
             else:
-                messages.error(request, 'Cannot delete published or locked results')
+                messages.error(request, error_msg)
                 return redirect('exams:result_detail', pk=pk)
         
         try:
@@ -2763,7 +2981,7 @@ def student_result_delete(request, pk):
                 return redirect('exams:result_list')
                 
         except Exception as e:
-            logger.error(f"Error deleting result: {e}")
+            logger.error(f"Error deleting result: {e}", exc_info=True)  # ✅ ADDED exc_info
             is_htmx = request.headers.get('HX-Request') == 'true'
             if is_htmx:
                 response = HttpResponse()
@@ -2782,16 +3000,17 @@ def student_result_verify(request, pk):
     
     if request.method == 'POST':
         try:
-            result.is_verified = True
-            result.verified_by = request.user
-            result.verification_date = get_school_current_time()
-            result.save()
+            with transaction.atomic():  # ✅ ADDED transaction
+                result.is_verified = True
+                result.verified_by = request.user.staff if hasattr(request.user, 'staff') else None  # ✅ FIXED
+                result.verification_date = get_school_current_time()
+                result.save()
             
             messages.success(request, f'Result verified for {result.student.get_full_name()}')
             return redirect('exams:result_detail', pk=pk)
                 
         except Exception as e:
-            logger.error(f"Error verifying result: {e}")
+            logger.error(f"Error verifying result: {e}", exc_info=True)  # ✅ ADDED exc_info
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:result_detail', pk=pk)
 
@@ -2806,19 +3025,117 @@ def student_result_moderate(request, pk):
             moderated_score = request.POST.get('moderated_score')
             moderation_notes = request.POST.get('moderation_notes', '')
             
-            result.is_moderated = True
-            result.moderated_score = Decimal(moderated_score)
-            result.moderator = request.user
-            result.moderation_notes = moderation_notes
-            result.save()
+            # ✅ ADDED: Validate moderated score
+            if not moderated_score:
+                messages.error(request, 'Moderated score is required')
+                return redirect('exams:result_detail', pk=pk)
+            
+            with transaction.atomic():  # ✅ ADDED transaction
+                result.is_moderated = True
+                result.moderated_score = Decimal(moderated_score)
+                result.moderator = request.user.staff if hasattr(request.user, 'staff') else None  # ✅ FIXED
+                result.moderation_notes = moderation_notes
+                result.save()
             
             messages.success(request, f'Result moderated for {result.student.get_full_name()}')
             return redirect('exams:result_detail', pk=pk)
                 
+        except (ValueError, InvalidOperation) as e:  # ✅ ADDED specific exception
+            logger.error(f"Invalid moderated score: {e}", exc_info=True)
+            messages.error(request, 'Invalid moderated score value')
+            return redirect('exams:result_detail', pk=pk)
         except Exception as e:
-            logger.error(f"Error moderating result: {e}")
+            logger.error(f"Error moderating result: {e}", exc_info=True)
             messages.error(request, f'Error: {str(e)}')
             return redirect('exams:result_detail', pk=pk)
+
+
+# ✅ ADDED: Missing bulk operations view
+@login_required
+def bulk_result_entry(request, examination_pk):
+    """Bulk entry of results for an examination"""
+    examination = get_object_or_404(
+        Examination.objects.select_related('subject', 'academic_session', 'exam_category'),
+        pk=examination_pk
+    )
+    
+    # Get students from target classes
+    students = Student.objects.filter(
+        class_enrollments__class_instance__in=examination.target_classes.all(),
+        class_enrollments__academic_session=examination.academic_session,
+        class_enrollments__is_active=True,
+        class_enrollments__completion_status='ONGOING'
+    ).distinct().order_by('first_name', 'last_name')
+    
+    if request.method == 'POST':
+        try:
+            results_created = 0
+            results_updated = 0
+            
+            with transaction.atomic():
+                for student in students:
+                    score_key = f'score_{student.pk}'
+                    score_value = request.POST.get(score_key, '').strip()
+                    
+                    if score_value:  # Only process if score is provided
+                        score = Decimal(score_value)
+                        
+                        # Get or create result
+                        result, created = StudentExamResult.objects.get_or_create(
+                            student=student,
+                            examination=examination,
+                            defaults={'score': score, 'status': 'COMPLETED'}
+                        )
+                        
+                        if created:
+                            results_created += 1
+                        else:
+                            # Update existing result if not locked
+                            if not result.is_grade_locked:
+                                result.score = score
+                                result.status = 'COMPLETED'
+                                result.save()
+                                results_updated += 1
+            
+            messages.success(
+                request,
+                f'Bulk entry complete: {results_created} results created, {results_updated} updated'
+            )
+            return redirect('exams:examination_detail', pk=examination.pk)
+            
+        except (ValueError, InvalidOperation) as e:
+            logger.error(f"Invalid score in bulk entry: {e}", exc_info=True)
+            messages.error(request, 'Invalid score value detected. Please check your entries.')
+        except Exception as e:
+            logger.error(f"Error in bulk result entry: {e}", exc_info=True)
+            messages.error(request, f'Error: {str(e)}')
+    
+    # Get existing results
+    existing_results = {
+        r.student_id: r for r in StudentExamResult.objects.filter(
+            examination=examination,
+            student__in=students
+        )
+    }
+    
+    # Prepare student data
+    student_data = []
+    for student in students:
+        existing_result = existing_results.get(student.pk)
+        student_data.append({
+            'student': student,
+            'result': existing_result,
+            'score': existing_result.score if existing_result else None,
+            'is_locked': existing_result.is_grade_locked if existing_result else False,
+        })
+    
+    context = {
+        'examination': examination,
+        'student_data': student_data,
+        'title': f'Bulk Entry: {examination.name}',
+    }
+    
+    return render(request, 'exams/results/bulk_entry.html', context)
 
 
 # =============================================================================

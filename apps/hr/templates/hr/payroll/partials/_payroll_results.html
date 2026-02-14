@@ -3,6 +3,7 @@
 {% load static %}
 {% load humanize %}
 {% load widget_tweaks %}
+{% load currency_filters %}
 
 <!-- Payroll Table -->
 <div class="table-responsive" style="overflow: visible;">
@@ -13,11 +14,12 @@
                 <th>Staff Member</th>
                 <th>Pay Period</th>
                 <th>Fiscal Period</th>
-                <th>Gross Pay</th>
-                <th>Deductions</th>
-                <th>Net Pay</th>
-                <th>Status</th>
-                <th width="120">Actions</th>
+                <th class="text-end">Basic Salary</th>
+                <th class="text-end">Gross Pay</th>
+                <th class="text-end">Deductions</th>
+                <th class="text-end">Net Pay</th>
+                <th class="text-center">Status</th>
+                <th width="120" class="text-center">Actions</th>
             </tr>
         </thead>
         <tbody id="payrollTableBody">
@@ -25,19 +27,22 @@
                 {% for payroll in payrolls_page %}
                 <tr {% if payroll.reversed %}class="table-secondary" style="opacity: 0.7;"{% endif %}>
                     <!-- Row Number -->
-                    <td>{{ forloop.counter|add:payrolls_page.start_index|add:"-1" }}</td>
+                    <td class="text-center">
+                        <strong>{{ forloop.counter|add:payrolls_page.start_index|add:"-1" }}</strong>
+                    </td>
                     
                     <!-- Staff Member -->
                     <td>
                         <div class="d-flex align-items-center">
                             <div>
                                 <h6 class="mb-0">
-                                    <a href="{% url 'hr:staff_profile' payroll.staff.pk %}" class="text-decoration-none">
+                                    <a href="{% url 'hr:staff_profile' payroll.staff.pk %}" 
+                                       class="text-decoration-none text-primary fw-bold">
                                         {{ payroll.staff.full_name }}
                                     </a>
                                     {% if payroll.reversed %}
-                                        <span class="badge bg-dark ms-1">
-                                            <i class="fa fa-undo me-1"></i>Reversed
+                                        <span class="badge bg-dark ms-2">
+                                            <i class="fa fa-undo me-1"></i>REVERSED
                                         </span>
                                     {% endif %}
                                 </h6>
@@ -46,12 +51,22 @@
                                         <i class="fa fa-id-card me-1"></i>
                                         {{ payroll.staff.staff_id }}
                                     </small>
-                                    {% if payroll.is_prorated %}
-                                        <span class="badge bg-warning text-dark ms-1" data-bs-toggle="tooltip" title="Prorated: {{ payroll.days_worked }}/{{ payroll.total_working_days }} days">
-                                            <i class="fa fa-calculator"></i> Prorated
+                                    {% if payroll.staff.primary_department %}
+                                        <span class="badge bg-light text-dark ms-1">
+                                            {{ payroll.staff.primary_department.name }}
                                         </span>
                                     {% endif %}
                                 </div>
+                                {% if payroll.is_prorated %}
+                                    <div class="mt-1">
+                                        <span class="badge bg-warning text-dark" 
+                                              data-bs-toggle="tooltip" 
+                                              title="Prorated: {{ payroll.days_worked }}/{{ payroll.total_working_days }} days">
+                                            <i class="fa fa-calculator me-1"></i>
+                                            Prorated ({{ payroll.days_worked }}/{{ payroll.total_working_days }} days)
+                                        </span>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                     </td>
@@ -59,7 +74,13 @@
                     <!-- Pay Period -->
                     <td>
                         <div class="mb-1">
-                            <strong>{{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}</strong>
+                            <strong class="text-dark">
+                                {% if payroll.pay_period_label %}
+                                    {{ payroll.pay_period_label }}
+                                {% else %}
+                                    {{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}
+                                {% endif %}
+                            </strong>
                         </div>
                         <small class="text-muted">
                             <i class="fa fa-calendar me-1"></i>
@@ -68,7 +89,7 @@
                         {% if payroll.payment_date %}
                             <div class="mt-1">
                                 <small class="text-info">
-                                    <i class="fa fa-money-bill me-1"></i>
+                                    <i class="fa fa-money-bill-wave me-1"></i>
                                     Paid: {{ payroll.payment_date|date:"M d, Y" }}
                                 </small>
                             </div>
@@ -79,11 +100,15 @@
                     <td>
                         {% if payroll.fiscal_period %}
                             <span class="badge bg-secondary">
+                                <i class="fa fa-folder me-1"></i>
                                 {{ payroll.fiscal_period.name }}
                             </span>
                             {% if payroll.fiscal_year %}
                                 <div class="mt-1">
-                                    <small class="text-muted">{{ payroll.fiscal_year.name }}</small>
+                                    <small class="text-muted">
+                                        <i class="fa fa-calendar-alt me-1"></i>
+                                        {{ payroll.fiscal_year.name }}
+                                    </small>
                                 </div>
                             {% endif %}
                         {% else %}
@@ -91,35 +116,58 @@
                         {% endif %}
                     </td>
                     
-                    <!-- Gross Pay -->
-                    <td>
-                        <div class="fw-bold text-primary">
-                            {{ payroll.gross_pay|floatformat:2|intcomma }}
+                    <!-- Basic Salary -->
+                    <td class="text-end">
+                        <div class="money-display">
+                            {{ payroll.basic_salary|format_currency }}
                         </div>
-                        <small class="text-muted">
-                            Basic: {{ payroll.basic_salary|floatformat:2|intcomma }}
-                        </small>
-                    </td>
-                    
-                    <!-- Deductions -->
-                    <td>
-                        <div class="fw-bold text-danger">
-                            {{ payroll.total_deductions|floatformat:2|intcomma }}
-                        </div>
-                        {% if payroll.get_deduction_count > 0 %}
-                            <small class="text-muted">
-                                {{ payroll.get_deduction_count }} item{{ payroll.get_deduction_count|pluralize }}
+                        {% if payroll.is_prorated %}
+                            <small class="text-muted d-block">
+                                <i class="fa fa-info-circle me-1"></i>Prorated
                             </small>
                         {% endif %}
                     </td>
                     
+                    <!-- Gross Pay -->
+                    <td class="text-end">
+                        <div class="money-display fw-bold text-primary">
+                            {{ payroll.gross_pay|format_currency }}
+                        </div>
+                            {% if payroll.allowances.count > 0 or payroll.bonuses.count > 0 %}
+                                <small class="text-muted d-block">
+                                    {% if payroll.allowances.count > 0 %}
+                                        <i class="fa fa-plus-circle me-1"></i>
+                                        {{ payroll.allowances.count }} allowance{{ payroll.allowances.count|pluralize }}
+                                    {% endif %}
+                                    {% if payroll.bonuses.count > 0 %}
+                                        {% if payroll.allowances.count > 0 %}, {% endif %}
+                                        {{ payroll.bonuses.count }} bonus{{ payroll.bonuses.count|pluralize:"es" }}
+                                    {% endif %}
+                                </small>
+                            {% endif %}
+                    </td>
+                    
+                    <!-- Deductions -->
+                    <td class="text-end">
+                        <div class="money-display fw-bold text-danger">
+                            {{ payroll.total_deductions|format_currency }}
+                        </div>
+                            {% if payroll.deductions.count > 0 %}
+                                <small class="text-muted d-block">
+                                    <i class="fa fa-minus-circle me-1"></i>
+                                    {{ payroll.deductions.count }} deduction{{ payroll.deductions.count|pluralize }}
+                                </small>
+                            {% endif %}
+                    </td>
+                    
                     <!-- Net Pay -->
-                    <td>
-                        <div class="fw-bold text-success" style="font-size: 1.1rem;">
-                            {{ payroll.net_pay|floatformat:2|intcomma }}
+                    <td class="text-end bg-light">
+                        <div class="money-display fw-bold text-success" style="font-size: 1.1rem;">
+                            {{ payroll.net_pay|format_currency }}
                         </div>
                         {% if payroll.payment_method %}
-                            <small class="text-muted">
+                            <small class="text-muted d-block">
+                                <i class="fa fa-credit-card me-1"></i>
                                 {{ payroll.payment_method.name }}
                             </small>
                         {% endif %}
@@ -129,8 +177,13 @@
                     <td class="text-center">
                         {% if payroll.reversed %}
                             <span class="badge status-badge reversed">
-                                <i class="fa fa-undo me-1"></i>Reversed
+                                <i class="fa fa-undo me-1"></i>REVERSED
                             </span>
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    {{ payroll.reversed_on|date:"M d, Y" }}
+                                </small>
+                            </div>
                         {% elif payroll.status == 'DRAFT' %}
                             <span class="badge status-badge draft">
                                 <i class="fa fa-file me-1"></i>Draft
@@ -141,12 +194,19 @@
                             </span>
                         {% elif payroll.status == 'PROCESSING' %}
                             <span class="badge status-badge processing">
-                                <i class="fa fa-spinner me-1"></i>Processing
+                                <i class="fa fa-spinner fa-spin me-1"></i>Processing
                             </span>
                         {% elif payroll.status == 'PAID' %}
                             <span class="badge status-badge paid">
                                 <i class="fa fa-check-double me-1"></i>Paid
                             </span>
+                            {% if payroll.paid_at %}
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        {{ payroll.paid_at|date:"M d, Y" }}
+                                    </small>
+                                </div>
+                            {% endif %}
                         {% elif payroll.status == 'CANCELLED' %}
                             <span class="badge status-badge cancelled">
                                 <i class="fa fa-times-circle me-1"></i>Cancelled
@@ -161,67 +221,89 @@
                     <!-- Actions Dropdown -->
                     <td>
                         <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle w-100"
+                                    data-bs-toggle="dropdown" 
+                                    aria-expanded="false">
                                 <i class="fa fa-ellipsis-v me-1"></i> Actions
                             </button>
                             <div class="dropdown-menu dropdown-menu-end">
                                 <!-- View Detail -->
-                                <a class="dropdown-item text-success" href="{% url 'hr:payroll_detail' payroll.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
+                                <a class="dropdown-item" href="{% url 'hr:payroll_detail' payroll.pk %}">
+                                    <i class="fa fa-eye me-2 text-success"></i> View Details
                                 </a>
                                 
                                 <!-- Edit -->
                                 {% if not payroll.reversed and payroll.status in 'DRAFT,APPROVED' %}
-                                    <a class="dropdown-item text-warning" href="{% url 'hr:payroll_edit' payroll.pk %}">
-                                        <i class="fa fa-edit me-2"></i> Edit
+                                    <a class="dropdown-item" href="{% url 'hr:payroll_edit' payroll.pk %}">
+                                        <i class="fa fa-edit me-2 text-warning"></i> Edit
                                     </a>
                                 {% endif %}
                                 
-                                <hr class="dropdown-divider">
+                                <div class="dropdown-divider"></div>
                                 
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
+                                <!-- Quick Actions Section -->
+                                <h6 class="dropdown-header">
+                                    <i class="fa fa-bolt me-1"></i> Quick Actions
+                                </h6>
                                 
                                 {% if not payroll.reversed %}
                                     {% if payroll.status == 'DRAFT' %}
-                                        <button type="button" class="dropdown-item text-primary" 
+                                        <button type="button" class="dropdown-item" 
                                                 hx-get="{% url 'hr:payroll_approve_modal' payroll.pk %}"
                                                 hx-target="#modal-container"
                                                 hx-swap="innerHTML">
-                                            <i class="fa fa-check-circle me-2"></i> Approve
+                                            <i class="fa fa-check-circle me-2 text-primary"></i> Approve Payroll
                                         </button>
                                     {% endif %}
                                     
                                     {% if payroll.status == 'APPROVED' %}
-                                        <button type="button" class="dropdown-item text-success" 
+                                        <button type="button" class="dropdown-item" 
                                                 hx-get="{% url 'hr:payroll_mark_paid_modal' payroll.pk %}"
                                                 hx-target="#modal-container"
                                                 hx-swap="innerHTML">
-                                            <i class="fa fa-money-bill me-2"></i> Mark as Paid
+                                            <i class="fa fa-money-bill me-2 text-success"></i> Mark as Paid
                                         </button>
                                     {% endif %}
                                     
-                                    <a class="dropdown-item" href="{% url 'hr:payroll_print' payroll.pk %}" target="_blank">
-                                        <i class="fa fa-print me-2"></i> Print Payslip
+                                    <a class="dropdown-item" href="#" target="_blank">
+                                        <i class="fa fa-print me-2 text-secondary"></i> Print Payslip
                                     </a>
                                     
-                                    <button type="button" class="dropdown-item text-info" 
-                                            hx-get="{% url 'hr:payroll_add_allowance_modal' payroll.pk %}"
+                                    <div class="dropdown-divider"></div>
+                                    
+                                    <h6 class="dropdown-header">
+                                        <i class="fa fa-cog me-1"></i> Manage Components
+                                    </h6>
+                                    
+                                    <button type="button" class="dropdown-item" 
+                                            hx-get="#"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
-                                        <i class="fa fa-plus-circle me-2"></i> Add Allowance
+                                        <i class="fa fa-plus-circle me-2 text-info"></i> Add Allowance
                                     </button>
                                     
-                                    <button type="button" class="dropdown-item text-info" 
-                                            hx-get="{% url 'hr:payroll_add_deduction_modal' payroll.pk %}"
+                                    <button type="button" class="dropdown-item" 
+                                            hx-get="#"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
-                                        <i class="fa fa-minus-circle me-2"></i> Add Deduction
+                                        <i class="fa fa-minus-circle me-2 text-warning"></i> Add Deduction
+                                    </button>
+                                    
+                                    <button type="button" class="dropdown-item" 
+                                            hx-get="#"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-gift me-2 text-success"></i> Add Bonus
                                     </button>
                                 {% endif %}
                                 
-                                <hr class="dropdown-divider">
+                                <div class="dropdown-divider"></div>
+                                
+                                <!-- Danger Zone -->
+                                <h6 class="dropdown-header text-danger">
+                                    <i class="fa fa-exclamation-triangle me-1"></i> Danger Zone
+                                </h6>
                                 
                                 <!-- Reversal Action -->
                                 {% if not payroll.reversed and payroll.status != 'CANCELLED' %}
@@ -239,18 +321,18 @@
                                             hx-get="{% url 'hr:payroll_delete_modal' payroll.pk %}"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
-                                        <i class="fa fa-trash me-2"></i> Delete
+                                        <i class="fa fa-trash me-2"></i> Delete Payroll
                                     </button>
                                 {% endif %}
                                 
                                 <!-- View Reversal Info (if reversed) -->
                                 {% if payroll.reversed %}
-                                    <hr class="dropdown-divider">
+                                    <div class="dropdown-divider"></div>
                                     <button type="button" class="dropdown-item text-info" 
                                             hx-get="{% url 'hr:payroll_reversal_info_modal' payroll.pk %}"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
-                                        <i class="fa fa-info-circle me-2"></i> Reversal Info
+                                        <i class="fa fa-info-circle me-2"></i> View Reversal Info
                                     </button>
                                 {% endif %}
                             </div>
@@ -260,16 +342,29 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="9" class="text-center text-muted">
+                    <td colspan="10" class="text-center text-muted">
                         <div class="empty-state">
                             <div class="empty-state-icon">
                                 <i class="pe-7s-search"></i>
                             </div>
-                            <h4 class="text-muted mb-2">No Payroll Records Found</h4>
-                            <p class="text-muted">
-                                Try adjusting your search filters or 
-                                <a href="{% url 'hr:payroll_create' %}" class="text-primary">create a new payroll record</a>.
+                            <h4 class="text-muted mb-3">No Payroll Records Found</h4>
+                            <p class="text-muted mb-4">
+                                {% if request.GET %}
+                                    No records match your current filters. Try adjusting your search criteria.
+                                {% else %}
+                                    You haven't created any payroll records yet.
+                                {% endif %}
                             </p>
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{% url 'hr:payroll_create' %}" class="btn btn-primary">
+                                    <i class="fa fa-plus me-1"></i> Create First Payroll
+                                </a>
+                                {% if request.GET %}
+                                    <button onclick="resetFilters()" class="btn btn-outline-secondary">
+                                        <i class="fa fa-times me-1"></i> Clear Filters
+                                    </button>
+                                {% endif %}
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -281,10 +376,12 @@
 <!-- Pagination -->
 {% if payrolls_page.paginator.num_pages > 1 %}
 <div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <!-- Results Count -->
         <div id="resultsCount" class="text-muted">
-            Showing {{ payrolls_page.start_index }} - {{ payrolls_page.end_index }} of {{ payrolls_page.paginator.count }} payroll records
+            <i class="fa fa-list me-1"></i>
+            Showing <strong>{{ payrolls_page.start_index }}</strong> - <strong>{{ payrolls_page.end_index }}</strong> 
+            of <strong>{{ payrolls_page.paginator.count|intcomma }}</strong> payroll records
         </div>
         
         <!-- Pagination Navigation -->
@@ -404,6 +501,12 @@
     border-color: #23272b;
 }
 
+/* Money Display */
+.money-display {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 600;
+}
+
 /* Fix for table responsive overflow with dropdowns */
 .table-responsive {
     overflow-x: auto;
@@ -435,10 +538,15 @@
     background-color: #f8f9fa;
     font-weight: 600;
     border-bottom: 2px solid #dee2e6;
+    vertical-align: middle;
 }
 
 .table tbody tr:hover {
     background-color: #f8f9fa;
+}
+
+.table tbody tr.table-secondary:hover {
+    background-color: #d6d8db;
 }
 
 /* Responsive handling for mobile devices */
@@ -453,6 +561,10 @@
         right: 0 !important;
         left: auto !important;
     }
+    
+    .money-display {
+        font-size: 0.9rem;
+    }
 }
 </style>
 
@@ -462,11 +574,15 @@
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-primary">
-                <i class="pe-7s-cash"></i>
+                <i class="pe-7s-users"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Total Payrolls</div>
-                <h3>{{ stats.total|default:0 }}</h3>
+                <h3>{{ stats.total|default:0|intcomma }}</h3>
+                <div class="stats-subtitle">
+                    Active: {{ stats.active|default:0|intcomma }} | 
+                    Reversed: {{ stats.reversed|default:0|intcomma }}
+                </div>
             </div>
         </div>
     </div>
@@ -477,8 +593,11 @@
                 <i class="pe-7s-check"></i>
             </div>
             <div class="stats-content">
-                <div class="stats-label">Paid</div>
-                <h3>{{ stats.paid|default:0 }}</h3>
+                <div class="stats-label">Paid Payrolls</div>
+                <h3>{{ stats.paid|default:0|intcomma }}</h3>
+                <div class="stats-subtitle">
+                    Total: {{ stats.total_net_pay|money_short }}
+                </div>
             </div>
         </div>
     </div>
@@ -486,11 +605,14 @@
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-warning">
-                <i class="pe-7s-refresh-2"></i>
+                <i class="pe-7s-note2"></i>
             </div>
             <div class="stats-content">
-                <div class="stats-label">Processing</div>
-                <h3>{{ stats.processing|default:0 }}</h3>
+                <div class="stats-label">Pending</div>
+                <h3>{{ stats.draft|default:0|intcomma }}</h3>
+                <div class="stats-subtitle">
+                    Approved: {{ stats.approved|default:0|intcomma }}
+                </div>
             </div>
         </div>
     </div>
@@ -501,8 +623,11 @@
                 <i class="pe-7s-wallet"></i>
             </div>
             <div class="stats-content">
-                <div class="stats-label">Total Net Pay</div>
-                <h3>{{ stats.total_net_pay|floatformat:0|default:0|intcomma }}</h3>
+                <div class="stats-label">Avg Net Pay</div>
+                <h3>{{ stats.avg_net_pay|money_short }}</h3>
+                <div class="stats-subtitle">
+                    Prorated: {{ stats.prorated_count|default:0|intcomma }}
+                </div>
             </div>
         </div>
     </div>

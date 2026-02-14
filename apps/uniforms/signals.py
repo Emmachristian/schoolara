@@ -26,7 +26,7 @@ from .models import (
 )
 from .services import (
     UniformInvoiceService, UniformAccountingService,
-    UniformStockService, UniformWorkflowService
+    UniformStockService, 
 )
 from .utils import (
     generate_uniform_sale_number, generate_purchase_order_number,

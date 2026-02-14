@@ -971,7 +971,7 @@ def uniform_stock_list(request):
     }
     
     if is_htmx:
-        return render(request, 'uniforms/stock/_stock_results.html', context)
+        return render(request, 'uniforms/stock/partials/_stock_results.html', context)
     else:
         return render(request, 'uniforms/stock/list.html', context)
 
@@ -1143,7 +1143,7 @@ def uniform_size_list(request):
     
     # Return appropriate template
     if is_htmx:
-        return render(request, 'uniforms/sizes/_size_results.html', context)
+        return render(request, 'uniforms/sizes/partials/_size_results.html', context)
     else:
         return render(request, 'uniforms/sizes/list.html', context)
 
@@ -2501,7 +2501,7 @@ def student_uniform_size_list(request):
     }
     
     if is_htmx:
-        return render(request, 'uniforms/student_sizes/_size_results.html', context)
+        return render(request, 'uniforms/student_sizes/partials/_size_results.html', context)
     else:
         return render(request, 'uniforms/student_sizes/list.html', context)
 

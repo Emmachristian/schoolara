@@ -9,6 +9,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db.models import Q
+from django.forms import inlineformset_factory
 from decimal import Decimal
 import logging
 
@@ -224,12 +225,13 @@ class GradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm
 
 
 class GradingRangeForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing grading ranges"""
+    """Form for creating/editing grading ranges (used in formset)"""
     
     class Meta:
         model = GradingRange
         fields = [
-            'grading_system', 'grade', 'grade_name',
+            # NOTE: 'grading_system' is NOT included - handled by formset
+            'grade', 'grade_name',
             'min_score', 'max_score', 'aggregate',
             'gpa_points', 'quality_points',
             'color_code', 'text_color',
@@ -237,69 +239,191 @@ class GradingRangeForm(BootstrapFormMixin, forms.ModelForm):
             'is_passing_grade', 'display_order',
         ]
         widgets = {
-            'grading_system': forms.Select(attrs={'class': 'form-select'}),
-            'grade': forms.TextInput(attrs={'placeholder': 'e.g., A, B+, D1'}),
-            'grade_name': forms.TextInput(attrs={'placeholder': 'e.g., Excellent, Good'}),
-            'min_score': forms.NumberInput(attrs={'step': '0.01'}),
-            'max_score': forms.NumberInput(attrs={'step': '0.01'}),
-            'aggregate': forms.TextInput(attrs={'placeholder': 'e.g., D1, C6'}),
-            'gpa_points': forms.NumberInput(attrs={'step': '0.01'}),
-            'quality_points': forms.NumberInput(attrs={'step': '0.01'}),
+            'grade': forms.TextInput(attrs={'placeholder': 'e.g., A, B+, D1', 'class': 'form-control'}),
+            'grade_name': forms.TextInput(attrs={'placeholder': 'e.g., Excellent, Good', 'class': 'form-control'}),
+            'min_score': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
+            'max_score': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
+            'aggregate': forms.TextInput(attrs={'placeholder': 'e.g., D1, C6', 'class': 'form-control'}),
+            'gpa_points': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
+            'quality_points': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
             'color_code': forms.TextInput(attrs={
                 'type': 'color',
-                'placeholder': '#00FF00'
+                'placeholder': '#00FF00',
+                'class': 'form-control form-control-color'
             }),
             'text_color': forms.TextInput(attrs={
                 'type': 'color',
-                'placeholder': '#FFFFFF'
+                'placeholder': '#FFFFFF',
+                'class': 'form-control form-control-color'
             }),
-            'comments': forms.Textarea(attrs={'rows': 2}),
-            'description': forms.Textarea(attrs={'rows': 2}),
+            'comments': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'performance_level': forms.Select(attrs={'class': 'form-select'}),
-            'display_order': forms.NumberInput(attrs={'min': '0'}),
+            'display_order': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
         }
     
     def clean(self):
-        """Validate grading range"""
+        """Basic validation for individual grading range"""
         cleaned_data = super().clean()
         
         min_score = cleaned_data.get('min_score')
         max_score = cleaned_data.get('max_score')
-        grading_system = cleaned_data.get('grading_system')
         
         # Validate score range
-        if min_score and max_score:
+        if min_score is not None and max_score is not None:
             if min_score >= max_score:
                 raise ValidationError({
                     'max_score': 'Maximum score must be greater than minimum score.'
                 })
         
-        # ✅ ADD: Validate scores within grading system bounds
-        if grading_system and min_score is not None and max_score is not None:
-            if min_score < grading_system.minimum_score:
-                raise ValidationError({
-                    'min_score': f'Minimum score cannot be less than grading system minimum ({grading_system.minimum_score}).'
-                })
-            
-            if max_score > grading_system.maximum_score:
-                raise ValidationError({
-                    'max_score': f'Maximum score cannot exceed grading system maximum ({grading_system.maximum_score}).'
-                })
-            
-            # Check for overlapping ranges
-            overlapping = GradingRange.objects.filter(
-                grading_system=grading_system
-            ).exclude(pk=self.instance.pk if self.instance.pk else None)
-            
-            for range_obj in overlapping:
-                if (min_score <= range_obj.max_score and max_score >= range_obj.min_score):
-                    raise ValidationError(
-                        f"Score range overlaps with existing range: {range_obj.grade} "
-                        f"({range_obj.min_score}-{range_obj.max_score})"
-                    )
-        
+        # Note: System bounds and overlap validation happens in formset.clean()
         return cleaned_data
 
+
+# =============================================================================
+# GRADING RANGE INLINE FORMSET
+# =============================================================================
+
+# Base formset factory
+BaseGradingRangeFormSet = inlineformset_factory(
+    GradingSystem,                     # Parent model
+    GradingRange,                       # Child model
+    form=GradingRangeForm,             # Use our custom form
+    extra=5,                            # Show 5 empty forms by default
+    min_num=1,                          # Require at least 1 grade range
+    validate_min=True,
+    can_delete=True,                    # Allow deletion of existing ranges
+    can_delete_extra=True,              # Allow deletion of extra empty forms
+)
+
+
+class GradingRangeFormSet(BaseGradingRangeFormSet):
+    """
+    Enhanced formset for grading ranges with comprehensive validation.
+    
+    Validates:
+    - No overlapping score ranges
+    - Complete coverage of grading system min-max spectrum
+    - No gaps in score coverage
+    - Proper ordering of ranges
+    """
+    
+    def clean(self):
+        """
+        Enhanced validation across all forms in the formset.
+        Checks for overlapping ranges and gaps in score coverage.
+        """
+        if any(self.errors):
+            # Don't proceed with formset validation if individual forms have errors
+            return
+        
+        super().clean()
+        
+        # Get all valid forms (not deleted, not empty)
+        valid_forms = [
+            form for form in self.forms
+            if form.cleaned_data and not form.cleaned_data.get('DELETE', False)
+        ]
+        
+        if not valid_forms:
+            raise ValidationError("At least one grade range is required.")
+        
+        # Extract score ranges with form reference
+        ranges = []
+        for form in valid_forms:
+            data = form.cleaned_data
+            min_score = data.get('min_score')
+            max_score = data.get('max_score')
+            
+            if min_score is not None and max_score is not None:
+                ranges.append({
+                    'min': min_score,
+                    'max': max_score,
+                    'grade': data.get('grade', ''),
+                    'form': form
+                })
+        
+        if not ranges:
+            raise ValidationError("At least one complete grade range (with min and max scores) is required.")
+        
+        # Sort ranges by min_score for easier validation
+        ranges.sort(key=lambda x: x['min'])
+        
+        # =====================================================================
+        # VALIDATION 1: Check for overlapping ranges
+        # =====================================================================
+        for i in range(len(ranges) - 1):
+            current = ranges[i]
+            next_range = ranges[i + 1]
+            
+            # Check if current range's max overlaps with next range's min
+            if current['max'] >= next_range['min']:
+                raise ValidationError(
+                    f"Grade ranges overlap: '{current['grade']}' "
+                    f"({current['min']}-{current['max']}) overlaps with "
+                    f"'{next_range['grade']}' ({next_range['min']}-{next_range['max']}). "
+                    f"Ranges must not overlap."
+                )
+        
+        # =====================================================================
+        # VALIDATION 2: Check coverage against grading system bounds
+        # =====================================================================
+        grading_system = self.instance
+        
+        if grading_system and grading_system.minimum_score is not None and grading_system.maximum_score is not None:
+            system_min = grading_system.minimum_score
+            system_max = grading_system.maximum_score
+            
+            # Check if ranges start at system minimum
+            if ranges[0]['min'] > system_min:
+                raise ValidationError(
+                    f"Grade ranges don't start at system minimum ({system_min}). "
+                    f"First range ('{ranges[0]['grade']}') starts at {ranges[0]['min']}. "
+                    f"Please add a range covering scores from {system_min}."
+                )
+            
+            # Check if ranges reach system maximum
+            if ranges[-1]['max'] < system_max:
+                raise ValidationError(
+                    f"Grade ranges don't reach system maximum ({system_max}). "
+                    f"Last range ('{ranges[-1]['grade']}') ends at {ranges[-1]['max']}. "
+                    f"Please add a range covering scores up to {system_max}."
+                )
+            
+            # ================================================================
+            # VALIDATION 3: Check for gaps between consecutive ranges
+            # ================================================================
+            for i in range(len(ranges) - 1):
+                current = ranges[i]
+                next_range = ranges[i + 1]
+                
+                # Check if there's a gap between current max and next min
+                # Allow for small floating point differences (0.01)
+                gap = next_range['min'] - current['max']
+                if gap > Decimal('0.01'):
+                    raise ValidationError(
+                        f"Gap detected in grade ranges: '{current['grade']}' ends at {current['max']}, "
+                        f"but '{next_range['grade']}' starts at {next_range['min']}. "
+                        f"There is a gap of {gap} points. Please ensure complete coverage."
+                    )
+        
+        # =====================================================================
+        # VALIDATION 4: Check for duplicate grades
+        # =====================================================================
+        grades = [r['grade'] for r in ranges if r['grade']]
+        if len(grades) != len(set(grades)):
+            duplicates = [grade for grade in set(grades) if grades.count(grade) > 1]
+            raise ValidationError(
+                f"Duplicate grade(s) found: {', '.join(duplicates)}. "
+                f"Each grade must be unique within a grading system."
+            )
+        
+        return self.cleaned_data
+
+
+# =============================================================================
+# CLASS GRADING SYSTEM FORMS
+# =============================================================================
 
 class ClassGradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for assigning grading systems to classes"""
@@ -386,7 +510,7 @@ class ClassGradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
                     'end_date': 'End date cannot be after session end.'
                 })
         
-        # ✅ ADD: Validate class belongs to the selected session
+        # Validate class belongs to the selected session
         if class_instance and academic_session:
             if class_instance.academic_session != academic_session:
                 raise ValidationError({
@@ -513,7 +637,7 @@ class ExaminationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
                     'exam_date': 'Examination date cannot be in the past.'
                 })
         
-        # ✅ ADD: Validate exam date within academic session
+        # Validate exam date within academic session
         if exam_date and academic_session:
             if exam_date < academic_session.start_date or exam_date > academic_session.end_date:
                 raise ValidationError({
@@ -541,13 +665,13 @@ class ExaminationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
                 raise ValidationError({
                     'pass_marks': 'Pass marks cannot exceed total marks.'
                 })
-            # ✅ ADD: Validate pass marks is positive
+            
             if pass_marks < 0:
                 raise ValidationError({
                     'pass_marks': 'Pass marks must be a positive value.'
                 })
         
-        # ✅ ADD: Validate total marks is positive
+        # Validate total marks is positive
         if total_marks and total_marks <= 0:
             raise ValidationError({
                 'total_marks': 'Total marks must be greater than zero.'
@@ -609,7 +733,7 @@ class ExamRegistrationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelF
                     'student': f'{student.get_full_name()} is already registered for this examination.'
                 })
             
-            # ✅ ADD: Check if student is in target classes
+            # Check if student is in target classes
             from students.models import StudentClassEnrollment
             
             student_classes = StudentClassEnrollment.objects.filter(
@@ -626,7 +750,7 @@ class ExamRegistrationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelF
                     'student': f'{student.get_full_name()} is not enrolled in any of the target classes for this examination.'
                 })
             
-            # ✅ ADD: Check exam category registration requirements
+            # Check exam category registration requirements
             if examination.exam_category and examination.exam_category.requires_registration:
                 # Check registration deadline
                 if examination.exam_category.registration_deadline_days:
@@ -734,6 +858,10 @@ class StudentExamResultForm(RequiredFieldsMixin, BootstrapFormMixin, MoneyFields
         return cleaned_data
 
 
+# =============================================================================
+# GRADE LOCKING FORMS
+# =============================================================================
+
 class GradeLockForm(BootstrapFormMixin, forms.Form):
     """Form for locking exam grades"""
     
@@ -835,12 +963,11 @@ class ExaminationFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
         widget=SelectWithDefault(default_label="All Subjects")
     )
     
-    # ✅ FIXED: Remove duplicate "All Statuses" from choices
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(Examination.EXAM_STATUS_CHOICES),
         required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})  # Use regular Select
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     exam_date_from = forms.DateField(
@@ -855,10 +982,9 @@ class ExaminationFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
         widget=DatePickerInput()
     )
     
-    # ✅ ADD: Additional useful filters
     exam_mode = forms.ChoiceField(
         label='Exam Mode',
-        choices=[('', 'All Modes')] + list(Examination.EXAM_MODE_CHOICES) if hasattr(Examination, 'EXAM_MODE_CHOICES') else [('', 'All Modes')],
+        choices=[('', 'All Modes')] + list(Examination.EXAM_MODES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -881,7 +1007,6 @@ class ExaminationFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
     
-    # ✅ ADD: Validate date range
     def clean(self):
         """Validate filter form data"""
         cleaned_data = super().clean()
@@ -915,7 +1040,6 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
         widget=SelectWithDefault(default_label="All Examinations")
     )
     
-    # ✅ FIXED: Remove duplicate from choices
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(StudentExamResult.RESULT_STATUS_CHOICES),
@@ -923,7 +1047,6 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # ✅ FIXED: Use BooleanField instead of deprecated NullBooleanField
     is_published = forms.ChoiceField(
         label='Published',
         choices=[
@@ -957,7 +1080,6 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # ✅ ADD: Additional useful filters
     min_score = forms.DecimalField(
         label='Minimum Score',
         required=False,
@@ -995,7 +1117,6 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
                 'subject', 'academic_session'
             ).order_by('-exam_date')
             
-            # ✅ ADD: Class filter queryset
             from academics.models import Class
             self.fields['class_instance'].queryset = Class.objects.filter(
                 is_active=True
@@ -1004,7 +1125,6 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
     
-    # ✅ ADD: Validate score range
     def clean(self):
         """Validate filter form data"""
         cleaned_data = super().clean()
@@ -1027,6 +1147,7 @@ class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
         
         return cleaned_data
 
+
 class ExamCategoryFilterForm(BootstrapFormMixin, forms.Form):
     """Filter form for exam categories"""
     
@@ -1038,14 +1159,14 @@ class ExamCategoryFilterForm(BootstrapFormMixin, forms.Form):
     
     category_type = forms.ChoiceField(
         label='Category Type',
-        choices=[('', 'All Types')] + list(ExamCategory.CATEGORY_TYPE_CHOICES) if hasattr(ExamCategory, 'CATEGORY_TYPE_CHOICES') else [('', 'All Types')],
+        choices=[('', 'All Types')] + list(ExamCategory.CATEGORY_TYPES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     frequency = forms.ChoiceField(
         label='Frequency',
-        choices=[('', 'All Frequencies')] + list(ExamCategory.FREQUENCY_CHOICES) if hasattr(ExamCategory, 'FREQUENCY_CHOICES') else [('', 'All Frequencies')],
+        choices=[('', 'All Frequencies')] + list(ExamCategory.FREQUENCY_CHOICES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -1072,6 +1193,7 @@ class ExamCategoryFilterForm(BootstrapFormMixin, forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
 
+
 class GradingSystemFilterForm(BootstrapFormMixin, forms.Form):
     """Filter form for grading systems"""
     
@@ -1083,14 +1205,14 @@ class GradingSystemFilterForm(BootstrapFormMixin, forms.Form):
     
     grading_type = forms.ChoiceField(
         label='Grading Type',
-        choices=[('', 'All Types')],  # Add actual choices from model
+        choices=[('', 'All Types')] + list(GradingSystem.GRADING_TYPES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     scale_type = forms.ChoiceField(
         label='Scale Type',
-        choices=[('', 'All Scales')],  # Add actual choices from model
+        choices=[('', 'All Scales')] + list(GradingSystem.SCALE_TYPES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -1136,7 +1258,7 @@ class ExamRegistrationFilterForm(BootstrapFormMixin, forms.Form):
     
     registration_status = forms.ChoiceField(
         label='Registration Status',
-        choices=[('', 'All')],  # Add actual choices from model
+        choices=[('', 'All')] + list(ExamRegistration.REGISTRATION_STATUS_CHOICES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -1152,9 +1274,13 @@ class ExamRegistrationFilterForm(BootstrapFormMixin, forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    payment_status = forms.ChoiceField(
-        label='Payment Status',
-        choices=[('', 'All')],  # Add actual choices from model if exists
+    payment_verified = forms.ChoiceField(
+        label='Payment Verified',
+        choices=[
+            ('', 'All'),
+            ('true', 'Verified'),
+            ('false', 'Not Verified')
+        ],
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -1168,6 +1294,7 @@ class ExamRegistrationFilterForm(BootstrapFormMixin, forms.Form):
             ).select_related('subject', 'academic_session').order_by('-exam_date')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
+
 
 class ClassGradingSystemFilterForm(BootstrapFormMixin, forms.Form):
     """Filter form for class grading system assignments"""
@@ -1250,6 +1377,7 @@ class ClassGradingSystemFilterForm(BootstrapFormMixin, forms.Form):
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
 
+
 # =============================================================================
 # BULK OPERATIONS FORMS
 # =============================================================================
@@ -1286,6 +1414,7 @@ class BulkResultEntryForm(BootstrapFormMixin, forms.Form):
             ).select_related('academic_level').order_by('academic_level__order', 'name')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
+
 
 # =============================================================================
 # UTILITY FUNCTIONS FOR FILTERS

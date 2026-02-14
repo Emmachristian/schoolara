@@ -1,0 +1,398 @@
+<!-- uniforms/templates/uniforms/stock/_stock_results.html -->
+
+{% load static %}
+{% load currency_filters %}
+
+<!-- Stock Records Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Size</th>
+                <th>Quantity</th>
+                <th>Reserved</th>
+                <th>Available</th>
+                <th>Location</th>
+                <th>Stock Value</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if stock_page %}
+                {% for stock in stock_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:stock_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Item Code -->
+                    <td>
+                        <span class="category-code">{{ stock.uniform_item.code }}</span>
+                        {% if stock.uniform_item.sku %}
+                            <br><small class="text-muted">SKU: {{ stock.uniform_item.sku }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Item Name & Type -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">
+                                <a href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}" 
+                                   class="text-decoration-none">
+                                    {{ stock.uniform_item.name }}
+                                </a>
+                            </h6>
+                            <small class="text-muted">
+                                <span class="badge bg-light text-dark border">
+                                    {{ stock.uniform_item.get_item_type_display }}
+                                </span>
+                                {% if stock.uniform_item.gender == 'M' %}
+                                    <span class="badge bg-info">Male</span>
+                                {% elif stock.uniform_item.gender == 'F' %}
+                                    <span class="badge bg-danger">Female</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Unisex</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Size -->
+                    <td>
+                        <span class="badge bg-primary" style="font-size: 0.9rem; padding: 6px 12px;">
+                            {{ stock.size.name }}
+                        </span>
+                        {% if stock.size.size_type %}
+                            <br><small class="text-muted">{{ stock.size.get_size_type_display }}</small>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Total Quantity -->
+                    <td>
+                        <div class="text-center">
+                            <strong class="{% if stock.quantity == 0 %}text-danger{% elif stock.quantity <= stock.uniform_item.reorder_level %}text-warning{% else %}text-success{% endif %}">
+                                {{ stock.quantity }}
+                            </strong>
+                            <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Reserved Quantity -->
+                    <td>
+                        <div class="text-center">
+                            {% if stock.reserved_quantity > 0 %}
+                                <strong class="text-info">{{ stock.reserved_quantity }}</strong>
+                                <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Available Quantity -->
+                    <td>
+                        <div class="text-center">
+                            <strong class="{% if stock.available_quantity == 0 %}text-danger{% elif stock.available_quantity <= stock.uniform_item.reorder_level %}text-warning{% else %}text-success{% endif %}">
+                                {{ stock.available_quantity }}
+                            </strong>
+                            <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
+                            
+                            {% if stock.available_quantity <= stock.uniform_item.reorder_level and stock.available_quantity > 0 %}
+                                <br><span class="badge bg-warning text-dark mt-1">
+                                    <i class="fa fa-exclamation-triangle"></i> Low Stock
+                                </span>
+                            {% elif stock.available_quantity == 0 %}
+                                <br><span class="badge bg-danger mt-1">
+                                    <i class="fa fa-times-circle"></i> Out of Stock
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Location -->
+                    <td>
+                        {% if stock.location %}
+                            <div>
+                                <i class="fa fa-map-marker-alt text-primary me-1"></i>
+                                <strong>{{ stock.location }}</strong>
+                                {% if stock.bin_number %}
+                                    <br><small class="text-muted">Bin: {{ stock.bin_number }}</small>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Not specified</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Stock Value -->
+                    <td>
+                        <div>
+                            <strong class="text-success">{{ stock.total_selling_value|money }}</strong>
+                            <br><small class="text-muted">Cost: {{ stock.total_cost_value|money }}</small>
+                            {% if stock.total_selling_value > stock.total_cost_value %}
+                                {% with profit=stock.total_selling_value|subtract_money:stock.total_cost_value %}
+                                    <br><small class="text-success">
+                                        Profit: {{ profit }}
+                                    </small>
+                                {% endwith %}
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Stock Status -->
+                    <td>
+                        {% if stock.available_quantity == 0 %}
+                            <span class="status-badge" style="background-color: #f8d7da; color: #721c24; border-color: #f5c6cb;">
+                                Out of Stock
+                            </span>
+                        {% elif stock.available_quantity <= stock.uniform_item.reorder_level %}
+                            <span class="status-badge" style="background-color: #fff3cd; color: #856404; border-color: #ffeaa7;">
+                                Low Stock
+                            </span>
+                        {% else %}
+                            <span class="status-badge" style="background-color: #d4edda; color: #155724; border-color: #c3e6cb;">
+                                In Stock
+                            </span>
+                        {% endif %}
+                        
+                        <br><small class="text-muted mt-1 d-block">
+                            Reorder at: {{ stock.uniform_item.reorder_level }}
+                        </small>
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'uniforms:uniform_stock_detail' stock.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'uniforms:uniform_stock_quick_view_modal' stock.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'uniforms:uniform_stock_edit' stock.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Stock Actions -->
+                                <h6 class="dropdown-header">Stock Actions</h6>
+                                
+                                <button type="button" class="dropdown-item text-primary"
+                                        hx-get="{% url 'uniforms:stock_adjustment_modal' stock.uniform_item.pk %}?size={{ stock.size.pk }}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-boxes me-2"></i>Adjust Quantity
+                                </button>
+                                
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'uniforms:stock_transfer_modal' stock.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-exchange-alt me-2"></i>Transfer Stock
+                                </button>
+                                
+                                <button type="button" class="dropdown-item text-success"
+                                        hx-get="{% url 'uniforms:stock_receive_modal' stock.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-truck me-2"></i>Receive Stock
+                                </button>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- View Item -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}">
+                                    <i class="fa fa-tshirt me-2"></i>View Item Details
+                                </a>
+                                
+                                <!-- Stock History -->
+                                <a class="dropdown-item text-secondary" 
+                                   href="{% url 'uniforms:stock_history' stock.pk %}">
+                                    <i class="fa fa-history me-2"></i>Stock History
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'uniforms:uniform_stock_print' stock.pk %}" 
+                                   target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print Label
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="11" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No stock records found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or add new stock.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if stock_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ stock_page.start_index }} - {{ stock_page.end_index }} of {{ stock_page.paginator.count }} records
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Stock pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if stock_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'uniforms:uniform_stock_list' %}" 
+                                hx-target="#stock-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ stock_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in stock_page.paginator.page_range %}
+                    {% if page_num == stock_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > stock_page.number|add:"-3" and page_num < stock_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'uniforms:uniform_stock_list' %}"
+                                    hx-target="#stock-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if stock_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'uniforms:uniform_stock_list' %}"
+                                hx-target="#stock-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ stock_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-box1"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Records</div>
+                <h3>{{ stats.total_records|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-box2"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Quantity</div>
+                <h3>{{ stats.total_quantity|format_number }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Value</div>
+                <h3>{{ stats.total_value|money_short }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Low Stock Items</div>
+                <h3>{{ stats.low_stock|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'stock-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

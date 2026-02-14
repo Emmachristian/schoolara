@@ -1,0 +1,366 @@
+<!-- uniforms/templates/uniforms/measurements/_measurement_results.html -->
+
+{% load static %}
+
+<!-- Measurements Table -->
+<div class="table-responsive" style="overflow: visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="50">#</th>
+                <th>Student</th>
+                <th>Class</th>
+                <th>Measurement Type</th>
+                <th>Value</th>
+                <th>Date Taken</th>
+                <th>Context</th>
+                <th>Status</th>
+                <th width="120">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if measurements_page %}
+                {% for measurement in measurements_page %}
+                <tr>
+                    <!-- Row Number -->
+                    <td>{{ forloop.counter|add:measurements_page.start_index|add:"-1" }}</td>
+                    
+                    <!-- Student Info -->
+                    <td>
+                        <div>
+                            <h6 class="mb-0">
+                                <a href="{% url 'students:student_detail' measurement.student.pk %}" 
+                                   class="text-decoration-none">
+                                    {{ measurement.student.get_full_name }}
+                                </a>
+                            </h6>
+                            <small class="text-muted">
+                                ID: {{ measurement.student.student_id }}
+                            </small>
+                        </div>
+                    </td>
+                    
+                    <!-- Class -->
+                    <td>
+                        {% if measurement.student.current_academic_level %}
+                            <span class="badge bg-primary">
+                                {{ measurement.student.current_academic_level.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">No class</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Measurement Type -->
+                    <td>
+                        <div>
+                            <strong>{{ measurement.measurement_type.name }}</strong>
+                            {% if measurement.measurement_type.description %}
+                                <br><small class="text-muted">{{ measurement.measurement_type.description|truncatewords:5 }}</small>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Value -->
+                    <td>
+                        <div class="text-center">
+                            <strong class="text-primary" style="font-size: 1.1rem;">
+                                {{ measurement.measurement_value|floatformat:1 }}
+                            </strong>
+                            <span class="text-muted">
+                                {{ measurement.measurement_type.unit.abbreviation }}
+                            </span>
+                        </div>
+                    </td>
+                    
+                    <!-- Date Taken -->
+                    <td>
+                        <div class="text-center">
+                            <strong>{{ measurement.measurement_date|date:"d M Y" }}</strong>
+                            <br><small class="text-muted">{{ measurement.measurement_date|date:"l" }}</small>
+                        </div>
+                    </td>
+                    
+                    <!-- Context -->
+                    <td>
+                        {% if measurement.measurement_context == 'ADMISSION' %}
+                            <span class="badge bg-primary">
+                                <i class="fa fa-user-plus me-1"></i>Admission
+                            </span>
+                        {% elif measurement.measurement_context == 'ANNUAL_CHECKUP' %}
+                            <span class="badge bg-success">
+                                <i class="fa fa-calendar-check me-1"></i>Annual
+                            </span>
+                        {% elif measurement.measurement_context == 'GROWTH_MONITORING' %}
+                            <span class="badge bg-info">
+                                <i class="fa fa-chart-line me-1"></i>Growth
+                            </span>
+                        {% elif measurement.measurement_context == 'UNIFORM_ORDER' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fa fa-tshirt me-1"></i>Uniform
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                <i class="fa fa-clipboard me-1"></i>Other
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Status -->
+                    <td>
+                        <div>
+                            {% if measurement.is_verified %}
+                                <span class="badge bg-success">
+                                    <i class="fa fa-check-circle me-1"></i>Verified
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa fa-clock me-1"></i>Unverified
+                                </span>
+                            {% endif %}
+                            
+                            {% if measurement.is_current %}
+                                <br><span class="badge bg-info mt-1">
+                                    <i class="fa fa-star me-1"></i>Current
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    
+                    <!-- Actions Dropdown -->
+                    <td>
+                        <div class="dropdown" style="position: static;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v me-1"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success" href="{% url 'uniforms:student_measurement_detail' measurement.pk %}">
+                                    <i class="fa fa-eye me-2"></i>View Details
+                                </a>
+                                
+                                <!-- Quick View Modal -->
+                                <button type="button" class="dropdown-item text-info"
+                                        hx-get="{% url 'uniforms:student_measurement_quick_view_modal' measurement.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                                </button>
+                                
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning" href="{% url 'uniforms:student_measurement_edit' measurement.pk %}">
+                                    <i class="fa fa-edit me-2"></i>Edit
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Verification -->
+                                <h6 class="dropdown-header">Verification</h6>
+                                
+                                {% if not measurement.is_verified %}
+                                    <button type="button" class="dropdown-item text-success"
+                                            hx-get="{% url 'uniforms:student_measurement_verify_modal' measurement.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-check-circle me-2"></i>Verify Measurement
+                                    </button>
+                                {% else %}
+                                    <div class="dropdown-item-text">
+                                        <small class="text-success">
+                                            <i class="fa fa-check-circle me-1"></i>Already Verified
+                                        </small>
+                                    </div>
+                                {% endif %}
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- View Student -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'students:student_detail' measurement.student.pk %}">
+                                    <i class="fa fa-user me-2"></i>View Student
+                                </a>
+                                
+                                <!-- Measurement History -->
+                                <a class="dropdown-item text-secondary" 
+                                   href="{% url 'uniforms:student_measurement_list' %}?student={{ measurement.student.pk }}">
+                                    <i class="fa fa-history me-2"></i>Measurement History
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Print -->
+                                <a class="dropdown-item text-primary" 
+                                   href="{% url 'uniforms:student_measurement_print_detail' measurement.pk %}" 
+                                   target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print Details
+                                </a>
+                                
+                                <hr class="dropdown-divider">
+                                
+                                <!-- Delete Action -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:student_measurement_delete_modal' measurement.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="pe-7s-search empty-state-icon"></i>
+                            <p class="mt-2 mb-0 text-muted">No measurements found matching your filters.</p>
+                            <small class="text-muted">Try adjusting your search criteria or add new measurements.</small>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if measurements_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <!-- Results Count -->
+        <div class="text-muted">
+            Showing {{ measurements_page.start_index }} - {{ measurements_page.end_index }} of {{ measurements_page.paginator.count }} measurements
+        </div>
+        
+        <!-- Pagination Navigation -->
+        <nav aria-label="Measurements pagination">
+            <ul class="pagination mb-0">
+                <!-- Previous Button -->
+                {% if measurements_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link" 
+                                hx-get="{% url 'uniforms:student_measurement_list' %}" 
+                                hx-target="#measurement-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ measurements_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">«</span>
+                    </li>
+                {% endif %}
+                
+                <!-- Page Numbers -->
+                {% for page_num in measurements_page.paginator.page_range %}
+                    {% if page_num == measurements_page.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% elif page_num > measurements_page.number|add:"-3" and page_num < measurements_page.number|add:"3" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'uniforms:student_measurement_list' %}"
+                                    hx-target="#measurement-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
+                                {{ page_num }}
+                            </button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Next Button -->
+                {% if measurements_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'uniforms:student_measurement_list' %}"
+                                hx-target="#measurement-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ measurements_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">»</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="pe-7s-study"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Total Measurements</div>
+                <h3>{{ stats.total|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Verified</div>
+                <h3>{{ stats.verified|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-clock"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Unverified</div>
+                <h3>{{ stats.unverified|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-star"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Current Records</div>
+                <h3>{{ stats.current|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reinitialize tooltips after HTMX swap -->
+<script>
+if (typeof htmx !== 'undefined') {
+    htmx.on('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'measurement-results') {
+            // Reinitialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    });
+}
+</script>

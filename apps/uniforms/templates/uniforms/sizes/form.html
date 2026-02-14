@@ -1,0 +1,574 @@
+<!-- uniforms/templates/uniforms/sizes/form.html -->
+
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .form-section-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .form-section-header i {
+        font-size: 1.5rem;
+        color: #007bff;
+        margin-right: 12px;
+    }
+    
+    .form-section-header h5 {
+        margin: 0;
+        color: #495057;
+        font-weight: 600;
+    }
+    
+    .form-section-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+        padding: 12px;
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+        border-radius: 4px;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .form-help-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .field-with-icon {
+        position: relative;
+    }
+    
+    .field-with-icon i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .field-with-icon input,
+    .field-with-icon select {
+        padding-left: 38px;
+    }
+    
+    .info-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .info-card h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 5px 0 0 0;
+    }
+    
+    .errorlist li {
+        color: #dc3545;
+        font-size: 0.875rem;
+        padding: 5px 10px;
+        background-color: #f8d7da;
+        border-radius: 4px;
+        margin-top: 5px;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+    }
+    
+    .sidebar-sticky {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-expand1 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ title|default:"Create Uniform Size" }}
+                <div class="page-title-subheading">
+                    {% if size %}
+                        Update uniform size details, measurement ranges, and age groups
+                    {% else %}
+                        Add a new uniform size with measurement guidelines
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            {% if size %}
+                <a href="{% url 'uniforms:uniform_size_detail' size.pk %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to Detail
+                </a>
+            {% else %}
+                <a href="{% url 'uniforms:uniform_size_list' %}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to List
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Form Errors -->
+{% if form.non_field_errors %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Form Errors</h5>
+    <ul class="mb-0">
+        {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<form method="post" id="size-form" novalidate>
+    {% csrf_token %}
+    
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            
+            <!-- Basic Information -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-info"></i>
+                    <h5>Basic Information</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label required-field">
+                            {{ form.name.label }}
+                        </label>
+                        <div class="field-with-icon">
+                            <i class="fa fa-tag"></i>
+                            {% render_field form.name class="form-control" placeholder="e.g., S, M, L, XL, 32, 34" %}
+                        </div>
+                        {{ form.name.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.code.id_for_label }}" class="form-label required-field">
+                            {{ form.code.label }}
+                        </label>
+                        <div class="field-with-icon">
+                            <i class="fa fa-barcode"></i>
+                            {% render_field form.code class="form-control" placeholder="e.g., S, M, L, 32" style="text-transform: uppercase;" %}
+                        </div>
+                        {{ form.code.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.size_type.id_for_label }}" class="form-label required-field">
+                            {{ form.size_type.label }}
+                        </label>
+                        {% render_field form.size_type class="form-select" %}
+                        {{ form.size_type.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.display_order.id_for_label }}" class="form-label">
+                            {{ form.display_order.label }}
+                        </label>
+                        {% render_field form.display_order class="form-control" placeholder="100" %}
+                        <small class="form-help-text">Lower numbers appear first in lists</small>
+                        {{ form.display_order.errors }}
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                            {{ form.description.label }}
+                        </label>
+                        {% render_field form.description class="form-control" rows="2" placeholder="Size description..." %}
+                        {{ form.description.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Measurement Ranges -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-ruler"></i>
+                    <h5>Measurement Ranges</h5>
+                </div>
+                
+                <div class="form-section-description">
+                    <i class="fa fa-info-circle"></i>
+                    Define measurement ranges to help recommend appropriate sizes for students
+                </div>
+                
+                <!-- Height Range -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="text-muted mb-2">Height Range (cm)</h6>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.min_height.id_for_label }}" class="form-label">
+                            Minimum Height
+                        </label>
+                        {% render_field form.min_height class="form-control" placeholder="e.g., 150.0" step="0.1" %}
+                        {{ form.min_height.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.max_height.id_for_label }}" class="form-label">
+                            Maximum Height
+                        </label>
+                        {% render_field form.max_height class="form-control" placeholder="e.g., 160.0" step="0.1" %}
+                        {{ form.max_height.errors }}
+                    </div>
+                </div>
+                
+                <!-- Chest Range -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="text-muted mb-2">Chest Range (cm)</h6>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.min_chest.id_for_label }}" class="form-label">
+                            Minimum Chest
+                        </label>
+                        {% render_field form.min_chest class="form-control" placeholder="e.g., 80.0" step="0.1" %}
+                        {{ form.min_chest.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.max_chest.id_for_label }}" class="form-label">
+                            Maximum Chest
+                        </label>
+                        {% render_field form.max_chest class="form-control" placeholder="e.g., 90.0" step="0.1" %}
+                        {{ form.max_chest.errors }}
+                    </div>
+                </div>
+                
+                <!-- Waist Range -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="text-muted mb-2">Waist Range (cm)</h6>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.min_waist.id_for_label }}" class="form-label">
+                            Minimum Waist
+                        </label>
+                        {% render_field form.min_waist class="form-control" placeholder="e.g., 60.0" step="0.1" %}
+                        {{ form.min_waist.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.max_waist.id_for_label }}" class="form-label">
+                            Maximum Waist
+                        </label>
+                        {% render_field form.max_waist class="form-control" placeholder="e.g., 70.0" step="0.1" %}
+                        {{ form.max_waist.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Age Range -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-users"></i>
+                    <h5>Age Range</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.min_age.id_for_label }}" class="form-label">
+                            Minimum Age
+                        </label>
+                        {% render_field form.min_age class="form-control" placeholder="e.g., 10" min="0" %}
+                        <small class="form-help-text">Minimum age for this size (years)</small>
+                        {{ form.min_age.errors }}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.max_age.id_for_label }}" class="form-label">
+                            Maximum Age
+                        </label>
+                        {% render_field form.max_age class="form-control" placeholder="e.g., 12" min="0" %}
+                        <small class="form-help-text">Maximum age for this size (years)</small>
+                        {{ form.max_age.errors }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-power"></i>
+                    <h5>Status</h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check form-switch">
+                            {% render_field form.is_active class="form-check-input" id="id_is_active" role="switch" %}
+                            <label class="form-check-label" for="id_is_active">
+                                {{ form.is_active.label }}
+                            </label>
+                        </div>
+                        <small class="form-help-text">
+                            Only active sizes can be assigned to uniform items
+                        </small>
+                        {{ form.is_active.errors }}
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Right Column - Information & Guidelines -->
+        <div class="col-lg-4">
+            
+            <!-- Sticky Sidebar Container -->
+            <div class="sidebar-sticky">
+                
+                <!-- Size Type Guide -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-light"></i> Size Type Guide</h6>
+                    
+                    <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
+                        <strong>NUMERIC:</strong> Number-based (e.g., 32, 34, 36)
+                    </div>
+                    
+                    <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
+                        <strong>ALPHA:</strong> Letter-based (e.g., S, M, L, XL)
+                    </div>
+                    
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
+                        <strong>AGE_BASED:</strong> Age-based (e.g., 6-7 years)
+                    </div>
+                    
+                    <div class="alert alert-secondary mb-0" style="font-size: 0.85rem;">
+                        <strong>CUSTOM:</strong> Custom sizing system
+                    </div>
+                </div>
+                
+                <!-- Quick Tips -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-help1"></i> Quick Tips</h6>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Size code should be unique and concise
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Measurement ranges help with size recommendations
+                    </div>
+                    
+                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Age ranges are optional but helpful
+                    </div>
+                    
+                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-lightbulb text-warning"></i>
+                        Use display order to control sort sequence
+                    </div>
+                </div>
+                
+                <!-- Standard Size Examples -->
+                <div class="info-card">
+                    <h6><i class="pe-7s-note2"></i> Common Examples</h6>
+                    
+                    <div class="mb-2">
+                        <strong class="text-primary">Alphabetic Sizes:</strong>
+                        <small class="d-block text-muted">XS, S, M, L, XL, XXL</small>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <strong class="text-success">Numeric Sizes:</strong>
+                        <small class="d-block text-muted">28, 30, 32, 34, 36, 38</small>
+                    </div>
+                    
+                    <div class="mb-0">
+                        <strong class="text-info">Age-Based:</strong>
+                        <small class="d-block text-muted">6-7Y, 8-9Y, 10-11Y, 12-13Y</small>
+                    </div>
+                </div>
+                
+            </div>
+            <!-- End Sticky Sidebar Container -->
+            
+        </div>
+    </div>
+    
+    <!-- Form Actions -->
+    <div class="form-actions">
+        {% if size %}
+            <a href="{% url 'uniforms:uniform_size_detail' size.pk %}" class="btn btn-secondary btn-lg">
+                <i class="fa fa-times"></i> Cancel
+            </a>
+        {% else %}
+            <a href="{% url 'uniforms:uniform_size_list' %}" class="btn btn-secondary btn-lg">
+                <i class="fa fa-times"></i> Cancel
+            </a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fa fa-save"></i> {{ submit_text|default:"Create Size" }}
+        </button>
+    </div>
+    
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    console.log('='.repeat(80));
+    console.log('SIZE FORM INITIALIZATION');
+    console.log('='.repeat(80));
+    
+    // =========================================================================
+    // FORM VALIDATION
+    // =========================================================================
+    
+    $('#size-form').on('submit', function(e) {
+        console.log('='.repeat(80));
+        console.log('FORM SUBMISSION STARTED');
+        console.log('='.repeat(80));
+        
+        let isValid = true;
+        const errors = [];
+        
+        // Required fields validation
+        const name = $('#id_name').val();
+        const code = $('#id_code').val();
+        const sizeType = $('#id_size_type').val();
+        
+        if (!name || !name.trim()) {
+            errors.push('Size name is required');
+            isValid = false;
+        }
+        
+        if (!code || !code.trim()) {
+            errors.push('Size code is required');
+            isValid = false;
+        }
+        
+        if (!sizeType) {
+            errors.push('Size type is required');
+            isValid = false;
+        }
+        
+        // Range validations
+        const minHeight = parseFloat($('#id_min_height').val());
+        const maxHeight = parseFloat($('#id_max_height').val());
+        
+        if (!isNaN(minHeight) && !isNaN(maxHeight) && minHeight >= maxHeight) {
+            errors.push('Maximum height must be greater than minimum height');
+            isValid = false;
+        }
+        
+        const minChest = parseFloat($('#id_min_chest').val());
+        const maxChest = parseFloat($('#id_max_chest').val());
+        
+        if (!isNaN(minChest) && !isNaN(maxChest) && minChest >= maxChest) {
+            errors.push('Maximum chest must be greater than minimum chest');
+            isValid = false;
+        }
+        
+        const minWaist = parseFloat($('#id_min_waist').val());
+        const maxWaist = parseFloat($('#id_max_waist').val());
+        
+        if (!isNaN(minWaist) && !isNaN(maxWaist) && minWaist >= maxWaist) {
+            errors.push('Maximum waist must be greater than minimum waist');
+            isValid = false;
+        }
+        
+        const minAge = parseInt($('#id_min_age').val());
+        const maxAge = parseInt($('#id_max_age').val());
+        
+        if (!isNaN(minAge) && !isNaN(maxAge) && minAge >= maxAge) {
+            errors.push('Maximum age must be greater than minimum age');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            console.error('❌ Form validation failed:', errors);
+            
+            // Show errors
+            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
+            errorHtml += '<ul class="mb-0">';
+            errors.forEach(function(error) {
+                errorHtml += '<li>' + error + '</li>';
+            });
+            errorHtml += '</ul>';
+            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            errorHtml += '</div>';
+            
+            // Insert at top of form
+            $('#size-form').prepend(errorHtml);
+            
+            // Scroll to top
+            $('html, body').animate({
+                scrollTop: 0
+            }, 500);
+            
+            return false;
+        }
+        
+        console.log('✅ Form validation passed');
+        console.log('Submitting form...');
+    });
+    
+    console.log('='.repeat(80));
+    console.log('✅ FORM INITIALIZATION COMPLETE');
+    console.log('='.repeat(80));
+});
+</script>
+{% endblock %}
