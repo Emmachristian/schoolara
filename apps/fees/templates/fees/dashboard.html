@@ -1,0 +1,714 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Fees Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Variables ─────────────────────────────────────────── */
+:root {
+  --fd-blue:    #1d4ed8;
+  --fd-green:   #059669;
+  --fd-amber:   #d97706;
+  --fd-red:     #dc2626;
+  --fd-purple:  #7c3aed;
+  --fd-teal:    #0891b2;
+  --card-bg:    #ffffff;
+  --card-bdr:   #e2e8f0;
+  --page-bg:    #f1f5f9;
+  --text-dark:  #0f172a;
+  --text-mid:   #475569;
+  --text-light: #94a3b8;
+  --radius:     12px;
+  --shadow-sm:  0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md:  0 4px 16px rgba(0,0,0,.08);
+}
+
+body { background: var(--page-bg); }
+
+/* ── Hero header ────────────────────────────────────────── */
+.fd-hero {
+  background: linear-gradient(130deg, #0f172a 0%, #1e3a8a 55%, #1d4ed8 100%);
+  border-radius: 16px;
+  padding: 28px 32px 26px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.fd-hero::before {
+  content:''; position:absolute; top:-80px; right:-60px;
+  width:260px; height:260px;
+  background:rgba(255,255,255,.05); border-radius:50%;
+}
+.fd-hero::after {
+  content:''; position:absolute; bottom:-50px; left:38%;
+  width:180px; height:180px;
+  background:rgba(255,255,255,.04); border-radius:50%;
+}
+.fd-hero-title {
+  font-size:1.55rem; font-weight:700;
+  letter-spacing:-.02em; margin:0 0 6px;
+}
+.fd-hero-sub { font-size:.88rem; opacity:.72; margin:0; }
+.fd-hero-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:20px; padding:5px 14px;
+  font-size:.78rem; font-weight:500; color:#fff;
+  backdrop-filter:blur(6px);
+}
+
+/* ── Stat cards ─────────────────────────────────────────── */
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-bdr);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  height: 100%;
+  transition: box-shadow .18s, transform .16s;
+}
+.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-card .sc-top { display:flex; align-items:flex-start; justify-content:space-between; }
+.stat-card .sc-icon {
+  width:46px; height:46px; border-radius:10px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.2rem;
+}
+.stat-card .sc-value {
+  font-size:1.55rem; font-weight:800;
+  letter-spacing:-.03em; line-height:1.1;
+  color: var(--text-dark); margin:12px 0 4px;
+}
+.stat-card .sc-label {
+  font-size:.75rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:.06em; color: var(--text-mid);
+}
+.stat-card .sc-sub { font-size:.8rem; color: var(--text-light); margin-top:2px; }
+
+.ico-blue   { background:#eff6ff; color:var(--fd-blue); }
+.ico-green  { background:#ecfdf5; color:var(--fd-green); }
+.ico-amber  { background:#fffbeb; color:var(--fd-amber); }
+.ico-red    { background:#fef2f2; color:var(--fd-red); }
+.ico-purple { background:#f5f3ff; color:var(--fd-purple); }
+.ico-teal   { background:#ecfeff; color:var(--fd-teal); }
+
+.accent-blue   { border-top:3px solid var(--fd-blue);   }
+.accent-green  { border-top:3px solid var(--fd-green);  }
+.accent-amber  { border-top:3px solid var(--fd-amber);  }
+.accent-red    { border-top:3px solid var(--fd-red);    }
+.accent-purple { border-top:3px solid var(--fd-purple); }
+.accent-teal   { border-top:3px solid var(--fd-teal);   }
+
+/* ── Section card ───────────────────────────────────────── */
+.sec-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-bdr);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.sec-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--card-bdr);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sec-head h6 {
+  margin: 0; font-size: .92rem; font-weight: 700; color: var(--text-dark);
+  display: flex; align-items: center; gap: 8px;
+}
+.bc { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:10px; }
+
+/* ── Table ──────────────────────────────────────────────── */
+.fd-table { font-size:.84rem; margin:0; }
+.fd-table thead th {
+  background:#f8fafc; font-size:.72rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em;
+  color: var(--text-mid); padding:10px 14px;
+  border-bottom: 1px solid var(--card-bdr); border-top:none;
+}
+.fd-table tbody tr { transition: background .1s; }
+.fd-table tbody tr:hover { background:#f8fafc; }
+.fd-table tbody td {
+  padding: 10px 14px; vertical-align:middle;
+  border-bottom: 1px solid #f1f5f9; color: var(--text-dark);
+}
+.fd-table tbody tr:last-child td { border-bottom:none; }
+
+/* ── Badges ─────────────────────────────────────────────── */
+.fd-badge {
+  font-size:.69rem; font-weight:700; padding:3px 9px;
+  border-radius:20px; letter-spacing:.03em; display:inline-block;
+}
+.bg-paid     { background:#dcfce7; color:#15803d; }
+.bg-partial  { background:#fef9c3; color:#a16207; }
+.bg-pending  { background:#dbeafe; color:#1e40af; }
+.bg-overdue  { background:#fee2e2; color:#b91c1c; }
+.bg-draft    { background:#f1f5f9; color:#475569; }
+.bg-void     { background:#f1f5f9; color:#334155; }
+
+/* ── Attention item ─────────────────────────────────────── */
+.attn-item {
+  display:flex; align-items:center; gap:12px;
+  padding:11px 18px; border-bottom:1px solid #f1f5f9;
+  transition:background .1s;
+}
+.attn-item:hover { background:#f8fafc; }
+.attn-item:last-child { border-bottom:none; }
+.attn-avatar {
+  width:36px; height:36px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.85rem; font-weight:700; flex-shrink:0;
+}
+.attn-name { font-size:.85rem; font-weight:600; color:var(--text-dark); line-height:1.2; }
+.attn-sub  { font-size:.75rem; color:var(--text-light); }
+.attn-val  { font-size:.85rem; font-weight:700; margin-left:auto; text-align:right; white-space:nowrap; }
+
+/* ── Quick link ─────────────────────────────────────────── */
+.qlink {
+  display:flex; align-items:center; gap:10px;
+  padding:11px 16px; border-radius:10px;
+  border:1px solid var(--card-bdr); background:var(--card-bg);
+  text-decoration:none; color:var(--text-dark);
+  transition:border-color .15s, box-shadow .15s;
+  font-size:.85rem; font-weight:600;
+}
+.qlink:hover {
+  border-color:#93c5fd; box-shadow:0 0 0 3px rgba(147,197,253,.2);
+  color:var(--fd-blue);
+}
+.ql-icon {
+  width:32px; height:32px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.9rem; flex-shrink:0;
+}
+
+/* ── Empty ──────────────────────────────────────────────── */
+.fd-empty { text-align:center; padding:36px 20px; color:var(--text-light); }
+.fd-empty i { font-size:2.2rem; margin-bottom:10px; opacity:.45; }
+.fd-empty p { margin:0; font-size:.85rem; }
+
+/* ── Scroll panel ───────────────────────────────────────── */
+.scroll-panel { max-height:360px; overflow-y:auto; }
+.scroll-panel::-webkit-scrollbar { width:4px; }
+.scroll-panel::-webkit-scrollbar-track { background:transparent; }
+.scroll-panel::-webkit-scrollbar-thumb { background:var(--card-bdr); border-radius:4px; }
+
+@media(max-width:767px) {
+  .fd-hero { padding:20px 18px; }
+  .fd-hero-title { font-size:1.2rem; }
+  .stat-card .sc-value { font-size:1.25rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════════════════════════════════════════
+     HERO HEADER
+══════════════════════════════════════════════════════ -->
+<div class="fd-hero">
+  <div class="row align-items-center">
+    <div class="col-md-7" style="position:relative;z-index:1;">
+      {% if current_session %}
+      <div class="mb-3">
+        <span class="fd-hero-pill">
+          <i class="fas fa-calendar-check"></i>
+          {{ current_session.academic_year }} &mdash; {{ current_session.academic_term }}
+        </span>
+      </div>
+      {% endif %}
+      <h1 class="fd-hero-title">Fees Management Dashboard</h1>
+      <p class="fd-hero-sub">Invoices, payments, scholarships and account balances at a glance.</p>
+    </div>
+    <div class="col-md-5 d-none d-md-flex justify-content-end align-items-center gap-2" style="position:relative;z-index:1;">
+      <a href="{% url 'fees:invoice_create' %}" class="btn btn-light btn-sm fw-semibold">
+        <i class="fas fa-plus me-1"></i>New Invoice
+      </a>
+      <a href="{% url 'fees:payment_create' %}" class="btn btn-light btn-sm fw-semibold">
+        <i class="fas fa-credit-card me-1"></i>Record Payment
+      </a>
+      <a href="{% url 'fees:invoice_bulk_generate' %}" class="btn btn-warning btn-sm fw-semibold">
+        <i class="fas fa-layer-group me-1"></i>Bulk Generate
+      </a>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     KPI STAT CARDS
+══════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-blue">
+      <div class="sc-top">
+        <div><div class="sc-label">Total Billed</div></div>
+        <div class="sc-icon ico-blue"><i class="fas fa-file-invoice-dollar"></i></div>
+      </div>
+      <div class="sc-value">
+        {% if invoice_stats.total_amount %}{{ invoice_stats.total_amount|money_short }}{% else %}&mdash;{% endif %}
+      </div>
+      <div class="sc-sub">{{ invoice_stats.total_invoices|default:0|intcomma }} invoice{{ invoice_stats.total_invoices|default:0|pluralize }}</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-green">
+      <div class="sc-top">
+        <div><div class="sc-label">Collected</div></div>
+        <div class="sc-icon ico-green"><i class="fas fa-coins"></i></div>
+      </div>
+      <div class="sc-value">
+        {% if payment_stats.total_amount %}{{ payment_stats.total_amount|money_short }}{% else %}&mdash;{% endif %}
+      </div>
+      <div class="sc-sub">{{ payment_stats.total_payments|default:0|intcomma }} payment{{ payment_stats.total_payments|default:0|pluralize }}</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-amber">
+      <div class="sc-top">
+        <div><div class="sc-label">Outstanding</div></div>
+        <div class="sc-icon ico-amber"><i class="fas fa-hourglass-half"></i></div>
+      </div>
+      <div class="sc-value">
+        {% if invoice_stats.total_balance %}{{ invoice_stats.total_balance|money_short }}{% else %}&mdash;{% endif %}
+      </div>
+      <div class="sc-sub">{{ invoice_stats.overdue_count|default:0 }} overdue</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-red">
+      <div class="sc-top">
+        <div><div class="sc-label">Overdue</div></div>
+        <div class="sc-icon ico-red"><i class="fas fa-exclamation-triangle"></i></div>
+      </div>
+      <div class="sc-value">{{ overdue_invoices|length|intcomma }}</div>
+      <div class="sc-sub">Need follow-up</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-purple">
+      <div class="sc-top">
+        <div><div class="sc-label">Scholarships</div></div>
+        <div class="sc-icon ico-purple"><i class="fas fa-graduation-cap"></i></div>
+      </div>
+      <div class="sc-value">{{ scholarship_stats.active_scholarships|default:0|intcomma }}</div>
+      <div class="sc-sub">{{ scholarship_stats.total_programs|default:0 }} program{{ scholarship_stats.total_programs|default:0|pluralize }}</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="stat-card accent-teal">
+      <div class="sc-top">
+        <div><div class="sc-label">Unverified</div></div>
+        <div class="sc-icon ico-teal"><i class="fas fa-clock"></i></div>
+      </div>
+      <div class="sc-value">{{ unverified_payments|length|intcomma }}</div>
+      <div class="sc-sub">Payments pending review</div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     RECENT INVOICES + RECENT PAYMENTS
+══════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+  <!-- Recent Invoices -->
+  <div class="col-lg-7">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6><i class="fas fa-file-invoice text-primary"></i> Recent Invoices</h6>
+        <a href="{% url 'fees:invoice_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:.75rem;padding:3px 12px;border-radius:20px;">
+          View All <i class="fas fa-arrow-right ms-1"></i>
+        </a>
+      </div>
+
+      {% if recent_invoices %}
+      <div class="table-responsive">
+        <table class="table fd-table">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Student</th>
+              <th>Session</th>
+              <th class="text-end">Total</th>
+              <th class="text-end">Balance</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in recent_invoices %}
+            <tr>
+              <td>
+                <a href="{% url 'fees:invoice_detail' inv.pk %}" class="text-primary fw-semibold text-decoration-none" style="font-size:.83rem;">
+                  {{ inv.invoice_number }}
+                </a>
+              </td>
+              <td>
+                <div style="font-size:.83rem;font-weight:600;color:var(--text-dark);">{{ inv.student.get_full_name }}</div>
+                <div style="font-size:.73rem;color:var(--text-light);">{{ inv.issue_date|date:"d M Y" }}</div>
+              </td>
+              <td style="font-size:.78rem;color:var(--text-mid);">{{ inv.academic_session }}</td>
+              <td class="text-end fw-semibold" style="font-size:.83rem;">{{ inv.total_amount|money_short }}</td>
+              <td class="text-end" style="font-size:.83rem;">
+                {% if inv.balance > 0 %}
+                  <span class="text-danger fw-bold">{{ inv.balance|money_short }}</span>
+                {% else %}
+                  <span class="text-success fw-bold">Cleared</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if inv.status == 'PAID' %}
+                  <span class="fd-badge bg-paid">Paid</span>
+                {% elif inv.status == 'PARTIALLY_PAID' %}
+                  <span class="fd-badge bg-partial">Partial</span>
+                {% elif inv.status == 'OVERDUE' %}
+                  <span class="fd-badge bg-overdue">Overdue</span>
+                {% elif inv.status == 'PENDING' %}
+                  <span class="fd-badge bg-pending">Pending</span>
+                {% elif inv.status == 'DRAFT' %}
+                  <span class="fd-badge bg-draft">Draft</span>
+                {% else %}
+                  <span class="fd-badge bg-void">{{ inv.get_status_display }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-file-invoice-dollar d-block"></i>
+        <p>No invoices yet.</p>
+        <a href="{% url 'fees:invoice_create' %}" class="btn btn-sm btn-primary mt-2">Create Invoice</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent Payments -->
+  <div class="col-lg-5">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6><i class="fas fa-credit-card text-success"></i> Recent Payments</h6>
+        <a href="{% url 'fees:payment_list' %}" class="btn btn-sm btn-outline-success" style="font-size:.75rem;padding:3px 12px;border-radius:20px;">
+          View All <i class="fas fa-arrow-right ms-1"></i>
+        </a>
+      </div>
+
+      {% if recent_payments %}
+      <div class="scroll-panel">
+        {% for pmt in recent_payments %}
+        <div class="attn-item">
+          <div class="attn-avatar {% if pmt.is_verified %}ico-green{% else %}ico-amber{% endif %}">
+            <i class="fas fa-money-bill-wave"></i>
+          </div>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="attn-name text-truncate">{{ pmt.student.get_full_name }}</div>
+            <div class="attn-sub">
+              {{ pmt.payment_method.name }} &bull; {{ pmt.payment_date|date:"d M" }}
+              {% if pmt.is_verified %}
+                <span class="fd-badge bg-paid ms-1" style="font-size:.64rem;">Verified</span>
+              {% else %}
+                <span class="fd-badge bg-partial ms-1" style="font-size:.64rem;">Pending</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="attn-val">
+            <div class="text-success fw-bold" style="font-size:.88rem;">{{ pmt.amount|money_short }}</div>
+            <div style="font-size:.72rem;color:var(--text-light);">{{ pmt.receipt_number }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-hand-holding-usd d-block"></i>
+        <p>No payments recorded.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     ATTENTION SECTIONS  (2×2)
+══════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+  <!-- Overdue Invoices -->
+  <div class="col-md-6">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6>
+          <i class="fas fa-exclamation-circle text-danger"></i>
+          Overdue Invoices
+          {% if overdue_invoices %}
+            <span class="bc bg-danger text-white">{{ overdue_invoices|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'fees:invoice_list' %}?status=OVERDUE" class="btn btn-sm btn-outline-danger" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
+      </div>
+      {% if overdue_invoices %}
+      <div class="scroll-panel">
+        {% for inv in overdue_invoices %}
+        <div class="attn-item">
+          <div class="attn-avatar ico-red"><i class="fas fa-file-invoice"></i></div>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="attn-name text-truncate">{{ inv.student.get_full_name }}</div>
+            <div class="attn-sub">Due {{ inv.due_date|date:"d M Y" }} &bull; {{ inv.invoice_number }}</div>
+          </div>
+          <div class="attn-val">
+            <div class="text-danger fw-bold" style="font-size:.88rem;">{{ inv.balance|money_short }}</div>
+            <a href="{% url 'fees:invoice_detail' inv.pk %}" class="text-primary" style="font-size:.72rem;">View</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-check-circle d-block text-success"></i>
+        <p>No overdue invoices. Great!</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Unverified Payments -->
+  <div class="col-md-6">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6>
+          <i class="fas fa-clock" style="color:var(--fd-amber);"></i>
+          Unverified Payments
+          {% if unverified_payments %}
+            <span class="bc bg-warning text-dark">{{ unverified_payments|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'fees:payment_list' %}?is_verified=false" class="btn btn-sm btn-outline-warning" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
+      </div>
+      {% if unverified_payments %}
+      <div class="scroll-panel">
+        {% for pmt in unverified_payments %}
+        <div class="attn-item">
+          <div class="attn-avatar ico-amber"><i class="fas fa-question-circle"></i></div>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="attn-name text-truncate">{{ pmt.student.get_full_name }}</div>
+            <div class="attn-sub">{{ pmt.payment_method.name }} &bull; {{ pmt.payment_date|date:"d M Y" }}</div>
+          </div>
+          <div class="attn-val">
+            <div class="fw-bold" style="font-size:.88rem;color:var(--fd-amber);">{{ pmt.amount|money_short }}</div>
+            <a href="{% url 'fees:payment_detail' pmt.pk %}" class="text-primary" style="font-size:.72rem;">Verify</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-check-double d-block text-success"></i>
+        <p>All payments verified.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Accounts with Debt -->
+  <div class="col-md-6">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6>
+          <i class="fas fa-user-times text-danger"></i>
+          Accounts with Debt
+          {% if accounts_in_debt %}
+            <span class="bc bg-danger text-white">{{ accounts_in_debt|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'fees:account_list' %}?has_debt=true" class="btn btn-sm btn-outline-danger" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
+      </div>
+      {% if accounts_in_debt %}
+      <div class="scroll-panel">
+        {% for acct in accounts_in_debt %}
+        <div class="attn-item">
+          <div class="attn-avatar ico-red">
+            <span style="font-size:.8rem;font-weight:700;">{{ acct.student.get_full_name|first }}</span>
+          </div>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="attn-name text-truncate">{{ acct.student.get_full_name }}</div>
+            <div class="attn-sub">
+              {{ acct.status }} &bull; {{ acct.last_transaction_date|date:"d M"|default:"No activity" }}
+            </div>
+          </div>
+          <div class="attn-val">
+            <div class="text-danger fw-bold" style="font-size:.88rem;">{{ acct.outstanding_amount|money_short }}</div>
+            <a href="{% url 'fees:account_detail' acct.pk %}" class="text-primary" style="font-size:.72rem;">View</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-smile-beam d-block text-success"></i>
+        <p>No accounts with outstanding debt.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Pending Scholarship Applications -->
+  <div class="col-md-6">
+    <div class="sec-card h-100">
+      <div class="sec-head">
+        <h6>
+          <i class="fas fa-graduation-cap" style="color:var(--fd-purple);"></i>
+          Pending Applications
+          {% if pending_scholarship_applications %}
+            <span class="bc text-white" style="background:var(--fd-purple);">{{ pending_scholarship_applications|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'fees:scholarship_application_list' %}?status=SUBMITTED" class="btn btn-sm" style="font-size:.72rem;padding:3px 10px;border-radius:20px;border:1px solid var(--fd-purple);color:var(--fd-purple);">View All</a>
+      </div>
+      {% if pending_scholarship_applications %}
+      <div class="scroll-panel">
+        {% for app in pending_scholarship_applications %}
+        <div class="attn-item">
+          <div class="attn-avatar ico-purple"><i class="fas fa-scroll"></i></div>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="attn-name text-truncate">{{ app.student.get_full_name }}</div>
+            <div class="attn-sub text-truncate">
+              {{ app.scholarship_program.name }} &bull; {{ app.application_date|date:"d M Y" }}
+            </div>
+          </div>
+          <div class="attn-val">
+            <a href="{% url 'fees:scholarship_application_detail' app.pk %}" class="btn btn-sm text-white" style="font-size:.72rem;padding:3px 12px;border-radius:20px;background:var(--fd-purple);">
+              Review
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="fd-empty">
+        <i class="fas fa-inbox d-block"></i>
+        <p>No pending applications.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     QUICK ACTIONS
+══════════════════════════════════════════════════════ -->
+<div class="sec-card mb-4">
+  <div class="sec-head">
+    <h6><i class="fas fa-bolt text-warning"></i> Quick Actions</h6>
+  </div>
+  <div class="p-3">
+    <div class="row g-2">
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:invoice_create' %}" class="qlink">
+          <div class="ql-icon ico-blue"><i class="fas fa-file-plus"></i></div>
+          New Invoice
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:payment_create' %}" class="qlink">
+          <div class="ql-icon ico-green"><i class="fas fa-credit-card"></i></div>
+          Record Payment
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:invoice_bulk_generate' %}" class="qlink">
+          <div class="ql-icon ico-amber"><i class="fas fa-layer-group"></i></div>
+          Bulk Generate
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:student_scholarship_create' %}" class="qlink">
+          <div class="ql-icon ico-purple"><i class="fas fa-award"></i></div>
+          Award Scholarship
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:payment_bulk_verify' %}" class="qlink">
+          <div class="ql-icon ico-teal"><i class="fas fa-check-double"></i></div>
+          Bulk Verify
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:outstanding_report' %}" class="qlink">
+          <div class="ql-icon" style="background:#f0fdfa;color:#0f766e;"><i class="fas fa-chart-pie"></i></div>
+          Reports
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:structure_list' %}" class="qlink">
+          <div class="ql-icon" style="background:#fdf4ff;color:#a21caf;"><i class="fas fa-sitemap"></i></div>
+          Fee Structures
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:category_list' %}" class="qlink">
+          <div class="ql-icon" style="background:#fff7ed;color:#c2410c;"><i class="fas fa-tags"></i></div>
+          Categories
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:discount_list' %}" class="qlink">
+          <div class="ql-icon" style="background:#fef9c3;color:#a16207;"><i class="fas fa-percent"></i></div>
+          Discounts
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:refund_list' %}" class="qlink">
+          <div class="ql-icon" style="background:#fff1f2;color:#be185d;"><i class="fas fa-undo"></i></div>
+          Refunds
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:account_list' %}" class="qlink">
+          <div class="ql-icon ico-blue"><i class="fas fa-wallet"></i></div>
+          Accounts
+        </a>
+      </div>
+
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{% url 'fees:collection_report' %}" class="qlink">
+          <div class="ql-icon ico-green"><i class="fas fa-file-export"></i></div>
+          Collection Report
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

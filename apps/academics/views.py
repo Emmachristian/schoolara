@@ -4370,100 +4370,233 @@ def bulk_enrollment_create(request):
 @login_required
 def bulk_enrollment_student_search(request):
     """
-    HTMX endpoint for live enrollment search.
-    Returns only the results partial.
+    HTMX endpoint for live student search in the bulk enrollment wizard.
+    Returns only the _student_selection_results.html partial.
+
+    Parameter names match the BulkEnrollmentStudentSelectionForm field names:
+        search                  — text search (name / admission number)
+        current_level           — AcademicLevel PK
+        enrollment_status       — Student.ENROLLMENT_STATUS_CHOICES value
+        gender                  — Student.GENDER_CHOICES value
+        exclude_already_enrolled — 'on' / absent
+        show_only_eligible      — 'on' / absent
+        sort_by                 — one of the sort_map keys below
+        class_id                — hidden context field (passed via hx-include)
+        session_id              — hidden context field (passed via hx-include)
+        page                    — pagination page number
     """
     from students.models import Student
-    
-    # Get search parameters
-    query = request.GET.get('q', '').strip()
-    level_id = request.GET.get('level_id')
-    status = request.GET.get('status', 'ACTIVE')
-    class_id = request.GET.get('class_id')
-    session_id = request.GET.get('session_id')
-    
+
+    # -------------------------------------------------------------------------
     # Base queryset
-    students = Student.objects.filter(enrollment_status=status)
-    
-    # Apply filters
+    # -------------------------------------------------------------------------
+    students = Student.objects.select_related(
+        'current_academic_level', 'admission_academic_level'
+    )
+
+    # -------------------------------------------------------------------------
+    # Enrollment status  (default: ACTIVE)
+    # -------------------------------------------------------------------------
+    status = request.GET.get('enrollment_status', '').strip()
+    if status:
+        students = students.filter(enrollment_status=status)
+    else:
+        students = students.filter(enrollment_status='ACTIVE')
+
+    # -------------------------------------------------------------------------
+    # Text search — name or admission number
+    # -------------------------------------------------------------------------
+    query = request.GET.get('search', '').strip()
     if query:
         students = students.filter(
             Q(first_name__icontains=query) |
             Q(last_name__icontains=query) |
-            Q(student_id__icontains=query)
+            Q(admission_number__icontains=query)
         )
-    
+
+    # -------------------------------------------------------------------------
+    # Academic level filter
+    # -------------------------------------------------------------------------
+    level_id = request.GET.get('current_level', '').strip()
     if level_id:
         students = students.filter(current_academic_level_id=level_id)
-    
-    # Exclude already enrolled students
-    if class_id and session_id:
-        enrolled_ids = StudentClassEnrollment.objects.filter(
-            class_instance_id=class_id,
-            academic_session_id=session_id
+
+    # -------------------------------------------------------------------------
+    # Gender filter
+    # -------------------------------------------------------------------------
+    gender = request.GET.get('gender', '').strip()
+    if gender:
+        students = students.filter(gender=gender)
+
+    # -------------------------------------------------------------------------
+    # Exclude already-enrolled students
+    # Checkbox sends 'on' when ticked; absent when unticked.
+    # -------------------------------------------------------------------------
+    exclude_enrolled = request.GET.get('exclude_already_enrolled')
+    session_id = request.GET.get('session_id', '').strip()
+    class_id   = request.GET.get('class_id', '').strip()
+
+    if exclude_enrolled:
+        # Exclude students with ANY active enrollment in the target session.
+        # If a specific class is provided, scope to that class instead.
+        enrollment_filter = {'completion_status': 'ONGOING'}
+
+        if session_id:
+            enrollment_filter['academic_session_id'] = session_id
+        if class_id:
+            enrollment_filter['class_instance_id'] = class_id
+
+        if session_id or class_id:
+            enrolled_ids = StudentClassEnrollment.objects.filter(
+                **enrollment_filter
+            ).values_list('student_id', flat=True)
+            students = students.exclude(id__in=enrolled_ids)
+
+    # -------------------------------------------------------------------------
+    # Show only promotion-eligible students
+    # -------------------------------------------------------------------------
+    show_only_eligible = request.GET.get('show_only_eligible')
+    if show_only_eligible:
+        from academics.models import AcademicProgress
+        eligible_ids = AcademicProgress.objects.filter(
+            is_eligible_for_promotion=True
         ).values_list('student_id', flat=True)
-        students = students.exclude(id__in=enrolled_ids)
-    
-    students = students.select_related(
-        'current_academic_level', 'admission_academic_level'
-    ).order_by('first_name', 'last_name')
-    
-    # Pagination
-    paginator = Paginator(students, 50)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
-    
-    context = {
-        'page_obj': page_obj,
-        'total_count': students.count(),
+        students = students.filter(id__in=eligible_ids)
+
+    # -------------------------------------------------------------------------
+    # Sorting
+    # -------------------------------------------------------------------------
+    sort_map = {
+        'name'           : ('first_name', 'last_name'),
+        '-name'          : ('-first_name', '-last_name'),
+        'admission_number': ('admission_number',),
+        '-admission_date': ('-admission_date',),
+        'admission_date' : ('admission_date',),
     }
-    
-    return render(request, 'academics/enrollments/_student_selection_results.html', context)
+    sort_by = request.GET.get('sort_by', 'name').strip()
+    students = students.order_by(*sort_map.get(sort_by, ('first_name', 'last_name')))
+
+    # -------------------------------------------------------------------------
+    # Pagination
+    # -------------------------------------------------------------------------
+    # Count before paginating so the footer shows the total correctly.
+    total_count = students.count()
+
+    paginator   = Paginator(students, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj    = paginator.get_page(page_number)
+
+    context = {
+        'page_obj'   : page_obj,
+        'total_count': total_count,
+    }
+
+    return render(
+        request,
+        'academics/enrollments/_student_selection_results.html',
+        context,
+    )
 
 
 @login_required
 def bulk_enrollment_step2(request):
     """
     Bulk Enrollment - Step 2: Review and confirm enrollment.
+
+    Handles three distinct request scenarios:
+    1. POST with 'student_ids' only → Step 1 handoff (render the form)
+    2. POST with 'confirm_enrollment' → actual form submission
+    3. GET → fallback/back-navigation (redirects if no student_ids)
     """
     from students.models import Student
-    
+
+    is_htmx = request.headers.get('HX-Request') == 'true'
+
+    # =========================================================================
+    # SCENARIO 1: Step 1 → Step 2 handoff (POST with student_ids, no confirm)
+    # =========================================================================
+    if request.method == 'POST' and 'student_ids' in request.POST and 'confirm_enrollment' not in request.POST:
+        student_ids_str = request.POST.get('student_ids', '')
+        class_id = request.POST.get('class_id')
+        session_id = request.POST.get('session_id')
+
+        if not student_ids_str:
+            messages.error(request, 'No students selected. Please go back and select students.')
+            return redirect('academics:bulk_enrollment_step1')
+
+        ids = [id.strip() for id in student_ids_str.split(',') if id.strip()]
+        student_count = Student.objects.filter(id__in=ids).count()
+
+        initial = {'selected_student_ids': student_ids_str}
+
+        if class_id:
+            target_class = get_object_or_404(Class, pk=class_id)
+            initial['class_instance'] = target_class
+            initial['academic_session'] = target_class.academic_session
+        elif session_id:
+            initial['academic_session'] = get_object_or_404(AcademicSession, pk=session_id)
+
+        form = BulkEnrollmentConfirmationForm(initial=initial, student_count=student_count)
+
+        selected_students = Student.objects.filter(id__in=ids).select_related('current_academic_level')
+
+        return render(request, 'academics/enrollments/bulk_step2.html', {
+            'form': form,
+            'selected_students': selected_students,
+            'student_count': student_count,
+            'title': 'Bulk Enrollment - Confirm',
+        })
+
+    # =========================================================================
+    # SCENARIO 2: Actual form submission (POST with confirm_enrollment present)
+    # =========================================================================
     if request.method == 'POST':
         form = BulkEnrollmentConfirmationForm(request.POST)
-        
+
         if form.is_valid():
             try:
                 result = execute_bulk_enrollment(form.cleaned_data, request.user)
-                
-                # Check if HTMX request
-                is_htmx = request.headers.get('HX-Request') == 'true'
-                
-                success_message = (
-                    f'Successfully enrolled {result["enrolled_count"]} student(s). '
-                    f'{result["invoice_count"]} invoice(s) created.'
+
+                # Build success message from result breakdown
+                parts = [f"Enrolled: {result['enrolled_count']}"]
+                if result['skipped_count']:
+                    parts.append(f"Skipped (already enrolled): {result['skipped_count']}")
+                if result['invoice_count']:
+                    parts.append(f"Invoices created: {result['invoice_count']}")
+                success_message = ' | '.join(parts)
+
+                # Build warning message if some failed
+                warning_message = None
+                if result['failed']:
+                    failed_names = ', '.join(
+                        f"{name} ({reason})" for name, reason in result['failed'][:5]
+                    )
+                    extra = f" and {len(result['failed']) - 5} more" if len(result['failed']) > 5 else ""
+                    warning_message = f"Failed for {len(result['failed'])} student(s): {failed_names}{extra}"
+
+                redirect_url = (
+                    reverse('academics:enrollment_list') +
+                    f'?class_instance={form.cleaned_data["class_instance"].pk}'
                 )
-                
+
                 if is_htmx:
                     response = HttpResponse()
                     response['HX-Alert-Message'] = success_message
-                    response['HX-Alert-Type'] = 'success'
+                    response['HX-Alert-Type'] = 'success' if result['enrolled_count'] > 0 else 'warning'
+                    if warning_message:
+                        response['HX-Alert-Warning'] = warning_message
                     response['HX-Close-Modal'] = 'true'
-                    response['HX-Redirect'] = (
-                        reverse('academics:enrollment_list') + 
-                        f'?class_instance={form.cleaned_data["class_instance"].pk}'
-                    )
+                    response['HX-Redirect'] = redirect_url
                     return response
                 else:
-                    messages.success(request, success_message)
-                    return redirect(
-                        reverse('academics:enrollment_list') + 
-                        f'?class_instance={form.cleaned_data["class_instance"].pk}'
-                    )
-                
+                    messages.success(request, success_message, extra_tags='sweetalert')
+                    if warning_message:
+                        messages.warning(request, warning_message, extra_tags='sweetalert')
+                    return redirect(redirect_url)
+
             except Exception as e:
-                logger.error(f"Bulk enrollment failed: {e}")
-                
-                is_htmx = request.headers.get('HX-Request') == 'true'
+                logger.error(f"Bulk enrollment failed: {e}", exc_info=True)
+
                 if is_htmx:
                     response = HttpResponse()
                     response['HX-Alert-Message'] = f'Bulk enrollment failed: {str(e)}'
@@ -4471,180 +4604,141 @@ def bulk_enrollment_step2(request):
                     return response
                 else:
                     messages.error(request, f'Bulk enrollment failed: {str(e)}')
+
         else:
-            is_htmx = request.headers.get('HX-Request') == 'true'
+            # Form validation failed - collect all errors for display
             if is_htmx:
+                error_messages = []
+                for field, errors in form.errors.items():
+                    for error in errors:
+                        if field == '__all__':
+                            error_messages.append(str(error))
+                        else:
+                            error_messages.append(f"{field}: {error}")
+
                 response = HttpResponse()
-                response['HX-Alert-Message'] = 'Please correct the errors in the form'
+                response['HX-Alert-Message'] = ' | '.join(error_messages) or 'Please correct the errors in the form'
                 response['HX-Alert-Type'] = 'error'
                 return response
             else:
                 messages.error(request, 'Please correct the errors below.')
-    else:
-        # Get student IDs from query params
-        student_ids = request.GET.get('student_ids', '')
-        
-        if not student_ids:
-            messages.error(
-                request,
-                'No students selected. Please go back and select students.'
-            )
-            return redirect('academics:bulk_enrollment_step1')
-        
-        # Split IDs (could be integers or UUIDs)
-        ids = [id.strip() for id in student_ids.split(',') if id.strip()]
-        
-        # Count students
-        student_count = Student.objects.filter(id__in=ids).count()
-        
-        # Initialize form with student IDs
-        initial = {
-            'selected_student_ids': student_ids,
-        }
-        
-        # Pre-fill class and session if provided
-        class_id = request.GET.get('class_id')
-        session_id = request.GET.get('session_id')
-        
-        if class_id:
-            target_class = get_object_or_404(Class, pk=class_id)
-            initial['class_instance'] = target_class
-            initial['academic_session'] = target_class.academic_session
-        elif session_id:
-            initial['academic_session'] = get_object_or_404(AcademicSession, pk=session_id)
-        
-        form = BulkEnrollmentConfirmationForm(
-            initial=initial,
-            student_count=student_count
-        )
-    
-    # Get selected students for display
-    student_ids_str = form.data.get('selected_student_ids') or form.initial.get('selected_student_ids', '')
+
+        # Re-render form with errors (non-HTMX invalid submission)
+        student_ids_str = form.data.get('selected_student_ids', '')
+        ids = [id.strip() for id in student_ids_str.split(',') if id.strip()]
+        selected_students = Student.objects.filter(id__in=ids).select_related('current_academic_level')
+
+        return render(request, 'academics/enrollments/bulk_step2.html', {
+            'form': form,
+            'selected_students': selected_students,
+            'student_count': len(ids),
+            'title': 'Bulk Enrollment - Confirm',
+        })
+
+    # =========================================================================
+    # SCENARIO 3: GET request — back navigation or direct URL access
+    # =========================================================================
+    student_ids_str = request.GET.get('student_ids', '')
+
+    if not student_ids_str:
+        messages.error(request, 'No students selected. Please go back and select students.')
+        return redirect('academics:bulk_enrollment_step1')
+
     ids = [id.strip() for id in student_ids_str.split(',') if id.strip()]
-    selected_students = Student.objects.filter(id__in=ids).select_related(
-        'current_academic_level'
-    )
-    
-    context = {
+    student_count = Student.objects.filter(id__in=ids).count()
+
+    initial = {'selected_student_ids': student_ids_str}
+
+    class_id = request.GET.get('class_id')
+    session_id = request.GET.get('session_id')
+
+    if class_id:
+        target_class = get_object_or_404(Class, pk=class_id)
+        initial['class_instance'] = target_class
+        initial['academic_session'] = target_class.academic_session
+    elif session_id:
+        initial['academic_session'] = get_object_or_404(AcademicSession, pk=session_id)
+
+    form = BulkEnrollmentConfirmationForm(initial=initial, student_count=student_count)
+    selected_students = Student.objects.filter(id__in=ids).select_related('current_academic_level')
+
+    return render(request, 'academics/enrollments/bulk_step2.html', {
         'form': form,
         'selected_students': selected_students,
-        'student_count': len(ids),
+        'student_count': student_count,
         'title': 'Bulk Enrollment - Confirm',
-    }
-    
-    return render(request, 'academics/enrollments/bulk_step2.html', context)
-
+    })
 
 def execute_bulk_enrollment(data, user):
-    """
-    Execute bulk enrollment with transaction safety.
-    
-    Args:
-        data: Cleaned form data
-        user: Current user (for audit trail)
-    
-    Returns:
-        dict: Result summary with enrolled_count, invoice_count, and skipped_count
-    """
     from students.models import Student
-    
+
     enrolled_count = 0
     invoice_count = 0
     skipped_count = 0
-    errors = []
-    
-    # Parse student IDs
+    failed = []  # List of (student_name, error_message)
+
     student_ids_str = data.get('selected_student_ids', '')
     if isinstance(student_ids_str, str):
         student_ids = [id.strip() for id in student_ids_str.split(',') if id.strip()]
     else:
         student_ids = student_ids_str
-    
-    students = Student.objects.filter(id__in=student_ids).select_related(
-        'current_academic_level'
-    )
-    
-    # Get common data
+
+    students = Student.objects.filter(id__in=student_ids).select_related('current_academic_level')
+
     academic_session = data['academic_session']
     class_instance = data['class_instance']
     enrollment_date = data.get('enrollment_date') or get_school_today()
     enrollment_type = data.get('enrollment_type', 'CONTINUING')
     auto_create_invoice = data.get('auto_create_invoice', True)
-    
-    logger.info(
-        f"Starting bulk enrollment: {students.count()} students into "
-        f"{class_instance} for {academic_session}"
-    )
-    
-    with transaction.atomic():
-        for student in students:
-            try:
-                # Check for duplicate enrollment
+
+    for student in students:
+        # Each student gets its own transaction so one failure doesn't affect others
+        try:
+            with transaction.atomic():
                 existing = StudentClassEnrollment.objects.filter(
                     student=student,
                     academic_session=academic_session,
                     class_instance=class_instance
                 ).exists()
-                
+
                 if existing:
-                    logger.warning(
-                        f"Student {student.get_full_name()} already enrolled - skipping"
-                    )
                     skipped_count += 1
                     continue
-                
-                # Create enrollment
-                # Note: roll_number will be auto-generated by the signal
+
                 enrollment = StudentClassEnrollment.objects.create(
                     student=student,
                     academic_session=academic_session,
                     class_instance=class_instance,
                     enrollment_date=enrollment_date,
                     enrollment_type=enrollment_type,
-                    auto_create_invoice=auto_create_invoice,  # Signal will use this
+                    auto_create_invoice=auto_create_invoice,
                     is_active=True,
                     completion_status='ONGOING',
                     enrollment_notes=data.get('enrollment_notes', '')
                 )
-                
+
                 enrolled_count += 1
-                
-                logger.info(
-                    f"Enrolled {student.get_full_name()} with roll number {enrollment.roll_number}"
-                )
-                
-                # Check if invoice was created by signal
+
                 if enrollment.academic_invoice:
                     invoice_count += 1
-                
-            except ValidationError as e:
-                error_msg = f"{student.get_full_name()}: {str(e)}"
-                logger.error(f"Validation error enrolling student: {error_msg}")
-                errors.append(error_msg)
-                
-            except Exception as e:
-                error_msg = f"{student.get_full_name()}: {str(e)}"
-                logger.error(f"Failed to enroll student: {error_msg}", exc_info=True)
-                errors.append(error_msg)
-    
-    # Log summary
+
+        except ValidationError as e:
+            failed.append((student.get_full_name(), str(e)))
+            logger.error(f"Validation error enrolling {student.get_full_name()}: {e}")
+        except Exception as e:
+            failed.append((student.get_full_name(), str(e)))
+            logger.error(f"Failed to enroll {student.get_full_name()}: {e}", exc_info=True)
+
     logger.info(
-        f"Bulk enrollment completed: {enrolled_count} enrolled, "
-        f"{invoice_count} invoices created, {skipped_count} skipped, "
-        f"{len(errors)} errors"
+        f"Bulk enrollment: {enrolled_count} enrolled, {invoice_count} invoices, "
+        f"{skipped_count} skipped, {len(failed)} failed"
     )
-    
-    if errors:
-        # Show first 5 errors
-        error_summary = '; '.join(errors[:5])
-        if len(errors) > 5:
-            error_summary += f" ... and {len(errors) - 5} more"
-        raise Exception(f"Some enrollments failed: {error_summary}")
-    
+
     return {
         'enrolled_count': enrolled_count,
         'invoice_count': invoice_count,
         'skipped_count': skipped_count,
+        'failed': failed,  # List of (name, reason) tuples
     }
 
 @login_required

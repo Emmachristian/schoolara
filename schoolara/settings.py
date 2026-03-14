@@ -153,9 +153,9 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            BASE_DIR / 'templates',   # ← project-wide templates
+            BASE_DIR / 'templates',
         ],
-        'APP_DIRS': True,            # ← enables app templates
+        'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 # Django defaults
@@ -163,29 +163,26 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                
-                # Accounts context processors (user, school, theme)
-                'accounts.context_processors.active_school',
-                'accounts.context_processors.user_context',
-                'accounts.context_processors.user_theme_preferences',
-                'accounts.context_processors.theme_colors',
-                'accounts.context_processors.user_security_context',
-                'accounts.context_processors.navigation_permissions',
-                'accounts.context_processors.user_notifications_count',
-                
-                # Core context processors (financial, configuration, fiscal)
-                'core.context_processors.school_configuration',      # ✅ Exists
-                'core.context_processors.active_academic_session',   # ✅ Exists
-                'core.context_processors.active_fiscal_period',      # ✅ Exists
-                'core.context_processors.payment_methods_context',   # ✅ Exists
+
+                # ── Branding & user ────────────────────────────────────────
+                'core.context_processors.school_branding',
+                'core.context_processors.user_preferences',
+                'core.context_processors.theme_colors',
+                'core.context_processors.user_security_context',
+                'core.context_processors.navigation_permissions',
+
+                # ── Academic & financial ───────────────────────────────────
+                'core.context_processors.school_configuration',
+                'core.context_processors.active_academic_session',
+                'core.context_processors.active_fiscal_period',
+                'core.context_processors.payment_methods_context',
             ],
             'libraries': {
-                # Custom template tag libraries
-                'custom_filters': 'utils.templatetags.custom_filters',
+                'custom_filters':  'utils.templatetags.custom_filters',
                 'currency_filters': 'core.templatetags.currency_filters',
-                'hr_filters': 'hr.templatetags.hr_filters',
-                'exam_filters': 'exams.templatetags.exam_filters',
-                'fees_tags': 'fees.templatetags.fees_tags',
+                'hr_filters':      'hr.templatetags.hr_filters',
+                'exam_filters':    'exams.templatetags.exam_filters',
+                'fees_tags':       'fees.templatetags.fees_tags',
             },
         },
     },

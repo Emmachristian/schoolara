@@ -1,202 +1,243 @@
+{# hr/templates/hr/teachers/partials/_teacher_results.html #}
 {% load static %}
 {% load humanize %}
-{% load widget_tweaks %}
 
-<!-- Teachers Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+/* ---- Avatar ---- */
+.teacher-photo {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e9ecef;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.teacher-avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; color: white; margin-right: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, #4361ee 0%, #764ba2 100%);
+}
+
+/* ---- Role badges ---- */
+.role-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+.role-badge.class-teacher { background: #d1ecf1; color: #0c5460; }
+.role-badge.online        { background: #d4edda; color: #155724; }
+
+/* ---- Digital literacy ---- */
+.digital-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.digital-pill.basic        { background: #e2e3e5; color: #383d41; }
+.digital-pill.intermediate { background: #fff3cd; color: #856404; }
+.digital-pill.advanced     { background: #d1ecf1; color: #0c5460; }
+.digital-pill.expert       { background: #d4edda; color: #155724; }
+
+/* ---- Status pills ---- */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid;
+}
+.status-pill.active   { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+.status-pill.inactive { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+
+/* ---- Teaching load ---- */
+.load-wrap { min-width: 130px; }
+
+/* ---- Overflow fix ---- */
+.table-responsive { overflow-x: auto; overflow-y: visible !important; }
+.table tbody td   { position: relative; overflow: visible; }
+.dropdown-menu    { z-index: 1050 !important; }
+
+@media (max-width: 768px) {
+    .dropdown-menu { min-width: 200px; right: 0 !important; left: auto !important; }
+    .teacher-photo, .teacher-avatar { width: 36px; height: 36px; }
+}
+</style>
+
+<div class="table-responsive">
+    <table class="table table-hover">
         <thead>
             <tr>
-                <th width="50">#</th>
+                <th width="50" class="text-center">#</th>
                 <th>Teacher</th>
                 <th>Specialization</th>
                 <th>Teaching Load</th>
-                <th>Classes</th>
+                <th class="text-center">Classes</th>
                 <th>Digital Skills</th>
-                <th>Status</th>
-                <th width="120">Actions</th>
+                <th class="text-center">Status</th>
+                <th width="110" class="text-center">Actions</th>
             </tr>
         </thead>
-        <tbody id="teacherTableBody">
+        <tbody>
             {% if teachers_page %}
                 {% for teacher in teachers_page %}
                 <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:teachers_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Teacher Info with Photo/Icon -->
+                    <!-- Row number — correct across all pages -->
+                    <td class="text-center text-muted small">
+                        {{ teachers_page.start_index|add:forloop.counter0 }}
+                    </td>
+
+                    <!-- Teacher name + photo -->
                     <td>
                         <div class="d-flex align-items-center">
                             {% if teacher.staff.photo %}
-                                <img src="{{ teacher.staff.photo.url }}" 
+                                <img src="{{ teacher.staff.photo.url }}"
                                      alt="{{ teacher.staff.full_name }}"
-                                     class="teacher-photo me-2">
+                                     class="teacher-photo">
                             {% else %}
-                                <div class="teacher-icon">
+                                <div class="teacher-avatar">
                                     <i class="pe-7s-study"></i>
                                 </div>
                             {% endif %}
                             <div>
-                                <h6 class="mb-0">
-                                    {{ teacher.staff.full_name }}
-                                </h6>
-                                <div class="mt-1">
+                                <div class="fw-semibold">{{ teacher.staff.full_name }}</div>
+                                <div class="mt-1 d-flex gap-1 flex-wrap">
                                     {% if teacher.is_class_teacher %}
-                                        <span class="badge badge-class-teacher me-1">
+                                        <span class="role-badge class-teacher">
                                             <i class="fa fa-chalkboard me-1"></i>Class Teacher
                                         </span>
                                     {% endif %}
                                     {% if teacher.can_teach_online %}
-                                        <span class="badge badge-online">
+                                        <span class="role-badge online">
                                             <i class="fa fa-laptop me-1"></i>Online
                                         </span>
                                     {% endif %}
                                 </div>
                                 {% if teacher.staff.primary_department %}
-                                    <small class="text-muted d-block mt-1">
-                                        <i class="pe-7s-culture me-1"></i>{{ teacher.staff.primary_department.name }}
-                                    </small>
+                                <small class="text-muted d-block">
+                                    <i class="pe-7s-culture me-1"></i>{{ teacher.staff.primary_department.name }}
+                                </small>
                                 {% endif %}
                             </div>
                         </div>
                     </td>
-                    
+
                     <!-- Specialization -->
                     <td>
                         {% if teacher.specialization %}
-                            <div class="mb-1">
-                                <i class="fa fa-graduation-cap text-primary me-1"></i>
-                                {{ teacher.specialization }}
-                            </div>
+                            <div class="small fw-semibold">{{ teacher.specialization }}</div>
                         {% endif %}
                         {% if teacher.subject_count > 0 %}
                             <small class="text-muted">
-                                <i class="fa fa-book me-1"></i>
-                                {{ teacher.subject_count }} qualified subject{{ teacher.subject_count|pluralize }}
+                                <i class="fa fa-book me-1"></i>{{ teacher.subject_count }} subject{{ teacher.subject_count|pluralize }}
                             </small>
                         {% else %}
                             <span class="text-muted">—</span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Teaching Load -->
+
+                    <!-- Teaching load progress bar -->
                     <td>
-                        <div class="teaching-load-info">
-                            <div class="mb-1">
-                                <small class="text-muted d-block">Current Load:</small>
-                                <div class="progress" style="height: 20px;">
-                                    {% widthratio teacher.current_teaching_load teacher.max_hours_per_week 100 as load_percentage %}
-                                    <div class="progress-bar 
-                                        {% if load_percentage >= 90 %}bg-danger
-                                        {% elif load_percentage >= 75 %}bg-warning
-                                        {% else %}bg-success
-                                        {% endif %}" 
-                                         role="progressbar" 
-                                         style="width: {{ load_percentage }}%"
-                                         aria-valuenow="{{ teacher.current_teaching_load }}" 
-                                         aria-valuemin="0" 
-                                         aria-valuemax="{{ teacher.max_hours_per_week }}">
-                                        {{ teacher.current_teaching_load }}h
-                                    </div>
+                        <div class="load-wrap">
+                            <div class="progress mb-1" style="height:16px;">
+                                {% widthratio teacher.current_teaching_load teacher.max_hours_per_week 100 as load_pct %}
+                                <div class="progress-bar
+                                    {% if load_pct >= 90 %}bg-danger
+                                    {% elif load_pct >= 75 %}bg-warning
+                                    {% else %}bg-success{% endif %}"
+                                     role="progressbar"
+                                     style="width:{{ load_pct }}%"
+                                     aria-valuenow="{{ teacher.current_teaching_load }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="{{ teacher.max_hours_per_week }}">
+                                    {{ teacher.current_teaching_load }}h
                                 </div>
                             </div>
-                            <small class="text-muted">
-                                Max: {{ teacher.max_hours_per_week }}h/week
-                            </small>
+                            <small class="text-muted">Max: {{ teacher.max_hours_per_week }}h/week</small>
                         </div>
                     </td>
-                    
-                    <!-- Assigned Classes -->
+
+                    <!-- Classes -->
                     <td class="text-center">
                         {% if teacher.class_count > 0 %}
-                            <span class="badge bg-primary">
-                                <i class="fa fa-users me-1"></i>
-                                {{ teacher.class_count }} class{{ teacher.class_count|pluralize:"es" }}
-                            </span>
+                            <span class="badge bg-primary">{{ teacher.class_count }} class{{ teacher.class_count|pluralize:"es" }}</span>
                         {% else %}
                             <span class="text-muted">—</span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Digital Literacy -->
+
+                    <!-- Digital literacy -->
                     <td>
-                        <span class="badge digital-literacy digital-{{ teacher.digital_literacy_level|lower }}">
-                            {% if teacher.digital_literacy_level == 'BASIC' %}
-                                <i class="fa fa-star me-1"></i>Basic
-                            {% elif teacher.digital_literacy_level == 'INTERMEDIATE' %}
-                                <i class="fa fa-star me-1"></i><i class="fa fa-star me-1"></i>Intermediate
-                            {% elif teacher.digital_literacy_level == 'ADVANCED' %}
-                                <i class="fa fa-star me-1"></i><i class="fa fa-star me-1"></i><i class="fa fa-star me-1"></i>Advanced
-                            {% elif teacher.digital_literacy_level == 'EXPERT' %}
+                        <span class="digital-pill {{ teacher.digital_literacy_level|lower }}">
+                            {% if teacher.digital_literacy_level == 'EXPERT' %}
                                 <i class="fa fa-trophy me-1"></i>Expert
+                            {% else %}
+                                {{ teacher.get_digital_literacy_level_display }}
                             {% endif %}
                         </span>
                     </td>
-                    
-                    <!-- Active Status Badge -->
+
+                    <!-- Status -->
                     <td class="text-center">
-                        {% if teacher.staff.is_active %}
-                            <span class="badge status-badge active">
-                                <i class="fa fa-check-circle me-1"></i>Active
-                            </span>
+                        {% if teacher.is_active %}
+                            <span class="status-pill active"><i class="fa fa-circle" style="font-size:0.4rem;"></i>Active</span>
                         {% else %}
-                            <span class="badge status-badge inactive">
-                                <i class="fa fa-times-circle me-1"></i>Inactive
-                            </span>
+                            <span class="status-pill inactive"><i class="fa fa-circle" style="font-size:0.4rem;"></i>Inactive</span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
+
+                    <!-- Actions -->
+                    <td class="text-center">
                         <div class="dropdown" style="position: static;">
                             <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
                                     data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                                <i class="fa fa-ellipsis-v"></i>
                             </button>
                             <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Profile -->
-                                <a class="dropdown-item text-success" href="{% url 'hr:teacher_profile' teacher.pk %}">
-                                    <i class="fa fa-user me-2"></i> View Profile
+                                <a class="dropdown-item" href="{% url 'hr:teacher_profile' teacher.pk %}">
+                                    <i class="fa fa-user me-2 text-success"></i>View Profile
                                 </a>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'hr:teacher_edit' teacher.pk %}">
-                                    <i class="fa fa-edit me-2"></i> Edit
+                                <a class="dropdown-item" href="{% url 'hr:teacher_edit' teacher.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
                                 </a>
-                                
                                 <hr class="dropdown-divider">
-                                
-                                <!-- Quick Links -->
                                 <h6 class="dropdown-header">Quick Links</h6>
-                                
                                 <a class="dropdown-item" href="{% url 'hr:staff_profile' teacher.staff.pk %}">
-                                    <i class="fa fa-id-card me-2"></i> Staff Profile
+                                    <i class="fa fa-id-card me-2"></i>Staff Profile
                                 </a>
-                                
                                 {% if teacher.class_count > 0 %}
-                                    <a class="dropdown-item" href="{% url 'academics:class_list' %}?teacher={{ teacher.id }}">
-                                        <i class="fa fa-chalkboard me-2"></i> Assigned Classes ({{ teacher.class_count }})
-                                    </a>
+                                <a class="dropdown-item" href="{% url 'academics:class_list' %}?teacher={{ teacher.pk }}">
+                                    <i class="fa fa-chalkboard me-2"></i>Assigned Classes ({{ teacher.class_count }})
+                                </a>
                                 {% endif %}
-                                
-                                <a class="dropdown-item" href="#">
-                                    <i class="fa fa-calendar-alt me-2"></i> Teaching Schedule
-                                </a>
-                                
-                                <a class="dropdown-item" href="#">
-                                    <i class="fa fa-chart-line me-2"></i> Performance
-                                </a>
-                                
                                 <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action -->
-                                <a class="dropdown-item text-danger" 
-                                   href="{% url 'hr:teacher_delete_modal' teacher.pk %}"
-                                   hx-get="{% url 'hr:teacher_delete_modal' teacher.pk %}"
-                                   hx-target="#modal-content"
-                                   hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i> Delete
-                                </a>
+                                {% if teacher.is_active %}
+                                <button type="button" class="dropdown-item text-warning"
+                                        hx-get="{% url 'hr:teacher_deactivate_modal' teacher.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-pause me-2"></i>Deactivate
+                                </button>
+                                {% else %}
+                                <button type="button" class="dropdown-item text-success"
+                                        hx-get="{% url 'hr:teacher_reactivate_modal' teacher.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-play me-2"></i>Reactivate
+                                </button>
+                                {% endif %}
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'hr:teacher_delete_modal' teacher.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
                             </div>
                         </div>
                     </td>
@@ -204,15 +245,13 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="8" class="text-center text-muted">
+                    <td colspan="8">
                         <div class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="pe-7s-search"></i>
-                            </div>
-                            <h4 class="text-muted mb-2">No Teachers Found</h4>
-                            <p class="text-muted">
-                                Try adjusting your search filters or 
-                                <a href="{% url 'hr:teacher_create' %}" class="text-primary">add a new teacher</a>.
+                            <div class="empty-icon"><i class="pe-7s-search"></i></div>
+                            <h5 class="text-muted mt-3">No Teachers Found</h5>
+                            <p class="text-muted small">
+                                Try adjusting your filters or
+                                <a href="{% url 'hr:teacher_create' %}">add a new teacher</a>.
                             </p>
                         </div>
                     </td>
@@ -224,77 +263,50 @@
 
 <!-- Pagination -->
 {% if teachers_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ teachers_page.start_index }} - {{ teachers_page.end_index }} of {{ teachers_page.paginator.count }} teachers
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-muted small">
+            Showing {{ teachers_page.start_index }}–{{ teachers_page.end_index }}
+            of {{ teachers_page.paginator.count|intcomma }} teacher{{ teachers_page.paginator.count|pluralize }}
         </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Teacher pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
+        <nav>
+            <ul class="pagination mb-0">
                 {% if teachers_page.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="#" 
-                           hx-get="{% url 'hr:teacher_search' %}" 
-                           hx-target="#teacher-results"
-                           hx-include="#searchForm"
-                           hx-vals='{"page": "{{ teachers_page.previous_page_number }}"}'
-                           aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                            <span class="visually-hidden">Previous</span>
-                        </a>
-                    </li>
+                <li class="page-item">
+                    <button type="button" class="page-link"
+                            hx-get="{% url 'hr:teacher_list' %}"
+                            hx-target="#teacher-results"
+                            hx-include="#searchForm"
+                            hx-vals='{"page": "{{ teachers_page.previous_page_number }}"}'>«</button>
+                </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                            <span class="visually-hidden">Previous</span>
-                        </a>
-                    </li>
+                <li class="page-item disabled"><span class="page-link">«</span></li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
+
                 {% for page_num in teachers_page.paginator.page_range %}
                     {% if page_num == teachers_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <a class="page-link" href="#">{{ page_num }}</a>
-                        </li>
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
                     {% elif page_num > teachers_page.number|add:"-3" and page_num < teachers_page.number|add:"3" %}
-                        <li class="page-item">
-                            <a class="page-link" href="#"
-                               hx-get="{% url 'hr:teacher_search' %}"
-                               hx-target="#teacher-results"
-                               hx-include="#searchForm"
-                               hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </a>
-                        </li>
+                    <li class="page-item">
+                        <button type="button" class="page-link"
+                                hx-get="{% url 'hr:teacher_list' %}"
+                                hx-target="#teacher-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</button>
+                    </li>
                     {% endif %}
                 {% endfor %}
-                
-                <!-- Next Button -->
+
                 {% if teachers_page.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="#"
-                           hx-get="{% url 'hr:teacher_search' %}"
-                           hx-target="#teacher-results"
-                           hx-include="#searchForm"
-                           hx-vals='{"page": "{{ teachers_page.next_page_number }}"}'
-                           aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                            <span class="visually-hidden">Next</span>
-                        </a>
-                    </li>
+                <li class="page-item">
+                    <button type="button" class="page-link"
+                            hx-get="{% url 'hr:teacher_list' %}"
+                            hx-target="#teacher-results"
+                            hx-include="#searchForm"
+                            hx-vals='{"page": "{{ teachers_page.next_page_number }}"}'>»</button>
+                </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true" aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                            <span class="visually-hidden">Next</span>
-                        </a>
-                    </li>
+                <li class="page-item disabled"><span class="page-link">»</span></li>
                 {% endif %}
             </ul>
         </nav>
@@ -302,206 +314,53 @@
 </div>
 {% endif %}
 
-<style>
-/* Teacher Photo/Icon Styles */
-.teacher-photo {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e9ecef;
-}
-
-.teacher-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: white;
-    margin-right: 12px;
-    flex-shrink: 0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-/* Badge Styles */
-.badge-class-teacher {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 0.7rem;
-}
-
-.badge-online {
-    background-color: #d4edda;
-    color: #155724;
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 0.7rem;
-}
-
-/* Digital Literacy Badges */
-.digital-literacy {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-.digital-literacy.digital-basic {
-    background-color: #e2e3e5;
-    color: #383d41;
-}
-
-.digital-literacy.digital-intermediate {
-    background-color: #fff3cd;
-    color: #856404;
-}
-
-.digital-literacy.digital-advanced {
-    background-color: #d1ecf1;
-    color: #0c5460;
-}
-
-.digital-literacy.digital-expert {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-/* Teaching Load Progress */
-.teaching-load-info {
-    min-width: 150px;
-}
-
-/* Status Badges */
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid;
-}
-
-.status-badge.active {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
-}
-
-.status-badge.inactive {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
-}
-
-/* Fix for table responsive overflow with dropdowns */
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-/* Empty State */
-.empty-state {
-    padding: 60px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-    margin-bottom: 20px;
-}
-
-/* Table Improvements */
-.table thead th {
-    background-color: #f8f9fa;
-    font-weight: 600;
-    border-bottom: 2px solid #dee2e6;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* Responsive handling for mobile devices */
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-    
-    .teacher-photo,
-    .teacher-icon {
-        width: 40px;
-        height: 40px;
-    }
-}
-</style>
-
-<!-- OUT OF BAND UPDATE FOR STATS (at the very end) -->
+<!-- OOB stats — 4 cards matching parent layout -->
+{% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-study"></i>
-            </div>
+            <div class="stats-icon bg-primary"><i class="pe-7s-study"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Teachers</div>
-                <h3>{{ stats.total|default:0 }}</h3>
+                <h3>{{ stats.total|default:0|intcomma }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
+            <div class="stats-icon bg-success"><i class="pe-7s-check"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Active</div>
-                <h3>{{ stats.active|default:0 }}</h3>
+                <h3>{{ stats.active|default:0|intcomma }}</h3>
+                <div class="stats-subtitle">Inactive: {{ stats.inactive|default:0|intcomma }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-users"></i>
-            </div>
+            <div class="stats-icon bg-info"><i class="pe-7s-users"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Class Teachers</div>
-                <h3>{{ stats.class_teachers|default:0 }}</h3>
+                <h3>{{ stats.class_teachers|default:0|intcomma }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-global"></i>
-            </div>
+            <div class="stats-icon bg-warning"><i class="pe-7s-global"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Can Teach Online</div>
-                <h3>{{ stats.can_teach_online|default:0 }}</h3>
+                <h3>{{ stats.can_teach_online|default:0|intcomma }}</h3>
             </div>
         </div>
     </div>
 </div>
+{% endif %}
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target.id === 'teacher-results') {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    }
+});
+</script>

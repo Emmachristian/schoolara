@@ -1,0 +1,270 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <!-- ===== HEADER ===== -->
+        <div class="modal-header" style="background:#f8f9fa; border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="
+                    width:36px; height:36px; border-radius:8px;
+                    background:#e8f5e9; display:flex; align-items:center;
+                    justify-content:center;">
+                    <i class="fa fa-check-circle" style="color:#27ae60; font-size:16px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px; font-weight:700; color:#1a1a2e;">
+                        Approve / Reject Expense
+                    </h5>
+                    <div style="font-size:11px; color:#6c757d; margin-top:1px;">
+                        {{ expense.expense_number }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <!-- ===== EXPENSE SUMMARY ===== -->
+        <div style="
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;">
+
+            <div>
+                <div style="font-size:13px; font-weight:600; color:#1a1a2e;">
+                    {{ expense.description }}
+                </div>
+                <div style="font-size:12px; color:#6c757d; margin-top:2px;">
+                    <span class="me-3">
+                        <i class="fa fa-tag me-1"></i>{{ expense.category.name }}
+                    </span>
+                    <span class="me-3">
+                        <i class="fa fa-calendar-alt me-1"></i>{{ expense.expense_date|date:"d M Y" }}
+                    </span>
+                    {% if expense.vendor_name %}
+                    <span>
+                        <i class="fa fa-store me-1"></i>{{ expense.vendor_name }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div style="text-align:right;">
+                <div style="font-size:11px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px;">
+                    Total Amount
+                </div>
+                <div style="font-size:20px; font-weight:800; color:#1a1a2e;">
+                    {{ expense.total_amount|money }}
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CANNOT APPROVE WARNING ===== -->
+        {% if not can_approve %}
+        <div style="
+            background:#fff8e1;
+            border-bottom:1px solid #ffe082;
+            padding:12px 20px;
+            display:flex;
+            align-items:flex-start;
+            gap:10px;
+            font-size:13px;
+            color:#856404;">
+            <i class="fa fa-exclamation-triangle mt-1" style="flex-shrink:0;"></i>
+            <div>
+                <strong>You do not have permission to approve this expense.</strong>
+                You can still add notes and reject it if required.
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ===== FORM ===== -->
+        <form method="post"
+              action="{% url 'finance:expense_approve' expense.pk %}"
+              hx-post="{% url 'finance:expense_approve' expense.pk %}"
+              hx-target="body"
+              hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:20px;">
+
+                <!-- Decision -->
+                <div class="mb-4">
+                    <label class="form-label" style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#495057;">
+                        Decision <span class="text-danger">*</span>
+                    </label>
+
+                    <!-- Custom radio cards instead of plain select -->
+                    <div class="d-flex gap-3">
+
+                        <!-- Approve option -->
+                        <label style="
+                            flex:1; cursor:pointer; border:2px solid #e9ecef;
+                            border-radius:10px; padding:14px 16px;
+                            transition:all .2s; position:relative;"
+                            class="decision-card"
+                            id="card-approve">
+                            <input type="radio" name="decision" value="APPROVE"
+                                   style="position:absolute; opacity:0;"
+                                   {% if not can_approve %}disabled{% endif %}
+                                   onchange="selectDecision(this)">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div style="
+                                    width:36px; height:36px; border-radius:8px;
+                                    background:#e8f5e9; display:flex; align-items:center;
+                                    justify-content:center; flex-shrink:0;">
+                                    <i class="fa fa-check" style="color:#27ae60;"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; font-size:13px; color:#1a1a2e;">Approve</div>
+                                    <div style="font-size:11px; color:#6c757d;">Expense will be approved for payment</div>
+                                </div>
+                            </div>
+                            {% if not can_approve %}
+                            <div style="
+                                position:absolute; inset:0; border-radius:8px;
+                                background:rgba(255,255,255,.6); cursor:not-allowed;">
+                            </div>
+                            {% endif %}
+                        </label>
+
+                        <!-- Reject option -->
+                        <label style="
+                            flex:1; cursor:pointer; border:2px solid #e9ecef;
+                            border-radius:10px; padding:14px 16px;
+                            transition:all .2s; position:relative;"
+                            class="decision-card"
+                            id="card-reject">
+                            <input type="radio" name="decision" value="REJECT"
+                                   style="position:absolute; opacity:0;"
+                                   onchange="selectDecision(this)">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div style="
+                                    width:36px; height:36px; border-radius:8px;
+                                    background:#fde8e8; display:flex; align-items:center;
+                                    justify-content:center; flex-shrink:0;">
+                                    <i class="fa fa-times" style="color:#e74c3c;"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; font-size:13px; color:#1a1a2e;">Reject</div>
+                                    <div style="font-size:11px; color:#6c757d;">Expense will be returned as rejected</div>
+                                </div>
+                            </div>
+                        </label>
+
+                    </div>
+
+                    <!-- Hidden select for Django form validation fallback -->
+                    <select name="decision" id="id_decision_hidden" style="display:none;">
+                        <option value=""></option>
+                        <option value="APPROVE">Approve Expense</option>
+                        <option value="REJECT">Reject Expense</option>
+                    </select>
+
+                    {% if form.decision.errors %}
+                    <div class="invalid-feedback d-block mt-2" style="font-size:12px;">
+                        {% for error in form.decision.errors %}{{ error }}{% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Notes -->
+                <div class="mb-2">
+                    <label for="id_notes" class="form-label"
+                           style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#495057;">
+                        Notes
+                        <span id="notes-hint" style="font-weight:400; color:#6c757d; text-transform:none; letter-spacing:0;">
+                            (optional)
+                        </span>
+                    </label>
+                    <textarea name="notes" id="id_notes"
+                              class="form-control {% if form.notes.errors %}is-invalid{% endif %}"
+                              rows="3"
+                              placeholder="Add approval notes or reason for rejection..."
+                              style="font-size:13px; resize:vertical;">{{ form.notes.value|default:'' }}</textarea>
+                    {% if form.notes.errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form.notes.errors %}{{ error }}{% endfor %}
+                    </div>
+                    {% endif %}
+                    <div id="reject-note-hint"
+                         style="display:none; font-size:12px; color:#e74c3c; margin-top:5px;">
+                        <i class="fa fa-info-circle me-1"></i>
+                        A reason is recommended when rejecting an expense.
+                    </div>
+                </div>
+
+            </div><!-- /modal-body -->
+
+            <!-- ===== FOOTER ===== -->
+            <div class="modal-footer" style="background:#f8f9fa; border-top:1px solid #e9ecef; padding:14px 20px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i> Cancel
+                </button>
+                <button type="submit" id="submit-btn"
+                        class="btn btn-sm"
+                        style="background:#27ae60; color:#fff; border:none; min-width:120px;"
+                        disabled>
+                    <i class="fa fa-check me-1" id="submit-icon"></i>
+                    <span id="submit-label">Select a decision</span>
+                </button>
+            </div>
+
+        </form>
+
+    </div><!-- /modal-content -->
+</div><!-- /modal-dialog -->
+
+<style>
+.decision-card:has(input:checked) {
+    border-color: #27ae60 !important;
+    background: #f0fff4;
+}
+
+#card-reject:has(input:checked) {
+    border-color: #e74c3c !important;
+    background: #fff8f8;
+}
+
+.decision-card:hover:not(:has(input:disabled)) {
+    border-color: #adb5bd;
+    box-shadow: 0 2px 6px rgba(0,0,0,.06);
+}
+</style>
+
+<script>
+function selectDecision(radio) {
+    const btn        = document.getElementById('submit-btn');
+    const label      = document.getElementById('submit-label');
+    const icon       = document.getElementById('submit-icon');
+    const rejectHint = document.getElementById('reject-note-hint');
+    const notesHint  = document.getElementById('notes-hint');
+    const hidden     = document.getElementById('id_decision_hidden');
+
+    // Sync hidden select so Django form gets the value
+    hidden.value = radio.value;
+
+    btn.disabled = false;
+
+    if (radio.value === 'APPROVE') {
+        btn.style.background = '#27ae60';
+        icon.className = 'fa fa-check me-1';
+        label.textContent = 'Approve Expense';
+        rejectHint.style.display = 'none';
+        notesHint.textContent = '(optional)';
+    } else {
+        btn.style.background = '#e74c3c';
+        icon.className = 'fa fa-times me-1';
+        label.textContent = 'Reject Expense';
+        rejectHint.style.display = 'block';
+        notesHint.textContent = '(recommended)';
+        // Focus notes field
+        document.getElementById('id_notes').focus();
+    }
+}
+</script>

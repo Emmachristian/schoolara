@@ -1,22 +1,26 @@
 {% load static %}
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ preferred_language|default:'en' }}">
 
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
 
-    <title>Schoolara</title>
+    <title>{% block title %}{{ school_name|default:"Schoolara" }}{% endblock %}</title>
     <meta content="" name="description">
     <meta content="" name="keywords">
 
-    <!-- Favicon -->
-    <link href="{% static 'img/favicon.png' %}" rel="icon">
+    <!-- Favicon — uses school favicon if available, falls back to default -->
+    {% if school_favicon_url %}
+        <link href="{{ school_favicon_url }}" rel="icon">
+    {% else %}
+        <link href="{% static 'img/favicon.png' %}" rel="icon">
+    {% endif %}
 
     <!-- Google Fonts -->
     <link href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&family=Nunito:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Pacifico&display=swap" rel="stylesheet">
 
     <!-- Vendor CSS Files -->
     <link href="{% static 'vendors/fontawesome-free/css/all.min.css' %}" rel="stylesheet">
@@ -24,7 +28,7 @@
     <link href="{% static 'vendors/linearicons-master/dist/web-font/style.css' %}" rel="stylesheet">
     <link href="{% static 'vendors/pixeden-stroke-7-icon-master/pe-icon-7-stroke/dist/pe-icon-7-stroke.css' %}" rel="stylesheet">
 
-    <!-- CSS for CropperJS, SweetAlert2, MagnifiPopup -->
+    <!-- CSS for CropperJS, SweetAlert2, MagnificPopup -->
     <link href="{% static 'vendors/cropperjs/dist/cropper.min.css' %}" rel="stylesheet">
     <link href="{% static 'vendors/sweetalert2/dist/sweetalert2.min.css' %}" rel="stylesheet">
     <link href="{% static 'vendors/magnific-popup/magnific-popup.css' %}" rel="stylesheet">
@@ -32,16 +36,29 @@
     <!-- Template main CSS File -->
     <link href="{% static 'css/base.css' %}" rel="stylesheet">
 
+    <!-- Fiscal Chip -->
+    <link href="{% static 'css/components/fiscal_chip.css' %}" rel="stylesheet">
+
     <!-- Page-specific extra CSS -->
     {% block extra_css %}{% endblock %}
 </head>
 
 <body>
-    
-    <!-- App Container with ALL theme classes -->
-    <div class="app-container app-theme-white body-tabs-shadow {% if fixed_header %}fixed-header{% endif %} {% if fixed_sidebar %}fixed-sidebar{% endif %} {% if fixed_footer %}fixed-footer{% endif %} {{ page_tabs_style|default:'body-tabs-shadow' }} {{ theme_color|default:'app-theme-white' }}">
 
-        <!-- Header Section with saved color scheme -->
+    <!-- ============================================================
+         App Container
+         Theme classes are driven entirely by context processor values
+         from core.context_processors.user_preferences so they reflect
+         the authenticated user's saved preferences on every page load.
+    ============================================================ -->
+    <div class="app-container
+                {{ theme_color|default:'app-theme-white' }}
+                {{ page_tabs_style|default:'body-tabs-shadow' }}
+                {% if fixed_header %}fixed-header{% endif %}
+                {% if fixed_sidebar %}fixed-sidebar{% endif %}
+                {% if fixed_footer %}fixed-footer{% endif %}">
+
+        <!-- Header — color scheme class comes from user profile -->
         <div class="app-header header-shadow {{ header_class }}">
             {% include 'partials/header.html' %}
         </div>
@@ -51,128 +68,193 @@
 
         <div class="app-main">
 
-            <!-- Sidebar Navigation with saved color scheme -->
+            <!-- Sidebar — color scheme class comes from user profile -->
             <div class="app-sidebar sidebar-shadow {{ sidebar_class }}">
                 {% include 'partials/sidebar.html' %}
             </div>
 
             <div class="app-main__outer">
                 <div class="app-main__inner">
-                    
+
+                    <!-- Security / password alerts (shown on every page) -->
+                    {% if force_password_change %}
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            <strong>Action required:</strong>
+                            You must change your password before continuing.
+                            <a href="{% url 'accounts:change_password' %}" class="alert-link ms-2">
+                                Change password
+                            </a>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+
+                    {% if password_expiring_soon and not force_password_change %}
+                        <div class="alert alert-info alert-dismissible fade show" role="alert">
+                            <strong>Password expiry:</strong>
+                            Your password expires in
+                            <strong>{{ days_until_password_expiry }} day{{ days_until_password_expiry|pluralize }}</strong>.
+                            <a href="{% url 'accounts:change_password' %}" class="alert-link ms-2">
+                                Change now
+                            </a>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+
                     <!-- Main Content Area -->
                     {% block content %}{% endblock %}
-                    
+
                 </div>
 
                 <!-- Footer Section -->
                 {% include 'partials/footer.html' %}
 
-            </div> <!-- End of app-main__outer -->
+            </div> <!-- /.app-main__outer -->
 
-        </div> <!-- End of app-main -->
+        </div> <!-- /.app-main -->
 
     </div>
-    <!-- End of App Container -->
+    <!-- /.app-container -->
 
-    <!-- Load jQuery first to avoid conflicts -->
-    <script type="text/javascript" src="{% static 'vendors/jquery/dist/jquery.min.js' %}"></script>
+
+    <!-- ============================================================
+         JavaScript — order matters:
+         jQuery → HTMX → Alpine → Bootstrap → plugins → app scripts
+    ============================================================ -->
+
+    <!-- jQuery (must be first) -->
+    <script src="{% static 'vendors/jquery/dist/jquery.min.js' %}"></script>
 
     <!-- HTMX -->
-    <script type="text/javascript" src="{% static 'js/htmx.min.js' %}"></script>
+    <script src="{% static 'js/htmx.min.js' %}"></script>
 
-    <!-- Alpine.js -->
+    <!-- Alpine.js (deferred so it initialises after DOM is ready) -->
     <script defer src="{% static 'js/alpine.min.js' %}"></script>
 
-    <!-- Plugin dependencies -->
-    <script type="text/javascript" src="{% static 'vendors/bootstrap/dist/js/bootstrap.bundle.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/moment/moment.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/metismenu/dist/metisMenu.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/bootstrap4-toggle/js/bootstrap4-toggle.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/jquery-circle-progress/dist/circle-progress.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/perfect-scrollbar/dist/perfect-scrollbar.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/toastr/build/toastr.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/jquery.fancytree/dist/jquery.fancytree-all-deps.min.js' %}"></script>
-    <script type="text/javascript" src="{% static 'vendors/apexcharts/dist/apexcharts.min.js' %}"></script>
+    <!-- Bootstrap -->
+    <script src="{% static 'vendors/bootstrap/dist/js/bootstrap.bundle.min.js' %}"></script>
 
-    <!-- SweetAlert2 -->
-    <script type="text/javascript" src="{% static 'vendors/sweetalert2/dist/sweetalert2.all.min.js' %}"></script>
+    <!-- Plugins -->
+    <script src="{% static 'vendors/moment/moment.js' %}"></script>
+    <script src="{% static 'vendors/metismenu/dist/metisMenu.js' %}"></script>
+    <script src="{% static 'vendors/bootstrap4-toggle/js/bootstrap4-toggle.min.js' %}"></script>
+    <script src="{% static 'vendors/jquery-circle-progress/dist/circle-progress.min.js' %}"></script>
+    <script src="{% static 'vendors/perfect-scrollbar/dist/perfect-scrollbar.min.js' %}"></script>
+    <script src="{% static 'vendors/toastr/build/toastr.min.js' %}"></script>
+    <script src="{% static 'vendors/jquery.fancytree/dist/jquery.fancytree-all-deps.min.js' %}"></script>
+    <script src="{% static 'vendors/apexcharts/dist/apexcharts.min.js' %}"></script>
+    <script src="{% static 'vendors/sweetalert2/dist/sweetalert2.all.min.js' %}"></script>
 
-    <!-- Custom JS -->
-    <script type="text/javascript" src="{% static 'js/charts/apex-charts.js' %}"></script>
-    <script type="text/javascript" src="{% static 'js/circle-progress.js' %}"></script>
-    <script type="text/javascript" src="{% static 'js/demo.js' %}"></script>
-    <script type="text/javascript" src="{% static 'js/scrollbar.js' %}"></script>
-    <script type="text/javascript" src="{% static 'js/toastr.js' %}"></script>
-    <script type="text/javascript" src="{% static 'js/treeview.js' %}"></script>
-
-    <!-- Template navigation JS File -->
+    <!-- Custom app scripts -->
+    <script src="{% static 'js/charts/apex-charts.js' %}"></script>
+    <script src="{% static 'js/circle-progress.js' %}"></script>
+    <script src="{% static 'js/demo.js' %}"></script>
+    <script src="{% static 'js/scrollbar.js' %}"></script>
+    <script src="{% static 'js/toastr.js' %}"></script>
+    <script src="{% static 'js/treeview.js' %}"></script>
     <script src="{% static 'js/sidebar-nav.js' %}"></script>
+    <script src="{% static 'js/app.js' %}"></script>
 
-    <!-- Template main JS File -->
-    <script type="text/javascript" src="{% static 'js/app.js' %}"></script>
-
-    <!-- Pass Django context to JavaScript -->
+    <!-- ============================================================
+         Global configuration — passes Django context to JavaScript.
+         All values sourced from core.context_processors.user_preferences
+         and core.context_processors.school_branding.
+    ============================================================ -->
     <script>
         window.THEME_CONFIG = {
-            headerClass: "{{ header_class|default:'' }}",
-            sidebarClass: "{{ sidebar_class|default:'' }}",
+            headerClass:   "{{ header_class|default:'' }}",
+            sidebarClass:  "{{ sidebar_class|default:'' }}",
             pageTabsStyle: "{{ page_tabs_style|default:'body-tabs-shadow' }}",
-            themeColor: "{{ theme_color|default:'app-theme-white' }}"
+            themeColor:    "{{ theme_color|default:'app-theme-white' }}",
+            fixedHeader:   {{ fixed_header|yesno:"true,false" }},
+            fixedSidebar:  {{ fixed_sidebar|yesno:"true,false" }},
+            fixedFooter:   {{ fixed_footer|yesno:"true,false" }},
+        };
+
+        window.SCHOOL_CONFIG = {
+            name:      "{{ school_name|default:'School'|escapejs }}",
+            shortName: "{{ school_short_name|default:school_name|default:'School'|escapejs }}",
+            currency:  "{{ school_currency|default:'UGX'|escapejs }}",
+            timezone:  "{{ preferred_timezone|default:'Africa/Kampala'|escapejs }}",
+            language:  "{{ preferred_language|default:'en'|escapejs }}",
+        };
+
+        window.USER_CONFIG = {
+            fullName:  "{{ user_full_name|default:''|escapejs }}",
+            role:      "{{ user_role|default:''|escapejs }}",
+            isAdmin:   {{ is_admin|yesno:"true,false" }},
         };
     </script>
-    
+
     <!-- Theme Settings Management -->
     <script src="{% static 'js/theme-settings.js' %}"></script>
 
-    <!-- Global SweetAlert Helper Functions -->
+    <!-- ============================================================
+         Global SweetAlert2 helpers — available everywhere as
+         window.showSuccess(), window.showError(), etc.
+    ============================================================ -->
     <script>
-        window.showSuccess = function(message, title) {
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
+        (function () {
+            var defaults = {
+                timer: 3000,
+                timerProgressBar: true,
+            };
+
+            window.showSuccess = function (message, title) {
+                Swal.fire(Object.assign({}, defaults, {
                     icon: 'success',
                     title: title || 'Success!',
                     text: message,
                     confirmButtonColor: '#28a745',
-                    timer: 3000,
-                    timerProgressBar: true
-                });
-            }
-        };
+                }));
+            };
 
-        window.showError = function(message, title) {
-            if (typeof Swal !== 'undefined') {
+            window.showError = function (message, title) {
                 Swal.fire({
                     icon: 'error',
                     title: title || 'Error!',
                     text: message,
-                    confirmButtonColor: '#dc3545'
+                    confirmButtonColor: '#dc3545',
                 });
-            }
-        };
+            };
 
-        window.showWarning = function(message, title) {
-            if (typeof Swal !== 'undefined') {
+            window.showWarning = function (message, title) {
                 Swal.fire({
                     icon: 'warning',
                     title: title || 'Warning!',
                     text: message,
-                    confirmButtonColor: '#ffc107'
+                    confirmButtonColor: '#ffc107',
                 });
-            }
-        };
+            };
 
-        window.showInfo = function(message, title) {
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
+            window.showInfo = function (message, title) {
+                Swal.fire(Object.assign({}, defaults, {
                     icon: 'info',
                     title: title || 'Info',
                     text: message,
-                    confirmButtonColor: '#17a2b8'
+                    confirmButtonColor: '#17a2b8',
+                }));
+            };
+
+            window.showConfirm = function (message, title, onConfirm) {
+                Swal.fire({
+                    icon: 'question',
+                    title: title || 'Are you sure?',
+                    text: message,
+                    showCancelButton: true,
+                    confirmButtonColor: '#3f6ad8',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, continue',
+                }).then(function (result) {
+                    if (result.isConfirmed && typeof onConfirm === 'function') {
+                        onConfirm();
+                    }
                 });
-            }
-        };
+            };
+        })();
     </script>
 
+    <!-- Page-specific scripts -->
     {% block extra_scripts %}{% endblock %}
+
 </body>
 </html>

@@ -584,16 +584,15 @@ class SchoolAdmin(admin.ModelAdmin):
     # =========================================================================
     
     def get_urls(self):
-        """Add custom URLs for school initialization"""
         urls = super().get_urls()
         custom_urls = [
             path(
-                '<int:school_id>/initialize/',
+                '<uuid:school_id>/initialize/',
                 self.admin_site.admin_view(self.initialize_school_view),
                 name='accounts_school_initialize',
             ),
             path(
-                '<int:school_id>/reinitialize/',
+                '<uuid:school_id>/reinitialize/',
                 self.admin_site.admin_view(self.reinitialize_school_view),
                 name='accounts_school_reinitialize',
             ),

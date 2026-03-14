@@ -1,0 +1,578 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   REVERSAL DETAIL PAGE
+   ============================================================================ */
+
+.reversal-hero {
+    background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 25px;
+    position: relative;
+    overflow: hidden;
+}
+
+.reversal-hero::after {
+    content: '↩';
+    position: absolute;
+    right: 30px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 80px;
+    opacity: 0.15;
+}
+
+.reversal-hero .hero-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+    margin-bottom: 6px;
+}
+
+.reversal-hero .hero-title {
+    font-size: 26px;
+    font-weight: 700;
+}
+
+.reversal-hero .hero-ref {
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    opacity: 0.85;
+    margin-top: 6px;
+}
+
+/* Detail Cards */
+.detail-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    margin-bottom: 20px;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+.detail-card-header {
+    background: #f8f9fa;
+    padding: 14px 20px;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.detail-card-body {
+    padding: 20px;
+}
+
+/* Info Grid */
+.info-row {
+    display: flex;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-row .info-label {
+    width: 200px;
+    min-width: 200px;
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    padding-right: 15px;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 2px;
+}
+
+.info-row .info-value {
+    flex: 1;
+    font-size: 14px;
+    color: #1a1a2e;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.info-row .info-value.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.info-row .info-value.danger { color: #c62828; font-weight: 700; }
+.info-row .info-value.success { color: #1b5e20; font-weight: 700; }
+.info-row .info-value.large { font-size: 20px; font-weight: 800; }
+
+/* Amount Box */
+.amount-box {
+    background: #fff3f3;
+    border: 2px solid #ffcdd2;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.amount-box .amount-label { font-size: 12px; color: #c62828; text-transform: uppercase; letter-spacing: 0.5px; }
+.amount-box .amount-value { font-size: 36px; font-weight: 800; color: #c62828; margin: 5px 0; }
+.amount-box .amount-note { font-size: 12px; color: #6c757d; }
+
+/* Audit Trail */
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.timeline-item:last-child { padding-bottom: 0; }
+
+.timeline-dot {
+    position: absolute;
+    left: -25px;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #6c757d;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #6c757d;
+}
+
+.timeline-dot.success { background: #28a745; box-shadow: 0 0 0 2px #28a745; }
+.timeline-dot.danger  { background: #dc3545; box-shadow: 0 0 0 2px #dc3545; }
+.timeline-dot.warning { background: #ffc107; box-shadow: 0 0 0 2px #ffc107; }
+.timeline-dot.info    { background: #17a2b8; box-shadow: 0 0 0 2px #17a2b8; }
+.timeline-dot.primary { background: #007bff; box-shadow: 0 0 0 2px #007bff; }
+
+.timeline-content {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px 15px;
+}
+
+.timeline-action {
+    font-weight: 700;
+    font-size: 13px;
+    color: #1a1a2e;
+}
+
+.timeline-time {
+    font-size: 11px;
+    color: #6c757d;
+    margin-top: 3px;
+}
+
+.timeline-details {
+    font-size: 12px;
+    color: #495057;
+    margin-top: 5px;
+}
+
+/* Reason Block */
+.reason-block {
+    background: #fff8f8;
+    border-left: 4px solid #dc3545;
+    border-radius: 0 8px 8px 0;
+    padding: 15px 20px;
+    font-size: 14px;
+    color: #1a1a2e;
+    line-height: 1.6;
+}
+
+/* Action Buttons */
+.action-bar {
+    background: #fff;
+    border-radius: 10px;
+    padding: 15px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border: 1px solid #e9ecef;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-back-2 icon-gradient bg-love-kiss"></i>
+            </div>
+            <div>
+                Payment Reversal
+                <div class="page-title-subheading">
+                    Reversal details for payment {{ payment.reference_number|default:payment.pk }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'finance:expense_payment_detail' payment.pk %}" class="btn btn-outline-secondary me-2">
+                <i class="fa fa-arrow-left me-1"></i> Back to Payment
+            </a>
+            <a href="{% url 'finance:expense_payment_print_receipt' payment.pk %}" target="_blank" class="btn btn-outline-secondary">
+                <i class="fa fa-print me-1"></i> Print Receipt
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Hero Banner -->
+<div class="reversal-hero">
+    <div class="hero-label">Payment Reversal Record</div>
+    <div class="hero-title">This payment was reversed</div>
+    <div class="hero-ref">
+        Ref: {{ payment.reference_number|default:"—" }} &nbsp;|&nbsp;
+        Expense: {{ payment.expense.expense_number }}
+    </div>
+</div>
+
+<div class="row">
+
+    <!-- LEFT COLUMN -->
+    <div class="col-lg-8">
+
+        <!-- Reversal Details -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <i class="fa fa-undo text-danger"></i> Reversal Details
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <div class="info-label">Reversed On</div>
+                    <div class="info-value danger">
+                        {{ payment.reversed_on|date:"d M Y, H:i"|default:"—" }}
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Reversed By</div>
+                    <div class="info-value">
+                        {% if reversed_by_user %}
+                            {{ reversed_by_user.get_full_name|default:reversed_by_user.username }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if payment.reversal_approval_required %}
+                <div class="info-row">
+                    <div class="info-label">Approval Required</div>
+                    <div class="info-value">Yes</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Approved By</div>
+                    <div class="info-value">
+                        {% if reversal_approved_by_user %}
+                            {{ reversal_approved_by_user.get_full_name|default:reversal_approved_by_user.username }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if payment.reversal_approved_on %}
+                <div class="info-row">
+                    <div class="info-label">Approved On</div>
+                    <div class="info-value">{{ payment.reversal_approved_on|date:"d M Y, H:i" }}</div>
+                </div>
+                {% endif %}
+                {% endif %}
+                {% if payment.reversal_journal_entry %}
+                <div class="info-row">
+                    <div class="info-label">Reversal Journal Entry</div>
+                    <div class="info-value">
+                        <a href="{% url 'finance:journal_entry_detail' payment.reversal_journal_entry.pk %}" class="text-primary fw-bold mono">
+                            {{ payment.reversal_journal_entry.entry_number }}
+                        </a>
+                        <span class="badge {% if payment.reversal_journal_entry.status == 'POSTED' %}bg-success{% else %}bg-warning text-dark{% endif %} ms-2">
+                            {{ payment.reversal_journal_entry.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Reason -->
+                <div class="mt-4 mb-2">
+                    <div class="info-label" style="font-size:11px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px;">
+                        Reversal Reason
+                    </div>
+                    <div class="reason-block">
+                        {{ payment.reversal_reason|default:"No reason provided." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Original Payment Details -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <i class="fa fa-file-invoice text-secondary"></i> Original Payment Details
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <div class="info-label">Reference Number</div>
+                    <div class="info-value mono">{{ payment.reference_number|default:"—" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Transaction ID</div>
+                    <div class="info-value mono">{{ payment.transaction_id|default:"—" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Payment Date</div>
+                    <div class="info-value">{{ payment.payment_date|date:"d M Y" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Payment Method</div>
+                    <div class="info-value">{{ payment.payment_method.name }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Payment Account</div>
+                    <div class="info-value">{{ payment.account.account_number }} – {{ payment.account.name }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Fiscal Period</div>
+                    <div class="info-value">{{ payment.fiscal_period.name }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Processed By</div>
+                    <div class="info-value">
+                        {% if performed_by_user %}{{ performed_by_user.get_full_name|default:performed_by_user.username }}{% else %}{{ payment.performed_by }}{% endif %}
+                    </div>
+                </div>
+                {% if payment.is_verified %}
+                <div class="info-row">
+                    <div class="info-label">Verified By</div>
+                    <div class="info-value success">
+                        {% if verified_by_user %}{{ verified_by_user.get_full_name|default:verified_by_user.username }}{% else %}—{% endif %}
+                        {% if payment.verification_date %}
+                            <small class="text-muted ms-2">{{ payment.verification_date|date:"d M Y" }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if payment.journal_entry %}
+                <div class="info-row">
+                    <div class="info-label">Original Journal Entry</div>
+                    <div class="info-value">
+                        <a href="{% url 'finance:journal_entry_detail' payment.journal_entry.pk %}" class="text-primary mono">
+                            {{ payment.journal_entry.entry_number }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Expense Details -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <i class="fa fa-receipt text-secondary"></i> Related Expense
+            </div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <div class="info-label">Expense Number</div>
+                    <div class="info-value">
+                        <a href="{% url 'finance:expense_detail' payment.expense.pk %}" class="text-primary mono fw-bold">
+                            {{ payment.expense.expense_number }}
+                        </a>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Description</div>
+                    <div class="info-value">{{ payment.expense.description }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Category</div>
+                    <div class="info-value">{{ payment.expense.category.name }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Expense Date</div>
+                    <div class="info-value">{{ payment.expense.expense_date|date:"d M Y" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Expense Total</div>
+                    <div class="info-value">{{ payment.expense.total_amount|money }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Expense Status</div>
+                    <div class="info-value">
+                        <span class="badge
+                            {% if payment.expense.status == 'APPROVED' %}bg-success
+                            {% elif payment.expense.status == 'PAID' %}bg-primary
+                            {% elif payment.expense.status == 'DRAFT' %}bg-secondary
+                            {% else %}bg-warning text-dark{% endif %}">
+                            {{ payment.expense.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit Trail -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <i class="fa fa-history text-secondary"></i> Full Audit Trail
+            </div>
+            <div class="detail-card-body">
+                {% if audit_trail %}
+                <div class="timeline">
+                    {% for event in audit_trail %}
+                    <div class="timeline-item">
+                        <div class="timeline-dot
+                            {% if event.action == 'REVERSED' or event.action == 'REVERSAL_JOURNAL_ENTRY' %}danger
+                            {% elif event.action == 'VERIFIED' or event.action == 'JOURNAL_ENTRY_CREATED' %}success
+                            {% elif event.action == 'PROCESSED' %}info
+                            {% elif event.action == 'REVERSAL_APPROVED' %}warning
+                            {% else %}primary{% endif %}">
+                        </div>
+                        <div class="timeline-content">
+                            <div class="timeline-action">{{ event.action|title|cut:"_" }}</div>
+                            <div class="timeline-time">
+                                {% if event.timestamp %}{{ event.timestamp|date:"d M Y, H:i" }}{% endif %}
+                                {% if event.user %}&nbsp;·&nbsp; {{ event.user.get_full_name|default:event.user.username }}{% endif %}
+                            </div>
+                            {% if event.details %}
+                            <div class="timeline-details">{{ event.details }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">No audit trail available.</p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /left col -->
+
+    <!-- RIGHT COLUMN -->
+    <div class="col-lg-4">
+
+        <!-- Amount Summary -->
+        <div class="amount-box">
+            <div class="amount-label">Reversed Amount</div>
+            <div class="amount-value">{{ payment.amount|money }}</div>
+            <div class="amount-note">This amount no longer counts toward the expense payment total.</div>
+        </div>
+
+        {% if payment.processing_fee > 0 or payment.bank_charges > 0 %}
+        <div class="detail-card">
+            <div class="detail-card-header"><i class="fa fa-coins text-secondary"></i> Fees</div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <div class="info-label">Processing Fee</div>
+                    <div class="info-value">{{ payment.processing_fee|money }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Bank Charges</div>
+                    <div class="info-value">{{ payment.bank_charges|money }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Total Disbursed</div>
+                    <div class="info-value danger">{{ payment.total_amount_including_fees|money }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="detail-card">
+            <div class="detail-card-header"><i class="fa fa-bolt text-secondary"></i> Quick Actions</div>
+            <div class="detail-card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'finance:expense_payment_detail' payment.pk %}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="fa fa-eye me-1"></i> View Full Payment
+                    </a>
+                    <a href="{% url 'finance:expense_detail' payment.expense.pk %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-file-invoice me-1"></i> View Expense
+                    </a>
+                    <a href="{% url 'finance:expense_payment_print_receipt' payment.pk %}"
+                       target="_blank"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-print me-1"></i> Print Receipt
+                    </a>
+                    {% if payment.reversal_journal_entry %}
+                    <a href="{% url 'finance:journal_entry_detail' payment.reversal_journal_entry.pk %}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-book me-1"></i> View Reversal Journal Entry
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'finance:expense_payment_list' %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Payments
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Summary Card -->
+        <div class="detail-card">
+            <div class="detail-card-header"><i class="fa fa-info-circle text-secondary"></i> Status Summary</div>
+            <div class="detail-card-body">
+                <div class="info-row">
+                    <div class="info-label">Payment Status</div>
+                    <div class="info-value">
+                        <span class="badge bg-danger">Reversed</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Was Verified</div>
+                    <div class="info-value">
+                        {% if payment.is_verified %}
+                            <span class="badge bg-success">Yes</span>
+                        {% else %}
+                            <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Affects Balance</div>
+                    <div class="info-value">
+                        <span class="badge bg-warning text-dark">No (Reversed)</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Effective Amount</div>
+                    <div class="info-value danger">{{ payment.effective_amount|money }}</div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /right col -->
+
+</div><!-- /row -->
+
+{% endblock %}

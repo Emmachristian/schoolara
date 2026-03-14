@@ -11,6 +11,7 @@ Comprehensive double-entry accounting system with:
 - Financial Period Management
 
 All business logic properly separated with utils.py integration
+
 User tracking handled automatically by BaseModel
 """
 

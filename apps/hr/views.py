@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.contrib import messages
-from django.db.models import Q, Count, Sum, Avg, Prefetch, F
+from django.db.models import Q, Count, Sum, Avg, Prefetch, F, IntegerField, Case, When
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db import transaction
@@ -209,7 +209,7 @@ def get_filtered_staff(request):
     ).annotate(
         active_contract_count=Count('contracts', filter=Q(contracts__status='ACTIVE'), distinct=True),
         designation_count=Count('staffdesignation', filter=Q(staffdesignation__is_active=True), distinct=True)
-    ).order_by('first_name', 'last_name')
+    ).order_by('-is_active', 'first_name', 'last_name')
     
     # Get filter parameters
     query = request.GET.get('q', '').strip()
@@ -365,39 +365,57 @@ def get_filtered_designations(request):
 
 
 def get_filtered_contracts(request):
-    """Helper function to get filtered contracts queryset"""
+    """Helper function to get filtered contracts queryset.
+    
+    Ordering: ACTIVE contracts always first, then by most recent start date,
+    then alphabetically by staff name for stable tie-breaking.
+    """
     contracts = Contract.objects.select_related(
         'staff'
-    ).order_by('-start_date', 'staff__first_name')
-    
-    # Get filter parameters
-    query = request.GET.get('q', '').strip()
-    contract_type = request.GET.get('contract_type', '')
-    status = request.GET.get('status', '')
-    staff = request.GET.get('staff', '')
-    start_date = request.GET.get('start_date', '')
-    end_date = request.GET.get('end_date', '')
-    expiring_soon = request.GET.get('expiring_soon', '')
-    is_permanent = request.GET.get('is_permanent', '')
+    ).annotate(
+        status_order=Case(
+            When(status='ACTIVE', then=0),
+            default=1,
+            output_field=IntegerField()
+        )
+    ).order_by('status_order', '-start_date', 'staff__first_name')
+
+    # -------------------------------------------------------------------------
+    # FILTER PARAMETERS
+    # -------------------------------------------------------------------------
+
+    query            = request.GET.get('q', '').strip()
+    contract_type    = request.GET.get('contract_type', '')
+    status           = request.GET.get('status', '')
+    staff            = request.GET.get('staff', '')
+    start_date       = request.GET.get('start_date', '')
+    end_date         = request.GET.get('end_date', '')
+    expiring_soon    = request.GET.get('expiring_soon', '')
+    is_permanent     = request.GET.get('is_permanent', '')
     salary_frequency = request.GET.get('salary_frequency', '')
-    
-    # Apply text search
+
+    # -------------------------------------------------------------------------
+    # TEXT SEARCH — multi-word AND logic
+    # -------------------------------------------------------------------------
+
     if query:
-        words = query.strip().split()
+        words = query.split()
         if words:
             combined_q = Q()
             for word in words:
-                word_q = (
+                combined_q &= (
                     Q(contract_number__icontains=word) |
                     Q(staff__first_name__icontains=word) |
                     Q(staff__last_name__icontains=word) |
                     Q(staff__staff_id__icontains=word) |
                     Q(job_title__icontains=word)
                 )
-                combined_q &= word_q
             contracts = contracts.filter(combined_q)
-    
-    # Apply filters
+
+    # -------------------------------------------------------------------------
+    # FILTERS
+    # -------------------------------------------------------------------------
+
     if contract_type:
         contracts = contracts.filter(contract_type=contract_type)
     if status:
@@ -419,7 +437,7 @@ def get_filtered_contracts(request):
             end_date__lte=threshold,
             end_date__gte=timezone.now().date()
         )
-    
+
     return contracts
 
 

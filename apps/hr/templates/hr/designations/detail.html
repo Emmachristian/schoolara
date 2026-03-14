@@ -1,0 +1,516 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   DESIGNATION DETAIL PAGE
+   ============================================================================ */
+
+.designation-hero {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+}
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+
+.hero-icon {
+    width: 56px; height: 56px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; color: white; margin-right: 18px; flex-shrink: 0;
+}
+.hero-icon.management { background: linear-gradient(135deg, #4361ee 0%, #764ba2 100%); }
+.hero-icon.teaching   { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.hero-icon.other      { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+
+.hero-ref  { font-size: 11px; color: #6c757d; letter-spacing: .8px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+.hero-name { font-size: 22px; font-weight: 700; color: #1a1a2e; line-height: 1.3; }
+.hero-sub  { font-size: 13px; color: #6c757d; margin-top: 4px; }
+
+.hero-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+.hero-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6c757d; }
+
+.hero-stat-box { background: #fff; border: 1px solid #dee2e6; border-radius: 10px; padding: 14px 20px; text-align: center; min-width: 110px; }
+.hero-stat-box.accent { border-color: #4361ee; background: #eef0ff; }
+.hero-stat-label { font-size: 10px; color: #6c757d; text-transform: uppercase; letter-spacing: .6px; }
+.hero-stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; color: #1a1a2e; }
+.hero-stat-box.accent .hero-stat-value { color: #4361ee; }
+
+.role-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+}
+.role-pill.teaching   { background: #fff3cd; color: #856404; }
+.role-pill.management { background: #d1ecf1; color: #0c5460; }
+.role-pill.active     { background: #d4edda; color: #155724; }
+.role-pill.inactive   { background: #f8d7da; color: #721c24; }
+
+/* ---- Cards ---- */
+.detail-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border: 1px solid #e9ecef; margin-bottom: 22px; overflow: hidden; }
+.detail-card-header { background: #f8f9fa; padding: 13px 22px; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; justify-content: space-between; }
+.detail-card-header .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #495057; display: flex; align-items: center; gap: 8px; margin: 0; }
+.detail-card-body { padding: 22px; }
+
+.info-row { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f1f3f5; }
+.info-row:last-child { border-bottom: none; }
+.info-label { width: 190px; min-width: 190px; font-size: 11.5px; color: #6c757d; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; padding-right: 14px; padding-top: 2px; }
+.info-value { flex: 1; font-size: 13.5px; color: #1a1a2e; font-weight: 500; word-break: break-word; }
+.info-value.mono { font-family: 'Courier New', monospace; font-size: 12.5px; }
+
+/* ---- Staff table ---- */
+.staff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.staff-table thead th { background: #f8f9fa; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #6c757d; border-bottom: 2px solid #e9ecef; white-space: nowrap; }
+.staff-table tbody td { padding: 10px 14px; border-bottom: 1px solid #f1f3f5; vertical-align: middle; }
+.staff-table tbody tr:last-child td { border-bottom: none; }
+.staff-table tbody tr:hover { background: #fafbfc; }
+
+.staff-initials-sm { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: white; margin-right: 10px; flex-shrink: 0; background: linear-gradient(135deg, #4361ee 0%, #764ba2 100%); }
+.staff-avatar-sm   { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid #e9ecef; margin-right: 10px; flex-shrink: 0; }
+
+/* ---- Subordinate cards ---- */
+.sub-card { border: 1px solid #e9ecef; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; transition: box-shadow .2s; }
+.sub-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.sub-card:last-child { margin-bottom: 0; }
+
+/* ---- Sidebar ---- */
+.summary-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border: 1px solid #e9ecef; margin-bottom: 18px; overflow: hidden; }
+.summary-card-header { background: #f8f9fa; padding: 12px 18px; border-bottom: 1px solid #e9ecef; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #495057; display: flex; align-items: center; gap: 7px; }
+.summary-card-body { padding: 16px 18px; }
+.summary-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px; }
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label { color: #6c757d; font-size: 12px; }
+.summary-row .s-value { font-weight: 600; color: #1a1a2e; }
+.summary-row .s-value.blue { color: #4361ee; }
+
+.salary-box { background: linear-gradient(135deg, #eef0ff 0%, #e8f0ff 100%); border: 1px solid #c5cefb; border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 16px; }
+.salary-box .label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .5px; }
+.salary-box .range { font-size: 15px; font-weight: 700; color: #4361ee; margin-top: 6px; }
+.salary-box .mid   { font-size: 11px; color: #6c757d; margin-top: 3px; }
+
+.empty-mini { text-align: center; padding: 28px 20px; color: #adb5bd; }
+.empty-mini i { font-size: 2.2rem; display: block; margin-bottom: 8px; opacity: .4; }
+.empty-mini p { font-size: 12px; margin: 0; }
+
+@media (max-width: 768px) {
+    .hero-top { flex-direction: column; }
+    .info-label { width: 130px; min-width: 130px; }
+}
+@media print {
+    .app-page-title, #modal-container, .summary-card:has(.d-grid) { display: none !important; }
+    .detail-card, .designation-hero { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon"><i class="pe-7s-id icon-gradient bg-happy-itmeo"></i></div>
+            <div>
+                Designation Detail
+                <div class="page-title-subheading">{{ designation.code }} &mdash; {{ designation.name }}</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'hr:designation_list' %}" class="btn btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </a>
+            <button type="button" class="btn btn-outline-secondary me-1" onclick="window.print()">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+            <a href="{% url 'hr:designation_edit' designation.pk %}" class="btn btn-warning me-1">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            <button class="btn btn-outline-danger"
+                    hx-get="{% url 'hr:designation_delete_modal' designation.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i> Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}{% if 'sweetalert' in message.tags %}
+    {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+    {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+    {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+    {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+{% endif %}{% endfor %}
+</script>
+{% endif %}
+
+<!-- HERO -->
+<div class="designation-hero">
+    <div class="hero-top">
+        <div class="d-flex align-items-start">
+            <div class="hero-icon {% if designation.is_management %}management{% elif designation.is_teaching %}teaching{% else %}other{% endif %}">
+                {% if designation.is_management %}<i class="pe-7s-users"></i>
+                {% elif designation.is_teaching %}<i class="pe-7s-study"></i>
+                {% else %}<i class="pe-7s-portfolio"></i>{% endif %}
+            </div>
+            <div>
+                <div class="hero-ref">{{ designation.code }}</div>
+                <div class="hero-name">{{ designation.name }}</div>
+                <div class="hero-sub">{{ designation.department.name }}</div>
+                <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+                    {% if designation.is_active %}
+                        <span class="role-pill active"><i class="fa fa-circle" style="font-size:.4rem;"></i>Active</span>
+                    {% else %}
+                        <span class="role-pill inactive"><i class="fa fa-circle" style="font-size:.4rem;"></i>Inactive</span>
+                    {% endif %}
+                    {% if designation.is_teaching %}
+                        <span class="role-pill teaching"><i class="fa fa-chalkboard-teacher"></i>Teaching</span>
+                    {% endif %}
+                    {% if designation.is_management %}
+                        <span class="role-pill management"><i class="fa fa-user-tie"></i>Management</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-start">
+            <div class="hero-stat-box accent">
+                <div class="hero-stat-label">Staff</div>
+                <div class="hero-stat-value">{{ staff_count }}</div>
+            </div>
+            <div class="hero-stat-box">
+                <div class="hero-stat-label">Rank</div>
+                <div class="hero-stat-value">{{ designation.rank_order }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="hero-meta">
+        <div class="hero-meta-item"><i class="fa fa-building"></i> {{ designation.department.name }}</div>
+        {% if designation.reports_to %}
+        <div class="hero-meta-item"><i class="fa fa-arrow-up"></i> Reports to: {{ designation.reports_to.name }}</div>
+        {% endif %}
+        {% if designation.min_salary and designation.max_salary %}
+        <div class="hero-meta-item"><i class="fa fa-money-bill-wave"></i> {{ designation.min_salary|format_currency }} – {{ designation.max_salary|format_currency }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        <!-- Details -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-info-circle text-primary"></i> Designation Details</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Code</div>
+                            <div class="info-value mono">{{ designation.code }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Department</div>
+                            <div class="info-value">
+                                <a href="{% url 'hr:department_edit' designation.department.pk %}" class="text-primary">{{ designation.department.name }}</a>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Reports To</div>
+                            <div class="info-value">
+                                {% if designation.reports_to %}
+                                    <a href="{% url 'hr:designation_detail' designation.reports_to.pk %}" class="text-primary">{{ designation.reports_to.name }}</a>
+                                {% else %}<span class="text-muted">Top of hierarchy</span>{% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Rank Order</div>
+                            <div class="info-value">{{ designation.rank_order }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Status</div>
+                            <div class="info-value">
+                                {% if designation.is_active %}<span class="badge bg-success">Active</span>
+                                {% else %}<span class="badge bg-danger">Inactive</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Is Teaching</div>
+                            <div class="info-value">
+                                {% if designation.is_teaching %}<span class="badge bg-warning text-dark">Yes</span>
+                                {% else %}<span class="text-muted">No</span>{% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Is Management</div>
+                            <div class="info-value">
+                                {% if designation.is_management %}<span class="badge bg-info">Yes</span>
+                                {% else %}<span class="text-muted">No</span>{% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Min Salary</div>
+                            <div class="info-value">{{ designation.min_salary|format_currency|default:"—" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Max Salary</div>
+                            <div class="info-value">{{ designation.max_salary|format_currency|default:"—" }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% if designation.description %}
+                <hr class="my-3">
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Description</div>
+                    <div class="info-value" style="font-size:13px;line-height:1.6;">{{ designation.description }}</div>
+                </div>
+                {% endif %}
+                {% if designation.key_responsibilities %}
+                <div class="info-row" style="border:0; margin-top:4px;">
+                    <div class="info-label">Responsibilities</div>
+                    <div class="info-value" style="font-size:13px;line-height:1.6;">{{ designation.key_responsibilities|linebreaksbr }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Staff Assignments -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-users text-success"></i> Staff with this Designation</span>
+                <span class="badge bg-primary">{{ staff_count }}</span>
+            </div>
+            <div class="detail-card-body" style="padding:0;">
+                {% if staff_assignments %}
+                <table class="staff-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Staff</th>
+                            <th>Department</th>
+                            <th>Assignment</th>
+                            <th class="text-center">Primary</th>
+                            <th>Since</th>
+                            <th class="text-end">Role Allowance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment in staff_assignments %}
+                        <tr>
+                            <td class="text-muted small">{{ forloop.counter }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    {% if assignment.staff.photo %}
+                                        <img src="{{ assignment.staff.photo.url }}" class="staff-avatar-sm" alt="">
+                                    {% else %}
+                                        <div class="staff-initials-sm">
+                                            {{ assignment.staff.first_name|first }}{{ assignment.staff.last_name|first }}
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <a href="{% url 'hr:staff_profile' assignment.staff.pk %}" class="fw-semibold text-decoration-none">
+                                            {{ assignment.staff.full_name }}
+                                        </a>
+                                        <small class="text-muted d-block">{{ assignment.staff.staff_id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ assignment.staff.primary_department.name|default:"—" }}</td>
+                            <td><span class="badge bg-light text-dark border" style="font-size:11px;">{{ assignment.get_assignment_type_display }}</span></td>
+                            <td class="text-center">
+                                {% if assignment.is_primary %}
+                                    <span class="badge bg-success" style="font-size:10px;">Primary</span>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                            <td><small>{{ assignment.start_date|date:"d M Y" }}</small></td>
+                            <td class="text-end">
+                                {% if assignment.role_allowance %}{{ assignment.role_allowance|format_currency }}
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-mini">
+                    <i class="fa fa-users"></i>
+                    <p>No staff currently assigned to this designation.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Subordinate Designations -->
+        {% if subordinates %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-sitemap text-info"></i> Subordinate Designations</span>
+                <span class="badge bg-info">{{ subordinates.count }}</span>
+            </div>
+            <div class="detail-card-body">
+                {% for sub in subordinates %}
+                <div class="sub-card">
+                    <div>
+                        <div class="fw-semibold">{{ sub.name }}</div>
+                        <small class="text-muted">{{ sub.department.name }} &middot; Rank {{ sub.rank_order }}</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if sub.is_teaching %}<span class="badge bg-warning text-dark" style="font-size:10px;">Teaching</span>{% endif %}
+                        {% if sub.is_management %}<span class="badge bg-info" style="font-size:10px;">Management</span>{% endif %}
+                        <a href="{% url 'hr:designation_detail' sub.pk %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fa fa-eye"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Required Qualifications -->
+        {% if designation.required_qualifications %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-graduation-cap text-warning"></i> Required Qualifications</span>
+            </div>
+            <div class="detail-card-body">
+                <ul class="mb-0" style="font-size:13px;line-height:2;">
+                    {% for q in designation.required_qualifications %}<li>{{ q }}</li>{% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+    </div><!-- /col-lg-8 -->
+
+    <div class="col-lg-4">
+
+        {% if designation.min_salary and designation.max_salary %}
+        <div class="salary-box">
+            <div class="label">Salary Reference Range</div>
+            <div class="range">{{ designation.min_salary|format_currency }} – {{ designation.max_salary|format_currency }}</div>
+            <div class="mid">Midpoint: {{ designation.min_salary|add_values:designation.max_salary|div:2|format_currency }}</div>
+        </div>
+        {% endif %}
+
+        <div class="summary-card">
+            <div class="summary-card-header"><i class="fa fa-chart-bar text-primary"></i> Summary</div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Staff Assigned</span>
+                    <span class="s-value blue">{{ staff_count }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Subordinate Roles</span>
+                    <span class="s-value">{{ subordinates.count }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Department</span>
+                    <span class="s-value" style="font-size:12px;">{{ designation.department.name }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Rank Order</span>
+                    <span class="s-value">{{ designation.rank_order }}</span>
+                </div>
+                {% if designation.reports_to %}
+                <div class="summary-row">
+                    <span class="s-label">Reports To</span>
+                    <span class="s-value" style="font-size:12px;">{{ designation.reports_to.name }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-card-header"><i class="fa fa-bolt text-warning"></i> Quick Actions</div>
+            <div class="summary-card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'hr:designation_edit' designation.pk %}" class="btn btn-outline-warning btn-sm">
+                        <i class="fa fa-edit me-1"></i> Edit Designation
+                    </a>
+                    <a href="{% url 'hr:staff_list' %}?designation={{ designation.pk }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fa fa-users me-1"></i> View All Staff
+                    </a>
+                    <a href="{% url 'hr:designation_list' %}?department={{ designation.department.pk }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-sitemap me-1"></i> Department Designations
+                    </a>
+                    {% if designation.reports_to %}
+                    <a href="{% url 'hr:designation_detail' designation.reports_to.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-arrow-up me-1"></i> Parent: {{ designation.reports_to.name }}
+                    </a>
+                    {% endif %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                        <i class="fa fa-print me-1"></i> Print
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-card-header"><i class="fa fa-clock text-secondary"></i> Record Info</div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">{{ designation.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">{{ designation.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target.id !== 'modal-container') return;
+    const dialog = event.detail.target.querySelector('.modal-dialog');
+    if (!dialog) return;
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) { bootstrap.Modal.getInstance(wrapper)?.dispose(); wrapper.remove(); }
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', () => {
+        wrapper.remove(); event.detail.target.innerHTML = ''; currentModal = null;
+    });
+});
+document.body.addEventListener('htmx:beforeSwap', function (event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    if (xhr.getResponseHeader('HX-Close-Modal') === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => Swal.fire({
+            icon: type, title: xhr.getResponseHeader('HX-Alert-Title') || type, text: message,
+            confirmButtonColor: type === 'success' ? '#4361ee' : '#dc3545',
+            timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success',
+        }).then(() => {
+            const redirect = xhr.getResponseHeader('HX-Redirect');
+            if (redirect) window.location.href = redirect;
+            else if (type === 'success') window.location.reload();
+        }), 300);
+    }
+});
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

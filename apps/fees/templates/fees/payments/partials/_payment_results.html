@@ -1,269 +1,304 @@
-{% load static %}
-{% load widget_tweaks %}
 {% load currency_filters %}
 
-<!-- Fee Payments Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+/* ── Table ── */
+.pay-list-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.pay-list-tbl thead th {
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.pay-list-tbl tbody td {
+    padding: 13px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+
+.pay-list-tbl tbody tr:hover { background: #fafbff; }
+
+.pay-list-tbl tbody tr.row-reversed { background: #fff5f5; }
+.pay-list-tbl tbody tr.row-reversed td { color: #94a3b8; }
+
+.pay-list-tbl tbody tr.row-refunded { background: #fffbeb; }
+.pay-list-tbl tbody tr.row-refunded td { color: #94a3b8; }
+
+/* ── Payment number cell ── */
+.pmt-num {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: #1d4ed8;
+    text-decoration: none;
+}
+.pmt-num:hover { text-decoration: underline; }
+
+/* ── Status pill ── */
+.s-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.sp-verified   { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.sp-unverified { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.sp-reversed   { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.sp-refunded   { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.sp-failed     { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.sp-cancelled  { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+.sp-pending    { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+
+/* ── Method chip ── */
+.method-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #334155;
+}
+
+/* ── Empty ── */
+.tbl-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #94a3b8;
+}
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ── Pagination ── */
+.pag-wrap {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: #f8fafc;
+    font-size: 12.5px;
+    color: #64748b;
+}
+</style>
+
+<div class="table-responsive" style="overflow-x:auto; overflow-y:visible;">
+    <table class="pay-list-tbl">
         <thead>
             <tr>
-                <th width="50">#</th>
-                <th width="130">Payment Number</th>
-                <th width="120">Payment Date</th>
-                <th width="200">Student</th>
-                <th width="150">Invoice</th>
-                <th width="150">Payment Method</th>
-                <th width="120">Amount</th>
-                <th width="100">Verified</th>
-                <th width="100">Status</th>
-                <th width="120">Actions</th>
+                <th style="width:40px;">#</th>
+                <th>Payment No.</th>
+                <th>Date</th>
+                <th>Student</th>
+                <th>Method</th>
+                <th class="text-end">Amount</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:80px;">Actions</th>
             </tr>
         </thead>
-        <tbody id="paymentTableBody">
+        <tbody>
             {% if payments_page %}
                 {% for payment in payments_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:payments_page.start_index|add:"-1" }}</td>
-                    
+                <tr class="{% if payment.reversed %}row-reversed{% elif payment.refunded %}row-refunded{% endif %}">
+
+                    <!-- # -->
+                    <td style="color:#94a3b8; font-size:12px;">
+                        {{ payments_page.start_index|add:forloop.counter0 }}
+                    </td>
+
                     <!-- Payment Number -->
                     <td>
-                        <div>
-                            <a href="{% url 'fees:payment_detail' payment.pk %}" class="text-primary fw-bold">
-                                {{ payment.payment_number }}
-                            </a>
-                            {% if payment.receipt_number %}
-                                <div class="mt-1">
-                                    <small class="text-muted">Receipt: {{ payment.receipt_number }}</small>
-                                </div>
-                            {% endif %}
-                            {% if payment.reference_number %}
-                                <div class="mt-1">
-                                    <span class="badge bg-dark" style="font-size: 0.7rem;">
-                                        {{ payment.reference_number }}
-                                    </span>
-                                </div>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
-                    <!-- Payment Date -->
-                    <td>
-                        <div class="text-dark">{{ payment.payment_date|date:"M d, Y" }}</div>
-                        {% if payment.fiscal_period %}
-                            <small class="text-muted">{{ payment.fiscal_period.name|truncatewords:2 }}</small>
+                        <a href="{% url 'fees:payment_detail' payment.pk %}" class="pmt-num">
+                            {{ payment.payment_number }}
+                        </a>
+                        {% if payment.reversed %}
+                            <span class="s-pill sp-reversed ms-1">Reversed</span>
+                        {% elif payment.refunded %}
+                            <span class="s-pill sp-refunded ms-1">Refunded</span>
                         {% endif %}
                     </td>
-                    
+
+                    <!-- Date -->
+                    <td style="white-space:nowrap; color:#334155;">
+                        {{ payment.payment_date|date:"d M Y" }}
+                    </td>
+
                     <!-- Student -->
                     <td>
-                        <div class="d-flex flex-column">
-                            <a href="{% url 'students:student_profile' payment.student.pk %}" class="text-dark fw-bold">
-                                {{ payment.student.get_full_name }}
-                            </a>
-                            <small class="text-muted">{{ payment.student.admission_number }}</small>
-                            {% if payment.paid_by_name and payment.paid_by_name != payment.student.get_full_name %}
-                                <small class="text-info">
-                                    <i class="fa fa-user me-1"></i>Paid by: {{ payment.paid_by_name|truncatewords:2 }}
-                                </small>
-                            {% endif %}
+                        <a href="{% url 'students:student_profile' payment.student.pk %}"
+                           style="font-weight:700; color:#0f172a; text-decoration:none;">
+                            {{ payment.student.get_full_name }}
+                        </a>
+                        <div style="font-size:11px; color:#94a3b8; font-family:monospace;">
+                            {{ payment.student.admission_number }}
                         </div>
                     </td>
-                    
-                    <!-- Invoice - Using currency filters -->
+
+                    <!-- Method -->
                     <td>
-                        {% if payment.invoice %}
-                            <div>
-                                <a href="{% url 'fees:invoice_detail' payment.invoice.pk %}" class="text-primary">
-                                    {{ payment.invoice.invoice_number }}
-                                </a>
-                                <div class="mt-1">
-                                    <small class="{{ payment.invoice.balance|balance_color_class }}">
-                                        Balance: {{ payment.invoice.balance|money }}
-                                    </small>
-                                </div>
-                            </div>
-                        {% else %}
-                            <span class="text-muted">No invoice</span>
-                        {% endif %}
+                        <span class="method-chip">
+                            <i class="fa fa-credit-card" style="font-size:9px; opacity:.6;"></i>
+                            {{ payment.payment_method.name }}
+                        </span>
                     </td>
-                    
-                    <!-- Payment Method -->
-                    <td>
-                        {% if payment.payment_method %}
-                            <span class="badge bg-info">
-                                {{ payment.payment_method.name }}
-                            </span>
-                            <div class="mt-1">
-                                <small class="text-muted">{{ payment.payment_method.get_method_type_display }}</small>
-                            </div>
-                        {% else %}
-                            <span class="text-muted">Not specified</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Amount - Using currency filters -->
+
+                    <!-- Amount -->
                     <td class="text-end">
-                        <strong class="text-success">{{ payment.amount|money }}</strong>
-                        {% if payment.overpayment_amount|is_positive %}
-                            <div class="mt-1">
-                                <small class="text-info">
-                                    <i class="fa fa-info-circle me-1"></i>Overpayment: {{ payment.overpayment_amount|money }}
-                                </small>
-                            </div>
-                        {% endif %}
+                        <span style="font-weight:800; font-size:13.5px;
+                            {% if payment.reversed or payment.refunded %}
+                                color:#94a3b8; text-decoration:line-through;
+                            {% else %}
+                                color:#15803d;
+                            {% endif %}">
+                            {{ payment.amount|money }}
+                        </span>
                     </td>
-                    
-                    <!-- Verification Status -->
+
+                    <!-- Status — single combined pill -->
                     <td class="text-center">
-                        {% if payment.is_verified %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-check-circle me-1"></i>Verified
+                        {% if payment.reversed %}
+                            <span class="s-pill sp-reversed">
+                                <i class="fa fa-undo"></i> Reversed
                             </span>
-                            {% if payment.verification_date %}
-                                <div class="mt-1">
-                                    <small class="text-muted">{{ payment.verification_date|date:"M d" }}</small>
-                                </div>
-                            {% endif %}
-                        {% else %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-clock me-1"></i>Unverified
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Status Badge -->
-                    <td class="text-center">
-                        {% if payment.status == 'PENDING' %}
-                            <span class="badge bg-secondary">
-                                <i class="fa fa-clock me-1"></i>Pending
-                            </span>
-                        {% elif payment.status == 'COMPLETED' %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-check-circle me-1"></i>Completed
+                        {% elif payment.refunded %}
+                            <span class="s-pill sp-refunded">
+                                <i class="fa fa-reply"></i> Refunded
                             </span>
                         {% elif payment.status == 'FAILED' %}
-                            <span class="badge bg-danger">
-                                <i class="fa fa-times-circle me-1"></i>Failed
-                            </span>
-                        {% elif payment.status == 'REVERSED' %}
-                            <span class="badge bg-dark">
-                                <i class="fa fa-undo me-1"></i>Reversed
+                            <span class="s-pill sp-failed">
+                                <i class="fa fa-times-circle"></i> Failed
                             </span>
                         {% elif payment.status == 'CANCELLED' %}
-                            <span class="badge bg-secondary">
-                                <i class="fa fa-ban me-1"></i>Cancelled
+                            <span class="s-pill sp-cancelled">
+                                <i class="fa fa-ban"></i> Cancelled
+                            </span>
+                        {% elif payment.status == 'PENDING' %}
+                            <span class="s-pill sp-pending">
+                                <i class="fa fa-clock"></i> Pending
+                            </span>
+                        {% elif payment.is_verified %}
+                            <span class="s-pill sp-verified">
+                                <i class="fa fa-check-double"></i> Verified
+                            </span>
+                        {% else %}
+                            <span class="s-pill sp-unverified">
+                                <i class="fa fa-clock"></i> Unverified
                             </span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+
+                    <!-- Actions -->
+                    <td class="text-center">
+                        <div class="dropdown">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown">
+                                <i class="fa fa-ellipsis-v"></i>
                             </button>
                             <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'fees:payment_detail' payment.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:payment_detail' payment.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i> View Details
                                 </a>
-                                
-                                <!-- Print Receipt -->
-                                <a class="dropdown-item" href="{% url 'fees:payment_print_receipt' payment.pk %}" target="_blank">
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:payment_print_receipt' payment.pk %}"
+                                   target="_blank">
                                     <i class="fa fa-print me-2"></i> Print Receipt
                                 </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
-                                
-                                <!-- Verify (if unverified and completed) -->
-                                {% if not payment.is_verified and payment.status == 'COMPLETED' %}
-                                    <button type="button" class="dropdown-item text-success"
+
+                                {% if not payment.reversed and not payment.refunded %}
+                                <div class="dropdown-divider"></div>
+
+                                    {% if not payment.is_verified and payment.status == 'COMPLETED' %}
+                                    <button class="dropdown-item text-success"
                                             hx-get="{% url 'fees:payment_verify_modal' payment.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-check-circle me-2"></i> Verify Payment
+                                            hx-target="#modal-container" hx-swap="innerHTML">
+                                        <i class="fa fa-check me-2"></i> Verify
                                     </button>
-                                {% endif %}
-                                
-                                <!-- ✅ REVERSE: Show for ANY completed payment -->
-                                {% if payment.status == 'COMPLETED' %}
-                                    <button type="button" class="dropdown-item text-danger"
+                                    {% endif %}
+
+                                    {% if payment.status == 'COMPLETED' %}
+                                    <button class="dropdown-item text-danger"
                                             hx-get="{% url 'fees:payment_reverse_modal' payment.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-undo me-2"></i> Reverse Payment
+                                            hx-target="#modal-container" hx-swap="innerHTML">
+                                        <i class="fa fa-undo me-2"></i> Reverse
                                     </button>
-                                {% endif %}
-                                
-                                <!-- ✅ REFUND: Show for verified completed payments -->
-                                {% if payment.is_verified and payment.status == 'COMPLETED' %}
-                                    <button type="button" class="dropdown-item text-warning"
+                                    {% endif %}
+
+                                    {% if payment.is_verified and payment.status == 'COMPLETED' %}
+                                    <button class="dropdown-item text-warning"
                                             hx-get="{% url 'fees:payment_refund_modal' payment.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-money-bill-wave me-2"></i> Process Refund
+                                            hx-target="#modal-container" hx-swap="innerHTML">
+                                        <i class="fa fa-reply me-2"></i> Refund
                                     </button>
+                                    {% endif %}
                                 {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Navigation Actions -->
-                                <h6 class="dropdown-header">Navigate To</h6>
-                                
-                                <!-- View Student -->
-                                <a class="dropdown-item" href="{% url 'students:student_profile' payment.student.pk %}">
+
+                                <div class="dropdown-divider"></div>
+
+                                <a class="dropdown-item"
+                                   href="{% url 'students:student_profile' payment.student.pk %}">
                                     <i class="fa fa-user me-2"></i> View Student
                                 </a>
-                                
-                                <!-- View Invoice -->
+
                                 {% if payment.invoice %}
-                                    <a class="dropdown-item" href="{% url 'fees:invoice_detail' payment.invoice.pk %}">
-                                        <i class="fa fa-file-invoice me-2"></i> View Invoice
-                                    </a>
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:invoice_detail' payment.invoice.pk %}">
+                                    <i class="fa fa-file-invoice me-2"></i> View Invoice
+                                </a>
                                 {% endif %}
-                                
-                                <!-- View Student Account -->
-                                {% with student_account=payment.student.student_account %}
-                                    {% if student_account and student_account.pk %}
-                                        <a class="dropdown-item" href="{% url 'fees:account_detail' student_account.pk %}">
-                                            <i class="fa fa-wallet me-2"></i> View Account
-                                        </a>
-                                    {% else %}
-                                        <span class="dropdown-item text-muted disabled">
-                                            <i class="fa fa-wallet me-2"></i> No Account
-                                        </span>
-                                    {% endif %}
+
+                                {% with acct=payment.student.financial_account %}
+                                {% if acct %}
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:account_detail' acct.pk %}">
+                                    <i class="fa fa-wallet me-2"></i> View Account
+                                </a>
+                                {% endif %}
                                 {% endwith %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action - Show for unverified OR reversed/refunded payments -->
+
                                 {% if not payment.is_verified or payment.reversed or payment.refunded %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'fees:payment_delete_modal' payment.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-trash me-2"></i> Delete Payment
-                                    </button>
+                                <div class="dropdown-divider"></div>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:payment_delete_modal' payment.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i> Delete
+                                </button>
                                 {% endif %}
                             </div>
                         </div>
                     </td>
+
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="10" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <h5 class="mt-3">No Fee Payments Found</h5>
-                            <p class="text-muted">Try adjusting your filters or record a new payment.</p>
-                            <a href="{% url 'fees:payment_create' %}" class="btn btn-primary mt-3">
+                    <td colspan="8">
+                        <div class="tbl-empty">
+                            <i class="pe-7s-cash"></i>
+                            <p>No payments found.</p>
+                            <a href="{% url 'fees:payment_create' %}" class="btn btn-sm btn-primary">
                                 <i class="fa fa-plus me-1"></i> Record Payment
                             </a>
                         </div>
@@ -276,167 +311,112 @@
 
 <!-- Pagination -->
 {% if payments_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ payments_page.start_index }} - {{ payments_page.end_index }} of {{ payments_page.paginator.count|format_number }} payments
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Payment pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if payments_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:payment_list' %}"
-                                hx-target="#payment-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ payments_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
-                    </li>
+<div class="pag-wrap">
+    <span>
+        Showing {{ payments_page.start_index }}–{{ payments_page.end_index }}
+        of {{ payments_page.paginator.count|format_number }} payments
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if payments_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:payment_list' %}"
+                        hx-target="#payment-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page": "{{ payments_page.previous_page_number }}"}'>
+                    «
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for page_num in payments_page.paginator.page_range %}
+                {% if page_num == payments_page.number %}
+                <li class="page-item active">
+                    <span class="page-link">{{ page_num }}</span>
+                </li>
+                {% elif page_num > payments_page.number|add:"-3" and page_num < payments_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'fees:payment_list' %}"
+                            hx-target="#payment-list"
+                            hx-include="#searchForm"
+                            hx-vals='{"page": "{{ page_num }}"}'>
+                        {{ page_num }}
+                    </button>
+                </li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in payments_page.paginator.page_range %}
-                    {% if page_num == payments_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > payments_page.number|add:"-3" and page_num < payments_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'fees:payment_list' %}"
-                                    hx-target="#payment-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if payments_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:payment_list' %}"
-                                hx-target="#payment-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ payments_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if payments_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:payment_list' %}"
+                        hx-target="#payment-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page": "{{ payments_page.next_page_number }}"}'>
+                    »
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- OOB stats update on filtered requests -->
 {% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+<div class="row mb-1" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-cash"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Payments</div>
-                <h3>{{ stats.total|default:0|format_number }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Total Payments</div>
+                <div class="stat-value">{{ stats.total|default:0|format_number }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Verified</div>
-                <h3>{{ stats.verified|default:0|format_number }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Verified</div>
+                <div class="stat-value">{{ stats.verified|default:0|format_number }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-attention"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Unverified</div>
-                <h3>{{ stats.unverified|default:0|format_number }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Unverified</div>
+                <div class="stat-value">{{ stats.unverified|default:0|format_number }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-graph2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Amount</div>
-                <h3>{{ stats.total_amount|default:0|money_short }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-graph2"></i></div>
+            <div>
+                <div class="stat-label">Total Amount</div>
+                <div class="stat-value">{{ stats.total_amount|default:0|money_short }}</div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Dropdown fixed-strategy init (prevents clipping inside overflow containers) -->
+<script>
+document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+    new bootstrap.Dropdown(el, {
+        popperConfig: function (def) {
+            return Object.assign({}, def, { strategy: 'fixed' });
+        }
+    });
+});
+</script>
 {% endif %}

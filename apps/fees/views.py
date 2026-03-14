@@ -167,23 +167,26 @@ logger = logging.getLogger(__name__)
 @login_required
 def fees_dashboard(request):
     """Main fees dashboard with overview statistics"""
-    
+
+    from django.db.models import Sum, Value
+    from django.db.models.functions import Coalesce
+
     try:
         # Get current session
         current_session = get_active_academic_session()
-        
+
         # Get comprehensive financial dashboard
         dashboard_data = fees_stats.get_financial_dashboard(
             academic_session_id=current_session.id if current_session else None
         )
-        
+
         # Get detailed statistics
         account_stats = fees_stats.get_student_account_statistics()
         invoice_stats = fees_stats.get_invoice_statistics()
         payment_stats = fees_stats.get_payment_statistics()
         scholarship_stats = fees_stats.get_scholarship_statistics()
         discount_stats = fees_stats.get_discount_statistics()
-        
+
     except Exception as e:
         logger.error(f"Error getting dashboard statistics: {e}")
         dashboard_data = {}
@@ -192,37 +195,48 @@ def fees_dashboard(request):
         payment_stats = {}
         scholarship_stats = {}
         discount_stats = {}
-    
+
     # Get recent activities
     recent_invoices = FeeInvoice.objects.select_related(
         'student', 'academic_session'
     ).order_by('-created_at')[:10]
-    
+
     recent_payments = Payment.objects.select_related(
         'student', 'invoice', 'payment_method'
     ).order_by('-created_at')[:10]
-    
+
     # Get items needing attention
     today = get_school_today()
-    
+
     overdue_invoices = FeeInvoice.objects.filter(
         due_date__lt=today,
         status__in=['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
     ).select_related('student', 'academic_session').order_by('due_date')[:10]
-    
+
     unverified_payments = Payment.objects.filter(
         is_verified=False,
         status='COMPLETED'
     ).select_related('student', 'payment_method').order_by('-created_at')[:10]
-    
+
     pending_scholarship_applications = StudentScholarshipApplication.objects.filter(
-        status='PENDING'
+        status='SUBMITTED'
     ).select_related('student', 'scholarship_program').order_by('-application_date')[:10]
-    
-    accounts_in_debt = StudentAccount.objects.filter(
-        current_balance__lt=0
-    ).select_related('student').order_by('current_balance')[:10]
-    
+
+    # current_balance is a @property computed from transactions — cannot be used
+    # in .filter(). Annotate the sum at the SQL level instead, then filter on that.
+    accounts_in_debt = (
+        StudentAccount.objects
+        .annotate(
+            computed_balance=Coalesce(
+                Sum('transactions__amount'),
+                Value(Decimal('0.00'))
+            )
+        )
+        .filter(computed_balance__lt=0)
+        .select_related('student')
+        .order_by('computed_balance')[:10]
+    )
+
     context = {
         'dashboard_data': dashboard_data,
         'account_stats': account_stats,
@@ -238,7 +252,7 @@ def fees_dashboard(request):
         'pending_scholarship_applications': pending_scholarship_applications,
         'accounts_in_debt': accounts_in_debt,
     }
-    
+
     return render(request, 'fees/dashboard.html', context)
 
 
@@ -1700,66 +1714,72 @@ def transaction_list_print_view(request):
 
 @login_required
 def invoice_list(request):
-    """Handle BOTH full page loads AND HTMX search/filter requests"""
+    """Handle BOTH full page loads AND HTMX search/filter requests."""
+    from django.db.models import Prefetch, Count, Sum, Q
+    from academics.models import StudentClassEnrollment
+
     filter_form = FeeInvoiceFilterForm(request.GET or None)
-    
-    # Get filtered invoices with related data
+
     invoices = get_filtered_fee_invoices(request).select_related(
         'student',
         'academic_session',
         'fiscal_period',
-        'fee_structure'
+        'fee_structure',
     ).prefetch_related(
         'items',
-        'payments'
+        'payments',
+        Prefetch(
+            'student__class_enrollments',
+            queryset=StudentClassEnrollment.objects.select_related(
+                'class_instance__academic_level'
+            ),
+            to_attr='prefetched_class_enrollments',
+        ),
     ).annotate(
         item_count=Count('items'),
-        payment_count=Count('payments', filter=Q(
-            payments__status='COMPLETED',
-            payments__reversed=False,
-            payments__refunded=False
-        ))
+        payment_count=Count(
+            'payments',
+            filter=Q(
+                payments__status='COMPLETED',
+                payments__reversed=False,
+                payments__refunded=False,
+            ),
+        ),
     )
-    
-    # Calculate statistics
+
     today = get_school_today()
+
     stats = {
-        'total': invoices.count(),
-        'draft': invoices.filter(status='DRAFT').count(),
-        'pending': invoices.filter(status='PENDING').count(),
-        'partially_paid': invoices.filter(status='PARTIALLY_PAID').count(),
-        'paid': invoices.filter(status='PAID').count(),
-        'overdue': invoices.filter(
-            due_date__lt=today,
-            status__in=['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
-        ).count(),
-        'total_amount': invoices.aggregate(Sum('total_amount'))['total_amount__sum'] or 0,
-        'total_paid': invoices.aggregate(Sum('paid_amount'))['paid_amount__sum'] or 0,
-        'total_balance': invoices.aggregate(Sum('balance'))['balance__sum'] or 0,
+        'total':         invoices.count(),
+        'draft':         invoices.filter(status='DRAFT').count(),
+        'pending':       invoices.filter(status='PENDING').count(),
+        'partially_paid':invoices.filter(status='PARTIALLY_PAID').count(),
+        'paid':          invoices.filter(status='PAID').count(),
+        'overdue':       invoices.filter(
+                             due_date__lt=today,
+                             status__in=['PENDING', 'PARTIALLY_PAID', 'OVERDUE'],
+                         ).count(),
+        'total_amount':  invoices.aggregate(v=Sum('total_amount'))['v'] or 0,
+        'total_paid':    invoices.aggregate(v=Sum('paid_amount'))['v'] or 0,
+        'total_balance': invoices.aggregate(v=Sum('balance'))['v'] or 0,
     }
-    
-    # Pagination
-    paginator = Paginator(invoices, 20)
-    page_number = request.GET.get('page', 1)
-    invoices_page = paginator.get_page(page_number)
-    
-    # Detect HTMX request
-    is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
+    paginator    = Paginator(invoices, 20)
+    invoices_page = paginator.get_page(request.GET.get('page', 1))
+    is_htmx      = request.headers.get('HX-Request') == 'true'
+
     context = {
         'invoices_page': invoices_page,
-        'paginator': paginator,
-        'stats': stats,
-        'filter_form': filter_form,
-        'is_htmx': is_htmx,
-        'today': today,  # ✅ Add today for overdue checks
+        'paginator':     paginator,
+        'stats':         stats,
+        'filter_form':   filter_form,
+        'is_htmx':       is_htmx,
+        'today':         today,
     }
-    
-    # Return appropriate template
+
     if is_htmx:
         return render(request, 'fees/invoices/partials/_invoice_results.html', context)
-    else:
-        return render(request, 'fees/invoices/list.html', context)
+    return render(request, 'fees/invoices/list.html', context)
 
 @login_required
 def invoice_create(request):
@@ -1843,11 +1863,18 @@ def invoice_detail(request, pk):
         'days_overdue': (today - invoice.due_date).days if invoice.due_date < today else 0,
         'days_until_due': (invoice.due_date - today).days if invoice.due_date >= today else 0,
     }
-    
+
+    # Check for linked uniform sale
+    from uniforms.models import UniformSale
+    uniform_sale = UniformSale.objects.filter(
+        fee_invoice=invoice
+    ).prefetch_related('items__uniform_item', 'items__size').first()
+
     context = {
         'invoice': invoice,
         'payments': payments,
         'payment_progress': payment_progress,
+        'uniform_sale': uniform_sale,
     }
     
     return render(request, 'fees/invoices/detail.html', context)

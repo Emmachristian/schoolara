@@ -1,9 +1,16 @@
-# utils/templatetags/custom_filters.py
-
 from django import template
 from decimal import Decimal
 
 register = template.Library()
+
+
+@register.filter
+def get_item(dictionary, key):
+    """Retrieve a value from a dict by key. Usage: {{ my_dict|get_item:key_var }}"""
+    if isinstance(dictionary, dict):
+        return dictionary.get(key)
+    return None
+
 
 @register.filter
 def mul(value, arg):
@@ -13,6 +20,7 @@ def mul(value, arg):
     except (ValueError, TypeError):
         return 0
 
+
 @register.filter
 def div(value, arg):
     """Divide two values"""
@@ -21,27 +29,28 @@ def div(value, arg):
     except (ValueError, TypeError):
         return 0
 
+
 @register.filter
 def subtract(value, arg):
     """Subtract arg from value"""
     try:
-        # Handle Decimal types
         if isinstance(value, Decimal) or isinstance(arg, Decimal):
             return Decimal(str(value)) - Decimal(str(arg))
         return float(value) - float(arg)
     except (ValueError, TypeError):
         return 0
 
+
 @register.filter
 def add_values(value, arg):
     """Add two values (alternative to built-in add for numbers)"""
     try:
-        # Handle Decimal types
         if isinstance(value, Decimal) or isinstance(arg, Decimal):
             return Decimal(str(value)) + Decimal(str(arg))
         return float(value) + float(arg)
     except (ValueError, TypeError):
         return 0
+
 
 @register.filter
 def percentage(value, total):
@@ -54,6 +63,7 @@ def percentage(value, total):
     except (ValueError, TypeError):
         return 0
 
+
 @register.filter
 def abs_value(value):
     """Return absolute value"""
@@ -61,7 +71,8 @@ def abs_value(value):
         return abs(float(value))
     except (ValueError, TypeError):
         return 0
-    
+
+
 @register.filter
 def money_short(value):
     """
@@ -72,29 +83,24 @@ def money_short(value):
     """
     try:
         value = Decimal(str(value)) if value else Decimal('0')
-        
-        # Get school config for currency
+
         from core.models import SchoolConfiguration
         try:
             school_config = SchoolConfiguration.get_current_config()
             currency = school_config.currency
-        except:
+        except Exception:
             currency = 'UGX'
-        
-        abs_value = abs(value)
-        
-        if abs_value >= 1_000_000_000:  # Billions
-            short_value = abs_value / 1_000_000_000
-            return f"{currency} {short_value:.1f}B"
-        elif abs_value >= 1_000_000:  # Millions
-            short_value = abs_value / 1_000_000
-            return f"{currency} {short_value:.1f}M"
-        elif abs_value >= 1_000:  # Thousands
-            short_value = abs_value / 1_000
-            return f"{currency} {short_value:.1f}K"
+
+        abs_val = abs(value)
+
+        if abs_val >= 1_000_000_000:
+            return f"{currency} {abs_val / 1_000_000_000:.1f}B"
+        elif abs_val >= 1_000_000:
+            return f"{currency} {abs_val / 1_000_000:.1f}M"
+        elif abs_val >= 1_000:
+            return f"{currency} {abs_val / 1_000:.1f}K"
         else:
-            # Use humanize for small numbers
             from django.contrib.humanize.templatetags.humanize import intcomma
             return f"{currency} {intcomma(int(value))}"
-    except:
-        return f"{currency} 0"
+    except Exception:
+        return "UGX 0"

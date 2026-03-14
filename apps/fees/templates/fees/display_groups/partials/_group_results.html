@@ -3,27 +3,30 @@
 {% load humanize %}
 
 <!-- Display Groups Table -->
-<div class="table-responsive">
+<div class="table-responsive" style="overflow: visible;">
     <table class="table table-hover align-middle">
         <thead>
             <tr>
                 <th width="3%">#</th>
-                <th width="35%">Display Group</th>
-                <th width="15%">Order</th>
-                <th width="15%">Categories</th>
-                <th width="12%">Status</th>
-                <th width="10%" class="text-center">Actions</th>
+                <th width="38%">Display Group</th>
+                <th width="10%">Order</th>
+                <th width="18%">Categories</th>
+                <th width="16%">Status</th>
+                <th width="15%" class="text-center">Actions</th>
             </tr>
         </thead>
-        <tbody id="sortable-groups">
+        <tbody>
             {% if groups_page %}
                 {% for group in groups_page %}
-                <tr data-group-id="{{ group.id }}" class="group-row" style="border-left: 3px solid {{ group.color_code|default:'#6f42c1' }};">
+                <tr data-group-id="{{ group.id }}"
+                    class="group-row"
+                    style="border-left: 3px solid {{ group.color_code|default:'#6f42c1' }};">
+
                     <!-- Row Number -->
                     <td class="text-muted fw-light">
                         {{ forloop.counter|add:groups_page.start_index|add:"-1" }}
                     </td>
-                    
+
                     <!-- Group Information -->
                     <td>
                         <div class="d-flex align-items-start gap-3">
@@ -34,19 +37,24 @@
                                 </div>
                                 <div class="group-status status-{{ group.is_active|yesno:'active,inactive' }}"></div>
                             </div>
-                            
+
                             <!-- Details -->
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center gap-2 mb-1">
-                                    <a href="{% url 'fees:display_group_detail' group.pk %}" 
+                                    <a href="{% url 'fees:display_group_detail' group.pk %}"
                                        class="group-name">
                                         {{ group.name }}
                                     </a>
                                     {% if not group.is_active %}
                                         <span class="badge badge-inactive">Inactive</span>
                                     {% endif %}
+                                    {% if group.show_as_group %}
+                                        <span class="badge-grouped">
+                                            <i class="fa fa-object-group fa-xs"></i> Grouped
+                                        </span>
+                                    {% endif %}
                                 </div>
-                                
+
                                 {% if group.description %}
                                     <p class="group-description">
                                         {{ group.description|truncatechars:100 }}
@@ -59,10 +67,13 @@
                     <!-- Display Order -->
                     <td>
                         <div class="order-controls">
-                            <span class="display-order-badge">{{ group.display_order }}</span>
+                            <span class="order-badge"
+                                  style="background-color: {{ group.color_code|default:'#6f42c1' }};">
+                                {{ group.display_order }}
+                            </span>
                         </div>
                     </td>
-                    
+
                     <!-- Categories -->
                     <td>
                         <div class="categories-info">
@@ -70,132 +81,124 @@
                                 <div class="category-count">
                                     <i class="fa fa-wallet text-primary"></i>
                                     <strong>{{ group.category_count }}</strong>
-                                    <span class="text-muted">categor{{ group.category_count|pluralize:"y,ies" }}</span>
+                                    <span class="text-muted">
+                                        categor{{ group.category_count|pluralize:"y,ies" }}
+                                    </span>
                                 </div>
-                                <a href="{% url 'fees:category_list' %}?display_group={{ group.id }}" 
+                                <a href="{% url 'fees:category_list' %}?display_group={{ group.id }}"
                                    class="btn btn-sm btn-link p-0 mt-1">
                                     <i class="fa fa-eye"></i> View categories
                                 </a>
                             {% else %}
                                 <div class="empty-indicator">
                                     <i class="fa fa-inbox text-muted"></i>
-                                    <span class="text-muted">No categories</span>
+                                    <span class="text-muted small">No categories</span>
                                 </div>
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Status -->
                     <td>
-                        <div class="status-toggle">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" 
-                                       type="checkbox" 
-                                       id="status-{{ group.id }}"
-                                       {% if group.is_active %}checked{% endif %}
-                                       onclick="toggleGroupStatus('{{ group.id }}', this.checked)">
-                                <label class="form-check-label" for="status-{{ group.id }}">
-                                    <span class="status-label status-{{ group.is_active|yesno:'active,inactive' }}">
-                                        {{ group.is_active|yesno:"Active,Inactive" }}
-                                    </span>
-                                </label>
-                            </div>
+                        <div class="d-flex flex-column gap-1">
+                            <span class="status-label status-{{ group.is_active|yesno:'active,inactive' }}">
+                                <i class="fa fa-circle fa-xs me-1"></i>
+                                {{ group.is_active|yesno:"Active,Inactive" }}
+                            </span>
                             {% if group.category_count == 0 %}
-                                <small class="text-warning d-block mt-1">
+                                <small class="text-warning">
                                     <i class="fa fa-exclamation-triangle"></i> Empty group
                                 </small>
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Actions -->
                     <td class="text-center">
-                        <div class="btn-group">
-                            <a href="{% url 'fees:display_group_detail' group.pk %}" 
-                               class="btn btn-sm btn-light"
-                               title="View Details">
-                                <i class="fa fa-eye"></i>
-                            </a>
-                            <a href="{% url 'fees:display_group_edit' group.pk %}" 
-                               class="btn btn-sm btn-light"
-                               title="Edit">
-                                <i class="fa fa-edit"></i>
-                            </a>
-                            <button type="button" 
-                                    class="btn btn-sm btn-light dropdown-toggle dropdown-toggle-split" 
-                                    data-bs-toggle="dropdown" 
+                        <div class="dropdown" style="position: static;">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown"
                                     aria-expanded="false">
-                                <span class="visually-hidden">More actions</span>
+                                <i class="fa fa-ellipsis-v"></i>
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'fees:category_create' %}?display_group={{ group.id }}">
-                                        <i class="fa fa-plus fa-fw"></i> Add Category
-                                    </a>
-                                </li>
+                            <div class="dropdown-menu dropdown-menu-end">
+
+                                <!-- View Details -->
+                                <a class="dropdown-item text-success"
+                                   href="{% url 'fees:display_group_detail' group.pk %}">
+                                    <i class="fa fa-eye fa-fw me-2"></i> View Details
+                                </a>
+
+                                <!-- Edit -->
+                                <a class="dropdown-item text-warning"
+                                   href="{% url 'fees:display_group_edit' group.pk %}">
+                                    <i class="fa fa-edit fa-fw me-2"></i> Edit
+                                </a>
+
+                                <hr class="dropdown-divider">
+
+                                <!-- Add Category -->
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:category_create' %}?display_group={{ group.id }}">
+                                    <i class="fa fa-plus fa-fw me-2"></i> Add Category
+                                </a>
+
                                 {% if group.category_count > 0 %}
-                                    <li>
-                                        <a class="dropdown-item" href="{% url 'fees:category_list' %}?display_group={{ group.id }}">
-                                            <i class="fa fa-list fa-fw"></i> View Categories
-                                        </a>
-                                    </li>
+                                    <!-- View Categories -->
+                                    <a class="dropdown-item"
+                                       href="{% url 'fees:category_list' %}?display_group={{ group.id }}">
+                                        <i class="fa fa-list fa-fw me-2"></i> View Categories
+                                    </a>
                                 {% endif %}
-                                <li><hr class="dropdown-divider"></li>
-                                <li>
-                                    <a class="dropdown-item" href="#" onclick="moveUp('{{ group.id }}'); return false;">
-                                        <i class="fa fa-arrow-up fa-fw"></i> Move Up
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#" onclick="moveDown('{{ group.id }}'); return false;">
-                                        <i class="fa fa-arrow-down fa-fw"></i> Move Down
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'fees:display_group_edit' group.pk %}">
-                                        <i class="fa fa-palette fa-fw"></i> Change Color
-                                    </a>
-                                </li>
+
+                                <hr class="dropdown-divider">
+
+                                <!-- Activate / Deactivate -->
+                                <button type="button" class="dropdown-item"
+                                        hx-get="{% url 'fees:display_group_toggle_active_modal' group.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-{% if group.is_active %}pause-circle{% else %}play-circle{% endif %} fa-fw me-2"></i>
+                                    {{ group.is_active|yesno:"Deactivate,Activate" }}
+                                </button>
+
+                                <hr class="dropdown-divider">
+
+                                <!-- Delete -->
                                 {% if group.category_count == 0 %}
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-danger" 
-                                           href="{% url 'fees:display_group_delete_modal' group.pk %}"
-                                           hx-get="{% url 'fees:display_group_delete_modal' group.pk %}"
-                                           hx-target="#modal-content"
-                                           hx-swap="innerHTML">
-                                            <i class="fa fa-trash fa-fw"></i> Delete Group
-                                        </a>
-                                    </li>
+                                    <button type="button" class="dropdown-item text-danger"
+                                            hx-get="{% url 'fees:display_group_delete_modal' group.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-trash fa-fw me-2"></i> Delete
+                                    </button>
                                 {% else %}
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-muted disabled" 
-                                           href="#"
-                                           data-bs-toggle="tooltip"
-                                           title="Cannot delete - contains {{ group.category_count }} categor{{ group.category_count|pluralize:'y,ies' }}">
-                                            <i class="fa fa-trash fa-fw"></i> Delete (In Use)
-                                        </a>
-                                    </li>
+                                    <button type="button"
+                                            class="dropdown-item text-muted"
+                                            disabled
+                                            data-bs-toggle="tooltip"
+                                            title="Cannot delete — contains {{ group.category_count }} categor{{ group.category_count|pluralize:'y,ies' }}">
+                                        <i class="fa fa-trash fa-fw me-2"></i> Delete (In Use)
+                                    </button>
                                 {% endif %}
-                            </ul>
+
+                            </div>
                         </div>
                     </td>
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="7" class="text-center">
+                    <td colspan="6" class="text-center">
                         <div class="empty-state">
-                            <div class="empty-icon">
-                                <i class="fa fa-layer-group"></i>
-                            </div>
-                            <h5 class="empty-title">No Display Groups Found</h5>
-                            <p class="empty-description">
-                                Display groups help organize fee categories for better presentation on invoices.
+                            <i class="pe-7s-albums empty-state-icon"></i>
+                            <h5 class="mt-3">No Display Groups Found</h5>
+                            <p class="text-muted">
+                                Display groups help organise fee categories for better presentation on invoices.
                             </p>
-                            <a href="{% url 'fees:display_group_create' %}" class="btn btn-primary">
-                                <i class="fa fa-plus"></i> Create Display Group
+                            <a href="{% url 'fees:display_group_create' %}" class="btn btn-primary mt-3">
+                                <i class="fa fa-plus me-1"></i> Create Display Group
                             </a>
                         </div>
                     </td>
@@ -208,30 +211,37 @@
 <!-- Pagination -->
 {% if groups_page.paginator.num_pages > 1 %}
 <div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div class="d-flex justify-content-between align-items-center">
+
+        <!-- Results Count -->
         <div id="resultsCount" class="text-muted">
-            Showing <strong>{{ groups_page.start_index }}</strong> to <strong>{{ groups_page.end_index }}</strong> of <strong>{{ groups_page.paginator.count }}</strong> groups
+            Showing {{ groups_page.start_index }} - {{ groups_page.end_index }}
+            of {{ groups_page.paginator.count }} group{{ groups_page.paginator.count|pluralize }}
         </div>
-        
+
+        <!-- Pagination Navigation -->
         <nav aria-label="Display group pagination">
-            <ul class="pagination mb-0" id="paginationNav">
+            <ul class="pagination mb-0">
+
+                <!-- Previous -->
                 {% if groups_page.has_previous %}
                     <li class="page-item">
-                        <a class="page-link" href="#" 
-                           hx-get="{% url 'fees:display_group_search' %}" 
-                           hx-target="#display-group-list"
-                           hx-include="#searchForm"
-                           hx-vals='{"page": "{{ groups_page.previous_page_number }}"}'
-                           aria-label="Previous">
-                            <i class="fa fa-chevron-left"></i>
-                        </a>
+                        <button class="page-link"
+                                hx-get="{% url 'fees:display_group_list' %}"
+                                hx-target="#display-group-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ groups_page.previous_page_number }}"}'
+                                aria-label="Previous">
+                            <span aria-hidden="true">«</span>
+                        </button>
                     </li>
                 {% else %}
                     <li class="page-item disabled">
-                        <span class="page-link"><i class="fa fa-chevron-left"></i></span>
+                        <span class="page-link" aria-disabled="true"><span aria-hidden="true">«</span></span>
                     </li>
                 {% endif %}
-                
+
+                <!-- Page Numbers -->
                 {% for page_num in groups_page.paginator.page_range %}
                     {% if page_num == groups_page.number %}
                         <li class="page-item active" aria-current="page">
@@ -239,33 +249,35 @@
                         </li>
                     {% elif page_num > groups_page.number|add:"-3" and page_num < groups_page.number|add:"3" %}
                         <li class="page-item">
-                            <a class="page-link" href="#"
-                               hx-get="{% url 'fees:display_group_search' %}"
-                               hx-target="#display-group-list"
-                               hx-include="#searchForm"
-                               hx-vals='{"page": "{{ page_num }}"}'>
+                            <button class="page-link"
+                                    hx-get="{% url 'fees:display_group_list' %}"
+                                    hx-target="#display-group-list"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>
                                 {{ page_num }}
-                            </a>
+                            </button>
                         </li>
                     {% endif %}
                 {% endfor %}
-                
+
+                <!-- Next -->
                 {% if groups_page.has_next %}
                     <li class="page-item">
-                        <a class="page-link" href="#"
-                           hx-get="{% url 'fees:display_group_search' %}"
-                           hx-target="#display-group-list"
-                           hx-include="#searchForm"
-                           hx-vals='{"page": "{{ groups_page.next_page_number }}"}'
-                           aria-label="Next">
-                            <i class="fa fa-chevron-right"></i>
-                        </a>
+                        <button class="page-link"
+                                hx-get="{% url 'fees:display_group_list' %}"
+                                hx-target="#display-group-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ groups_page.next_page_number }}"}'
+                                aria-label="Next">
+                            <span aria-hidden="true">»</span>
+                        </button>
                     </li>
                 {% else %}
                     <li class="page-item disabled">
-                        <span class="page-link"><i class="fa fa-chevron-right"></i></span>
+                        <span class="page-link" aria-disabled="true"><span aria-hidden="true">»</span></span>
                     </li>
                 {% endif %}
+
             </ul>
         </nav>
     </div>
@@ -274,11 +286,9 @@
 
 <style>
 /* ============================
-   Table Base Styles
+   Table Base
    ============================ */
-.table {
-    font-size: 0.9rem;
-}
+.table { font-size: 0.9rem; }
 
 .table thead th {
     background-color: #f8f9fa;
@@ -294,6 +304,13 @@
 .table tbody td {
     padding: 1rem 0.75rem;
     vertical-align: middle;
+    position: relative;
+    overflow: visible;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important;
 }
 
 .group-row {
@@ -308,12 +325,11 @@
 }
 
 /* ============================
-   Order Controls
+   Order Badge
    ============================ */
 .order-controls {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
 }
 
 .order-badge {
@@ -327,37 +343,6 @@
     font-weight: 700;
     font-size: 0.9rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-}
-
-.order-arrows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.btn-order {
-    background: transparent;
-    border: none;
-    padding: 0;
-    width: 20px;
-    height: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #6c757d;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.7rem;
-}
-
-.btn-order:hover:not(:disabled) {
-    color: #667eea;
-    transform: scale(1.2);
-}
-
-.btn-order:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
 }
 
 /* ============================
@@ -391,13 +376,8 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.group-status.status-active {
-    background-color: #28a745;
-}
-
-.group-status.status-inactive {
-    background-color: #dc3545;
-}
+.group-status.status-active   { background-color: #28a745; }
+.group-status.status-inactive { background-color: #dc3545; }
 
 /* ============================
    Group Information
@@ -410,9 +390,7 @@
     transition: color 0.2s;
 }
 
-.group-name:hover {
-    color: #667eea;
-}
+.group-name:hover { color: #667eea; }
 
 .badge-inactive {
     background-color: #f8d7da;
@@ -420,6 +398,19 @@
     font-size: 0.7rem;
     padding: 0.25rem 0.5rem;
     font-weight: 600;
+    border-radius: 4px;
+}
+
+.badge-grouped {
+    background-color: #e7f3ff;
+    color: #0969da;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .group-description {
@@ -430,58 +421,7 @@
 }
 
 /* ============================
-   Appearance Section
-   ============================ */
-.appearance-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.color-display {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.color-swatch {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    border: 2px solid rgba(0,0,0,0.1);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    cursor: help;
-    transition: transform 0.2s;
-}
-
-.color-swatch:hover {
-    transform: scale(1.1);
-}
-
-.color-code {
-    font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
-    color: #495057;
-    background-color: #f8f9fa;
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid #dee2e6;
-}
-
-.badge-grouped {
-    background-color: #e7f3ff;
-    color: #0969da;
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-/* ============================
-   Categories Section
+   Categories Info
    ============================ */
 .categories-info {
     display: flex;
@@ -496,10 +436,6 @@
     font-size: 0.9rem;
 }
 
-.category-count i {
-    font-size: 0.9rem;
-}
-
 .category-count strong {
     font-size: 1.1rem;
     color: #2c3e50;
@@ -509,7 +445,6 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.85rem;
 }
 
 .btn-link {
@@ -517,100 +452,42 @@
     text-decoration: none;
 }
 
-.btn-link:hover {
-    text-decoration: underline;
-}
+.btn-link:hover { text-decoration: underline; }
 
 /* ============================
-   Status Toggle
+   Status Label
    ============================ */
-.status-toggle {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.form-check-input {
-    cursor: pointer;
-    width: 2.5rem;
-    height: 1.25rem;
-}
-
-.form-check-input:checked {
-    background-color: #28a745;
-    border-color: #28a745;
-}
-
-.form-check-label {
-    cursor: pointer;
-    margin-left: 0.5rem;
-}
-
 .status-label {
     font-weight: 600;
     font-size: 0.85rem;
 }
 
-.status-label.status-active {
-    color: #28a745;
-}
-
-.status-label.status-inactive {
-    color: #dc3545;
-}
+.status-label.status-active   { color: #28a745; }
+.status-label.status-inactive { color: #dc3545; }
 
 /* ============================
    Empty State
    ============================ */
 .empty-state {
-    padding: 4rem 2rem;
+    padding: 80px 30px;
     text-align: center;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    margin: 30px 0;
+    border: 2px dashed #dee2e6;
 }
 
-.empty-icon {
-    width: 80px;
-    height: 80px;
-    margin: 0 auto 1.5rem;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.empty-icon i {
-    font-size: 2rem;
-    color: #667eea;
-    opacity: 0.6;
-}
-
-.empty-title {
-    color: #2c3e50;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-.empty-description {
-    color: #6c757d;
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
+.empty-state-icon {
+    font-size: 5rem;
+    color: #dee2e6;
+    margin-bottom: 25px;
 }
 
 /* ============================
-   Actions Dropdown
+   Dropdown
    ============================ */
-.btn-group .btn {
-    transition: all 0.2s;
-}
-
-.btn-group .btn:hover {
-    background-color: #e9ecef;
-}
-
 .dropdown-menu {
+    z-index: 1050 !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     border: 1px solid #e9ecef;
     border-radius: 8px;
@@ -623,133 +500,91 @@
     transition: all 0.2s;
 }
 
-.dropdown-item:hover {
-    background-color: #f8f9fa;
-}
-
-.dropdown-item i.fa-fw {
-    width: 1.25rem;
-    text-align: center;
-}
-
-.dropdown-divider {
-    margin: 0.5rem 0;
-}
-
+.dropdown-item:hover { background-color: #f8f9fa; }
 
 /* ============================
-   Responsive Design
+   Pagination
    ============================ */
-@media (max-width: 1200px) {
-    .group-description {
-        display: none;
-    }
+.pagination .page-link {
+    border: 1px solid #dee2e6;
+    color: #667eea;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s;
 }
 
-@media (max-width: 992px) {
-    .table {
-        font-size: 0.85rem;
-    }
-    
-    .order-arrows {
-        display: none !important;
-    }
+.pagination .page-link:hover {
+    background-color: #667eea;
+    color: white;
+    border-color: #667eea;
 }
+
+.pagination .page-item.active .page-link {
+    background-color: #667eea;
+    border-color: #667eea;
+    font-weight: 600;
+}
+
+/* ============================
+   Responsive
+   ============================ */
+@media (max-width: 1200px) { .group-description { display: none; } }
 
 @media (max-width: 768px) {
-    .table thead th {
-        font-size: 0.75rem;
-        padding: 0.75rem 0.5rem;
-    }
-    
-    .table tbody td {
-        padding: 0.75rem 0.5rem;
-    }
-    
-    .group-icon {
-        width: 36px;
-        height: 36px;
-        font-size: 0.9rem;
-    }
-    
-    .group-name {
-        font-size: 0.875rem;
-    }
-    
-    /* Hide appearance column on mobile */
-    table th:nth-child(4),
-    table td:nth-child(4) {
-        display: none;
-    }
+    table th:nth-child(3),
+    table td:nth-child(3) { display: none; }
 }
 </style>
 
-<!-- OUT OF BAND UPDATE FOR STATS -->
-<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6 mb-3">
+<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only on HTMX requests) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-primary">
-                <i class="fa fa-layer-group"></i>
+                <i class="pe-7s-albums"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Total Groups</div>
-                <h3 class="stats-value">{{ stats.total|default:0 }}</h3>
+                <h3>{{ stats.total|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6 mb-3">
+
+    <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-success">
-                <i class="fa fa-check-circle"></i>
+                <i class="pe-7s-check"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Active Groups</div>
-                <h3 class="stats-value">{{ stats.active|default:0 }}</h3>
+                <h3>{{ stats.active|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6 mb-3">
+
+    <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-info">
-                <i class="fa fa-object-group"></i>
+                <i class="pe-7s-folder"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Show as Group</div>
-                <h3 class="stats-value">{{ stats.grouped|default:0 }}</h3>
+                <h3>{{ stats.grouped|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6 mb-3">
+
+    <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-warning">
-                <i class="fa fa-wallet"></i>
+                <i class="pe-7s-note2"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Total Categories</div>
-                <h3 class="stats-value">{{ stats.total_categories|default:0 }}</h3>
+                <h3>{{ stats.total_categories|default:0 }}</h3>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-function toggleGroupStatus(groupId, isActive) {
-    const url = `/fees/display-groups/${groupId}/toggle-active/`;
-    
-    htmx.ajax('POST', url, {
-        target: '#display-group-list',
-        swap: 'innerHTML'
-    });
-}
-
-// Initialize tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-});
-</script>
+{% endif %}

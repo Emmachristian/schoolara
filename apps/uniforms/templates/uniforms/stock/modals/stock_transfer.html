@@ -1,0 +1,115 @@
+{# uniforms/templates/uniforms/stock/modals/stock_transfer.html #}
+<div class="modal fade show d-block" id="stockTransferModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa fa-exchange-alt text-info me-2"></i>Transfer Stock
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form hx-post="{% url 'uniforms:stock_transfer' stock.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+
+                <div class="modal-body">
+
+                    <!-- Item summary -->
+                    <div class="alert alert-info py-2 mb-3">
+                        <strong>{{ stock.uniform_item.name }}</strong>
+                        {% if stock.size %}
+                            &mdash; Size <strong>{{ stock.size.name }}</strong>
+                        {% endif %}
+                        <br>
+                        <small>
+                            Available to transfer:
+                            <strong class="{% if stock.available_quantity == 0 %}text-danger{% endif %}">
+                                {{ stock.available_quantity }}
+                            </strong>
+                            unit(s)
+                        </small>
+                    </div>
+
+                    {% if stock.available_quantity == 0 %}
+                        <div class="alert alert-warning">
+                            <i class="fa fa-exclamation-triangle me-2"></i>
+                            No available units to transfer ({{ stock.reserved_quantity }} are reserved).
+                        </div>
+                    {% endif %}
+
+                    <!-- Target size -->
+                    <div class="mb-3">
+                        <label for="target_size_pk" class="form-label fw-semibold required-field">
+                            Transfer To (Size)
+                        </label>
+                        <select class="form-select" id="target_size_pk" name="target_size_pk" required>
+                            <option value="">-- Select target size --</option>
+                            {% for other in other_stock_records %}
+                                <option value="{{ other.size.pk }}">
+                                    {{ other.size.name }}
+                                    (current stock: {{ other.quantity }})
+                                </option>
+                            {% empty %}
+                                <option disabled>No other size variants available</option>
+                            {% endfor %}
+                        </select>
+                        {% if not other_stock_records %}
+                            <div class="form-text text-warning">
+                                No other size variants exist for this item.
+                                Create a stock record for the target size first.
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Quantity -->
+                    <div class="mb-3">
+                        <label for="quantity" class="form-label fw-semibold required-field">
+                            Quantity to Transfer
+                        </label>
+                        <input type="number"
+                               class="form-control"
+                               id="quantity"
+                               name="quantity"
+                               min="1"
+                               max="{{ stock.available_quantity }}"
+                               value="1"
+                               {% if stock.available_quantity == 0 %}disabled{% endif %}
+                               required>
+                    </div>
+
+                    <!-- Reason -->
+                    <div class="mb-3">
+                        <label for="reason" class="form-label fw-semibold required-field">
+                            Reason
+                        </label>
+                        <input type="text"
+                               class="form-control"
+                               id="reason"
+                               name="reason"
+                               placeholder="e.g. Rebalancing sizes, Correction…"
+                               required>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="btn btn-info text-white"
+                            {% if stock.available_quantity == 0 or not other_stock_records %}
+                                disabled
+                            {% endif %}>
+                        <i class="fa fa-exchange-alt me-1"></i>Transfer
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade show"></div>

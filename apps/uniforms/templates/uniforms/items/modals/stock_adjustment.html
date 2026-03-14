@@ -1,0 +1,145 @@
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+                <i class="fa fa-boxes me-2"></i>Adjust Stock — {{ item.name }}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+
+            <!-- Current Stock Summary -->
+            <div class="alert alert-info text-start mb-4">
+                <div class="row">
+                    <div class="col-6">
+                        <small class="text-muted d-block">Item Code</small>
+                        <strong>{{ item.code }}</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted d-block">Current Stock</small>
+                        <strong class="{% if item.current_stock == 0 %}text-danger{% elif item.is_low_stock %}text-warning{% else %}text-success{% endif %}">
+                            {{ item.current_stock }} {{ item.unit_of_measure.abbreviation }}
+                        </strong>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <small class="text-muted d-block">Reorder Level</small>
+                        <strong>{{ item.reorder_level }}</strong>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <small class="text-muted d-block">Unit Cost</small>
+                        <strong>{{ item.unit_cost|money }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            {% if item.requires_sizing %}
+            <!-- Sized item — direct adjustment not applicable -->
+            <div class="alert alert-warning text-start">
+                <i class="fa fa-info-circle me-2"></i>
+                <strong>Sized item.</strong> Stock is tracked per size variant.
+                Use the <a href="{% url 'uniforms:uniform_stock_list' %}?item={{ item.pk }}">Stock Records</a>
+                page to adjust individual size quantities.
+            </div>
+
+            {% else %}
+            <!-- Unsized item — show adjustment form -->
+            <form hx-post="{% url 'uniforms:uniform_item_adjust_stock' item.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML"
+                  id="stock-adjustment-form">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label for="adj_type" class="form-label fw-semibold">Adjustment Type</label>
+                    <select name="adjustment_type" id="adj_type" class="form-select" required>
+                        <option value="">— Select —</option>
+                        <option value="ADD">Add Stock</option>
+                        <option value="REMOVE">Remove Stock</option>
+                        <option value="SET">Set to Exact Level</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="adj_qty" class="form-label fw-semibold">
+                        Quantity
+                        <small class="text-muted fw-normal" id="qty-hint"></small>
+                    </label>
+                    <input type="number" name="quantity" id="adj_qty"
+                           class="form-control" min="0" placeholder="0" required>
+                    <div id="new-stock-preview" class="form-text text-muted mt-1" style="display:none;">
+                        New stock level: <strong id="preview-value"></strong>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="adj_reason" class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                    <textarea name="reason" id="adj_reason" class="form-control" rows="2"
+                              placeholder="e.g., Stock count correction, Damaged items removed..." required></textarea>
+                </div>
+
+                <div class="modal-footer px-0 pb-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-check me-1"></i>Apply Adjustment
+                    </button>
+                </div>
+            </form>
+
+            <script>
+            (function () {
+                const adjType   = document.getElementById('adj_type');
+                const adjQty    = document.getElementById('adj_qty');
+                const qtyHint   = document.getElementById('qty-hint');
+                const preview   = document.getElementById('new-stock-preview');
+                const previewVal= document.getElementById('preview-value');
+                const current   = {{ item.current_stock }};
+
+                function update() {
+                    const type = adjType.value;
+                    const qty  = parseInt(adjQty.value) || 0;
+
+                    const hints = {
+                        'ADD':    '(units to add)',
+                        'REMOVE': '(units to remove)',
+                        'SET':    '(new total)',
+                    };
+                    qtyHint.textContent = hints[type] || '';
+
+                    if (!type || adjQty.value === '') {
+                        preview.style.display = 'none';
+                        return;
+                    }
+
+                    let newStock;
+                    if (type === 'ADD')    newStock = current + qty;
+                    if (type === 'REMOVE') newStock = Math.max(0, current - qty);
+                    if (type === 'SET')    newStock = qty;
+
+                    previewVal.textContent = newStock + ' {{ item.unit_of_measure.abbreviation }}';
+                    previewVal.className   = newStock === 0 ? 'text-danger' : newStock <= {{ item.reorder_level }} ? 'text-warning' : 'text-success';
+                    preview.style.display  = 'block';
+                }
+
+                adjType.addEventListener('change', update);
+                adjQty.addEventListener('input',  update);
+            })();
+            </script>
+            {% endif %}
+
+        </div>
+
+        {% if item.requires_sizing %}
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Close
+            </button>
+        </div>
+        {% endif %}
+
+    </div>
+</div>

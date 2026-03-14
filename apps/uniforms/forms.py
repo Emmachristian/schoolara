@@ -3,6 +3,15 @@
 """
 Uniform Management Forms with timezone support and HTMX filters.
 All date validations use school timezone for consistency.
+
+CHANGES:
+- UniformItemForm: removed barcode, category, subcategory, maximum_stock,
+  supplier_name, supplier_contact, supplier_item_code, material,
+  care_instructions (removed from model).
+- UniformItemForm.clean(): removed maximum_stock > current_stock validation
+  (field no longer exists).
+- UniformItemFilterForm: removed category filter field (field no longer
+  exists on the model).
 """
 
 from django import forms
@@ -12,7 +21,6 @@ from django.db.models import Q
 from decimal import Decimal
 import logging
 
-# Import base form utilities with timezone support ⭐
 from utils.forms import (
     BootstrapFormMixin,
     HTMXFormMixin,
@@ -30,10 +38,10 @@ from utils.forms import (
     MoneyInput,
     PercentageField,
     PercentageInput,
-    validate_future_date,  # ⭐ Uses school timezone
-    validate_past_date,  # ⭐ Uses school timezone
-    validate_date_not_before,  # ⭐ Uses school timezone
-    validate_date_not_after,  # ⭐ Uses school timezone
+    validate_future_date,
+    validate_past_date,
+    validate_date_not_before,
+    validate_date_not_after,
     validate_positive_amount,
 )
 
@@ -58,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 class MeasurementTypeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for creating/editing measurement types"""
-    
+
     class Meta:
         model = MeasurementType
         fields = [
@@ -81,105 +89,76 @@ class MeasurementTypeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelFo
             }),
             'unit': forms.Select(attrs={'class': 'form-select'}),
             'min_value': forms.NumberInput(attrs={
-                'step': '0.01',
-                'placeholder': 'Minimum value'
+                'step': '0.01', 'placeholder': 'Minimum value'
             }),
             'max_value': forms.NumberInput(attrs={
-                'step': '0.01',
-                'placeholder': 'Maximum value'
+                'step': '0.01', 'placeholder': 'Maximum value'
             }),
             'applicable_age_min': forms.NumberInput(attrs={
-                'min': '0',
-                'placeholder': 'Min age'
+                'min': '0', 'placeholder': 'Min age'
             }),
             'applicable_age_max': forms.NumberInput(attrs={
-                'min': '0',
-                'placeholder': 'Max age'
+                'min': '0', 'placeholder': 'Max age'
             }),
             'display_order': forms.NumberInput(attrs={'min': '1'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['unit'].queryset = UnitOfMeasure.objects.filter(
                 is_active=True
             ).order_by('name')
         except Exception as e:
             logger.error(f"Error setting unit queryset: {e}")
-        
-        # Help text
         self.fields['code'].help_text = "Unique code for this measurement"
-    
+
     def clean_code(self):
-        """Ensure code is uppercase"""
-        code = self.cleaned_data.get('code', '')
-        return code.upper()
-    
+        return self.cleaned_data.get('code', '').upper()
+
     def clean(self):
-        """Validate measurement type data"""
         cleaned_data = super().clean()
-        
-        # Validate min/max values
         min_value = cleaned_data.get('min_value')
         max_value = cleaned_data.get('max_value')
-        
-        if min_value and max_value:
-            if min_value >= max_value:
-                raise ValidationError({
-                    'max_value': 'Maximum value must be greater than minimum value.'
-                })
-        
-        # Validate age range
+        if min_value and max_value and min_value >= max_value:
+            raise ValidationError({
+                'max_value': 'Maximum value must be greater than minimum value.'
+            })
         min_age = cleaned_data.get('applicable_age_min')
         max_age = cleaned_data.get('applicable_age_max')
-        
-        if min_age and max_age:
-            if min_age >= max_age:
-                raise ValidationError({
-                    'applicable_age_max': 'Maximum age must be greater than minimum age.'
-                })
-        
+        if min_age and max_age and min_age >= max_age:
+            raise ValidationError({
+                'applicable_age_max': 'Maximum age must be greater than minimum age.'
+            })
         return cleaned_data
 
 
 class MeasurementTypeFilterForm(BaseFilterForm):
     """Filter form for measurement types"""
-    
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'})
     )
-    
     category = forms.ChoiceField(
         label='Category',
         choices=[('', 'All Categories')] + list(MeasurementType.MEASUREMENT_CATEGORIES),
         required=False,
         widget=SelectWithDefault(default_label="All Categories")
     )
-    
     is_active = forms.NullBooleanField(
-        label='Status',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        label='Status', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'}
+        )
     )
-    
     is_required = forms.NullBooleanField(
-        label='Required',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Required'),
-            ('false', 'Optional')
-        ], attrs={'class': 'form-select'})
+        label='Required', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Required'), ('false', 'Optional')],
+            attrs={'class': 'form-select'}
+        )
     )
 
 
@@ -188,11 +167,8 @@ class MeasurementTypeFilterForm(BaseFilterForm):
 # =============================================================================
 
 class StudentMeasurementForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """
-    Form for recording student measurements.
-    Uses school timezone for date validations. ⭐
-    """
-    
+    """Form for recording student measurements. Uses school timezone. ⭐"""
+
     class Meta:
         model = StudentMeasurement
         fields = [
@@ -202,29 +178,24 @@ class StudentMeasurementForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
         ]
         widgets = {
             'student': forms.Select(attrs={
-                'class': 'form-select',
-                'data-placeholder': 'Select student...'
+                'class': 'form-select', 'data-placeholder': 'Select student...'
             }),
             'measurement_type': forms.Select(attrs={'class': 'form-select'}),
             'value': forms.NumberInput(attrs={
-                'step': '0.01',
-                'placeholder': 'Measurement value'
+                'step': '0.01', 'placeholder': 'Measurement value'
             }),
             'measurement_date': DatePickerInput(),
             'academic_session': forms.Select(attrs={'class': 'form-select'}),
             'measurement_context': forms.Select(attrs={'class': 'form-select'}),
             'measurement_method': forms.Select(attrs={'class': 'form-select'}),
             'notes': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Additional notes...'
+                'rows': 3, 'placeholder': 'Additional notes...'
             }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         student = kwargs.pop('student', None)
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
         try:
             if student:
                 self.fields['student'].initial = student
@@ -233,204 +204,138 @@ class StudentMeasurementForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
                 self.fields['student'].queryset = Student.objects.filter(
                     enrollment_status='ACTIVE'
                 ).order_by('first_name', 'last_name')
-            
             self.fields['measurement_type'].queryset = MeasurementType.objects.filter(
                 is_active=True
             ).order_by('category', 'display_order')
-            
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
             ).order_by('-start_date')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default measurement date (uses school timezone) ⭐
+
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['measurement_date'].initial = get_school_today()
-    
+
     def clean(self):
-        """Validate measurement data using school timezone ⭐"""
         cleaned_data = super().clean()
-        
-        # Validate measurement date (uses school timezone) ⭐
         measurement_date = cleaned_data.get('measurement_date')
-        
         from core.utils import get_school_today
         today = get_school_today()
-        
         if measurement_date and measurement_date > today:
             raise ValidationError({
                 'measurement_date': 'Measurement date cannot be in the future.'
             })
-        
-        # Validate measurement value against type constraints
         measurement_type = cleaned_data.get('measurement_type')
         value = cleaned_data.get('value')
-        
         if measurement_type and value:
             if measurement_type.min_value and value < measurement_type.min_value:
                 self.add_error('value',
-                    f'Value is below minimum allowed ({measurement_type.min_value}).'
-                )
-            
+                    f'Value is below minimum allowed ({measurement_type.min_value}).')
             if measurement_type.max_value and value > measurement_type.max_value:
                 self.add_error('value',
-                    f'Value is above maximum allowed ({measurement_type.max_value}).'
-                )
-        
+                    f'Value is above maximum allowed ({measurement_type.max_value}).')
         return cleaned_data
 
 
 class BulkMeasurementForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
-    """
-    Form for recording measurements for multiple students.
-    Uses school timezone for date validations. ⭐
-    """
-    
+    """Form for recording measurements for multiple students. Uses school timezone. ⭐"""
+
     measurement_session = forms.ModelChoiceField(
-        label='Measurement Session',
-        queryset=None,
-        required=False,
+        label='Measurement Session', queryset=None, required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
         help_text='Optional: Link to a measurement session'
     )
-    
     academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=True,
+        label='Academic Session', queryset=None, required=True,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
-    
     measurement_date = forms.DateField(
-        label='Measurement Date',
-        required=True,
-        widget=DatePickerInput()
+        label='Measurement Date', required=True, widget=DatePickerInput()
     )
-    
     measurement_context = forms.ChoiceField(
         label='Measurement Context',
         choices=StudentMeasurement.MEASUREMENT_CONTEXT_CHOICES,
-        required=True,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        required=True, widget=forms.Select(attrs={'class': 'form-select'})
     )
-    
     measurement_method = forms.ChoiceField(
         label='Measurement Method',
         choices=StudentMeasurement.MEASUREMENT_METHOD_CHOICES,
-        required=True,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        required=True, widget=forms.Select(attrs={'class': 'form-select'})
     )
-    
     target_class = forms.ModelChoiceField(
-        label='Target Class',
-        queryset=None,
-        required=False,
+        label='Target Class', queryset=None, required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
         help_text='Measure all students in this class'
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['measurement_session'].queryset = MeasurementSession.objects.filter(
                 status__in=['PLANNED', 'IN_PROGRESS']
             ).order_by('-session_date')
-            
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
             ).order_by('-start_date')
-            
             self.fields['target_class'].queryset = Class.objects.filter(
                 is_active=True
             ).order_by('academic_level__level_order', 'name')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default measurement date (uses school timezone) ⭐
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['measurement_date'].initial = get_school_today()
 
 
 class StudentMeasurementFilterForm(DateRangeFilterForm):
-    """
-    Filter form for student measurements.
-    Uses school timezone for date filters. ⭐
-    """
-    
+    """Filter form for student measurements. Uses school timezone. ⭐"""
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by student name...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by student name...'})
     )
-    
     student = forms.ModelChoiceField(
-        label='Student',
-        queryset=None,
-        required=False,
+        label='Student', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Students")
     )
-    
     measurement_type = forms.ModelChoiceField(
-        label='Measurement Type',
-        queryset=None,
-        required=False,
+        label='Measurement Type', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Types")
     )
-    
     academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=False,
+        label='Academic Session', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Sessions")
     )
-    
     measurement_context = forms.ChoiceField(
         label='Context',
         choices=[('', 'All Contexts')] + list(StudentMeasurement.MEASUREMENT_CONTEXT_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Contexts")
     )
-    
     is_verified = forms.NullBooleanField(
-        label='Verification',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Verified'),
-            ('false', 'Unverified')
-        ], attrs={'class': 'form-select'})
+        label='Verification', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Verified'), ('false', 'Unverified')],
+            attrs={'class': 'form-select'}
+        )
     )
-    
     measurement_date_from = forms.DateField(
-        label='Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Date From', required=False, widget=DatePickerInput()
     )
-    
     measurement_date_to = forms.DateField(
-        label='Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Date To', required=False, widget=DatePickerInput()
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['student'].queryset = Student.objects.filter(
                 enrollment_status='ACTIVE'
             ).order_by('first_name', 'last_name')
-            
             self.fields['measurement_type'].queryset = MeasurementType.objects.filter(
                 is_active=True
             ).order_by('category', 'display_order')
-            
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
             ).order_by('-start_date')
@@ -444,7 +349,7 @@ class StudentMeasurementFilterForm(DateRangeFilterForm):
 
 class UniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for creating/editing uniform sizes"""
-    
+
     class Meta:
         model = UniformSize
         fields = [
@@ -454,78 +359,47 @@ class UniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
             'display_order', 'is_active'
         ]
         widgets = {
-            'name': forms.TextInput(attrs={
-                'placeholder': 'e.g., S, M, L, XL, 32, 34'
-            }),
+            'name': forms.TextInput(attrs={'placeholder': 'e.g., S, M, L, XL, 32, 34'}),
             'code': forms.TextInput(attrs={
                 'placeholder': 'e.g., S, M, L, 32',
                 'style': 'text-transform: uppercase;'
             }),
             'size_type': forms.Select(attrs={'class': 'form-select'}),
-            'description': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Size description...'
-            }),
-            'min_height': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Min height (cm)'
-            }),
-            'max_height': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Max height (cm)'
-            }),
-            'min_chest': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Min chest (cm)'
-            }),
-            'max_chest': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Max chest (cm)'
-            }),
-            'min_waist': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Min waist (cm)'
-            }),
-            'max_waist': forms.NumberInput(attrs={
-                'step': '0.1',
-                'placeholder': 'Max waist (cm)'
-            }),
+            'description': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Size description...'}),
+            'min_height': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Min height (cm)'}),
+            'max_height': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Max height (cm)'}),
+            'min_chest': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Min chest (cm)'}),
+            'max_chest': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Max chest (cm)'}),
+            'min_waist': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Min waist (cm)'}),
+            'max_waist': forms.NumberInput(attrs={'step': '0.1', 'placeholder': 'Max waist (cm)'}),
             'min_age': forms.NumberInput(attrs={'min': '0'}),
             'max_age': forms.NumberInput(attrs={'min': '0'}),
             'display_order': forms.NumberInput(attrs={'min': '1'}),
         }
-    
+
     def clean_code(self):
-        """Ensure code is uppercase"""
-        code = self.cleaned_data.get('code', '')
-        return code.upper()
+        return self.cleaned_data.get('code', '').upper()
+
 
 class UniformSizeFilterForm(BaseFilterForm):
     """Filter form for uniform sizes"""
-    
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'})
     )
-    
     size_type = forms.ChoiceField(
         label='Size Type',
         choices=[('', 'All Types')] + list(UniformSize.SIZE_TYPE_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Types")
     )
-    
     is_active = forms.NullBooleanField(
-        label='Status',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        label='Status', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'}
+        )
     )
 
 
@@ -534,18 +408,33 @@ class UniformSizeFilterForm(BaseFilterForm):
 # =============================================================================
 
 class UniformItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing uniform items"""
-    
+    """
+    Form for creating/editing uniform items.
+
+    REMOVED FIELDS (no longer on the model):
+      barcode, category, subcategory, maximum_stock,
+      supplier_name, supplier_contact, supplier_item_code,
+      material, care_instructions
+
+    STOCK FIELD BEHAVIOUR:
+      Create mode — editable for initial bootstrapping (before any UniformStock
+                    records exist for unsized items).
+      Edit mode   — always disabled. current_stock is a signal-maintained
+                    denormalised cache (Sum of UniformStock.quantity). Writing
+                    to it directly causes drift; all changes must go through
+                    UniformStock / stock-adjustment views which fire the signal.
+    """
+
     class Meta:
         model = UniformItem
         fields = [
             'name', 'code', 'description', 'item_type', 'gender',
-            'category', 'subcategory', 'requires_sizing', 'available_sizes',
+            'requires_sizing', 'available_sizes',
             'unit_of_measure', 'unit_cost', 'selling_price',
-            'sku', 'barcode', 'current_stock', 'reorder_level', 'maximum_stock',
-            'supplier_name', 'supplier_contact', 'supplier_item_code',
-            'image', 'color', 'material', 'care_instructions',
-            'is_taxable', 'tax_rate', 'is_active', 'is_mandatory', 'notes'
+            'sku', 'current_stock', 'reorder_level',
+            'image', 'color',
+            'is_taxable', 'tax_rate',
+            'is_active', 'is_mandatory', 'notes',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -556,145 +445,115 @@ class UniformItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin,
                 'style': 'text-transform: uppercase;'
             }),
             'description': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Detailed description...'
+                'rows': 3, 'placeholder': 'Detailed description...'
             }),
             'item_type': forms.Select(attrs={'class': 'form-select'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
-            'category': forms.TextInput(attrs={
-                'placeholder': 'e.g., Shirts, Trousers, Shoes'
-            }),
-            'subcategory': forms.TextInput(attrs={
-                'placeholder': 'e.g., Long Sleeve, Short Sleeve'
-            }),
             'available_sizes': forms.SelectMultiple(attrs={
-                'class': 'form-select',
-                'size': '5'
+                'class': 'form-select', 'size': '5'
             }),
             'unit_of_measure': forms.Select(attrs={'class': 'form-select'}),
             'unit_cost': MoneyInput(),
             'selling_price': MoneyInput(),
             'sku': forms.TextInput(attrs={'placeholder': 'Stock Keeping Unit'}),
-            'barcode': forms.TextInput(attrs={'placeholder': 'Barcode'}),
             'current_stock': forms.NumberInput(attrs={'min': '0'}),
             'reorder_level': forms.NumberInput(attrs={'min': '0'}),
-            'maximum_stock': forms.NumberInput(attrs={'min': '0'}),
-            'supplier_name': forms.TextInput(attrs={
-                'placeholder': 'Supplier name'
-            }),
-            'supplier_contact': forms.TextInput(attrs={
-                'placeholder': 'Phone or email'
-            }),
-            'supplier_item_code': forms.TextInput(attrs={
-                'placeholder': 'Supplier\'s item code'
-            }),
             'color': forms.TextInput(attrs={'placeholder': 'e.g., White, Blue'}),
-            'material': forms.TextInput(attrs={
-                'placeholder': 'e.g., Cotton, Polyester'
-            }),
-            'care_instructions': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Washing and care instructions...'
-            }),
             'tax_rate': forms.Select(attrs={'class': 'form-select'}),
             'notes': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Additional notes...'
+                'rows': 2, 'placeholder': 'Additional notes...'
             }),
         }
-    
+
+    # ------------------------------------------------------------------
+    # Properties set in __init__ and read by the template to avoid
+    # duplicating the is_edit_mode logic in multiple places.
+    # ------------------------------------------------------------------
+    is_edit_mode: bool = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
+
         try:
             self.fields['available_sizes'].queryset = UniformSize.objects.filter(
                 is_active=True
             ).order_by('display_order')
-            
             self.fields['unit_of_measure'].queryset = UnitOfMeasure.objects.filter(
-                is_active=True,
-                uom_type='QUANTITY'
+                is_active=True, uom_type='QUANTITY'
             ).order_by('name')
-
-            
             self.fields['tax_rate'].queryset = TaxRate.objects.filter(
                 is_active=True
             ).order_by('name')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Help text
+
         self.fields['code'].help_text = "Unique item code"
         self.fields['unit_cost'].help_text = "Cost price (for COGS calculation)"
         self.fields['selling_price'].help_text = "Selling price to students"
-    
+
+        # ----------------------------------------------------------------
+        # current_stock lock
+        #
+        # CREATE mode: allow direct entry so staff can set an opening
+        #   balance before any UniformStock records have been created.
+        #
+        # EDIT mode: disable unconditionally.  The field is a
+        #   signal-maintained Sum() cache — overwriting it manually causes
+        #   the value to drift out of sync the next time any stock record
+        #   is saved.  All stock changes must go through UniformStock or
+        #   the stock-adjustment views.
+        # ----------------------------------------------------------------
+        self.is_edit_mode = bool(self.instance and self.instance.pk)
+
+        if self.is_edit_mode:
+            self.fields['current_stock'].disabled = True
+            self.fields['current_stock'].help_text = (
+                "Read-only in edit mode. Use Stock Adjustment to update stock levels."
+            )
+        else:
+            self.fields['current_stock'].help_text = (
+                "Opening stock balance. After creation, manage stock via "
+                "Stock Adjustment or Purchase Orders."
+            )
+
     def clean_code(self):
-        """Ensure code is uppercase"""
-        code = self.cleaned_data.get('code', '')
-        return code.upper()
-    
+        return self.cleaned_data.get('code', '').upper()
+
     def clean(self):
-        """Validate uniform item data"""
         cleaned_data = super().clean()
-        
-        # Validate pricing
         unit_cost = cleaned_data.get('unit_cost')
         selling_price = cleaned_data.get('selling_price')
-        
-        if unit_cost and selling_price:
-            if selling_price < unit_cost:
-                self.add_error('selling_price',
-                    'Selling price should typically be higher than unit cost.'
-                )
-        
-        # Validate stock levels
-        current_stock = cleaned_data.get('current_stock')
-        maximum_stock = cleaned_data.get('maximum_stock')
-        
-        if current_stock and maximum_stock:
-            if current_stock > maximum_stock:
-                self.add_error('current_stock',
-                    'Current stock cannot exceed maximum stock.'
-                )
-        
+        if unit_cost and selling_price and selling_price < unit_cost:
+            self.add_error(
+                'selling_price',
+                'Selling price should typically be higher than unit cost.'
+            )
         return cleaned_data
 
 
 class UniformItemFilterForm(BaseFilterForm):
-    """Filter form for uniform items"""
-    
+    """
+    Filter form for uniform items.
+
+    REMOVED: category field (no longer on the model — use item_type instead).
+    """
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code, SKU...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code, SKU...'})
     )
-    
     item_type = forms.ChoiceField(
         label='Item Type',
         choices=[('', 'All Types')] + list(UniformItem.ITEM_TYPE_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Types")
     )
-    
     gender = forms.ChoiceField(
         label='Gender',
         choices=[('', 'All')] + list(UniformItem.GENDER_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All")
     )
-    
-    category = forms.CharField(
-        label='Category',
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Filter by category...'
-        })
-    )
-    
     stock_status = forms.ChoiceField(
         label='Stock Status',
         choices=[
@@ -706,25 +565,19 @@ class UniformItemFilterForm(BaseFilterForm):
         required=False,
         widget=SelectWithDefault(default_label="All")
     )
-    
     is_active = forms.NullBooleanField(
-        label='Status',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        label='Status', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'}
+        )
     )
-    
     is_mandatory = forms.NullBooleanField(
-        label='Mandatory',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Mandatory'),
-            ('false', 'Optional')
-        ], attrs={'class': 'form-select'})
+        label='Mandatory', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Mandatory'), ('false', 'Optional')],
+            attrs={'class': 'form-select'}
+        )
     )
 
 
@@ -734,7 +587,7 @@ class UniformItemFilterForm(BaseFilterForm):
 
 class UniformStockForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for managing uniform stock by size"""
-    
+
     class Meta:
         model = UniformStock
         fields = [
@@ -746,61 +599,77 @@ class UniformStockForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm)
             'size': forms.Select(attrs={'class': 'form-select'}),
             'quantity': forms.NumberInput(attrs={'min': '0'}),
             'reserved_quantity': forms.NumberInput(attrs={'min': '0'}),
-            'location': forms.TextInput(attrs={
-                'placeholder': 'Storage location'
-            }),
-            'bin_number': forms.TextInput(attrs={
-                'placeholder': 'Bin/shelf number'
-            }),
+            'location': forms.TextInput(attrs={'placeholder': 'Storage location'}),
+            'bin_number': forms.TextInput(attrs={'placeholder': 'Bin/shelf number'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['uniform_item'].queryset = UniformItem.objects.filter(
                 is_active=True
             ).order_by('name')
-            
             self.fields['size'].queryset = UniformSize.objects.filter(
                 is_active=True
             ).order_by('display_order')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
 
+        # Size required-ness is enforced conditionally in clean() below.
+        # The JS in form.html hides the field entirely for unsized items.
+        self.fields['size'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        uniform_item = cleaned_data.get('uniform_item')
+        size = cleaned_data.get('size')
+
+        if uniform_item is None:
+            return cleaned_data
+
+        if uniform_item.requires_sizing:
+            if not size:
+                self.add_error('size', 'This item requires a size. Please select one.')
+        else:
+            # Clear any accidentally submitted size value
+            cleaned_data['size'] = None
+
+            # Surface the DB unique constraint as a clean form error
+            existing_qs = UniformStock.objects.filter(
+                uniform_item=uniform_item, size__isnull=True
+            )
+            if self.instance and self.instance.pk:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            if existing_qs.exists():
+                self.add_error(
+                    'uniform_item',
+                    'A stock record already exists for this item. '
+                    'Edit the existing record instead of creating a new one.'
+                )
+        return cleaned_data
+
 
 class StockAdjustmentForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
     """Form for adjusting stock levels"""
-    
+
     ADJUSTMENT_TYPE_CHOICES = [
         ('ADD', 'Add Stock'),
         ('REMOVE', 'Remove Stock'),
         ('SET', 'Set Stock Level'),
     ]
-    
+
     adjustment_type = forms.ChoiceField(
-        label='Adjustment Type',
-        choices=ADJUSTMENT_TYPE_CHOICES,
-        required=True,
+        label='Adjustment Type', choices=ADJUSTMENT_TYPE_CHOICES, required=True,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
-    
     quantity = forms.IntegerField(
-        label='Quantity',
-        min_value=0,
-        required=True,
-        widget=forms.NumberInput(attrs={
-            'min': '0',
-            'placeholder': 'Quantity'
-        })
+        label='Quantity', min_value=0, required=True,
+        widget=forms.NumberInput(attrs={'min': '0', 'placeholder': 'Quantity'})
     )
-    
     reason = forms.CharField(
-        label='Reason',
-        required=True,
+        label='Reason', required=True,
         widget=forms.Textarea(attrs={
-            'rows': 3,
-            'placeholder': 'Reason for stock adjustment...'
+            'rows': 3, 'placeholder': 'Reason for stock adjustment...'
         })
     )
 
@@ -810,32 +679,21 @@ class StockAdjustmentForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
 # =============================================================================
 
 class UniformPurchaseOrderForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """
-    Form for creating/editing uniform purchase orders.
-    Uses school timezone for date validations. ⭐
-    """
-    
+    """Form for creating/editing uniform purchase orders. Uses school timezone. ⭐"""
+
     class Meta:
         model = UniformPurchaseOrder
         fields = [
             'supplier_name', 'supplier_contact', 'supplier_email', 'supplier_phone',
             'order_date', 'expected_delivery_date', 'fiscal_period',
-            'shipping_cost', 'payment_terms', 
+            'shipping_cost', 'payment_terms',
             'auto_create_journal_entry', 'notes'
         ]
         widgets = {
-            'supplier_name': forms.TextInput(attrs={
-                'placeholder': 'Supplier name'
-            }),
-            'supplier_contact': forms.TextInput(attrs={
-                'placeholder': 'Contact person'
-            }),
-            'supplier_email': forms.EmailInput(attrs={
-                'placeholder': 'email@example.com'
-            }),
-            'supplier_phone': forms.TextInput(attrs={
-                'placeholder': '+256700000000'
-            }),
+            'supplier_name': forms.TextInput(attrs={'placeholder': 'Supplier name'}),
+            'supplier_contact': forms.TextInput(attrs={'placeholder': 'Contact person'}),
+            'supplier_email': forms.EmailInput(attrs={'placeholder': 'email@example.com'}),
+            'supplier_phone': forms.TextInput(attrs={'placeholder': '+256700000000'}),
             'order_date': DatePickerInput(),
             'expected_delivery_date': DatePickerInput(),
             'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
@@ -843,62 +701,43 @@ class UniformPurchaseOrderForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapF
             'payment_terms': forms.TextInput(attrs={
                 'placeholder': 'e.g., Net 30, Payment on Delivery'
             }),
-            'notes': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Additional notes...'
-            }),
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Additional notes...'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
         try:
             self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
-                status__in=['OPEN', 'CURRENT']
+                is_active=True,
+                is_closed=False,
             ).order_by('-start_date')
-            
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default order date (uses school timezone) ⭐
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['order_date'].initial = get_school_today()
-    
+
     def clean(self):
-        """Validate purchase order data using school timezone ⭐"""
         cleaned_data = super().clean()
-        
-        # Validate dates (uses school timezone) ⭐
         order_date = cleaned_data.get('order_date')
         expected_delivery_date = cleaned_data.get('expected_delivery_date')
-        
         from core.utils import get_school_today
         today = get_school_today()
-        
         if order_date and order_date > today:
+            raise ValidationError({'order_date': 'Order date cannot be in the future.'})
+        if order_date and expected_delivery_date and expected_delivery_date < order_date:
             raise ValidationError({
-                'order_date': 'Order date cannot be in the future.'
+                'expected_delivery_date': 'Expected delivery date cannot be before order date.'
             })
-        
-        if order_date and expected_delivery_date:
-            if expected_delivery_date < order_date:
-                raise ValidationError({
-                    'expected_delivery_date': 'Expected delivery date cannot be before order date.'
-                })
-        
         return cleaned_data
 
 
 class UniformPurchaseOrderItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for purchase order items (inline formset use)"""
-    
+
     class Meta:
         model = UniformPurchaseOrderItem
-        fields = [
-            'uniform_item', 'size', 'quantity_ordered', 'unit_price', 'notes'
-        ]
+        fields = ['uniform_item', 'size', 'quantity_ordered', 'unit_price', 'notes']
         widgets = {
             'uniform_item': forms.Select(attrs={'class': 'form-select'}),
             'size': forms.Select(attrs={'class': 'form-select'}),
@@ -906,15 +745,13 @@ class UniformPurchaseOrderItemForm(RequiredFieldsMixin, MoneyFieldsMixin, Bootst
             'unit_price': MoneyInput(),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['uniform_item'].queryset = UniformItem.objects.filter(
                 is_active=True
             ).order_by('name')
-            
             self.fields['size'].queryset = UniformSize.objects.filter(
                 is_active=True
             ).order_by('display_order')
@@ -923,50 +760,35 @@ class UniformPurchaseOrderItemForm(RequiredFieldsMixin, MoneyFieldsMixin, Bootst
 
 
 class UniformPurchaseOrderFilterForm(DateRangeFilterForm):
-    """
-    Filter form for purchase orders.
-    Uses school timezone for date filters. ⭐
-    """
-    
+    """Filter form for purchase orders. Uses school timezone. ⭐"""
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by PO number, supplier...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by PO number, supplier...'})
     )
-    
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(UniformPurchaseOrder.STATUS_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Statuses")
     )
-    
     fiscal_period = forms.ModelChoiceField(
-        label='Fiscal Period',
-        queryset=None,
-        required=False,
+        label='Fiscal Period', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Periods")
     )
-    
     order_date_from = forms.DateField(
-        label='Order Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Order Date From', required=False, widget=DatePickerInput()
     )
-    
     order_date_to = forms.DateField(
-        label='Order Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Order Date To', required=False, widget=DatePickerInput()
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
+            self.fields['fiscal_period'].queryset = (
+                FiscalPeriod.objects.all().order_by('-start_date')
+            )
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
 
@@ -977,25 +799,26 @@ class UniformPurchaseOrderFilterForm(DateRangeFilterForm):
 
 class UniformSaleForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """
-    Form for creating/editing uniform sales.
-    Uses school timezone for date validations. ⭐
+    Form for creating/editing uniform sales. Uses school timezone. ⭐
+
+    NOTE: fiscal_period is auto-assigned by the pre_save signal.
+    NOTE: academic_session is a property derived from fiscal_period.
+    NOTE: auto_create_invoice / auto_create_journal_entry are always True
+          and are not exposed in the form.
     """
-    
+
     class Meta:
         model = UniformSale
         fields = [
-            'student', 'academic_session', 'fiscal_period', 'sale_type', 'sale_date',
-            'auto_create_invoice', 'discount_amount', 'discount_reason',
-            'payment_method', 'payment_reference', 'return_date',
-            'auto_create_journal_entry', 'notes'
+            'student', 'sale_type', 'sale_date',
+            'discount_amount', 'discount_reason',
+            'payment_method', 'payment_reference',
+            'return_date', 'notes'
         ]
         widgets = {
             'student': forms.Select(attrs={
-                'class': 'form-select',
-                'data-placeholder': 'Select student...'
+                'class': 'form-select', 'data-placeholder': 'Select student...'
             }),
-            'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
             'sale_type': forms.Select(attrs={'class': 'form-select'}),
             'sale_date': DatePickerInput(),
             'discount_amount': MoneyInput(),
@@ -1003,21 +826,14 @@ class UniformSaleForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin,
                 'placeholder': 'Reason for discount (if applicable)...'
             }),
             'payment_method': forms.Select(attrs={'class': 'form-select'}),
-            'payment_reference': forms.TextInput(attrs={
-                'placeholder': 'Payment reference'
-            }),
+            'payment_reference': forms.TextInput(attrs={'placeholder': 'Payment reference'}),
             'return_date': DatePickerInput(),
-            'notes': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Additional notes...'
-            }),
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Additional notes...'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         student = kwargs.pop('student', None)
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
         try:
             if student:
                 self.fields['student'].initial = student
@@ -1025,61 +841,36 @@ class UniformSaleForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin,
                 self.fields['student'].queryset = Student.objects.filter(
                     enrollment_status='ACTIVE'
                 ).order_by('first_name', 'last_name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
-            
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True
             ).order_by('name')
-            
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default sale date (uses school timezone) ⭐
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['sale_date'].initial = get_school_today()
-    
+
     def clean(self):
-        """Validate sale data using school timezone ⭐"""
         cleaned_data = super().clean()
-        
-        # Validate sale date (uses school timezone) ⭐
         sale_date = cleaned_data.get('sale_date')
-        
         from core.utils import get_school_today
         today = get_school_today()
-        
         if sale_date and sale_date > today:
-            raise ValidationError({
-                'sale_date': 'Sale date cannot be in the future.'
-            })
-        
-        # Validate return date for loans
+            raise ValidationError({'sale_date': 'Sale date cannot be in the future.'})
         sale_type = cleaned_data.get('sale_type')
         return_date = cleaned_data.get('return_date')
-        
         if sale_type == 'LOAN' and not return_date:
-            self.add_error('return_date',
-                'Return date is required for loaned items.'
-            )
-        
-        if sale_date and return_date:
-            if return_date < sale_date:
-                raise ValidationError({
-                    'return_date': 'Return date cannot be before sale date.'
-                })
-        
+            self.add_error('return_date', 'Return date is required for loaned items.')
+        if sale_date and return_date and return_date < sale_date:
+            raise ValidationError({
+                'return_date': 'Return date cannot be before sale date.'
+            })
         return cleaned_data
 
 
 class UniformSaleItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """Form for uniform sale items (inline formset use)"""
-    
+
     class Meta:
         model = UniformSaleItem
         fields = [
@@ -1097,19 +888,16 @@ class UniformSaleItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMi
             'discount_percentage': PercentageInput(),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['uniform_item'].queryset = UniformItem.objects.filter(
                 is_active=True
             ).order_by('name')
-            
             self.fields['size'].queryset = UniformSize.objects.filter(
                 is_active=True
             ).order_by('display_order')
-            
             self.fields['tax_rate'].queryset = TaxRate.objects.filter(
                 is_active=True
             ).order_by('name')
@@ -1119,78 +907,52 @@ class UniformSaleItemForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMi
 
 class UniformSaleFilterForm(DateRangeFilterForm):
     """
-    Filter form for uniform sales.
-    Uses school timezone for date filters. ⭐
+    Filter form for uniform sales. Uses school timezone. ⭐
+
+    NOTE: academic_session filters via fiscal_period__related_academic_session
+          in the view — not via a direct field on UniformSale.
     """
-    
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by sale number, student...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by sale number, student...'})
     )
-    
-    student = forms.ModelChoiceField(
-        label='Student',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Students")
-    )
-    
     academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=False,
+        label='Academic Session', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Sessions")
     )
-    
     fiscal_period = forms.ModelChoiceField(
-        label='Fiscal Period',
-        queryset=None,
-        required=False,
+        label='Fiscal Period', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Periods")
     )
-    
     sale_type = forms.ChoiceField(
         label='Sale Type',
         choices=[('', 'All Types')] + list(UniformSale.SALE_TYPE_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Types")
     )
-    
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(UniformSale.STATUS_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Statuses")
     )
-    
     sale_date_from = forms.DateField(
-        label='Sale Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Sale Date From', required=False, widget=DatePickerInput()
     )
-    
     sale_date_to = forms.DateField(
-        label='Sale Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Sale Date To', required=False, widget=DatePickerInput()
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
-            self.fields['student'].queryset = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).order_by('first_name', 'last_name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
+            self.fields['academic_session'].queryset = (
+                AcademicSession.objects.all().order_by('-start_date')
+            )
+            self.fields['fiscal_period'].queryset = (
+                FiscalPeriod.objects.all().order_by('-start_date')
+            )
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
 
@@ -1200,11 +962,8 @@ class UniformSaleFilterForm(DateRangeFilterForm):
 # =============================================================================
 
 class MeasurementSessionForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """
-    Form for creating/editing measurement sessions.
-    Uses school timezone for date validations. ⭐
-    """
-    
+    """Form for creating/editing measurement sessions. Uses school timezone. ⭐"""
+
     class Meta:
         model = MeasurementSession
         fields = [
@@ -1217,135 +976,81 @@ class MeasurementSessionForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
             }),
             'session_type': forms.Select(attrs={'class': 'form-select'}),
             'session_date': DatePickerInput(),
-            'start_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'form-control'
-            }),
-            'end_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'form-control'
-            }),
+            'start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
             'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'target_classes': forms.SelectMultiple(attrs={
-                'class': 'form-select',
-                'size': '5'
-            }),
-            'target_students': forms.SelectMultiple(attrs={
-                'class': 'form-select',
-                'size': '5'
-            }),
-            'notes': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Session notes...'
-            }),
+            'target_classes': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'}),
+            'target_students': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'}),
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Session notes...'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
             ).order_by('-start_date')
-            
             self.fields['target_classes'].queryset = Class.objects.filter(
                 is_active=True
             ).order_by('academic_level__level_order', 'name')
-            
             self.fields['target_students'].queryset = Student.objects.filter(
                 enrollment_status='ACTIVE'
             ).order_by('first_name', 'last_name')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default session date (uses school timezone) ⭐
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['session_date'].initial = get_school_today()
-        
-        # Help text
         self.fields['target_classes'].help_text = "Leave empty to measure all students"
         self.fields['target_students'].help_text = "Leave empty if measuring by class"
-    
+
     def clean(self):
-        """Validate session data using school timezone ⭐"""
         cleaned_data = super().clean()
-        
-        # Validate session date (uses school timezone) ⭐
         session_date = cleaned_data.get('session_date')
-        
         from core.utils import get_school_today
         today = get_school_today()
-        
         if session_date and session_date < today - timezone.timedelta(days=365):
             self.add_error('session_date',
-                'Session date is more than a year in the past. Please verify.'
-            )
-        
-        # Validate time range
+                'Session date is more than a year in the past. Please verify.')
         start_time = cleaned_data.get('start_time')
         end_time = cleaned_data.get('end_time')
-        
-        if start_time and end_time:
-            if end_time <= start_time:
-                raise ValidationError({
-                    'end_time': 'End time must be after start time.'
-                })
-        
+        if start_time and end_time and end_time <= start_time:
+            raise ValidationError({'end_time': 'End time must be after start time.'})
         return cleaned_data
 
 
 class MeasurementSessionFilterForm(DateRangeFilterForm):
-    """
-    Filter form for measurement sessions.
-    Uses school timezone for date filters. ⭐
-    """
-    
+    """Filter form for measurement sessions. Uses school timezone. ⭐"""
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by session name...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by session name...'})
     )
-    
     session_type = forms.ChoiceField(
         label='Session Type',
         choices=[('', 'All Types')] + list(MeasurementSession.SESSION_TYPES),
         required=False,
         widget=SelectWithDefault(default_label="All Types")
     )
-    
     academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=False,
+        label='Academic Session', queryset=None, required=False,
         widget=SelectWithDefault(default_label="All Sessions")
     )
-    
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(MeasurementSession.STATUS_CHOICES),
         required=False,
         widget=SelectWithDefault(default_label="All Statuses")
     )
-    
     session_date_from = forms.DateField(
-        label='Session Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Session Date From', required=False, widget=DatePickerInput()
     )
-    
     session_date_to = forms.DateField(
-        label='Session Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Session Date To', required=False, widget=DatePickerInput()
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         try:
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
@@ -1359,11 +1064,8 @@ class MeasurementSessionFilterForm(DateRangeFilterForm):
 # =============================================================================
 
 class StudentUniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """
-    Form for creating/editing student uniform size recommendations.
-    Uses school timezone for date validations. ⭐
-    """
-    
+    """Form for student uniform size recommendations. Uses school timezone. ⭐"""
+
     class Meta:
         model = StudentUniformSize
         fields = [
@@ -1373,8 +1075,7 @@ class StudentUniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
         ]
         widgets = {
             'student': forms.Select(attrs={
-                'class': 'form-select',
-                'data-placeholder': 'Select student...'
+                'class': 'form-select', 'data-placeholder': 'Select student...'
             }),
             'uniform_item': forms.Select(attrs={'class': 'form-select'}),
             'recommended_size': forms.Select(attrs={'class': 'form-select'}),
@@ -1382,17 +1083,12 @@ class StudentUniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
             'sizing_method': forms.Select(attrs={'class': 'form-select'}),
             'confidence_level': forms.Select(attrs={'class': 'form-select'}),
             'recommendation_date': DatePickerInput(),
-            'notes': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Additional notes...'
-            }),
+            'notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Additional notes...'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         student = kwargs.pop('student', None)
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
         try:
             if student:
                 self.fields['student'].initial = student
@@ -1400,23 +1096,17 @@ class StudentUniformSizeForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
                 self.fields['student'].queryset = Student.objects.filter(
                     enrollment_status='ACTIVE'
                 ).order_by('first_name', 'last_name')
-            
             self.fields['uniform_item'].queryset = UniformItem.objects.filter(
-                is_active=True,
-                requires_sizing=True
+                is_active=True, requires_sizing=True
             ).order_by('name')
-            
             self.fields['recommended_size'].queryset = UniformSize.objects.filter(
                 is_active=True
             ).order_by('display_order')
-            
             self.fields['academic_session'].queryset = AcademicSession.objects.filter(
                 is_active=True
             ).order_by('-start_date')
         except Exception as e:
             logger.error(f"Error setting querysets: {e}")
-        
-        # Set default recommendation date (uses school timezone) ⭐
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['recommendation_date'].initial = get_school_today()

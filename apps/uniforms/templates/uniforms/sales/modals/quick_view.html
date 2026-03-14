@@ -1,0 +1,137 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">
+                <i class="pe-7s-shopbag me-2"></i>{{ sale.sale_number }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-3">
+
+            <!-- Status banner -->
+            <div class="text-center mb-3">
+                <span class="badge fs-6
+                    {% if sale.status == 'DRAFT' %}bg-secondary
+                    {% elif sale.status == 'PENDING' %}bg-warning text-dark
+                    {% elif sale.status == 'PAID' %}bg-success
+                    {% elif sale.status == 'PARTIAL' %}bg-info
+                    {% elif sale.status == 'ISSUED' %}bg-primary
+                    {% elif sale.status == 'CANCELLED' %}bg-danger
+                    {% elif sale.status == 'RETURNED' %}bg-secondary
+                    {% endif %}">
+                    {% if sale.cancelled %}CANCELLED
+                    {% elif sale.returned %}RETURNED
+                    {% else %}{{ sale.get_status_display }}
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="row g-3">
+                <!-- Left column -->
+                <div class="col-md-6">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted" style="width:45%;">Student</td>
+                                <td><strong>{{ sale.student.get_full_name }}</strong></td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Sale Type</td>
+                                <td>{{ sale.get_sale_type_display }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Sale Date</td>
+                                <td>{{ sale.sale_date|date:"d M Y" }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Academic Session</td>
+                                <td>{{ sale.academic_session|default:"—" }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Fiscal Period</td>
+                                <td>{{ sale.fiscal_period|default:"—" }}</td>
+                            </tr>
+                            {% if sale.payment_method %}
+                            <tr>
+                                <td class="text-muted">Payment Method</td>
+                                <td>{{ sale.payment_method }}</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Right column: financials -->
+                <div class="col-md-6">
+                    <div class="p-3 bg-light rounded">
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-muted">Items</span>
+                            <span>{{ item_count }} item(s)</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-muted">Subtotal</span>
+                            <span>{{ sale.subtotal|format_currency }}</span>
+                        </div>
+                        {% if sale.discount_amount %}
+                        <div class="d-flex justify-content-between py-1 text-success">
+                            <span>Discount</span>
+                            <span>-{{ sale.discount_amount|amount }}</span>
+                        </div>
+                        {% endif %}
+                        {% if sale.tax_amount %}
+                        <div class="d-flex justify-content-between py-1 text-muted">
+                            <span>Tax</span>
+                            <span>{{ sale.tax_amount|amount }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="d-flex justify-content-between py-2 border-top mt-1 fw-bold">
+                            <span>Total</span>
+                            <span>{{ sale.total_amount|format_currency }}</span>
+                        </div>
+                        {% if sale.paid_amount %}
+                        <div class="d-flex justify-content-between py-1 text-success">
+                            <span>Paid</span>
+                            <span>{{ sale.paid_amount|format_currency }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 {{ sale.balance|balance_color_class }}">
+                            <span>Balance</span>
+                            <span>{{ sale.balance|format_currency }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if sale.fee_invoice or sale.journal_entry %}
+                    <div class="mt-2 p-2 bg-light rounded" style="font-size:0.8rem;">
+                        {% if sale.fee_invoice %}
+                        <div><i class="fa fa-file-invoice me-1 text-muted"></i>Invoice: {{ sale.fee_invoice.invoice_number }}</div>
+                        {% endif %}
+                        {% if sale.journal_entry %}
+                        <div><i class="fa fa-book me-1 text-muted"></i>Journal: {{ sale.journal_entry.entry_number }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if sale.notes %}
+            <div class="mt-3 p-2 bg-light rounded" style="font-size:0.875rem;">
+                <i class="fa fa-sticky-note me-1 text-muted"></i><strong>Notes:</strong> {{ sale.notes }}
+            </div>
+            {% endif %}
+
+        </div>
+        <div class="modal-footer">
+            <a href="{% url 'uniforms:uniform_sale_detail' sale.pk %}" class="btn btn-primary btn-sm">
+                <i class="fa fa-eye me-1"></i>View Full Detail
+            </a>
+            {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
+            <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}" class="btn btn-outline-primary btn-sm">
+                <i class="fa fa-edit me-1"></i>Edit
+            </a>
+            {% endif %}
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+    </div>
+</div>

@@ -37,6 +37,7 @@
     justify-content: center;
     font-weight: bold;
     margin-right: 10px;
+    flex-shrink: 0;
 }
 
 .wizard-step.active .step-number {
@@ -141,21 +142,8 @@
     background-color: #e7f3ff !important;
 }
 
-.student-avatar {
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 12px;
-}
-
 /* ============================================================================
-   SELECTION SUMMARY
+   SELECTION SUMMARY BAR (FIXED BOTTOM)
    ============================================================================ */
 
 .selection-summary {
@@ -169,6 +157,7 @@
     box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
     z-index: 1000;
     display: none;
+    transition: all 0.3s ease;
 }
 
 .selection-summary.active {
@@ -195,6 +184,7 @@
     padding: 8px 16px;
     border-radius: 20px;
     font-weight: bold;
+    white-space: nowrap;
 }
 
 /* ============================================================================
@@ -244,25 +234,25 @@
     .wizard-steps {
         flex-direction: column;
     }
-    
+
     .wizard-step {
         max-width: 100%;
         margin-bottom: 10px;
     }
-    
+
     .step-connector {
         display: none;
     }
-    
+
     .filter-section {
         padding: 15px;
     }
-    
+
     .summary-content {
         flex-direction: column;
         gap: 10px;
     }
-    
+
     .summary-info {
         flex-direction: column;
         gap: 10px;
@@ -318,15 +308,16 @@
 <section class="section">
     <div class="row">
         <div class="col-lg-12">
-            
+
             <!-- Information Box -->
             <div class="info-box">
                 <i class="fa fa-lightbulb"></i>
-                <strong>How it works:</strong> 
-                Select students from the list below using checkboxes. You can filter students by level, status, or search by name. 
+                <strong>How it works:</strong>
+                Select students from the list below using checkboxes. You can filter students by level,
+                status, or search by name. Your selections are preserved when you navigate between pages.
                 Then proceed to Step 2 to configure enrollment details for all selected students.
             </div>
-            
+
             {% if target_class %}
             <div class="info-box warning">
                 <i class="fa fa-info-circle"></i>
@@ -341,17 +332,17 @@
                         <i class="fa fa-filter me-2"></i>Student Filters
                     </h5>
                 </div>
-                
+
                 <form id="filterForm" class="row g-3"
                       hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
                       hx-target="#student-selection-results"
                       hx-trigger="input changed delay:500ms from:#{{ form.search.id_for_label }}, change from:select"
                       hx-include="[name='class_id'], [name='session_id']">
-                    
-                    <!-- Hidden inputs for class and session -->
+
+                    <!-- Hidden inputs for class and session context -->
                     <input type="hidden" name="class_id" value="{{ request.GET.class_id }}">
                     <input type="hidden" name="session_id" value="{{ request.GET.session_id }}">
-                    
+
                     <!-- Search -->
                     <div class="col-md-4">
                         <label for="{{ form.search.id_for_label }}" class="form-label small text-muted mb-1">
@@ -359,7 +350,7 @@
                         </label>
                         {{ form.search }}
                     </div>
-                    
+
                     <!-- Current Level -->
                     <div class="col-md-3">
                         <label for="{{ form.current_level.id_for_label }}" class="form-label small text-muted mb-1">
@@ -367,7 +358,7 @@
                         </label>
                         {{ form.current_level }}
                     </div>
-                    
+
                     <!-- Enrollment Status -->
                     <div class="col-md-3">
                         <label for="{{ form.enrollment_status.id_for_label }}" class="form-label small text-muted mb-1">
@@ -375,7 +366,7 @@
                         </label>
                         {{ form.enrollment_status }}
                     </div>
-                    
+
                     <!-- Gender -->
                     <div class="col-md-2">
                         <label for="{{ form.gender.id_for_label }}" class="form-label small text-muted mb-1">
@@ -383,7 +374,7 @@
                         </label>
                         {{ form.gender }}
                     </div>
-                    
+
                     <!-- Second Row -->
                     <div class="col-md-4">
                         <div class="form-check">
@@ -393,7 +384,7 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="col-md-4">
                         <div class="form-check">
                             {{ form.show_only_eligible }}
@@ -402,7 +393,7 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <!-- Sort By -->
                     <div class="col-md-4">
                         <label for="{{ form.sort_by.id_for_label }}" class="form-label small text-muted mb-1">
@@ -418,18 +409,19 @@
                 <div class="table-header-actions">
                     <h6 class="mb-0">
                         <i class="fa fa-users me-2"></i>Available Students
+                        <span class="badge bg-secondary ms-2" id="totalCountBadge"></span>
                     </h6>
                     <div class="selection-controls">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
-                            <i class="fa fa-check-double me-1"></i> Select All
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllVisible()">
+                            <i class="fa fa-check-double me-1"></i> Select Page
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
-                            <i class="fa fa-times me-1"></i> Clear Selection
+                            <i class="fa fa-times me-1"></i> Clear All
                         </button>
                     </div>
                 </div>
-                
-                <!-- Results Container -->
+
+                <!-- Results Container — HTMX loads the partial here -->
                 <div id="student-selection-results"
                      hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
                      hx-trigger="load"
@@ -444,7 +436,7 @@
                     </div>
                 </div>
             </div>
-            
+
         </div>
     </div>
 </section>
@@ -461,8 +453,8 @@
                 No students selected
             </div>
         </div>
-        <div>
-            <button type="button" class="btn btn-secondary me-2" onclick="clearSelection()">
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-secondary" onclick="clearSelection()">
                 <i class="fa fa-times me-1"></i> Clear
             </button>
             <button type="button" class="btn btn-primary btn-lg" onclick="proceedToStep2()" id="proceedBtn" disabled>
@@ -472,7 +464,7 @@
     </div>
 </div>
 
-<!-- Add bottom padding to prevent content from being hidden by fixed summary bar -->
+<!-- Bottom padding so fixed bar doesn't obscure content -->
 <div style="height: 100px;"></div>
 
 {% endblock %}
@@ -480,170 +472,232 @@
 {% block extra_scripts %}
 <script>
 // ============================================================================
-// STUDENT SELECTION MANAGEMENT
+// SELECTION STATE
+// Use a Map (id → name) so selections persist across HTMX pagination swaps.
+// Students not currently visible in the DOM are never accidentally lost.
 // ============================================================================
 
-let selectedStudents = new Set();
+const selectedStudents = new Map();
 
-// This function is called by checkboxes in the partial template
-function updateSelectedCount() {
-    updateSelection();
+// ============================================================================
+// CORE SELECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Called by each checkbox's onchange. Adds or removes the student from the
+ * Map depending on checked state, then syncs the UI.
+ */
+function toggleStudentRow(checkbox) {
+    const id   = checkbox.value;
+    const name = checkbox.getAttribute('data-name') || 'Unknown Student';
+    const row  = checkbox.closest('tr');
+
+    if (checkbox.checked) {
+        selectedStudents.set(id, name);
+        row.classList.add('selected');
+    } else {
+        selectedStudents.delete(id);
+        row.classList.remove('selected');
+    }
+
+    updateSummaryBar();
+    updateLocalCountDisplay();
 }
 
-function updateSelection() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
+/**
+ * Select every checkbox currently visible in the DOM (current page only).
+ * Selections on other pages are preserved.
+ */
+function selectAllVisible() {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        cb.checked = true;
+        cb.closest('tr').classList.add('selected');
+        selectedStudents.set(cb.value, cb.getAttribute('data-name') || 'Unknown Student');
+    });
+    updateSummaryBar();
+    updateLocalCountDisplay();
+}
+
+/**
+ * Clear ALL selections, including students on other pages.
+ */
+function clearSelection() {
     selectedStudents.clear();
-    
-    checkboxes.forEach(checkbox => {
-        if (checkbox.checked) {
-            selectedStudents.add({
-                id: checkbox.value,
-                name: checkbox.getAttribute('data-name') || 'Unknown Student'
-            });
+
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        cb.checked = false;
+        cb.closest('tr').classList.remove('selected');
+    });
+
+    updateSummaryBar();
+    updateLocalCountDisplay();
+}
+
+/**
+ * After an HTMX swap, re-check boxes for students that were already selected
+ * (possibly selected on a previous page). This is what makes selection persist
+ * across pagination.
+ */
+function restoreCheckboxState() {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        if (selectedStudents.has(cb.value)) {
+            cb.checked = true;
+            cb.closest('tr').classList.add('selected');
+        } else {
+            cb.checked = false;
+            cb.closest('tr').classList.remove('selected');
         }
     });
-    
-    updateSummaryBar();
+    updateLocalCountDisplay();
 }
 
+// ============================================================================
+// UI SYNC FUNCTIONS
+// ============================================================================
+
+/**
+ * Update the fixed bottom summary bar.
+ */
 function updateSummaryBar() {
-    const summary = document.getElementById('selectionSummary');
-    const countElement = document.getElementById('selectedCount');
-    const namesElement = document.getElementById('selectedNames');
+    const summary    = document.getElementById('selectionSummary');
+    const countEl    = document.getElementById('selectedCount');
+    const namesEl    = document.getElementById('selectedNames');
     const proceedBtn = document.getElementById('proceedBtn');
-    
+
     const count = selectedStudents.size;
-    countElement.textContent = count;
-    
+    countEl.textContent = count;
+
     if (count > 0) {
         summary.classList.add('active');
         proceedBtn.disabled = false;
-        
-        if (count <= 5) {
-            const names = Array.from(selectedStudents).map(s => s.name).join(', ');
-            namesElement.textContent = names;
-        } else {
-            const firstFive = Array.from(selectedStudents).slice(0, 5).map(s => s.name).join(', ');
-            namesElement.textContent = `${firstFive} and ${count - 5} more`;
-        }
+
+        const names = Array.from(selectedStudents.values());
+        namesEl.textContent = count <= 5
+            ? names.join(', ')
+            : `${names.slice(0, 5).join(', ')} and ${count - 5} more`;
     } else {
         summary.classList.remove('active');
         proceedBtn.disabled = true;
-        namesElement.textContent = 'No students selected';
+        namesEl.textContent = 'No students selected';
     }
 }
 
-function selectAll() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = true;
-        checkbox.closest('tr').classList.add('selected');
-    });
-    updateSelection();
-}
+/**
+ * Update the local "X selected" counter inside the results partial,
+ * and set the indeterminate / checked state on the "Select All" checkbox.
+ */
+function updateLocalCountDisplay() {
+    const visibleChecked = document.querySelectorAll('.student-checkbox:checked').length;
+    const allVisible     = document.querySelectorAll('.student-checkbox').length;
 
-function clearSelection() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = false;
-        checkbox.closest('tr').classList.remove('selected');
-    });
-    selectedStudents.clear();
-    updateSummaryBar();
-}
+    // Local count display inside the partial
+    const displayEl = document.getElementById('selectedCountDisplay');
+    if (displayEl) displayEl.textContent = visibleChecked;
 
-function toggleStudentRow(checkbox) {
-    const row = checkbox.closest('tr');
-    if (checkbox.checked) {
-        row.classList.add('selected');
-    } else {
-        row.classList.remove('selected');
+    // Select-all checkbox state
+    const selectAllCb = document.getElementById('selectAllStudents');
+    if (selectAllCb && allVisible > 0) {
+        selectAllCb.checked       = visibleChecked === allVisible;
+        selectAllCb.indeterminate = visibleChecked > 0 && visibleChecked < allVisible;
     }
-    updateSelection();
 }
 
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+
+/**
+ * POSTs selected student IDs to Step 2, avoiding GET URL length limits.
+ */
 function proceedToStep2() {
     if (selectedStudents.size === 0) {
         alert('Please select at least one student to continue.');
         return;
     }
-    
-    const studentIds = Array.from(selectedStudents).map(s => s.id).join(',');
-    const classId = '{{ request.GET.class_id }}';
-    const sessionId = '{{ request.GET.session_id }}';
-    
-    let url = "{% url 'academics:bulk_enrollment_step2' %}?student_ids=" + studentIds;
-    
-    if (classId) {
-        url += "&class_id=" + classId;
+
+    const studentIds = Array.from(selectedStudents.keys()).join(',');
+    const classId    = '{{ request.GET.class_id }}';
+    const sessionId  = '{{ request.GET.session_id }}';
+
+    // Build and submit a hidden form via POST so we don't hit URL length limits
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = "{% url 'academics:bulk_enrollment_step2' %}";
+
+    const fields = {
+        'csrfmiddlewaretoken': '{{ csrf_token }}',
+        'student_ids'        : studentIds,
+        'class_id'           : classId,
+        'session_id'         : sessionId,
+    };
+
+    for (const [name, value] of Object.entries(fields)) {
+        if (!value) continue;
+        const input = document.createElement('input');
+        input.type  = 'hidden';
+        input.name  = name;
+        input.value = value;
+        form.appendChild(input);
     }
-    if (sessionId) {
-        url += "&session_id=" + sessionId;
-    }
-    
-    window.location.href = url;
+
+    document.body.appendChild(form);
+    form.submit();
 }
 
 // ============================================================================
-// HTMX EVENT LISTENERS
+// HTMX LIFECYCLE HOOKS
 // ============================================================================
 
-document.body.addEventListener('htmx:afterSwap', function(event) {
+/**
+ * After every HTMX swap into #student-selection-results:
+ *   1. Restore previously selected checkboxes (persists across pages).
+ *   2. Re-initialise Bootstrap tooltips.
+ */
+document.body.addEventListener('htmx:afterSwap', function (event) {
     if (event.detail.target.id === 'student-selection-results') {
-        // Reapply selection state after HTMX swap
-        const checkboxes = document.querySelectorAll('.student-checkbox');
-        checkboxes.forEach(checkbox => {
-            const studentId = checkbox.value;
-            const isSelected = Array.from(selectedStudents).some(s => s.id === studentId);
-            
-            if (isSelected) {
-                checkbox.checked = true;
-                checkbox.closest('tr').classList.add('selected');
-            }
-            
-            // Add event listener
-            checkbox.addEventListener('change', function() {
-                toggleStudentRow(this);
-            });
-        });
-        
-        // Re-initialize tooltips
+        restoreCheckboxState();
         initializeTooltips();
     }
 });
 
 // ============================================================================
-// TOOLTIP INITIALIZATION
+// BOOTSTRAP TOOLTIPS
 // ============================================================================
 
 function initializeTooltips() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        // Dispose existing instance to avoid duplicates
+        const existing = bootstrap.Tooltip.getInstance(el);
+        if (existing) existing.dispose();
+        new bootstrap.Tooltip(el);
     });
 }
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initializeTooltips();
-});
 
 // ============================================================================
 // KEYBOARD SHORTCUTS
 // ============================================================================
 
-document.addEventListener('keydown', function(event) {
-    // Ctrl/Cmd + A to select all (when not in input field)
-    if ((event.ctrlKey || event.metaKey) && event.key === 'a' && 
+document.addEventListener('keydown', function (event) {
+    // Ctrl/Cmd + A — select all visible (only when not typing in an input)
+    if ((event.ctrlKey || event.metaKey) && event.key === 'a' &&
         !['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
         event.preventDefault();
-        selectAll();
+        selectAllVisible();
     }
-    
-    // Escape to clear selection
+
+    // Escape — clear all selections
     if (event.key === 'Escape') {
         clearSelection();
     }
+});
+
+// ============================================================================
+// INITIALISE ON PAGE LOAD
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', function () {
+    initializeTooltips();
+    updateSummaryBar();
 });
 </script>
 {% endblock %}

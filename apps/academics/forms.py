@@ -1740,6 +1740,61 @@ class BulkEnrollmentStudentSelectionForm(BootstrapFormMixin, forms.Form):
                 f'Exclude students already enrolled in {self.academic_session.name}'
             )
 
+    def get_filtered_queryset(self):  # ← indented inside the class
+        from students.models import Student
+        from django.db.models import Q
+
+        qs = Student.objects.select_related(
+            'current_academic_level', 'admission_academic_level'
+        )
+
+        status = self.cleaned_data.get('enrollment_status')
+        if status:
+            qs = qs.filter(enrollment_status=status)
+        else:
+            qs = qs.filter(enrollment_status='ACTIVE')
+
+        query = self.cleaned_data.get('search', '').strip()
+        if query:
+            qs = qs.filter(
+                Q(first_name__icontains=query) |
+                Q(last_name__icontains=query) |
+                Q(admission_number__icontains=query)
+            )
+
+        level = self.cleaned_data.get('current_level')
+        if level:
+            qs = qs.filter(current_academic_level=level)
+
+        gender = self.cleaned_data.get('gender')
+        if gender:
+            qs = qs.filter(gender=gender)
+
+        if self.cleaned_data.get('exclude_already_enrolled') and self.academic_session:
+            enrolled_ids = StudentClassEnrollment.objects.filter(
+                academic_session=self.academic_session,
+                completion_status='ONGOING'
+            ).values_list('student_id', flat=True)
+            qs = qs.exclude(id__in=enrolled_ids)
+
+        if self.cleaned_data.get('show_only_eligible'):
+            from academics.models import AcademicProgress
+            eligible_ids = AcademicProgress.objects.filter(
+                is_eligible_for_promotion=True
+            ).values_list('student_id', flat=True)
+            qs = qs.filter(id__in=eligible_ids)
+
+        sort_by = self.cleaned_data.get('sort_by', 'name')
+        sort_map = {
+            'name': ('first_name', 'last_name'),
+            '-name': ('-first_name', '-last_name'),
+            'admission_number': ('admission_number',),
+            '-admission_date': ('-admission_date',),
+            'admission_date': ('admission_date',),
+        }
+        qs = qs.order_by(*sort_map.get(sort_by, ('first_name', 'last_name')))
+
+        return qs
 
 class BulkEnrollmentConfirmationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
     """Step 2: Configure enrollment details for selected students"""

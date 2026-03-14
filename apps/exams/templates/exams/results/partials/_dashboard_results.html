@@ -1,121 +1,221 @@
-<!-- exams/results/partials/_dashboard_results.html -->
-{% load exam_filters %}
+{% load static custom_filters %}
+{# ─────────────────────────────────────────────────────────────────────────────
+   exams/results/partials/_dashboard_results.html
 
-{% if results_data and category_subjects %}
-<div class="table-responsive">
-    <table class="table dashboard-table table-bordered mb-0">
-        <thead>
-            <tr>
-                <th width="50">Pos</th>
-                <th class="text-start">Student Name</th>
-                {% for subject in category_subjects %}
-                <th>{{ subject }}</th>
-                {% endfor %}
-                <th>Total</th>
-                <th>Average</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for data in results_data %}
-            <tr>
-                <td><strong>{{ data.position }}</strong></td>
-                <td class="text-start">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <div class="fw-bold">{{ data.student.get_full_name }}</div>
-                            <small class="text-muted">{{ data.student.admission_number }}</small>
-                        </div>
-                    </div>
-                </td>
-                {% for subject in category_subjects %}
-                    {% with result=data.subject_results|get_item:subject %}
-                    <td>
-                        {% if result.score is not None %}
-                            <div class="score-cell">{{ result.score }}</div>
-                            <div class="grade-cell text-muted">{{ result.grade|default:"-" }}</div>
-                            <div class="mt-1">
-                                {% if result.is_locked %}
-                                <i class="fa fa-lock text-warning" 
-                                   style="font-size: 0.7rem;"
-                                   data-bs-toggle="tooltip"
-                                   title="Grade Locked"></i>
-                                {% endif %}
-                                {% if result.is_published %}
-                                <i class="fa fa-check-circle text-success" 
-                                   style="font-size: 0.7rem;"
-                                   data-bs-toggle="tooltip"
-                                   title="Published"></i>
-                                {% endif %}
-                            </div>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    {% endwith %}
-                {% endfor %}
-                <td><strong>{{ data.total }}</strong></td>
-                <td><strong>{{ data.average }}</strong></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+   Swapped in/out by HTMX when the user clicks a category tab.
+   Also included directly by class_dashboard.html on first page load.
+
+   Context (all provided by class_results_dashboard):
+     class_instance, session, selected_abbr, selected_category,
+     exams_by_category, results_data, category_subjects,
+     students, stats
+#}
+
+<!-- ── Category tab strip ─────────────────────────────────────────────── -->
+{% if exams_by_category %}
+
+<div class="cat-tabs" id="cat-tab-strip">
+    {% for abbr, cat_data in exams_by_category.items %}
+        {% with cat=cat_data.category exams=cat_data.exams %}
+        <a class="cat-tab {% if abbr == selected_abbr %}active{% endif %}"
+           href="?session={{ session.pk }}&mode=dashboard&tab={{ abbr }}"
+           hx-get="?session={{ session.pk }}&mode=dashboard&tab={{ abbr }}"
+           hx-target="#results-container"
+           hx-swap="innerHTML"
+           hx-push-url="true"
+           hx-indicator="#results-container">
+            {{ cat.name }}
+            <span class="tab-count">{{ exams|length }}</span>
+        </a>
+        {% endwith %}
+    {% endfor %}
 </div>
 
-<!-- Actions Section -->
-{% if selected_category %}
-<div class="mt-3 p-3 bg-light rounded">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <h6 class="mb-1">{{ selected_category.name }}</h6>
-            <small class="text-muted">{{ results_data|length }} students</small>
-        </div>
-        <div class="btn-group">
-            <button type="button" 
-                    class="btn btn-sm btn-primary"
-                    hx-get="{% url 'exams:bulk_result_entry_modal' %}"
-                    hx-vals='{"examination_category": "{{ selected_category.pk }}", "class": "{{ class_instance.pk }}", "session": "{{ session.pk }}"}'
-                    hx-target="#modal-container"
-                    hx-swap="innerHTML">
-                <i class="fa fa-plus me-1"></i>Enter Results
-            </button>
-            <button type="button" 
-                    class="btn btn-sm btn-success"
-                    hx-get="{% url 'exams:bulk_publish_results_modal' %}"
-                    hx-vals='{"examination_category": "{{ selected_category.pk }}", "class": "{{ class_instance.pk }}", "session": "{{ session.pk }}"}'
-                    hx-target="#modal-container"
-                    hx-swap="innerHTML">
-                <i class="fa fa-check me-1"></i>Publish Results
-            </button>
-            <button type="button" 
-                    class="btn btn-sm btn-warning"
-                    hx-get="{% url 'exams:bulk_lock_grades_modal' %}"
-                    hx-vals='{"examination_category": "{{ selected_category.pk }}", "class": "{{ class_instance.pk }}", "session": "{{ session.pk }}"}'
-                    hx-target="#modal-container"
-                    hx-swap="innerHTML">
-                <i class="fa fa-lock me-1"></i>Lock Grades
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">
-                <i class="fa fa-print me-1"></i>Print
-            </button>
-        </div>
+{% else %}
+<!-- No examinations exist for this class/session yet -->
+<div class="no-category">
+    <i class="fas fa-folder-open d-block mb-2"></i>
+    No examinations are set up for <strong>{{ class_instance.get_display_name }}</strong>
+    in <strong>{{ session.name }}</strong>.
+    <div class="mt-3">
+        <a href="{% url 'exams:examination_create' %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-plus me-1"></i> Create Examination
+        </a>
     </div>
 </div>
 {% endif %}
 
-{% else %}
-<div class="alert alert-info mb-0">
-    <div class="d-flex align-items-center">
-        <i class="fa fa-info-circle me-2" style="font-size: 1.5rem;"></i>
+
+<!-- ── Results panel for the active tab ───────────────────────────────── -->
+{% if selected_category and exams_by_category %}
+
+<div class="results-wrap">
+
+    <!-- Toolbar -->
+    <div class="results-toolbar">
         <div>
-            <strong>No results found for this category</strong>
-            <p class="mb-0 mt-1 small">
-                {% if not exams_by_category|get_item:selected_category_abbr %}
-                    No examinations have been created for this category yet.
-                {% else %}
-                    Results have not been entered yet. Click "Enter Results" to begin.
-                {% endif %}
-            </p>
+            <h6>
+                {{ selected_category.name }}
+                <span style="font-size:.75rem;font-weight:400;color:#9da3b4;margin-left:.4rem;">
+                    — {{ category_subjects|length }} subject{{ category_subjects|length|pluralize }}
+                    &nbsp;·&nbsp;
+                    {{ students.count }} student{{ students.count|pluralize }}
+                </span>
+            </h6>
+        </div>
+        <div class="toolbar-right">
+            <!-- "Enter Results" → goes to the entry grid for this class + category -->
+            <a href="{% url 'exams:class_category_results_entry' class_pk=class_instance.pk category_pk=selected_category.pk %}?session={{ session.pk }}"
+               class="btn btn-sm btn-primary">
+                <i class="fas fa-pen me-1"></i> Enter Results
+            </a>
+            <a href="{% url 'exams:result_list' %}?examination=&class_instance={{ class_instance.pk }}"
+               class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-list me-1"></i> View All
+            </a>
         </div>
     </div>
+
+    <!-- Grid -->
+    {% if results_data %}
+    <div class="results-table-container">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th class="col-pos">#</th>
+                    <th class="col-name">Student</th>
+                    {% for subject_name in category_subjects %}
+                    <th class="col-subj">{{ subject_name }}</th>
+                    {% endfor %}
+                    <th class="col-total">Total</th>
+                    <th class="col-avg">Average</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in results_data %}
+                <tr>
+                    <!-- Position -->
+                    <td>
+                        <span class="pos-badge
+                            {% if row.position == 1 %}gold
+                            {% elif row.position == 2 %}silver
+                            {% elif row.position == 3 %}bronze
+                            {% else %}other{% endif %}">
+                            {{ row.position }}
+                        </span>
+                    </td>
+
+                    <!-- Student name -->
+                    <td class="col-name">
+                        <a href="{% url 'exams:result_list' %}?q={{ row.student.first_name }}+{{ row.student.last_name }}"
+                           style="color: inherit; text-decoration: none;">
+                            {{ row.student.get_full_name }}
+                        </a>
+                    </td>
+
+                    <!-- One column per subject -->
+                    {% for subject_name in category_subjects %}
+                        {% with cell=row.subject_results|get_item:subject_name %}
+                        <td>
+                            {% if cell.score is not None %}
+                            <div class="score-cell">
+                                <span class="score-val">{{ cell.score }}</span>
+                                {% if cell.grade %}
+                                <span class="grade-badge
+                                    {% if cell.grade == 'A' or cell.grade == 'A+' or cell.grade == 'A-' %}grade-A
+                                    {% elif cell.grade|slice:':1' == 'B' %}grade-B
+                                    {% elif cell.grade|slice:':1' == 'C' %}grade-C
+                                    {% elif cell.grade|slice:':1' == 'D' %}grade-D
+                                    {% elif cell.grade|slice:':1' == 'F' %}grade-F
+                                    {% else %}grade-default{% endif %}">
+                                    {{ cell.grade }}
+                                </span>
+                                {% endif %}
+                                <div class="cell-indicators">
+                                    {% if cell.is_locked %}
+                                    <span class="ind ind-lock" title="Grade locked">
+                                        <i class="fas fa-lock"></i>
+                                    </span>
+                                    {% endif %}
+                                    {% if cell.is_published %}
+                                    <span class="ind ind-pub" title="Published">
+                                        <i class="fas fa-check"></i>
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="score-val no-score">—</span>
+                            {% endif %}
+                        </td>
+                        {% endwith %}
+                    {% endfor %}
+
+                    <!-- Totals -->
+                    <td class="total-cell">
+                        {% if row.subjects_taken > 0 %}
+                            {{ row.total }}
+                        {% else %}
+                            <span style="color:#c0c4cc;">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="avg-cell">
+                        {% if row.subjects_taken > 0 %}
+                            {{ row.average }}
+                        {% else %}
+                            <span style="color:#c0c4cc;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Footer: quick stats bar -->
+    <div style="padding:.75rem 1.25rem;border-top:1px solid #f0f1f5;background:#fafbff;
+                display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.78rem;color:#6c757d;">
+        <span>
+            <i class="fas fa-users me-1 text-muted"></i>
+            {{ results_data|length }} student{{ results_data|length|pluralize }} ranked
+        </span>
+        <span>
+            <i class="fas fa-book me-1 text-muted"></i>
+            {{ category_subjects|length }} subject{{ category_subjects|length|pluralize }}
+        </span>
+        {% if selected_category %}
+        <span class="ms-auto">
+            <a href="{% url 'exams:class_category_results_entry' class_pk=class_instance.pk category_pk=selected_category.pk %}?session={{ session.pk }}"
+               style="color:#3d4fbd;font-weight:600;text-decoration:none;">
+                <i class="fas fa-pen me-1"></i>Enter / update scores →
+            </a>
+        </span>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <!-- No results yet for this category -->
+    <div class="empty-results">
+        <i class="fas fa-inbox d-block mb-3"></i>
+        <h6>No results entered yet</h6>
+        <p>
+            No scores have been entered for
+            <strong>{{ selected_category.name }}</strong> in
+            <strong>{{ class_instance.get_display_name }}</strong>.
+        </p>
+        <a href="{% url 'exams:class_category_results_entry' class_pk=class_instance.pk category_pk=selected_category.pk %}?session={{ session.pk }}"
+           class="btn btn-primary btn-sm mt-2">
+            <i class="fas fa-pen me-1"></i> Enter Results Now
+        </a>
+    </div>
+    {% endif %}
+
+</div><!-- /.results-wrap -->
+
+{% elif exams_by_category %}
+<!-- Categories exist but none is selected (shouldn't happen, but safe fallback) -->
+<div class="no-category">
+    <i class="fas fa-hand-pointer d-block mb-2"></i>
+    Select a category tab above to view results.
 </div>
 {% endif %}

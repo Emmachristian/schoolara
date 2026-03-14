@@ -1,0 +1,128 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <!-- ===== HEADER ===== -->
+        <div class="modal-header" style="background:#fff5f5; border-bottom:1px solid #fecaca;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="
+                    width:36px; height:36px; border-radius:8px;
+                    background:#fde8e8; display:flex; align-items:center;
+                    justify-content:center;">
+                    <i class="fa fa-trash" style="color:#e74c3c; font-size:15px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px; font-weight:700; color:#1a1a2e;">
+                        Delete Expense
+                    </h5>
+                    <div style="font-size:11px; color:#6c757d; margin-top:1px;">
+                        {{ expense.expense_number }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <!-- ===== BODY ===== -->
+        <div class="modal-body" style="padding:24px 22px;">
+
+            <!-- Warning block -->
+            <div style="
+                background:#fff5f5;
+                border:1px solid #fecaca;
+                border-left:4px solid #e74c3c;
+                border-radius:0 8px 8px 0;
+                padding:14px 16px;
+                margin-bottom:20px;
+                display:flex;
+                align-items:flex-start;
+                gap:10px;">
+                <i class="fa fa-exclamation-triangle" style="color:#e74c3c; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#7f1d1d; line-height:1.5;">
+                    <strong>This action cannot be undone.</strong>
+                    The expense and all its line items will be permanently deleted.
+                </div>
+            </div>
+
+            <!-- Expense summary -->
+            <div style="
+                background:#f8f9fa;
+                border:1px solid #e9ecef;
+                border-radius:10px;
+                padding:16px 18px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                    <div style="flex:1;">
+                        <div style="font-size:12px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px; font-weight:600;">
+                            Expense
+                        </div>
+                        <div style="font-size:15px; font-weight:700; color:#1a1a2e; margin-top:3px;">
+                            {{ expense.description }}
+                        </div>
+                        <div style="font-size:12px; color:#6c757d; margin-top:5px; display:flex; flex-wrap:wrap; gap:10px;">
+                            <span><i class="fa fa-tag me-1"></i>{{ expense.category.name }}</span>
+                            <span><i class="fa fa-calendar-alt me-1"></i>{{ expense.expense_date|date:"d M Y" }}</span>
+                            {% if expense.lines.count %}
+                            <span><i class="fa fa-list me-1"></i>{{ expense.lines.count }} line item{{ expense.lines.count|pluralize }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                        <div style="font-size:11px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px;">Amount</div>
+                        <div style="font-size:20px; font-weight:800; color:#e74c3c; margin-top:2px;">
+                            {{ expense.total_amount|money }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Only DRAFT/PENDING check -->
+            {% if expense.status not in 'DRAFT,PENDING_APPROVAL' %}
+            <div style="
+                margin-top:14px;
+                background:#fff8e1;
+                border:1px solid #ffe082;
+                border-left:4px solid #f39c12;
+                border-radius:0 8px 8px 0;
+                padding:12px 14px;
+                font-size:12px;
+                color:#856404;
+                display:flex;
+                align-items:center;
+                gap:8px;">
+                <i class="fa fa-lock" style="flex-shrink:0;"></i>
+                Expenses with status <strong>&nbsp;{{ expense.get_status_display }}&nbsp;</strong> cannot be deleted.
+                Cancel it first if you need to remove it.
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- ===== FOOTER ===== -->
+        <div class="modal-footer" style="background:#f8f9fa; border-top:1px solid #e9ecef; padding:14px 20px;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i> Cancel
+            </button>
+
+            {% if expense.status in 'DRAFT,PENDING_APPROVAL' %}
+            <form method="post" action="{% url 'finance:expense_delete' expense.pk %}"
+                  hx-post="{% url 'finance:expense_delete' expense.pk %}"
+                  hx-target="body"
+                  hx-swap="none"
+                  style="display:inline;">
+                {% csrf_token %}
+                <button type="submit"
+                        class="btn btn-danger btn-sm"
+                        style="min-width:130px;">
+                    <i class="fa fa-trash me-1"></i> Yes, Delete
+                </button>
+            </form>
+            {% else %}
+            <button type="button" class="btn btn-secondary btn-sm" disabled>
+                <i class="fa fa-lock me-1"></i> Cannot Delete
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

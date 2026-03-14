@@ -1827,17 +1827,45 @@ def expense_print_view(request, pk):
     """Generate printable expense"""
     expense = get_object_or_404(
         Expense.objects.select_related(
-            'category', 'fiscal_period', 'expense_account'
-        ).prefetch_related('lines', 'payments'),
+            'category',
+            'fiscal_period',
+            'fiscal_period__fiscal_year',
+            'academic_session',
+            'expense_account',
+            'budget_line__budget',
+            'budget_line__account',
+            'journal_entry',
+        ).prefetch_related(
+            'lines__expense_account',
+            'lines__tax_rate',
+            'lines__unit_of_measure',
+            'payments__payment_method',
+            'payments__account',
+        ),
         pk=pk
     )
-    
+
+    payments = expense.payments.select_related(
+        'payment_method', 'account'
+    ).order_by('-payment_date')
+
+    lines = expense.lines.select_related(
+        'expense_account', 'tax_rate', 'unit_of_measure'
+    )
+
+    total_paid = sum(p.amount for p in payments if p.is_active)
+    remaining  = expense.total_amount - total_paid
+
     context = {
-        'expense': expense,
-        'now': timezone.now(),
-        'title': f'Expense {expense.expense_number}',
+        'expense':   expense,
+        'lines':     lines,
+        'payments':  payments,
+        'total_paid': total_paid,
+        'remaining':  remaining,
+        'now':        timezone.now(),
+        'title':      f'Expense {expense.expense_number}',
     }
-    
+
     return render(request, 'finance/expenses/print.html', context)
 
 
@@ -2376,6 +2404,106 @@ def export_expense_payments_excel(request):
     wb.save(response)
     return response
 
+@login_required
+def expense_payment_print_receipt(request, pk):
+    """
+    Generate a printable payment receipt for an expense payment.
+    
+    Renders a clean, printer-friendly receipt showing:
+    - Payment details (reference, date, amount)
+    - Expense details (number, description, vendor)
+    - Account and payment method info
+    - Verification status
+    - Reversal notice (if reversed)
+    - Journal entry reference
+    """
+    payment = get_object_or_404(
+        ExpensePayment.objects.select_related(
+            'expense__category',
+            'expense__fiscal_period',
+            'payment_method',
+            'account',
+            'fiscal_period',
+            'journal_entry',
+            'reversal_journal_entry',
+        ),
+        pk=pk
+    )
+
+    # Resolve user display names safely
+    performed_by_user = payment.get_performed_by_user()
+    verified_by_user  = payment.get_verified_by_user()
+    reversed_by_user  = payment.get_reversed_by_user()
+
+    context = {
+        'payment': payment,
+        'performed_by_user': performed_by_user,
+        'verified_by_user': verified_by_user,
+        'reversed_by_user': reversed_by_user,
+        'now': timezone.now(),
+        'title': f'Payment Receipt – {payment.reference_number or payment.pk}',
+    }
+
+    return render(request, 'finance/expense_payments/print_receipt.html', context)
+
+@login_required
+def expense_payment_reversal_detail(request, pk):
+    """
+    Display full reversal details for a reversed expense payment.
+
+    The URL pk is the pk of the *original* payment that was reversed.
+    This view shows:
+    - Original payment info
+    - Who reversed it, when, and why
+    - The reversing journal entry
+    - Full audit trail
+    
+    Note: There is no separate Reversal model – reversal metadata is stored
+    directly on the ExpensePayment instance (reversed=True, reversed_on,
+    reversed_by_id, reversal_reason, reversal_journal_entry).
+    """
+    payment = get_object_or_404(
+        ExpensePayment.objects.select_related(
+            'expense__category',
+            'expense__fiscal_period',
+            'payment_method',
+            'account',
+            'fiscal_period',
+            'journal_entry',
+            'reversal_journal_entry',
+        ),
+        pk=pk
+    )
+
+    # This view only makes sense for reversed payments
+    if not payment.reversed:
+        messages.warning(
+            request,
+            "This payment has not been reversed.",
+            extra_tags='sweetalert'
+        )
+        return redirect('finance:expense_payment_detail', pk=pk)
+
+    # Resolve user objects
+    performed_by_user         = payment.get_performed_by_user()
+    verified_by_user          = payment.get_verified_by_user()
+    reversed_by_user          = payment.get_reversed_by_user()
+    reversal_approved_by_user = payment.get_reversal_approved_by_user()
+
+    # Full audit trail
+    audit_trail = payment.get_audit_trail()
+
+    context = {
+        'payment': payment,
+        'performed_by_user': performed_by_user,
+        'verified_by_user': verified_by_user,
+        'reversed_by_user': reversed_by_user,
+        'reversal_approved_by_user': reversal_approved_by_user,
+        'audit_trail': audit_trail,
+        'title': f'Reversal Details – {payment.reference_number or payment.pk}',
+    }
+
+    return render(request, 'finance/expense_payments/reversal_detail.html', context)
 
 # =============================================================================
 # JOURNAL VIEWS

@@ -219,11 +219,11 @@
     .category-filters {
         padding: 15px;
     }
-    
+
     .stats-card {
         margin-bottom: 15px;
     }
-    
+
     .dropdown-menu {
         min-width: 200px;
         right: 0 !important;
@@ -254,7 +254,7 @@
                 <a href="{% url 'fees:category_create' %}" class="btn btn-primary">
                     <i class="fa fa-plus me-1"></i> Create Category
                 </a>
-                <a href="{% url 'fees:category_list_print_view' %}" target="_blank" class="btn btn-outline-secondary">
+                <a href="{% url 'fees:category_list_print' %}" target="_blank" class="btn btn-outline-secondary">
                     <i class="fa fa-print me-1"></i> Print
                 </a>
             </div>
@@ -289,11 +289,11 @@
             </div>
             <div class="stats-content">
                 <div class="stats-label">Total Categories</div>
-                <h3>{{ stats.total_categories|default:0 }}</h3>
+                <h3>{{ stats.total|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
+
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
             <div class="stats-icon bg-success">
@@ -301,31 +301,31 @@
             </div>
             <div class="stats-content">
                 <div class="stats-label">Active Categories</div>
-                <h3>{{ stats.active_categories|default:0 }}</h3>
+                <h3>{{ stats.active|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
+
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-warning">
+            <div class="stats-icon bg-danger">
                 <i class="pe-7s-attention"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Mandatory</div>
-                <h3>{{ stats.configuration.mandatory|default:0 }}</h3>
+                <h3>{{ stats.mandatory|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
+
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-info">
+            <div class="stats-icon bg-warning">
                 <i class="pe-7s-cash"></i>
             </div>
             <div class="stats-content">
                 <div class="stats-label">Taxable</div>
-                <h3>{{ stats.configuration.taxable|default:0 }}</h3>
+                <h3>{{ stats.taxable|default:0 }}</h3>
             </div>
         </div>
     </div>
@@ -338,7 +338,7 @@
             <!-- Results Card -->
             <div class="main-card mb-3 card card-animate">
                 <div class="card-body">
-                    
+
                     <!-- Filter Header -->
                     <div class="filter-header">
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -360,10 +360,10 @@
                     <!-- Search & Filters with HTMX -->
                     <div class="category-filters">
                         <form id="searchForm" class="row g-3"
-                              hx-get="{% url 'fees:category_search' %}"
+                              hx-get="{% url 'fees:category_list' %}"
                               hx-target="#fee-category-list"
-                              hx-trigger="input changed delay:500ms from:#{{ filter_form.q.id_for_label }}, change from:select">
-                            
+                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
+
                             <!-- Search Input -->
                             <div class="col-md-4">
                                 <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
@@ -371,7 +371,7 @@
                                 </label>
                                 {{ filter_form.q }}
                             </div>
-                            
+
                             <!-- Category Type Filter -->
                             <div class="col-md-2">
                                 <label for="{{ filter_form.category_type.id_for_label }}" class="form-label small text-muted mb-1">
@@ -406,8 +406,8 @@
 
                             <!-- Advanced Filters Toggle -->
                             <div class="col-12">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" 
-                                        data-bs-toggle="collapse" 
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        data-bs-toggle="collapse"
                                         data-bs-target="#advancedFilters">
                                     <i class="fa fa-filter me-1"></i> Advanced Filters
                                 </button>
@@ -450,7 +450,7 @@
 
                     <!-- Results Container -->
                     <div id="fee-category-list"
-                         hx-get="{% url 'fees:category_search' %}"
+                         hx-get="{% url 'fees:category_list' %}"
                          hx-trigger="load"
                          hx-swap="innerHTML">
                         <!-- Initial loading state -->
@@ -468,23 +468,103 @@
     </div>
 </section>
 
+<!-- ========================================== -->
+<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
+<!-- ========================================== -->
+<div id="modal-container" style="display: none;">
+    <!-- Modal content loaded here via HTMX -->
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 // ============================================================================
-// HTMX EVENT LISTENERS - UPDATE STATS
+// HTMX EVENT LISTENERS
 // ============================================================================
 
+// Handle alerts from response headers
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title = xhr.getResponseHeader('HX-Alert-Title');
+
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745' :
+                                   type === 'error' ? '#dc3545' :
+                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success'
+            });
+        }, 300);
+    }
+});
+
+// ============================================================================
+// DYNAMIC MODAL HANDLER
+// ============================================================================
+
+let currentModal = null;
+
+// Show modal after HTMX loads content into #modal-container
 document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog = modalContainer.querySelector('.modal-dialog');
+
+        if (modalDialog) {
+            let modalWrapper = document.getElementById('dynamicModalWrapper');
+
+            // Remove existing modal wrapper if it exists
+            if (modalWrapper) {
+                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
+                if (existingModal) {
+                    existingModal.dispose();
+                }
+                modalWrapper.remove();
+            }
+
+            // Create new modal wrapper
+            modalWrapper = document.createElement('div');
+            modalWrapper.className = 'modal fade';
+            modalWrapper.id = 'dynamicModalWrapper';
+            modalWrapper.setAttribute('tabindex', '-1');
+            modalWrapper.setAttribute('aria-hidden', 'true');
+
+            // Move the modal-dialog into the wrapper
+            modalWrapper.appendChild(modalDialog);
+
+            // Append to body
+            document.body.appendChild(modalWrapper);
+
+            // Initialize and show modal
+            currentModal = new bootstrap.Modal(modalWrapper, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+
+            currentModal.show();
+
+            // Clean up when hidden
+            modalWrapper.addEventListener('hidden.bs.modal', function() {
+                modalWrapper.remove();
+                modalContainer.innerHTML = '';
+                currentModal = null;
+            });
+        }
+    }
+
+    // Reinitialize tooltips after content swap
     if (event.detail.target.id === 'fee-category-list') {
-        console.log('Fee category results updated');
-        
-        // Reinitialize tooltips after HTMX swap
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
+        initializeTooltips();
     }
 });
 
@@ -496,12 +576,16 @@ function resetFilters() {
     window.location.href = "{% url 'fees:category_list' %}";
 }
 
-// Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function() {
+function initializeTooltips() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+}
+
+// Initialize Bootstrap tooltips on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTooltips();
 });
 </script>
 {% endblock %}

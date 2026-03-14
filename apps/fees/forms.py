@@ -476,35 +476,70 @@ class FeesStructureItemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Model
         ).select_related('display_group').order_by(
             'display_group__display_order', 'display_order'
         )
+        
+        # These fields are optional — blank submissions from cloned rows
+        # default to 0.00 rather than raising a validation error
+        self.fields['tax_percentage'].required = False
+        self.fields['default_discount_percentage'].required = False
+        self.fields['max_scholarship_discount'].required = False
+        
+        # number_of_installments is optional when installments are disabled
+        self.fields['number_of_installments'].required = False
     
     def clean(self):
         """Validate structure item data"""
         cleaned_data = super().clean()
         
+        # ------------------------------------------------------------------
+        # Coerce blank/None optional decimal fields to safe defaults so that
+        # downstream comparisons never raise TypeError on None values.
+        # ------------------------------------------------------------------
+        tax_percentage = cleaned_data.get('tax_percentage') or Decimal('0.00')
+        cleaned_data['tax_percentage'] = tax_percentage
+
+        default_discount_percentage = (
+            cleaned_data.get('default_discount_percentage') or Decimal('0.00')
+        )
+        cleaned_data['default_discount_percentage'] = default_discount_percentage
+
+        number_of_installments = cleaned_data.get('number_of_installments') or 1
+        cleaned_data['number_of_installments'] = number_of_installments
+
+        # ------------------------------------------------------------------
+        # Scholarship discount validation
+        # ------------------------------------------------------------------
         scholarship_eligible = cleaned_data.get('scholarship_eligible')
         max_scholarship_discount = cleaned_data.get('max_scholarship_discount')
         
         if not scholarship_eligible and max_scholarship_discount:
-            self.add_error('max_scholarship_discount',
+            self.add_error(
+                'max_scholarship_discount',
                 'Cannot set max scholarship discount if item is not scholarship eligible.'
             )
         
+        # ------------------------------------------------------------------
+        # Tax validation
+        # ------------------------------------------------------------------
         is_taxable = cleaned_data.get('is_taxable', False)
-        tax_percentage = cleaned_data.get('tax_percentage') or Decimal('0.00')
         
         if is_taxable and tax_percentage == 0:
-            self.add_error('tax_percentage',
+            self.add_error(
+                'tax_percentage',
                 'Tax percentage must be greater than 0 if item is taxable.'
             )
         
+        # Auto-enable is_taxable when a non-zero percentage is supplied
         if not is_taxable and tax_percentage > 0:
             cleaned_data['is_taxable'] = True
         
+        # ------------------------------------------------------------------
+        # Installment validation
+        # ------------------------------------------------------------------
         is_payable_in_installments = cleaned_data.get('is_payable_in_installments')
-        number_of_installments = cleaned_data.get('number_of_installments')
         
         if is_payable_in_installments and number_of_installments < 2:
-            self.add_error('number_of_installments',
+            self.add_error(
+                'number_of_installments',
                 'Number of installments must be at least 2 when installments are enabled.'
             )
         
@@ -512,7 +547,6 @@ class FeesStructureItemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Model
             cleaned_data['number_of_installments'] = 1
         
         return cleaned_data
-
 
 class FeesStructureFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
     """

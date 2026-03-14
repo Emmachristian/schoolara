@@ -126,6 +126,9 @@ urlpatterns = [
     path('expenses/<uuid:pk>/modal/reject/', modal_views.expense_reject_modal, name='expense_reject_modal'),
     path('expenses/<uuid:pk>/modal/cancel/', modal_views.expense_cancel_modal, name='expense_cancel_modal'),
     path('expenses/<uuid:pk>/modal/quick-view/', modal_views.expense_quick_view_modal, name='expense_quick_view_modal'),
+    path('expense-payments/<uuid:pk>/modal/quick-view/', modal_views.expense_payment_detail_modal, name='expense_payment_quick_view_modal'),
+    path('expense-payments/<uuid:pk>/print/receipt/', views.expense_payment_print_receipt, name='expense_payment_print_receipt'),
+    path('expense-payments/reversals/<uuid:pk>/', views.expense_payment_reversal_detail, name='expense_payment_reversal_detail'),
 
     # Expense Lines (Inline Management)
     path('expenses/<uuid:expense_pk>/lines/add/modal/', modal_views.expense_line_form_modal, name='expense_line_add_modal'),

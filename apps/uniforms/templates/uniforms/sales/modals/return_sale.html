@@ -1,0 +1,127 @@
+{% load currency_filters %}
+
+<div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title">
+                <i class="fa fa-undo me-2"></i>Process Return
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body py-4">
+            {% if can_return %}
+                <div class="alert alert-info text-start">
+                    <strong>{{ sale.sale_number }}</strong><br>
+                    <small>Student: {{ sale.student.get_full_name }}</small><br>
+                    <small>Date: {{ sale.sale_date|date:"d M Y" }}</small><br>
+                    <small>Total: {{ sale.total_amount|format_currency }}</small>
+                </div>
+
+                <!-- Items being returned -->
+                <div class="mb-3">
+                    <strong class="d-block mb-2">Items to Return</strong>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-center">Size</th>
+                                    <th class="text-center">Qty</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr>
+                                    <td>{{ item.uniform_item.name }}</td>
+                                    <td class="text-center">{{ item.size.name|default:"—" }}</td>
+                                    <td class="text-center">{{ item.quantity }}</td>
+                                    <td class="text-end">{{ item.total_price|amount }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {% if warnings %}
+                <div class="alert alert-warning text-start">
+                    <strong><i class="fa fa-exclamation-circle me-2"></i>Note:</strong>
+                    {% for warning in warnings %}
+                    <div class="mt-1">{{ warning }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="alert alert-warning text-start">
+                    <strong><i class="fa fa-exclamation-circle me-2"></i>Important:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Items will be added back to inventory</li>
+                        <li>COGS and revenue journal entries will be reversed</li>
+                        <li>This action cannot be undone</li>
+                    </ul>
+                </div>
+
+                <form id="returnSaleForm"
+                      hx-post="{% url 'uniforms:uniform_sale_return' sale.pk %}"
+                      hx-target="#modal-container"
+                      hx-swap="innerHTML">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="return_reason" class="form-label">
+                            <strong>Return Reason <span class="text-danger">*</span></strong>
+                        </label>
+                        <textarea class="form-control"
+                                  id="return_reason"
+                                  name="return_reason"
+                                  rows="2"
+                                  required
+                                  placeholder="Why are items being returned?"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="return_condition" class="form-label">
+                            <strong>Item Condition <span class="text-danger">*</span></strong>
+                        </label>
+                        <select class="form-select" id="return_condition" name="return_condition" required>
+                            <option value="">— Select condition —</option>
+                            <option value="GOOD">Good — can be restocked</option>
+                            <option value="FAIR">Fair — can be restocked with discount</option>
+                            <option value="WORN">Worn — inspect before restocking</option>
+                            <option value="DAMAGED">Damaged — cannot be restocked</option>
+                            <option value="UNUSABLE">Unusable — write off</option>
+                        </select>
+                    </div>
+
+                    <div class="modal-footer px-0 pb-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fa fa-times me-1"></i>Back
+                        </button>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fa fa-undo me-1"></i>Confirm Return
+                        </button>
+                    </div>
+                </form>
+
+            {% else %}
+                <div class="text-center mb-3">
+                    <i class="fa fa-lock text-danger" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-center mb-3 text-danger">Cannot Process Return</h4>
+                <div class="alert alert-danger text-start">
+                    {% for warning in warnings %}
+                    <div class="mb-1">
+                        <i class="fa fa-exclamation-circle me-2"></i>{{ warning }}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="modal-footer px-0 pb-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fa fa-times me-1"></i>Close
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

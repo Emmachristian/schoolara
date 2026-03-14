@@ -1,0 +1,1304 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   PAYMENT DETAIL PAGE
+   ============================================================================ */
+
+:root {
+    --ink:        #0f172a;
+    --ink-mid:    #334155;
+    --ink-muted:  #64748b;
+    --ink-faint:  #94a3b8;
+    --surface:    #ffffff;
+    --surface-2:  #f8fafc;
+    --surface-3:  #f1f5f9;
+    --border:     #e2e8f0;
+    --border-2:   #cbd5e1;
+    --accent:     #1d4ed8;
+    --accent-lt:  #eff6ff;
+    --green:      #15803d;
+    --green-lt:   #f0fdf4;
+    --amber:      #b45309;
+    --amber-lt:   #fffbeb;
+    --red:        #dc2626;
+    --red-lt:     #fef2f2;
+    --violet:     #7c3aed;
+    --violet-lt:  #f5f3ff;
+    --radius:     10px;
+}
+
+/* ── Hero ── */
+.pmt-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--green);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 22px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+
+.pmt-hero.reversed { border-top-color: var(--red); }
+.pmt-hero.refunded { border-top-color: var(--amber); }
+
+.pmt-hero-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.pmt-hero-id {
+    font-family: 'Courier New', monospace;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.pmt-number-tag {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.pmt-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    margin-top: 14px;
+}
+
+.pmt-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pmt-meta-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--ink-faint);
+}
+
+.pmt-meta-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.pmt-amount-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.pmt-total-box { text-align: right; }
+.pmt-total-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--ink-muted);
+    font-weight: 600;
+}
+.pmt-total-value {
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+.pmt-total-value.active   { color: var(--green); }
+.pmt-total-value.reversed { color: var(--red); text-decoration: line-through; opacity: .6; }
+.pmt-total-value.refunded { color: var(--amber); text-decoration: line-through; opacity: .6; }
+
+/* ── Status Pills ── */
+.st-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.st-completed { background: var(--green-lt);   color: var(--green);  border: 1px solid #bbf7d0; }
+.st-pending   { background: var(--amber-lt);   color: var(--amber);  border: 1px solid #fde68a; }
+.st-reversed  { background: var(--red-lt);     color: var(--red);    border: 1px solid #fecaca; }
+.st-refunded  { background: var(--amber-lt);   color: var(--amber);  border: 1px solid #fde68a; }
+.st-failed    { background: var(--red-lt);     color: var(--red);    border: 1px solid #fecaca; }
+.st-cancelled { background: var(--surface-3);  color: var(--ink-muted); border: 1px solid var(--border-2); }
+.st-verified  { background: var(--accent-lt);  color: var(--accent); border: 1px solid #bfdbfe; }
+
+/* ── Cards ── */
+.pmt-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.pmt-card-head {
+    background: var(--surface-2);
+    padding: 13px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pmt-card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.pmt-card-body { padding: 20px 22px; }
+
+/* ── Info Grid ── */
+.pmt-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+}
+
+.pmt-info-cell {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+.pmt-info-cell:nth-child(odd)  { padding-right: 24px; }
+.pmt-info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.pmt-info-cell:last-child,
+.pmt-info-cell:nth-last-child(2) { border-bottom: none; }
+.pmt-info-cell.full-width {
+    grid-column: span 2;
+    border-left: none !important;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.pmt-info-lbl {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--ink-faint);
+    margin-bottom: 3px;
+}
+.pmt-info-val {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.pmt-info-val.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12.5px;
+}
+.pmt-info-val small {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    margin-top: 1px;
+}
+
+/* ── Breakdown Table ── */
+.breakdown-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.breakdown-tbl thead th {
+    background: var(--surface-2);
+    padding: 10px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--ink-muted);
+    border-bottom: 2px solid var(--border);
+}
+.breakdown-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink);
+    vertical-align: middle;
+}
+.breakdown-tbl tbody tr:last-child td { border-bottom: none; }
+.breakdown-tbl tbody tr:hover { background: #fafbff; }
+
+/* ── Audit Timeline ── */
+.audit-timeline { position: relative; padding-left: 30px; }
+.audit-timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px; top: 4px; bottom: 4px;
+    width: 2px;
+    background: var(--border);
+}
+
+.tl-item { position: relative; padding-bottom: 20px; }
+.tl-item:last-child { padding-bottom: 0; }
+
+.tl-dot {
+    position: absolute;
+    left: -26px; top: 3px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2.5px solid #fff;
+    background: var(--ink-faint);
+    box-shadow: 0 0 0 2px var(--ink-faint);
+}
+.tl-dot.created   { background: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.tl-dot.verified  { background: var(--green);  box-shadow: 0 0 0 2px var(--green); }
+.tl-dot.reversed  { background: var(--red);    box-shadow: 0 0 0 2px var(--red); }
+.tl-dot.refunded  { background: var(--amber);  box-shadow: 0 0 0 2px var(--amber); }
+.tl-dot.journal   { background: var(--violet); box-shadow: 0 0 0 2px var(--violet); }
+.tl-dot.receipt   { background: var(--teal, #0f766e); box-shadow: 0 0 0 2px var(--teal, #0f766e); }
+
+.tl-content {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 11px 15px;
+}
+.tl-title { font-weight: 700; font-size: 13px; color: var(--ink); }
+.tl-date  { font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+.tl-note  { font-size: 12px; color: var(--ink-mid); margin-top: 5px; font-style: italic; border-top: 1px solid var(--border); padding-top: 5px; }
+
+/* ── Side Cards ── */
+.side-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+.side-card-head {
+    background: var(--surface-2);
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.side-card-body { padding: 14px 18px; }
+
+.side-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+.side-row:last-child { border-bottom: none; }
+.side-row .s-label { color: var(--ink-muted); font-size: 12.5px; }
+.side-row .s-value { font-weight: 700; color: var(--ink); }
+.side-row .s-value.green  { color: var(--green); }
+.side-row .s-value.red    { color: var(--red); }
+.side-row .s-value.amber  { color: var(--amber); }
+.side-row .s-value.accent { color: var(--accent); }
+.side-row .s-value.muted  { color: var(--ink-muted); font-weight: 500; }
+.side-row.divider-row {
+    border-top: 2px solid var(--border-2);
+    padding-top: 11px;
+    margin-top: 4px;
+}
+.side-row.divider-row .s-label { font-weight: 700; color: var(--ink); font-size: 13px; }
+.side-row.divider-row .s-value { font-size: 15px; font-weight: 900; }
+
+/* ── Warning / Reversal banners ── */
+.state-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 22px;
+    font-size: 13px;
+    border: 1px solid transparent;
+}
+.state-banner.reversed {
+    background: var(--red-lt);
+    border-color: #fecaca;
+    border-left: 4px solid var(--red);
+    border-radius: 0 8px 8px 0;
+    color: #7f1d1d;
+}
+.state-banner.refunded {
+    background: var(--amber-lt);
+    border-color: #fde68a;
+    border-left: 4px solid var(--amber);
+    border-radius: 0 8px 8px 0;
+    color: #78350f;
+}
+
+/* ── Method chip ── */
+.method-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 4px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+/* ── Empty State ── */
+.empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--ink-faint);
+}
+.empty-state i { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+.empty-state p { font-size: 13px; margin: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .pmt-hero { grid-template-columns: 1fr; }
+    .pmt-amount-block { align-items: flex-start; }
+    .pmt-info-grid { grid-template-columns: 1fr; }
+    .pmt-info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════════════════════════════════
+     PAGE HEADER
+═══════════════════════════════════════════ -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-cash icon-gradient bg-happy-green"></i>
+            </div>
+            <div>
+                Payment Detail
+                <div class="page-title-subheading">
+                    {{ payment.payment_number }} &mdash; {{ payment.student.get_full_name }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'fees:payment_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </a>
+            <a href="{% url 'fees:payment_print_receipt' payment.pk %}" target="_blank"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-print me-1"></i> Print Receipt
+            </a>
+
+            {% if not payment.reversed and not payment.refunded %}
+                {% if not payment.is_verified %}
+                <button class="btn btn-sm btn-success me-1"
+                        hx-get="{% url 'fees:payment_verify_modal' payment.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-check me-1"></i> Verify
+                </button>
+                {% endif %}
+                <div class="btn-group">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <button class="dropdown-item"
+                                hx-get="{% url 'fees:payment_send_receipt_modal' payment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-envelope me-2 text-primary"></i> Send Receipt
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'fees:payment_reverse_modal' payment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-undo me-2"></i> Reverse Payment
+                        </button>
+                        <button class="dropdown-item text-warning"
+                                hx-get="{% url 'fees:payment_refund_modal' payment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-reply me-2"></i> Issue Refund
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'fees:payment_delete_modal' payment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Flash messages -->
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════
+     REVERSAL / REFUND STATE BANNERS
+═══════════════════════════════════════════ -->
+{% if payment.reversed %}
+<div class="state-banner reversed">
+    <i class="fa fa-undo fa-lg mt-1"></i>
+    <div>
+        <strong>This payment has been reversed.</strong>
+        No money was returned &mdash; this was an internal accounting correction only.
+        {% if payment.reversal_reason %}
+            <br><span style="font-size:12.5px;">Reason: {{ payment.reversal_reason }}</span>
+        {% endif %}
+        {% if payment.reversed_on %}
+            <br><span style="font-size:12px; opacity:.8;">Reversed on {{ payment.reversed_on|date:"d M Y, H:i" }}</span>
+        {% endif %}
+    </div>
+</div>
+{% elif payment.refunded %}
+<div class="state-banner refunded">
+    <i class="fa fa-reply fa-lg mt-1"></i>
+    <div>
+        <strong>This payment has been refunded.</strong>
+        Money was returned to the payer via <strong>{{ payment.refund_method }}</strong>.
+        {% if payment.refund_reference %}
+            Reference: <strong class="mono">{{ payment.refund_reference }}</strong>.
+        {% endif %}
+        {% if payment.refunded_on %}
+            <br><span style="font-size:12px; opacity:.8;">Refunded on {{ payment.refunded_on|date:"d M Y, H:i" }}</span>
+        {% endif %}
+        {% if payment.refund_notes %}
+            <br><span style="font-size:12.5px; margin-top:3px; display:block;">{{ payment.refund_notes }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════
+     HERO
+═══════════════════════════════════════════ -->
+<div class="pmt-hero {% if payment.reversed %}reversed{% elif payment.refunded %}refunded{% endif %}">
+    <div>
+        <div class="pmt-hero-top">
+            <span class="pmt-number-tag">Payment</span>
+            <span class="pmt-hero-id">{{ payment.payment_number }}</span>
+
+            {% if payment.reversed %}
+                <span class="st-pill st-reversed"><i class="fa fa-undo"></i> Reversed</span>
+            {% elif payment.refunded %}
+                <span class="st-pill st-refunded"><i class="fa fa-reply"></i> Refunded</span>
+            {% elif payment.status == 'COMPLETED' and payment.is_verified %}
+                <span class="st-pill st-verified"><i class="fa fa-check-double"></i> Verified</span>
+            {% elif payment.status == 'COMPLETED' %}
+                <span class="st-pill st-completed"><i class="fa fa-check-circle"></i> Completed</span>
+            {% elif payment.status == 'PENDING' %}
+                <span class="st-pill st-pending"><i class="fa fa-clock"></i> Pending</span>
+            {% elif payment.status == 'FAILED' %}
+                <span class="st-pill st-failed"><i class="fa fa-times-circle"></i> Failed</span>
+            {% elif payment.status == 'CANCELLED' %}
+                <span class="st-pill st-cancelled"><i class="fa fa-ban"></i> Cancelled</span>
+            {% else %}
+                <span class="st-pill st-pending">{{ payment.get_status_display }}</span>
+            {% endif %}
+
+            {% if payment.is_break_payment %}
+                <span class="st-pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;">
+                    <i class="fa fa-calendar-check"></i> Break Period
+                </span>
+            {% endif %}
+        </div>
+
+        <div class="pmt-hero-meta">
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Student</span>
+                <span class="pmt-meta-value">
+                    <a href="{% url 'students:student_profile' payment.student.pk %}"
+                       style="color:inherit;text-decoration:none;">
+                        {{ payment.student.get_full_name }}
+                    </a>
+                </span>
+            </div>
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Invoice</span>
+                <span class="pmt-meta-value">
+                    <a href="{% url 'fees:invoice_detail' payment.invoice.pk %}"
+                       style="color:inherit;text-decoration:none;font-family:monospace;">
+                        {{ payment.invoice.invoice_number }}
+                    </a>
+                </span>
+            </div>
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Payment Date</span>
+                <span class="pmt-meta-value">{{ payment.payment_date|date:"d M Y" }}</span>
+            </div>
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Method</span>
+                <span class="pmt-meta-value">{{ payment.payment_method.name }}</span>
+            </div>
+            {% if payment.receipt_number %}
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Receipt</span>
+                <span class="pmt-meta-value" style="font-family:monospace;">
+                    {{ payment.receipt_number }}
+                </span>
+            </div>
+            {% endif %}
+            {% if payment.academic_session %}
+            <div class="pmt-meta-item">
+                <span class="pmt-meta-label">Academic Session</span>
+                <span class="pmt-meta-value">{{ payment.academic_session }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="pmt-amount-block">
+        <div class="pmt-total-box">
+            <div class="pmt-total-label">Amount Paid</div>
+            <div class="pmt-total-value {% if payment.reversed %}reversed{% elif payment.refunded %}refunded{% else %}active{% endif %}">
+                {{ payment.amount|money }}
+            </div>
+        </div>
+        {% if payment.overpayment_amount > 0 %}
+        <div class="pmt-total-box">
+            <div class="pmt-total-label" style="color:var(--accent);">Overpayment</div>
+            <div style="font-size:16px;font-weight:800;color:var(--accent);">
+                +{{ payment.overpayment_amount|money }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════ -->
+<div class="row">
+
+    <!-- ── LEFT COLUMN ── -->
+    <div class="col-lg-8">
+
+        <!-- PAYMENT DETAILS -->
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-credit-card text-success"></i> Payment Details
+                </span>
+            </div>
+            <div class="pmt-card-body" style="padding:0 22px;">
+                <div class="pmt-info-grid">
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Payment Number</div>
+                        <div class="pmt-info-val mono">{{ payment.payment_number }}</div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Receipt Number</div>
+                        <div class="pmt-info-val mono">{{ payment.receipt_number|default:"—" }}</div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Payment Date</div>
+                        <div class="pmt-info-val">{{ payment.payment_date|date:"d M Y" }}</div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Payment Method</div>
+                        <div class="pmt-info-val">
+                            <span class="method-chip">
+                                <i class="fa fa-credit-card" style="font-size:10px;color:var(--ink-muted);"></i>
+                                {{ payment.payment_method.name }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Student</div>
+                        <div class="pmt-info-val">
+                            <a href="{% url 'students:student_profile' payment.student.pk %}" class="text-primary">
+                                {{ payment.student.get_full_name }}
+                            </a>
+                        </div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Invoice</div>
+                        <div class="pmt-info-val">
+                            <a href="{% url 'fees:invoice_detail' payment.invoice.pk %}" class="text-primary mono">
+                                {{ payment.invoice.invoice_number }}
+                            </a>
+                            <small>{{ payment.invoice.get_status_display }}</small>
+                        </div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Academic Session</div>
+                        <div class="pmt-info-val">{{ payment.academic_session|default:"—" }}</div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Fiscal Period</div>
+                        <div class="pmt-info-val">
+                            {% if payment.fiscal_period %}
+                                {{ payment.fiscal_period.name }}
+                                <small>{{ payment.fiscal_period.fiscal_year }}</small>
+                            {% else %}—{% endif %}
+                        </div>
+                    </div>
+
+                    {% if payment.reference_number %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Reference Number</div>
+                        <div class="pmt-info-val mono">{{ payment.reference_number }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.transaction_id %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Transaction ID</div>
+                        <div class="pmt-info-val mono">{{ payment.transaction_id }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if payment.remarks %}
+                    <div class="pmt-info-cell full-width" style="border-bottom:none;">
+                        <div class="pmt-info-lbl">Remarks</div>
+                        <div class="pmt-info-val" style="font-weight:500;line-height:1.6;">{{ payment.remarks }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- PAYER INFORMATION -->
+        {% if payment.paid_by_name or payment.paid_by_phone or payment.paid_by_email %}
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-user text-primary"></i> Payer Information
+                </span>
+            </div>
+            <div class="pmt-card-body" style="padding:0 22px;">
+                <div class="pmt-info-grid">
+                    {% if payment.paid_by_name %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Paid By</div>
+                        <div class="pmt-info-val">{{ payment.paid_by_name }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.paid_by_relationship %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Relationship</div>
+                        <div class="pmt-info-val">{{ payment.get_paid_by_relationship_display }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.paid_by_phone %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Phone</div>
+                        <div class="pmt-info-val mono">{{ payment.paid_by_phone }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.paid_by_email %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Email</div>
+                        <div class="pmt-info-val">{{ payment.paid_by_email }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- BANK / MOBILE MONEY DETAILS -->
+        {% if payment.bank_name or payment.cheque_number or payment.mobile_money_provider %}
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-university text-accent"></i>
+                    {% if payment.mobile_money_provider %}Mobile Money Details
+                    {% elif payment.cheque_number %}Cheque Details
+                    {% else %}Bank Details{% endif %}
+                </span>
+            </div>
+            <div class="pmt-card-body" style="padding:0 22px;">
+                <div class="pmt-info-grid">
+                    {% if payment.bank_name %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Bank Name</div>
+                        <div class="pmt-info-val">{{ payment.bank_name }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.account_number %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Account Number</div>
+                        <div class="pmt-info-val mono">{{ payment.account_number }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.cheque_number %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Cheque Number</div>
+                        <div class="pmt-info-val mono">{{ payment.cheque_number }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.cheque_date %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Cheque Date</div>
+                        <div class="pmt-info-val">{{ payment.cheque_date|date:"d M Y" }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.mobile_money_provider %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Provider</div>
+                        <div class="pmt-info-val">{{ payment.mobile_money_provider }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.mobile_number %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Mobile Number</div>
+                        <div class="pmt-info-val mono">{{ payment.mobile_number }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- FEE BREAKDOWN (if available) -->
+        {% if payment.fee_breakdown %}
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-list-ul text-success"></i> Fee Breakdown
+                </span>
+            </div>
+            <div style="padding:0;">
+                <table class="breakdown-tbl">
+                    <thead>
+                        <tr>
+                            <th>Fee Category</th>
+                            <th class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key, value in payment.fee_breakdown.items %}
+                        <tr>
+                            <td>{{ key }}</td>
+                            <td class="text-end fw-bold">{{ value|money }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- REVERSAL DETAILS -->
+        {% if payment.reversed %}
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-undo text-danger"></i> Reversal Details
+                </span>
+            </div>
+            <div class="pmt-card-body" style="padding:0 22px;">
+                <div class="pmt-info-grid">
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Reversed On</div>
+                        <div class="pmt-info-val">
+                            {{ payment.reversed_on|date:"d M Y, H:i" }}
+                        </div>
+                    </div>
+                    {% if payment.reversal_journal_entry %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Reversal Journal Entry</div>
+                        <div class="pmt-info-val">
+                            <a href="{% url 'finance:journal_entry_detail' payment.reversal_journal_entry.pk %}"
+                               class="text-primary mono">
+                                {{ payment.reversal_journal_entry.entry_number }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if payment.reversal_reason %}
+                    <div class="pmt-info-cell full-width" style="border-bottom:none;">
+                        <div class="pmt-info-lbl">Reason</div>
+                        <div class="pmt-info-val" style="font-weight:500;line-height:1.6;color:var(--red);">
+                            {{ payment.reversal_reason }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- REFUND DETAILS -->
+        {% if payment.refunded %}
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-reply text-warning"></i> Refund Details
+                </span>
+            </div>
+            <div class="pmt-card-body" style="padding:0 22px;">
+                <div class="pmt-info-grid">
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Refunded On</div>
+                        <div class="pmt-info-val">{{ payment.refunded_on|date:"d M Y, H:i" }}</div>
+                    </div>
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Refund Method</div>
+                        <div class="pmt-info-val">{{ payment.get_refund_method_display|default:payment.refund_method }}</div>
+                    </div>
+                    {% if payment.refund_reference %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Refund Reference</div>
+                        <div class="pmt-info-val mono">{{ payment.refund_reference }}</div>
+                    </div>
+                    {% endif %}
+                    {% if payment.refund_journal_entry %}
+                    <div class="pmt-info-cell">
+                        <div class="pmt-info-lbl">Refund Journal Entry</div>
+                        <div class="pmt-info-val">
+                            <a href="{% url 'finance:journal_entry_detail' payment.refund_journal_entry.pk %}"
+                               class="text-primary mono">
+                                {{ payment.refund_journal_entry.entry_number }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if payment.refund_notes %}
+                    <div class="pmt-info-cell full-width" style="border-bottom:none;">
+                        <div class="pmt-info-lbl">Refund Notes</div>
+                        <div class="pmt-info-val" style="font-weight:500;line-height:1.6;">
+                            {{ payment.refund_notes }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- AUDIT TRAIL -->
+        <div class="pmt-card">
+            <div class="pmt-card-head">
+                <span class="pmt-card-title">
+                    <i class="fa fa-history text-secondary"></i> Audit Trail
+                </span>
+            </div>
+            <div class="pmt-card-body">
+                {% if audit_trail %}
+                <div class="audit-timeline">
+                    {% for event in audit_trail %}
+                    <div class="tl-item">
+                        <div class="tl-dot
+                            {% if event.action == 'CREATED' %}created
+                            {% elif event.action == 'VERIFIED' %}verified
+                            {% elif event.action == 'REVERSED' or event.action == 'REVERSAL_JOURNAL_ENTRY' %}reversed
+                            {% elif event.action == 'REFUNDED' or event.action == 'REFUND_JOURNAL_ENTRY' %}refunded
+                            {% elif 'JOURNAL' in event.action %}journal
+                            {% elif event.action == 'RECEIPT_ISSUED' %}receipt
+                            {% endif %}">
+                        </div>
+                        <div class="tl-content">
+                            <div class="tl-title">
+                                {% if event.action == 'CREATED' %}Payment Created
+                                {% elif event.action == 'RECEIPT_ISSUED' %}Receipt Issued
+                                {% elif event.action == 'VERIFIED' %}Payment Verified
+                                {% elif event.action == 'JOURNAL_ENTRY_CREATED' %}Journal Entry Created
+                                {% elif event.action == 'REVERSED' %}Payment Reversed
+                                {% elif event.action == 'REVERSAL_JOURNAL_ENTRY' %}Reversal Journal Entry Created
+                                {% elif event.action == 'REFUNDED' %}Refund Issued
+                                {% elif event.action == 'REFUND_JOURNAL_ENTRY' %}Refund Journal Entry Created
+                                {% else %}{{ event.action|title }}
+                                {% endif %}
+                            </div>
+                            <div class="tl-date">
+                                {{ event.timestamp|date:"d M Y, H:i" }}
+                                {% if event.user %}&mdash; {{ event.user.get_full_name|default:event.user }}{% endif %}
+                            </div>
+                            {% if event.details %}
+                            <div class="tl-note">{{ event.details }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="pe-7s-note"></i>
+                    <p>No audit trail available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ── RIGHT / SIDEBAR COLUMN ── -->
+    <div class="col-lg-4">
+
+        <!-- AMOUNT SUMMARY -->
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-calculator text-success"></i> Amount Summary
+            </div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Total Payment</span>
+                    <span class="s-value {% if payment.reversed or payment.refunded %}muted{% else %}green{% endif %}">
+                        {{ payment.amount|money }}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Applied to Invoice</span>
+                    <span class="s-value">{{ payment.amount_applied_to_invoice|money }}</span>
+                </div>
+                {% if payment.overpayment_amount > 0 %}
+                <div class="side-row">
+                    <span class="s-label">Overpayment (Credit)</span>
+                    <span class="s-value accent">{{ payment.overpayment_amount|money }}</span>
+                </div>
+                {% endif %}
+                {% if payment.processing_fee_amount > 0 %}
+                <div class="side-row">
+                    <span class="s-label">Processing Fee</span>
+                    <span class="s-value amber">{{ payment.processing_fee_amount|money }}</span>
+                </div>
+                {% endif %}
+                {% if payment.reversed or payment.refunded %}
+                <div class="side-row divider-row">
+                    <span class="s-label">Effective Amount</span>
+                    <span class="s-value muted">{{ payment.effective_amount|money }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- VERIFICATION STATUS -->
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-shield-alt {% if payment.is_verified %}text-success{% else %}text-secondary{% endif %}"></i>
+                Verification Status
+            </div>
+            <div class="side-card-body">
+                <div class="text-center" style="padding:8px 0 14px;">
+                    {% if payment.is_verified %}
+                        <div style="width:52px;height:52px;border-radius:50%;background:var(--green-lt);border:2px solid #bbf7d0;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;">
+                            <i class="fa fa-check-double" style="color:var(--green);font-size:1.3rem;"></i>
+                        </div>
+                        <div style="font-weight:700;color:var(--green);font-size:13px;">Verified</div>
+                        {% if payment.verification_date %}
+                        <div style="font-size:11.5px;color:var(--ink-muted);margin-top:3px;">
+                            {{ payment.verification_date|date:"d M Y, H:i" }}
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div style="width:52px;height:52px;border-radius:50%;background:var(--amber-lt);border:2px solid #fde68a;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;">
+                            <i class="fa fa-clock" style="color:var(--amber);font-size:1.3rem;"></i>
+                        </div>
+                        <div style="font-weight:700;color:var(--amber);font-size:13px;">Pending Verification</div>
+                        {% if not payment.reversed and not payment.refunded %}
+                        <div style="margin-top:12px;">
+                            <button class="btn btn-success btn-sm"
+                                    hx-get="{% url 'fees:payment_verify_modal' payment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-check me-1"></i> Verify Now
+                            </button>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- STUDENT ACCOUNT SUMMARY -->
+        {% if account_summary %}
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-wallet text-primary"></i> Student Account
+            </div>
+            <div class="side-card-body">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-lt);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fa fa-user" style="color:var(--accent);font-size:.95rem;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:13.5px;color:var(--ink);">
+                            {{ account_summary.student.get_full_name }}
+                        </div>
+                        <span class="badge {% if account_summary.status == 'ACTIVE' %}bg-success{% else %}bg-secondary{% endif %}" style="font-size:10px;">
+                            {{ account_summary.status }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="side-row">
+                    <span class="s-label">Total Charged</span>
+                    <span class="s-value">{{ account_summary.total_charges|money }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Total Paid</span>
+                    <span class="s-value green">{{ account_summary.total_payments|money }}</span>
+                </div>
+                {% if account_summary.total_discounts > 0 %}
+                <div class="side-row">
+                    <span class="s-label">Total Discounts</span>
+                    <span class="s-value green">{{ account_summary.total_discounts|money }}</span>
+                </div>
+                {% endif %}
+                <div class="side-row divider-row">
+                    <span class="s-label">Account Balance</span>
+                    <span class="s-value {% if account_summary.has_outstanding %}red{% elif account_summary.has_credit %}green{% else %}muted{% endif %}">
+                        {% if account_summary.has_outstanding %}
+                            -{{ account_summary.outstanding_amount|money }}
+                        {% elif account_summary.has_credit %}
+                            +{{ account_summary.credit_amount|money }}
+                        {% else %}
+                            Settled
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <a href="{% url 'fees:account_detail' account_summary.student.financial_account.pk %}"
+                       class="btn btn-outline-primary btn-sm w-100">
+                        <i class="fa fa-external-link-alt me-1"></i> View Full Account
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- QUICK ACTIONS -->
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-bolt text-warning"></i> Quick Actions
+            </div>
+            <div class="side-card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'fees:payment_print_receipt' payment.pk %}" target="_blank"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-print me-1"></i> Print Receipt
+                    </a>
+                    {% if not payment.reversed and not payment.refunded %}
+                    <button class="btn btn-outline-primary btn-sm"
+                            hx-get="{% url 'fees:payment_send_receipt_modal' payment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-envelope me-1"></i> Email Receipt
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm"
+                            hx-get="{% url 'fees:payment_reverse_modal' payment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-undo me-1"></i> Reverse Payment
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm"
+                            hx-get="{% url 'fees:payment_refund_modal' payment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-reply me-1"></i> Issue Refund
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'fees:invoice_detail' payment.invoice.pk %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-file-invoice me-1"></i> View Invoice
+                    </a>
+                    <a href="{% url 'fees:payment_list' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Payments
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- JOURNAL ENTRY LINKS -->
+        {% if payment.journal_entry or payment.reversal_journal_entry or payment.refund_journal_entry %}
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-book text-secondary"></i> Journal Entries
+            </div>
+            <div class="side-card-body">
+                {% if payment.journal_entry %}
+                <div class="side-row">
+                    <span class="s-label">Payment Entry</span>
+                    <a href="{% url 'finance:journal_entry_detail' payment.journal_entry.pk %}"
+                       class="s-value accent" style="font-family:monospace;font-size:12.5px;">
+                        {{ payment.journal_entry.entry_number }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if payment.reversal_journal_entry %}
+                <div class="side-row">
+                    <span class="s-label">Reversal Entry</span>
+                    <a href="{% url 'finance:journal_entry_detail' payment.reversal_journal_entry.pk %}"
+                       class="s-value" style="font-family:monospace;font-size:12.5px;color:var(--red);">
+                        {{ payment.reversal_journal_entry.entry_number }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if payment.refund_journal_entry %}
+                <div class="side-row">
+                    <span class="s-label">Refund Entry</span>
+                    <a href="{% url 'finance:journal_entry_detail' payment.refund_journal_entry.pk %}"
+                       class="s-value" style="font-family:monospace;font-size:12.5px;color:var(--amber);">
+                        {{ payment.refund_journal_entry.entry_number }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- RECORD INFO -->
+        <div class="side-card">
+            <div class="side-card-head">
+                <i class="fa fa-clock text-secondary"></i> Record Info
+            </div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">{{ payment.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">{{ payment.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Receipt Issued</span>
+                    <span class="s-value {% if payment.receipt_issued %}green{% else %}muted{% endif %}">
+                        {% if payment.receipt_issued %}Yes{% else %}No{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Break Period</span>
+                    <span class="s-value muted">
+                        {% if payment.is_break_payment %}Yes{% else %}No{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Auto Journal</span>
+                    <span class="s-value muted">
+                        {% if payment.auto_create_journal_entry %}Enabled{% else %}Disabled{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /col-lg-4 -->
+
+</div><!-- /row -->
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const container = document.getElementById('modal-container');
+    const dialog    = container.querySelector('.modal-dialog');
+    if (!dialog) return;
+
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) {
+        const ex = bootstrap.Modal.getInstance(wrapper);
+        if (ex) ex.dispose();
+        wrapper.remove();
+    }
+
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        container.innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+
+    if (close === 'true' && currentModal) currentModal.hide();
+
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    /* Fixed-strategy dropdowns — prevents clipping inside overflow:hidden */
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (def) {
+                return Object.assign({}, def, { strategy: 'fixed' });
+            }
+        });
+    });
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+});
+</script>
+{% endblock %}

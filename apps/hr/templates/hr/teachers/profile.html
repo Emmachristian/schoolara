@@ -1,0 +1,654 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   TEACHER PROFILE PAGE
+   ============================================================================ */
+
+/* ---- Hero ---- */
+.teacher-hero {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+}
+.hero-inner { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+
+/* Avatar */
+.teacher-avatar-wrap { position: relative; flex-shrink: 0; }
+.teacher-avatar {
+    width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
+    border: 3px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.teacher-avatar-fallback {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: linear-gradient(135deg, #4361ee 0%, #764ba2 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.2rem; color: white;
+    border: 3px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.status-dot {
+    position: absolute; bottom: 4px; right: 4px;
+    width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff;
+}
+.status-dot.active   { background: #27ae60; }
+.status-dot.inactive { background: #adb5bd; }
+
+/* Hero text */
+.hero-info  { flex: 1; min-width: 0; }
+.hero-name  { font-size: 22px; font-weight: 700; color: #1a1a2e; line-height: 1.3; }
+.hero-id    { font-size: 12px; color: #6c757d; font-family: 'Courier New', monospace; margin-top: 3px; }
+.hero-dept  { font-size: 13px; color: #6c757d; margin-top: 4px; }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.hero-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; letter-spacing: .4px;
+}
+.hero-badge.active     { background: #d4edda; color: #155724; }
+.hero-badge.inactive   { background: #f8d7da; color: #721c24; }
+.hero-badge.class-tchr { background: #d1ecf1; color: #0c5460; }
+.hero-badge.online     { background: #e8f5e9; color: #1b5e20; }
+.hero-badge.overloaded { background: #fff3cd; color: #856404; }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+.hero-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6c757d; }
+
+/* Workload bar in hero */
+.workload-wrap { min-width: 200px; }
+.workload-label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+.workload-bar-track { height: 8px; background: #e9ecef; border-radius: 8px; overflow: hidden; }
+.workload-bar-fill { height: 100%; border-radius: 8px; transition: width .5s ease; }
+.workload-bar-fill.ok      { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+.workload-bar-fill.warning { background: linear-gradient(90deg, #f39c12, #ffc107); }
+.workload-bar-fill.danger  { background: linear-gradient(90deg, #e74c3c, #ff6b6b); }
+.workload-nums { display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; margin-top: 4px; }
+
+/* ---- Detail Cards ---- */
+.detail-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef; margin-bottom: 22px; overflow: hidden;
+}
+.detail-card-header {
+    background: #f8f9fa; padding: 13px 22px; border-bottom: 1px solid #e9ecef;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.detail-card-header .card-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #495057;
+    display: flex; align-items: center; gap: 8px; margin: 0;
+}
+.detail-card-body { padding: 22px; }
+
+/* ---- Info rows ---- */
+.info-row { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f1f3f5; }
+.info-row:last-child { border-bottom: none; }
+.info-label {
+    width: 180px; min-width: 180px;
+    font-size: 11.5px; color: #6c757d;
+    text-transform: uppercase; letter-spacing: .4px; font-weight: 600;
+    padding-right: 14px; padding-top: 2px;
+}
+.info-value { flex: 1; font-size: 13.5px; color: #1a1a2e; font-weight: 500; word-break: break-word; }
+
+/* ---- Chips ---- */
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+}
+.chip.subject { background: #eef0ff; color: #4361ee; border: 1px solid #c5cefb; }
+.chip.level   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.chip.class   { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.chip.slot    { background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; }
+
+/* ---- Sidebar ---- */
+.summary-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef; margin-bottom: 18px; overflow: hidden;
+}
+.summary-card-header {
+    background: #f8f9fa; padding: 12px 18px; border-bottom: 1px solid #e9ecef;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #495057;
+    display: flex; align-items: center; gap: 7px;
+}
+.summary-card-body { padding: 16px 18px; }
+.summary-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label { color: #6c757d; font-size: 12px; }
+.summary-row .s-value { font-weight: 600; color: #1a1a2e; }
+.summary-row .s-value.green { color: #27ae60; }
+.summary-row .s-value.red   { color: #e74c3c; }
+.summary-row .s-value.blue  { color: #4361ee; }
+.summary-row .s-value.muted { color: #6c757d; }
+
+/* Workload highlight box */
+.workload-box {
+    background: linear-gradient(135deg, #eef0ff, #e8f0ff);
+    border: 1px solid #c5cefb; border-radius: 10px;
+    padding: 16px; text-align: center; margin-bottom: 16px;
+}
+.workload-box.warn   { background: #fffbeb; border-color: #fde68a; }
+.workload-box.danger { background: #fff5f5; border-color: #fecaca; }
+.workload-box .label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .5px; }
+.workload-box .value { font-size: 32px; font-weight: 800; color: #4361ee; margin: 4px 0; }
+.workload-box.warn   .value { color: #d97706; }
+.workload-box.danger .value { color: #dc2626; }
+.workload-box .sub   { font-size: 12px; color: #6c757d; }
+
+/* Empty mini */
+.empty-mini { text-align: center; padding: 24px; color: #adb5bd; }
+.empty-mini i { font-size: 2rem; display: block; margin-bottom: 8px; opacity: .4; }
+.empty-mini p { font-size: 12px; margin: 0; }
+
+@media (max-width: 768px) {
+    .hero-inner { flex-direction: column; }
+    .info-label { width: 130px; min-width: 130px; }
+}
+
+@media print {
+    .app-page-title, #modal-container,
+    .summary-card:has(.d-grid) { display: none !important; }
+    .detail-card, .teacher-hero { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Teacher Profile
+                <div class="page-title-subheading">
+                    {{ teacher.staff.full_name }} &mdash; {{ teacher.staff.staff_id }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'hr:teacher_list' %}" class="btn btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </a>
+            <a href="{% url 'hr:staff_profile' teacher.staff.pk %}" class="btn btn-outline-secondary me-1">
+                <i class="fa fa-id-card me-1"></i> Staff Profile
+            </a>
+            <button type="button" class="btn btn-outline-secondary me-1" onclick="window.print()">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+            <a href="{% url 'hr:teacher_edit' teacher.pk %}" class="btn btn-warning me-1">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            {% if teacher.is_active %}
+            <button class="btn btn-outline-warning me-1"
+                    hx-get="{% url 'hr:teacher_deactivate_modal' teacher.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-pause me-1"></i> Deactivate
+            </button>
+            {% else %}
+            <button class="btn btn-outline-success me-1"
+                    hx-get="{% url 'hr:teacher_reactivate_modal' teacher.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-play me-1"></i> Reactivate
+            </button>
+            {% endif %}
+            <button class="btn btn-outline-danger"
+                    hx-get="{% url 'hr:teacher_delete_modal' teacher.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i> Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- ===== HERO ===== -->
+<div class="teacher-hero">
+    <div class="hero-inner">
+
+        <div class="teacher-avatar-wrap">
+            {% if teacher.staff.photo %}
+                <img src="{{ teacher.staff.photo.url }}" alt="{{ teacher.staff.full_name }}" class="teacher-avatar">
+            {% else %}
+                <div class="teacher-avatar-fallback"><i class="pe-7s-study"></i></div>
+            {% endif %}
+            <span class="status-dot {% if teacher.is_active %}active{% else %}inactive{% endif %}"></span>
+        </div>
+
+        <div class="hero-info">
+            <div class="hero-name">{{ teacher.staff.full_name }}</div>
+            <div class="hero-id">{{ teacher.staff.staff_id }}</div>
+            {% if teacher.staff.primary_department %}
+            <div class="hero-dept"><i class="pe-7s-culture me-1"></i>{{ teacher.staff.primary_department.name }}</div>
+            {% endif %}
+            <div class="hero-badges">
+                <span class="hero-badge {% if teacher.is_active %}active{% else %}inactive{% endif %}">
+                    <i class="fa fa-circle" style="font-size:.4rem;"></i>
+                    {% if teacher.is_active %}Active{% else %}Inactive{% endif %}
+                </span>
+                {% if teacher.is_class_teacher %}
+                <span class="hero-badge class-tchr"><i class="fa fa-chalkboard"></i>Class Teacher</span>
+                {% endif %}
+                {% if teacher.can_teach_online %}
+                <span class="hero-badge online"><i class="fa fa-laptop"></i>Online Teaching</span>
+                {% endif %}
+                {% if metrics.is_overloaded %}
+                <span class="hero-badge overloaded"><i class="fa fa-exclamation-triangle"></i>Overloaded</span>
+                {% endif %}
+            </div>
+            <div class="hero-meta">
+                {% if teacher.specialization %}
+                <div class="hero-meta-item"><i class="fa fa-graduation-cap"></i>{{ teacher.specialization }}</div>
+                {% endif %}
+                <div class="hero-meta-item"><i class="fa fa-book"></i>{{ metrics.qualified_subject_count }} subject{{ metrics.qualified_subject_count|pluralize }}</div>
+                <div class="hero-meta-item"><i class="fa fa-chalkboard"></i>{{ metrics.assigned_class_count }} class{{ metrics.assigned_class_count|pluralize:"es" }}</div>
+                <div class="hero-meta-item"><i class="fa fa-laptop"></i>{{ teacher.get_digital_literacy_level_display }}</div>
+            </div>
+        </div>
+
+        <div class="workload-wrap">
+            <div class="workload-label">Teaching Load</div>
+            <div class="workload-bar-track">
+                <div class="workload-bar-fill {% if metrics.workload_percentage >= 100 %}danger{% elif metrics.workload_percentage >= 75 %}warning{% else %}ok{% endif %}"
+                     style="width:{% if metrics.workload_percentage > 100 %}100{% else %}{{ metrics.workload_percentage }}{% endif %}%;"></div>
+            </div>
+            <div class="workload-nums">
+                <span>{{ teacher.current_teaching_load }}h current</span>
+                <span>{{ metrics.workload_percentage }}%</span>
+                <span>{{ teacher.max_hours_per_week }}h max</span>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        <!-- ---- TEACHER DETAILS ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-info-circle text-primary"></i> Teacher Details</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Staff ID</div>
+                            <div class="info-value mono">{{ teacher.staff.staff_id }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Department</div>
+                            <div class="info-value">{{ teacher.staff.primary_department.name|default:"—" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Specialization</div>
+                            <div class="info-value">{{ teacher.specialization|default:"—" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Digital Literacy</div>
+                            <div class="info-value">{{ teacher.get_digital_literacy_level_display }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Class Teacher</div>
+                            <div class="info-value">
+                                {% if teacher.is_class_teacher %}
+                                    <span class="badge bg-info text-white">Yes</span>
+                                {% else %}
+                                    <span class="text-muted">No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Max Hours/Week</div>
+                            <div class="info-value">{{ teacher.max_hours_per_week }}h</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Current Load</div>
+                            <div class="info-value">
+                                {{ teacher.current_teaching_load }}h
+                                <small class="text-muted ms-1">({{ metrics.workload_percentage }}%)</small>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Available Hours</div>
+                            <div class="info-value fw-semibold {% if metrics.available_hours < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {% if metrics.available_hours < 0 %}
+                                    {{ metrics.available_hours }}h (overloaded)
+                                {% else %}
+                                    {{ metrics.available_hours }}h
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Online Teaching</div>
+                            <div class="info-value">
+                                {% if teacher.can_teach_online %}
+                                    <span class="badge bg-success">Yes</span>
+                                {% else %}
+                                    <span class="text-muted">No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Joined</div>
+                            <div class="info-value">{{ teacher.staff.date_of_joining|date:"d M Y" }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% if teacher.teaching_philosophy %}
+                <hr class="my-3">
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Philosophy</div>
+                    <div class="info-value" style="font-size:13px; line-height:1.6;">{{ teacher.teaching_philosophy|linebreaksbr }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ---- QUALIFIED SUBJECTS ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-book text-success"></i> Qualified Subjects</span>
+                <span class="badge bg-light text-secondary border">{{ metrics.qualified_subject_count }}</span>
+            </div>
+            <div class="detail-card-body">
+                {% with subjects=teacher.qualified_subjects.all %}
+                {% if subjects %}
+                    <div class="chip-list">
+                        {% for subject in subjects %}
+                        <span class="chip subject"><i class="fa fa-book" style="font-size:.65rem;"></i>{{ subject.name }}</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-mini">
+                        <i class="fa fa-book"></i>
+                        <p>No qualified subjects assigned.</p>
+                    </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <!-- ---- PREFERRED ACADEMIC LEVELS ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-layer-group text-info"></i> Preferred Academic Levels</span>
+            </div>
+            <div class="detail-card-body">
+                {% with levels=teacher.preferred_academic_levels.all %}
+                {% if levels %}
+                    <div class="chip-list">
+                        {% for level in levels %}
+                        <span class="chip level"><i class="fa fa-graduation-cap" style="font-size:.65rem;"></i>{{ level.name }}</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-mini">
+                        <i class="fa fa-layer-group"></i>
+                        <p>No preferred academic levels set.</p>
+                    </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <!-- ---- ASSIGNED CLASSES ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-chalkboard text-warning"></i> Assigned Classes</span>
+                <span class="badge bg-light text-secondary border">{{ metrics.assigned_class_count }}</span>
+            </div>
+            <div class="detail-card-body">
+                {% with classes=teacher.assigned_classes.all %}
+                {% if classes %}
+                    <div class="chip-list">
+                        {% for cls in classes %}
+                        <span class="chip class"><i class="fa fa-users" style="font-size:.65rem;"></i>{{ cls.name }}</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-mini">
+                        <i class="fa fa-chalkboard"></i>
+                        <p>No classes assigned.</p>
+                    </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <!-- ---- AVAILABILITY ---- -->
+        {% if teacher.available_days or teacher.preferred_time_slots %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-calendar-alt text-secondary"></i> Availability</span>
+            </div>
+            <div class="detail-card-body">
+                {% if teacher.available_days %}
+                <div class="info-row">
+                    <div class="info-label">Available Days</div>
+                    <div class="info-value">
+                        <div class="chip-list">
+                            {% for day in teacher.available_days %}
+                            <span class="chip level">{{ day }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if teacher.preferred_time_slots %}
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Preferred Slots</div>
+                    <div class="info-value">
+                        <div class="chip-list">
+                            {% for slot in teacher.preferred_time_slots %}
+                            <span class="chip slot">{{ slot }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div><!-- /col-lg-8 -->
+
+    <div class="col-lg-4">
+
+        <!-- ---- WORKLOAD BOX ---- -->
+        <div class="workload-box {% if metrics.workload_percentage >= 100 %}danger{% elif metrics.workload_percentage >= 75 %}warn{% endif %}">
+            <div class="label">Teaching Load</div>
+            <div class="value">{{ metrics.workload_percentage }}%</div>
+            <div class="sub">
+                {{ teacher.current_teaching_load }}h of {{ teacher.max_hours_per_week }}h/week
+                {% if metrics.available_hours > 0 %}
+                    &middot; {{ metrics.available_hours }}h available
+                {% elif metrics.is_overloaded %}
+                    &middot; {{ metrics.available_hours|abs_value }}h over limit
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ---- TEACHING SUMMARY ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-chart-bar text-primary"></i> Teaching Summary
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Qualified Subjects</span>
+                    <span class="s-value blue">{{ metrics.qualified_subject_count }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Assigned Classes</span>
+                    <span class="s-value">{{ metrics.assigned_class_count }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Current Load</span>
+                    <span class="s-value">{{ teacher.current_teaching_load }}h / week</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Max Hours</span>
+                    <span class="s-value muted">{{ teacher.max_hours_per_week }}h / week</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Available</span>
+                    <span class="s-value {% if metrics.available_hours < 0 %}red{% else %}green{% endif %}">
+                        {% if metrics.available_hours < 0 %}Overloaded ({{ metrics.available_hours|abs_value }}h over)
+                        {% else %}{{ metrics.available_hours }}h{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Digital Literacy</span>
+                    <span class="s-value">{{ teacher.get_digital_literacy_level_display }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- QUICK ACTIONS ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-bolt text-warning"></i> Quick Actions
+            </div>
+            <div class="summary-card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'hr:teacher_edit' teacher.pk %}" class="btn btn-outline-warning btn-sm">
+                        <i class="fa fa-edit me-1"></i> Edit Teacher Profile
+                    </a>
+                    <a href="{% url 'hr:staff_profile' teacher.staff.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-id-card me-1"></i> Staff Profile
+                    </a>
+                    {% if teacher.is_active %}
+                    <button class="btn btn-outline-warning btn-sm"
+                            hx-get="{% url 'hr:teacher_deactivate_modal' teacher.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-pause me-1"></i> Deactivate
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline-success btn-sm"
+                            hx-get="{% url 'hr:teacher_reactivate_modal' teacher.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-play me-1"></i> Reactivate
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'hr:teacher_list' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Teachers
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                        <i class="fa fa-print me-1"></i> Print Profile
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- RECORD INFO ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-clock text-secondary"></i> Record Info
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">{{ teacher.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">{{ teacher.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Staff Joined</span>
+                    <span class="s-value" style="font-size:12px;">{{ teacher.staff.date_of_joining|date:"d M Y" }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /col-lg-4 -->
+</div><!-- /row -->
+
+<div id="modal-container" style="display:none;"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target.id !== 'modal-container') return;
+    const dialog = event.detail.target.querySelector('.modal-dialog');
+    if (!dialog) return;
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) { bootstrap.Modal.getInstance(wrapper)?.dispose(); wrapper.remove(); }
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', () => {
+        wrapper.remove();
+        event.detail.target.innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (event) {
+    const xhr = event.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (xhr.getResponseHeader('HX-Close-Modal') === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: xhr.getResponseHeader('HX-Alert-Title') || type,
+                text: message,
+                confirmButtonColor: '#4361ee',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

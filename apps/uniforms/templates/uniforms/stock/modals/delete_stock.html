@@ -1,0 +1,89 @@
+<!-- uniforms/templates/uniforms/stock/modals/delete_stock.html -->
+
+<div class="modal fade" id="deleteStockModal" tabindex="-1" aria-labelledby="deleteStockModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteStockModalLabel">
+                    <i class="fa fa-trash me-2"></i>Delete Stock Record
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- Item / size summary -->
+                <div class="alert alert-light border mb-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fa fa-box fa-2x text-secondary me-3"></i>
+                        <div>
+                            <strong>{{ stock.uniform_item.name }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                Code: {{ stock.uniform_item.code }}
+                                {% if stock.size %}
+                                    &nbsp;|&nbsp; Size: <strong>{{ stock.size.name }}</strong>
+                                {% else %}
+                                    &nbsp;|&nbsp; <span class="badge bg-secondary">No Size</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                {% if warnings %}
+                <ul class="list-unstyled mb-3">
+                    {% for warning in warnings %}
+                    <li class="alert {% if not can_delete %}alert-danger{% else %}alert-warning{% endif %} py-2 px-3 mb-2">
+                        <i class="fa {% if not can_delete %}fa-ban{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
+                        {{ warning }}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if can_delete %}
+                <p class="text-muted mb-0">
+                    This action is <strong>permanent</strong> and cannot be undone.
+                    The item's total stock count will be updated automatically.
+                </p>
+                {% endif %}
+
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+
+                {% if can_delete %}
+                <form method="post"
+                      action="{% url 'uniforms:uniform_stock_delete' stock.pk %}"
+                      hx-post="{% url 'uniforms:uniform_stock_delete' stock.pk %}"
+                      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                      hx-target="body"
+                      hx-swap="none">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fa fa-trash me-1"></i>Delete Record
+                    </button>
+                </form>
+                {% else %}
+                <button type="button" class="btn btn-danger" disabled>
+                    <i class="fa fa-ban me-1"></i>Cannot Delete
+                </button>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-show once the partial is swapped in
+    document.addEventListener('htmx:afterSwap', function () {
+        const el = document.getElementById('deleteStockModal');
+        if (el) { new bootstrap.Modal(el).show(); }
+    }, { once: true });
+</script>

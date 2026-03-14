@@ -1,6 +1,7 @@
-<!-- uniforms/templates/uniforms/items/_item_results.html -->
+<!-- uniforms/templates/uniforms/items/partials/_item_results.html -->
 
 {% load static %}
+{% load currency_filters %}
 
 <!-- Items Table -->
 <div class="table-responsive" style="overflow: visible;">
@@ -12,7 +13,6 @@
                 <th>Item Name</th>
                 <th>Type</th>
                 <th>Gender</th>
-                <th>Category</th>
                 <th>Stock Status</th>
                 <th>Price</th>
                 <th>Sizes</th>
@@ -26,7 +26,7 @@
                 <tr>
                     <!-- Row Number -->
                     <td>{{ forloop.counter|add:items_page.start_index|add:"-1" }}</td>
-                    
+
                     <!-- Item Code -->
                     <td>
                         <span class="category-code">{{ item.code }}</span>
@@ -34,7 +34,7 @@
                             <br><small class="text-muted">SKU: {{ item.sku }}</small>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Item Name & Description -->
                     <td>
                         <div>
@@ -51,14 +51,14 @@
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Item Type -->
                     <td>
                         <span class="category-type-badge {{ item.item_type|lower }}">
                             {{ item.get_item_type_display }}
                         </span>
                     </td>
-                    
+
                     <!-- Gender -->
                     <td>
                         {% if item.gender == 'M' %}
@@ -75,17 +75,7 @@
                             </span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Category -->
-                    <td>
-                        <div>
-                            <strong>{{ item.category|default:"N/A" }}</strong>
-                            {% if item.subcategory %}
-                                <br><small class="text-muted">{{ item.subcategory }}</small>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
+
                     <!-- Stock Status -->
                     <td>
                         <div>
@@ -104,20 +94,20 @@
                             <small class="text-muted d-block">Reorder: {{ item.reorder_level }}</small>
                         </div>
                     </td>
-                    
+
                     <!-- Price -->
                     <td>
                         <div>
-                            <strong class="text-success">{{ item.selling_price|floatformat:2 }}</strong>
-                            <br><small class="text-muted">Cost: {{ item.unit_cost|floatformat:2 }}</small>
+                            <strong class="text-success">{{ item.selling_price|money }}</strong>
+                            <br><small class="text-muted">Cost: {{ item.unit_cost|money }}</small>
                             {% if item.markup_percentage > 0 %}
                                 <br><span class="badge bg-light text-dark border">
-                                    +{{ item.markup_percentage|floatformat:1 }}%
+                                    +{{ item.markup_percentage|format_percentage:1 }}
                                 </span>
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Available Sizes -->
                     <td>
                         {% if item.requires_sizing %}
@@ -130,7 +120,7 @@
                             </span>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Status Badge -->
                     <td>
                         {% if item.is_active %}
@@ -144,7 +134,7 @@
                             <span class="status-badge inactive">Inactive</span>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Actions Dropdown -->
                     <td>
                         <div class="dropdown" style="position: static;">
@@ -157,7 +147,7 @@
                                 <a class="dropdown-item text-success" href="{% url 'uniforms:uniform_item_detail' item.pk %}">
                                     <i class="fa fa-eye me-2"></i>View Details
                                 </a>
-                                
+
                                 <!-- Quick View Modal -->
                                 <button type="button" class="dropdown-item text-info"
                                         hx-get="{% url 'uniforms:uniform_item_quick_view_modal' item.pk %}"
@@ -165,36 +155,36 @@
                                         hx-swap="innerHTML">
                                     <i class="fa fa-info-circle me-2"></i>Quick View
                                 </button>
-                                
+
                                 <!-- Edit -->
                                 <a class="dropdown-item text-warning" href="{% url 'uniforms:uniform_item_edit' item.pk %}">
                                     <i class="fa fa-edit me-2"></i>Edit
                                 </a>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Stock Actions -->
                                 <h6 class="dropdown-header">Stock Management</h6>
-                                
+
                                 <button type="button" class="dropdown-item text-primary"
                                         hx-get="{% url 'uniforms:stock_adjustment_modal' item.pk %}"
                                         hx-target="#modal-container"
                                         hx-swap="innerHTML">
                                     <i class="fa fa-boxes me-2"></i>Adjust Stock
                                 </button>
-                                
+
                                 <button type="button" class="dropdown-item text-info"
                                         hx-get="{% url 'uniforms:stock_transfer_modal' item.pk %}"
                                         hx-target="#modal-container"
                                         hx-swap="innerHTML">
                                     <i class="fa fa-exchange-alt me-2"></i>Transfer Stock
                                 </button>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Status Actions -->
                                 <h6 class="dropdown-header">Status Actions</h6>
-                                
+
                                 {% if item.is_active %}
                                     <button type="button" class="dropdown-item text-warning"
                                             hx-get="{% url 'uniforms:uniform_item_toggle_active_modal' item.pk %}"
@@ -210,12 +200,12 @@
                                         <i class="fa fa-check-circle me-2"></i>Activate
                                     </button>
                                 {% endif %}
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Item Features -->
                                 <h6 class="dropdown-header">Features</h6>
-                                
+
                                 {% if item.requires_sizing %}
                                     <div class="dropdown-item-text">
                                         <small class="text-success">
@@ -223,35 +213,27 @@
                                         </small>
                                     </div>
                                 {% endif %}
-                                
+
                                 {% if item.is_taxable %}
                                     <div class="dropdown-item-text">
                                         <small class="text-info">
                                             <i class="fa fa-percentage me-1"></i>Taxable
-                                            {% if item.tax_rate %}({{ item.tax_rate.percentage }}%){% endif %}
+                                            {% if item.tax_rate %}({{ item.tax_rate.percentage|format_percentage:1 }}){% endif %}
                                         </small>
                                     </div>
                                 {% endif %}
-                                
-                                {% if item.supplier_name %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-muted">
-                                            <i class="fa fa-truck me-1"></i>{{ item.supplier_name|truncatewords:3 }}
-                                        </small>
-                                    </div>
-                                {% endif %}
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Print -->
-                                <a class="dropdown-item text-primary" 
-                                   href="{% url 'uniforms:uniform_item_print_detail' item.pk %}" 
+                                <a class="dropdown-item text-primary"
+                                   href="{% url 'uniforms:uniform_item_print_detail' item.pk %}"
                                    target="_blank">
                                     <i class="fa fa-print me-2"></i>Print Details
                                 </a>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Delete Action -->
                                 <button type="button" class="dropdown-item text-danger"
                                         hx-get="{% url 'uniforms:uniform_item_delete_modal' item.pk %}"
@@ -266,7 +248,7 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="11" class="text-center py-5">
+                    <td colspan="10" class="text-center py-5">
                         <div class="empty-state">
                             <i class="pe-7s-search empty-state-icon"></i>
                             <p class="mt-2 mb-0 text-muted">No uniform items found matching your filters.</p>
@@ -283,19 +265,15 @@
 {% if items_page.paginator.num_pages > 1 %}
 <div class="mt-4">
     <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
         <div class="text-muted">
             Showing {{ items_page.start_index }} - {{ items_page.end_index }} of {{ items_page.paginator.count }} items
         </div>
-        
-        <!-- Pagination Navigation -->
         <nav aria-label="Uniform items pagination">
             <ul class="pagination mb-0">
-                <!-- Previous Button -->
                 {% if items_page.has_previous %}
                     <li class="page-item">
-                        <button class="page-link" 
-                                hx-get="{% url 'uniforms:uniform_item_list' %}" 
+                        <button class="page-link"
+                                hx-get="{% url 'uniforms:uniform_item_list' %}"
                                 hx-target="#item-results"
                                 hx-include="#searchForm"
                                 hx-vals='{"page": "{{ items_page.previous_page_number }}"}'
@@ -304,17 +282,12 @@
                         </button>
                     </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">«</span>
-                    </li>
+                    <li class="page-item disabled"><span class="page-link">«</span></li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
+
                 {% for page_num in items_page.paginator.page_range %}
                     {% if page_num == items_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
                     {% elif page_num > items_page.number|add:"-3" and page_num < items_page.number|add:"3" %}
                         <li class="page-item">
                             <button class="page-link"
@@ -327,8 +300,7 @@
                         </li>
                     {% endif %}
                 {% endfor %}
-                
-                <!-- Next Button -->
+
                 {% if items_page.has_next %}
                     <li class="page-item">
                         <button class="page-link"
@@ -341,9 +313,7 @@
                         </button>
                     </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">»</span>
-                    </li>
+                    <li class="page-item disabled"><span class="page-link">»</span></li>
                 {% endif %}
             </ul>
         </nav>
@@ -351,53 +321,42 @@
 </div>
 {% endif %}
 
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- OUT OF BAND UPDATE FOR STATS (HTMX only) -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-box2"></i>
-            </div>
+            <div class="stats-icon bg-primary"><i class="pe-7s-box2"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Items</div>
-                <h3>{{ stats.total|default:0 }}</h3>
+                <h3>{{ stats.total|default:0|format_number }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
+            <div class="stats-icon bg-success"><i class="pe-7s-check"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Active Items</div>
-                <h3>{{ stats.active|default:0 }}</h3>
+                <h3>{{ stats.active|default:0|format_number }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-attention"></i>
-            </div>
+            <div class="stats-icon bg-warning"><i class="pe-7s-attention"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Low Stock</div>
-                <h3>{{ stats.low_stock|default:0 }}</h3>
+                <h3>{{ stats.low_stock|default:0|format_number }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-cash"></i>
-            </div>
+            <div class="stats-icon bg-info"><i class="pe-7s-cash"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Value</div>
-                <h3>{{ stats.total_value|floatformat:0|default:0 }}</h3>
+                <h3>{{ stats.total_value|default:0|money_short }}</h3>
             </div>
         </div>
     </div>
@@ -409,7 +368,6 @@
 if (typeof htmx !== 'undefined') {
     htmx.on('htmx:afterSwap', function(event) {
         if (event.detail.target.id === 'item-results') {
-            // Reinitialize Bootstrap tooltips
             const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);

@@ -1,4 +1,4 @@
-<!-- uniforms/templates/uniforms/stock/_stock_results.html -->
+<!-- uniforms/templates/uniforms/stock/partials/_stock_results.html -->
 
 {% load static %}
 {% load currency_filters %}
@@ -27,7 +27,7 @@
                 <tr>
                     <!-- Row Number -->
                     <td>{{ forloop.counter|add:stock_page.start_index|add:"-1" }}</td>
-                    
+
                     <!-- Item Code -->
                     <td>
                         <span class="category-code">{{ stock.uniform_item.code }}</span>
@@ -35,12 +35,12 @@
                             <br><small class="text-muted">SKU: {{ stock.uniform_item.sku }}</small>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Item Name & Type -->
                     <td>
                         <div>
                             <h6 class="mb-0">
-                                <a href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}" 
+                                <a href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}"
                                    class="text-decoration-none">
                                     {{ stock.uniform_item.name }}
                                 </a>
@@ -59,17 +59,23 @@
                             </small>
                         </div>
                     </td>
-                    
+
                     <!-- Size -->
                     <td>
-                        <span class="badge bg-primary" style="font-size: 0.9rem; padding: 6px 12px;">
-                            {{ stock.size.name }}
-                        </span>
-                        {% if stock.size.size_type %}
-                            <br><small class="text-muted">{{ stock.size.get_size_type_display }}</small>
+                        {% if stock.size %}
+                            <span class="badge bg-primary" style="font-size: 0.9rem; padding: 6px 12px;">
+                                {{ stock.size.name }}
+                            </span>
+                            {% if stock.size.size_type %}
+                                <br><small class="text-muted">{{ stock.size.get_size_type_display }}</small>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-secondary" style="font-size: 0.9rem; padding: 6px 12px;">
+                                No Size
+                            </span>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Total Quantity -->
                     <td>
                         <div class="text-center">
@@ -79,7 +85,7 @@
                             <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
                         </div>
                     </td>
-                    
+
                     <!-- Reserved Quantity -->
                     <td>
                         <div class="text-center">
@@ -91,7 +97,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Available Quantity -->
                     <td>
                         <div class="text-center">
@@ -99,7 +105,7 @@
                                 {{ stock.available_quantity }}
                             </strong>
                             <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
-                            
+
                             {% if stock.available_quantity <= stock.uniform_item.reorder_level and stock.available_quantity > 0 %}
                                 <br><span class="badge bg-warning text-dark mt-1">
                                     <i class="fa fa-exclamation-triangle"></i> Low Stock
@@ -111,7 +117,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Location -->
                     <td>
                         {% if stock.location %}
@@ -126,7 +132,7 @@
                             <span class="text-muted">Not specified</span>
                         {% endif %}
                     </td>
-                    
+
                     <!-- Stock Value -->
                     <td>
                         <div>
@@ -141,7 +147,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    
+
                     <!-- Stock Status -->
                     <td>
                         {% if stock.available_quantity == 0 %}
@@ -157,12 +163,12 @@
                                 In Stock
                             </span>
                         {% endif %}
-                        
+
                         <br><small class="text-muted mt-1 d-block">
                             Reorder at: {{ stock.uniform_item.reorder_level }}
                         </small>
                     </td>
-                    
+
                     <!-- Actions Dropdown -->
                     <td>
                         <div class="dropdown" style="position: static;">
@@ -171,11 +177,13 @@
                                 <i class="fa fa-ellipsis-v me-1"></i>
                             </button>
                             <div class="dropdown-menu dropdown-menu-end">
+
                                 <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'uniforms:uniform_stock_detail' stock.pk %}">
+                                <a class="dropdown-item text-success"
+                                   href="{% url 'uniforms:uniform_stock_detail' stock.pk %}">
                                     <i class="fa fa-eye me-2"></i>View Details
                                 </a>
-                                
+
                                 <!-- Quick View Modal -->
                                 <button type="button" class="dropdown-item text-info"
                                         hx-get="{% url 'uniforms:uniform_stock_quick_view_modal' stock.pk %}"
@@ -183,60 +191,69 @@
                                         hx-swap="innerHTML">
                                     <i class="fa fa-info-circle me-2"></i>Quick View
                                 </button>
-                                
+
                                 <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'uniforms:uniform_stock_edit' stock.pk %}">
+                                <a class="dropdown-item text-warning"
+                                   href="{% url 'uniforms:uniform_stock_edit' stock.pk %}">
                                     <i class="fa fa-edit me-2"></i>Edit
                                 </a>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Stock Actions -->
                                 <h6 class="dropdown-header">Stock Actions</h6>
-                                
+
                                 <button type="button" class="dropdown-item text-primary"
-                                        hx-get="{% url 'uniforms:stock_adjustment_modal' stock.uniform_item.pk %}?size={{ stock.size.pk }}"
+                                        hx-get="{% url 'uniforms:stock_adjustment_modal' stock.uniform_item.pk %}{% if stock.size %}?size={{ stock.size.pk }}{% endif %}"
                                         hx-target="#modal-container"
                                         hx-swap="innerHTML">
                                     <i class="fa fa-boxes me-2"></i>Adjust Quantity
                                 </button>
-                                
+
+                                {# Transfer only makes sense when there are size variants #}
+                                {% if stock.size %}
                                 <button type="button" class="dropdown-item text-info"
                                         hx-get="{% url 'uniforms:stock_transfer_modal' stock.pk %}"
                                         hx-target="#modal-container"
                                         hx-swap="innerHTML">
                                     <i class="fa fa-exchange-alt me-2"></i>Transfer Stock
                                 </button>
-                                
+                                {% endif %}
+
                                 <button type="button" class="dropdown-item text-success"
                                         hx-get="{% url 'uniforms:stock_receive_modal' stock.pk %}"
                                         hx-target="#modal-container"
                                         hx-swap="innerHTML">
                                     <i class="fa fa-truck me-2"></i>Receive Stock
                                 </button>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- View Item -->
-                                <a class="dropdown-item text-primary" 
+                                <a class="dropdown-item text-primary"
                                    href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}">
                                     <i class="fa fa-tshirt me-2"></i>View Item Details
                                 </a>
-                                
-                                <!-- Stock History -->
-                                <a class="dropdown-item text-secondary" 
-                                   href="{% url 'uniforms:stock_history' stock.pk %}">
-                                    <i class="fa fa-history me-2"></i>Stock History
-                                </a>
-                                
+
                                 <hr class="dropdown-divider">
-                                
+
                                 <!-- Print -->
-                                <a class="dropdown-item text-primary" 
-                                   href="{% url 'uniforms:uniform_stock_print' stock.pk %}" 
+                                <a class="dropdown-item text-primary"
+                                   href="{% url 'uniforms:uniform_stock_print_detail' stock.pk %}"
                                    target="_blank">
                                     <i class="fa fa-print me-2"></i>Print Label
                                 </a>
+
+                                <hr class="dropdown-divider">
+
+                                <!-- Delete — opens confirmation modal -->
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:uniform_stock_delete_modal' stock.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete Record
+                                </button>
+
                             </div>
                         </div>
                     </td>
@@ -265,15 +282,14 @@
         <div class="text-muted">
             Showing {{ stock_page.start_index }} - {{ stock_page.end_index }} of {{ stock_page.paginator.count }} records
         </div>
-        
+
         <!-- Pagination Navigation -->
         <nav aria-label="Stock pagination">
             <ul class="pagination mb-0">
-                <!-- Previous Button -->
                 {% if stock_page.has_previous %}
                     <li class="page-item">
-                        <button class="page-link" 
-                                hx-get="{% url 'uniforms:uniform_stock_list' %}" 
+                        <button class="page-link"
+                                hx-get="{% url 'uniforms:uniform_stock_list' %}"
                                 hx-target="#stock-results"
                                 hx-include="#searchForm"
                                 hx-vals='{"page": "{{ stock_page.previous_page_number }}"}'
@@ -282,17 +298,12 @@
                         </button>
                     </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">«</span>
-                    </li>
+                    <li class="page-item disabled"><span class="page-link">«</span></li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
+
                 {% for page_num in stock_page.paginator.page_range %}
                     {% if page_num == stock_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
                     {% elif page_num > stock_page.number|add:"-3" and page_num < stock_page.number|add:"3" %}
                         <li class="page-item">
                             <button class="page-link"
@@ -305,8 +316,7 @@
                         </li>
                     {% endif %}
                 {% endfor %}
-                
-                <!-- Next Button -->
+
                 {% if stock_page.has_next %}
                     <li class="page-item">
                         <button class="page-link"
@@ -319,9 +329,7 @@
                         </button>
                     </li>
                 {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">»</span>
-                    </li>
+                    <li class="page-item disabled"><span class="page-link">»</span></li>
                 {% endif %}
             </ul>
         </nav>
@@ -329,50 +337,39 @@
 </div>
 {% endif %}
 
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- Out-of-band stats update (HTMX only) -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-box1"></i>
-            </div>
+            <div class="stats-icon bg-primary"><i class="pe-7s-box1"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Records</div>
                 <h3>{{ stats.total_records|default:0 }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-box2"></i>
-            </div>
+            <div class="stats-icon bg-success"><i class="pe-7s-box2"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Quantity</div>
                 <h3>{{ stats.total_quantity|format_number }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-cash"></i>
-            </div>
+            <div class="stats-icon bg-info"><i class="pe-7s-cash"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Total Value</div>
                 <h3>{{ stats.total_value|money_short }}</h3>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-attention"></i>
-            </div>
+            <div class="stats-icon bg-warning"><i class="pe-7s-attention"></i></div>
             <div class="stats-content">
                 <div class="stats-label">Low Stock Items</div>
                 <h3>{{ stats.low_stock|default:0 }}</h3>
@@ -382,16 +379,14 @@
 </div>
 {% endif %}
 
-<!-- Reinitialize tooltips after HTMX swap -->
 <script>
 if (typeof htmx !== 'undefined') {
     htmx.on('htmx:afterSwap', function(event) {
         if (event.detail.target.id === 'stock-results') {
-            // Reinitialize Bootstrap tooltips
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(function (tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
+            const tooltipTriggerList = [].slice.call(
+                document.querySelectorAll('[data-bs-toggle="tooltip"]')
+            );
+            tooltipTriggerList.map(function(el) { return new bootstrap.Tooltip(el); });
         }
     });
 }

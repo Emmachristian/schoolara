@@ -15,7 +15,7 @@
         margin-bottom: 25px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
+
     .form-section-header {
         display: flex;
         align-items: center;
@@ -23,19 +23,19 @@
         padding-bottom: 15px;
         border-bottom: 2px solid #e9ecef;
     }
-    
+
     .form-section-header i {
         font-size: 1.5rem;
         color: #007bff;
         margin-right: 12px;
     }
-    
+
     .form-section-header h5 {
         margin: 0;
         color: #495057;
         font-weight: 600;
     }
-    
+
     .form-section-description {
         color: #6c757d;
         font-size: 0.9rem;
@@ -45,23 +45,23 @@
         border-left: 3px solid #007bff;
         border-radius: 4px;
     }
-    
+
     .required-field::after {
         content: " *";
         color: #dc3545;
     }
-    
+
     .form-help-text {
         display: block;
         margin-top: 5px;
         font-size: 0.875rem;
         color: #6c757d;
     }
-    
+
     .field-with-icon {
         position: relative;
     }
-    
+
     .field-with-icon i {
         position: absolute;
         left: 12px;
@@ -69,12 +69,12 @@
         transform: translateY(-50%);
         color: #6c757d;
     }
-    
+
     .field-with-icon input,
     .field-with-icon select {
         padding-left: 38px;
     }
-    
+
     .info-card {
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
@@ -82,7 +82,7 @@
         padding: 20px;
         margin-bottom: 20px;
     }
-    
+
     .info-card h6 {
         color: #495057;
         font-weight: 600;
@@ -90,34 +90,34 @@
         padding-bottom: 10px;
         border-bottom: 2px solid #dee2e6;
     }
-    
+
     .info-row {
         display: flex;
         justify-content: space-between;
         padding: 10px;
         border-bottom: 1px solid #dee2e6;
     }
-    
+
     .info-row:last-child {
         border-bottom: none;
     }
-    
+
     .info-label {
         font-weight: 500;
         color: #6c757d;
     }
-    
+
     .info-value {
         color: #495057;
         font-weight: 600;
     }
-    
+
     .errorlist {
         list-style: none;
         padding: 0;
         margin: 5px 0 0 0;
     }
-    
+
     .errorlist li {
         color: #dc3545;
         font-size: 0.875rem;
@@ -126,7 +126,7 @@
         border-radius: 4px;
         margin-top: 5px;
     }
-    
+
     .form-actions {
         display: flex;
         gap: 15px;
@@ -138,7 +138,7 @@
         bottom: 0;
         z-index: 100;
     }
-    
+
     .sidebar-sticky {
         position: sticky;
         top: 20px;
@@ -146,7 +146,7 @@
         overflow-y: auto;
         padding-right: 5px;
     }
-    
+
     .calculation-preview {
         background-color: #e7f3ff;
         border: 1px solid #b3d9ff;
@@ -154,18 +154,52 @@
         padding: 15px;
         margin-top: 15px;
     }
-    
+
     .calculation-preview h6 {
         color: #004085;
         font-weight: 600;
         margin-bottom: 10px;
     }
-    
+
     .calculation-preview .preview-amount {
         font-size: 1.5rem;
         color: #004085;
         font-weight: 700;
     }
+
+    /* Existing stock panel */
+    #existing-stock-card {
+        border-color: #ffc107;
+    }
+
+    #existing-stock-card h6 {
+        color: #856404;
+        border-bottom-color: #ffc107;
+    }
+
+    #existing-stock-card .info-value.text-danger  { color: #dc3545 !important; }
+    #existing-stock-card .info-value.text-warning { color: #856404 !important; }
+    #existing-stock-card .info-value.text-success { color: #155724 !important; }
+
+    .stock-loading {
+        text-align: center;
+        color: #6c757d;
+        padding: 15px 0;
+        font-size: 0.875rem;
+    }
+
+    .stock-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .stock-badge-danger  { background: #f8d7da; color: #842029; }
+    .stock-badge-warning { background: #fff3cd; color: #664d03; }
+    .stock-badge-success { background: #d1e7dd; color: #0f5132; }
+    .stock-badge-info    { background: #cff4fc; color: #055160; }
 </style>
 {% endblock %}
 
@@ -183,7 +217,7 @@
                     {% if stock %}
                         Update stock record details, quantities, and location
                     {% else %}
-                        Add a new stock record for size-specific inventory tracking
+                        Add a new stock record for inventory tracking
                     {% endif %}
                 </div>
             </div>
@@ -217,23 +251,34 @@
 
 <form method="post" id="stock-form" novalidate>
     {% csrf_token %}
-    
+
+    {# Resolved URLs for AJAX stock lookup endpoints.                          #}
+    {# Placeholder UUIDs are substituted by JS at call time.                   #}
+    {# sized:   ajax_get_stock_quantity — requires both item_pk and size_pk    #}
+    {# unsized: ajax_get_item_stock    — requires only item_pk                 #}
+    <span id="ajax-stock-url" style="display:none;"
+          data-url="{% url 'uniforms:ajax_get_stock_quantity' item_pk='00000000-0000-0000-0000-000000000000' size_pk='11111111-1111-1111-1111-111111111111' %}"></span>
+    <span id="ajax-item-stock-url" style="display:none;"
+          data-url="{% url 'uniforms:ajax_get_item_stock' item_pk='00000000-0000-0000-0000-000000000000' %}"></span>
+
     <div class="row">
         <!-- Left Column -->
         <div class="col-lg-8">
-            
+
             <!-- Item & Size Selection -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-box2"></i>
                     <h5>Item & Size Selection</h5>
                 </div>
-                
+
                 <div class="form-section-description">
                     <i class="fa fa-info-circle"></i>
-                    Select the uniform item and size for this stock record. Each item-size combination must be unique.
+                    Select the uniform item and (if applicable) the size for this stock record.
+                    Each item–size combination must be unique. Any existing stock for the
+                    selected combination will appear in the sidebar.
                 </div>
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.uniform_item.id_for_label }}" class="form-label required-field">
@@ -248,9 +293,16 @@
                         {% endif %}
                         {{ form.uniform_item.errors }}
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ form.size.id_for_label }}" class="form-label required-field">
+
+                    <div class="col-md-6 mb-3" id="size-field-wrapper">
+                        {#
+                            FIXED: The required-field marker on the size label is now
+                            toggled by JS based on whether the selected item requires_sizing.
+                            Previously it was hardcoded on the label, making it always show
+                            as required even for unsized items.
+                            The label starts without the class so it is correct on first render.
+                        #}
+                        <label for="{{ form.size.id_for_label }}" class="form-label" id="size-label">
                             {{ form.size.label }}
                         </label>
                         <div class="field-with-icon">
@@ -264,19 +316,19 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Stock Quantities -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-box1"></i>
                     <h5>Stock Quantities</h5>
                 </div>
-                
+
                 <div class="form-section-description">
                     <i class="fa fa-info-circle"></i>
                     Track total quantity and reserved stock. Available quantity is calculated automatically.
                 </div>
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.quantity.id_for_label }}" class="form-label required-field">
@@ -291,7 +343,7 @@
                         {% endif %}
                         {{ form.quantity.errors }}
                     </div>
-                    
+
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.reserved_quantity.id_for_label }}" class="form-label">
                             {{ form.reserved_quantity.label }}
@@ -306,7 +358,7 @@
                         {{ form.reserved_quantity.errors }}
                     </div>
                 </div>
-                
+
                 <!-- Available Quantity Preview -->
                 <div id="available-preview" class="calculation-preview" style="display: none;">
                     <h6><i class="fa fa-check-circle"></i> Available Quantity</h6>
@@ -322,14 +374,14 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Storage Location -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-map-marker"></i>
                     <h5>Storage Location</h5>
                 </div>
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.location.id_for_label }}" class="form-label">
@@ -341,7 +393,7 @@
                         </div>
                         {{ form.location.errors }}
                     </div>
-                    
+
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.bin_number.id_for_label }}" class="form-label">
                             {{ form.bin_number.label }}
@@ -354,103 +406,121 @@
                     </div>
                 </div>
             </div>
-            
+
         </div>
-        
+
         <!-- Right Column - Information & Preview -->
         <div class="col-lg-4">
-            
+
             <!-- Sticky Sidebar Container -->
             <div class="sidebar-sticky">
-                
+
+                <!-- EXISTING STOCK LOOKUP -->
+                <div id="existing-stock-card" class="info-card" style="display: none;">
+                    <h6><i class="fa fa-database"></i> Existing Stock for This Combination</h6>
+                    <div id="existing-stock-body">
+                        <div class="stock-loading">
+                            <i class="fa fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
+                </div>
+
                 {% if stock %}
-                <!-- Current Stock Information -->
+                <!-- Current Stock Information (edit mode) -->
                 <div class="info-card">
                     <h6><i class="pe-7s-graph"></i> Current Stock Info</h6>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Current Quantity</span>
                         <span class="info-value">{{ stock.quantity }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Reserved</span>
                         <span class="info-value">{{ stock.reserved_quantity }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Available</span>
                         <span class="info-value text-success">{{ stock.available_quantity }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Cost Value</span>
                         <span class="info-value">{{ stock.total_cost_value|money }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Selling Value</span>
                         <span class="info-value text-success">{{ stock.total_selling_value|money }}</span>
                     </div>
                 </div>
-                
-                <!-- Item Information -->
+
+                <!-- Item Information (edit mode) -->
                 <div class="info-card">
                     <h6><i class="pe-7s-box2"></i> Item Details</h6>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Item Code</span>
                         <span class="info-value">{{ stock.uniform_item.code }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Item Type</span>
                         <span class="info-value">{{ stock.uniform_item.get_item_type_display }}</span>
                     </div>
-                    
+
+                    <div class="info-row">
+                        <span class="info-label">Sizing</span>
+                        {# FIXED: guard stock.size before accessing .name #}
+                        <span class="info-value">
+                            {% if stock.size %}{{ stock.size.name }}{% else %}No Size{% endif %}
+                        </span>
+                    </div>
+
                     <div class="info-row">
                         <span class="info-label">Unit Cost</span>
                         <span class="info-value">{{ stock.uniform_item.unit_cost|money }}</span>
                     </div>
-                    
+
                     <div class="info-row">
                         <span class="info-label">Selling Price</span>
                         <span class="info-value">{{ stock.uniform_item.selling_price|money }}</span>
                     </div>
                 </div>
                 {% endif %}
-                
+
                 <!-- Quick Tips -->
                 <div class="info-card">
                     <h6><i class="pe-7s-help1"></i> Quick Tips</h6>
-                    
+
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-lightbulb text-warning"></i>
                         Use clear location names for easy identification
                     </div>
-                    
+
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-lightbulb text-warning"></i>
                         Reserved quantity is for pending sales
                     </div>
-                    
+
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-lightbulb text-warning"></i>
-                        Each item-size combination must be unique
+                        Each item–size combination must be unique
                     </div>
-                    
+
                     <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
                         <i class="fa fa-lightbulb text-warning"></i>
                         Stock values are calculated automatically
                     </div>
                 </div>
-                
+
             </div>
             <!-- End Sticky Sidebar Container -->
-            
+
         </div>
     </div>
-    
+
     <!-- Form Actions -->
     <div class="form-actions">
         {% if stock %}
@@ -466,137 +536,269 @@
             <i class="fa fa-save"></i> {{ submit_text|default:"Create Stock Record" }}
         </button>
     </div>
-    
+
 </form>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+// Lookup map: item PK -> requires_sizing (bool).
+// Built server-side so no extra AJAX call is needed.
+const ITEM_REQUIRES_SIZING = {
+    {% for obj in form.uniform_item.field.queryset %}
+    '{{ obj.pk }}': {{ obj.requires_sizing|yesno:"true,false" }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+};
+
 $(document).ready(function() {
-    console.log('='.repeat(80));
-    console.log('STOCK FORM INITIALIZATION');
-    console.log('='.repeat(80));
-    
+
+    // =========================================================================
+    // CONSTANTS
+    // =========================================================================
+
+    const EDITING_STOCK_PK = {% if stock %}'{{ stock.pk }}'{% else %}null{% endif %};
+
+    // =========================================================================
+    // SIZE FIELD — show/hide & required marker
+    // =========================================================================
+
+    function updateSizeField() {
+        const itemId = $('#id_uniform_item').val();
+        const requiresSizing = itemId ? (ITEM_REQUIRES_SIZING[itemId] === true) : false;
+
+        if (requiresSizing) {
+            $('#size-field-wrapper').show();
+            $('#size-label').addClass('required-field');
+        } else {
+            $('#id_size').val('');
+            $('#size-label').removeClass('required-field');
+            $('#size-field-wrapper').hide();
+        }
+    }
+
+    $('#id_uniform_item').on('change', function() {
+        updateSizeField();
+        lookupExistingStock();
+    });
+
+    // Initialise on load — hides the field immediately if the selected item
+    // (or no item) does not require sizing. Covers edit form and back-button.
+    updateSizeField();
+
+    // =========================================================================
+    // EXISTING STOCK LOOKUP
+    // =========================================================================
+
+    function renderStockResult(data) {
+        if (!data.success) {
+            $('#existing-stock-body').html(
+                '<p class="text-muted mb-0" style="font-size:0.875rem;">' +
+                '<i class="fa fa-info-circle"></i> Could not retrieve stock data.</p>'
+            );
+            return;
+        }
+
+        const qty       = data.data.quantity;
+        const reserved  = data.data.reserved;
+        const available = data.data.available;
+
+        let badgeClass, statusLabel;
+        if (qty === 0) {
+            badgeClass  = 'stock-badge-danger';
+            statusLabel = 'Out of Stock';
+        } else if (available < 10) {
+            badgeClass  = 'stock-badge-warning';
+            statusLabel = 'Low Stock';
+        } else {
+            badgeClass  = 'stock-badge-success';
+            statusLabel = 'In Stock';
+        }
+
+        let duplicateWarning = '';
+        if (!EDITING_STOCK_PK && qty > 0) {
+            duplicateWarning =
+                '<div class="alert alert-warning mt-2 mb-0" style="font-size:0.8rem;">' +
+                '<i class="fa fa-exclamation-triangle"></i> ' +
+                'A stock record already exists for this combination. ' +
+                'Saving will fail due to the unique constraint — ' +
+                'edit the existing record instead.' +
+                '</div>';
+        }
+
+        let noStockNote = '';
+        if (!EDITING_STOCK_PK && qty === 0) {
+            noStockNote =
+                '<div class="alert alert-info mt-2 mb-0" style="font-size:0.8rem;">' +
+                '<i class="fa fa-info-circle"></i> ' +
+                'No stock record exists yet for this combination. ' +
+                'You\'re good to create one.' +
+                '</div>';
+        }
+
+        $('#existing-stock-body').html(
+            '<div class="info-row">' +
+                '<span class="info-label">Total Quantity</span>' +
+                '<span class="info-value">' + qty + '</span>' +
+            '</div>' +
+            '<div class="info-row">' +
+                '<span class="info-label">Reserved</span>' +
+                '<span class="info-value">' + reserved + '</span>' +
+            '</div>' +
+            '<div class="info-row">' +
+                '<span class="info-label">Available</span>' +
+                '<span class="info-value ' + (available === 0 ? 'text-danger' : 'text-success') + '">' +
+                    available +
+                '</span>' +
+            '</div>' +
+            '<div class="info-row" style="border-bottom:none;">' +
+                '<span class="info-label">Status</span>' +
+                '<span class="stock-badge ' + badgeClass + '">' + statusLabel + '</span>' +
+            '</div>' +
+            duplicateWarning +
+            noStockNote
+        );
+    }
+
+    function lookupExistingStock() {
+        const itemId = $('#id_uniform_item').val();
+        if (!itemId) {
+            $('#existing-stock-card').hide();
+            return;
+        }
+
+        const requiresSizing = ITEM_REQUIRES_SIZING[itemId] === true;
+        const sizeId = $('#id_size').val();
+
+        if (requiresSizing && !sizeId) {
+            $('#existing-stock-card').hide();
+            return;
+        }
+
+        $('#existing-stock-card').show();
+        $('#existing-stock-body').html(
+            '<div class="stock-loading"><i class="fa fa-spinner fa-spin"></i> Checking stock...</div>'
+        );
+
+        let stockUrl;
+
+        if (requiresSizing) {
+            stockUrl = $('#ajax-stock-url').data('url')
+                .replace('00000000-0000-0000-0000-000000000000', itemId)
+                .replace('11111111-1111-1111-1111-111111111111', sizeId);
+        } else {
+            stockUrl = $('#ajax-item-stock-url').data('url')
+                .replace('00000000-0000-0000-0000-000000000000', itemId);
+        }
+
+        $.ajax({
+            url: stockUrl,
+            method: 'GET',
+            success: function(data) { renderStockResult(data); },
+            error: function(xhr) {
+                $('#existing-stock-body').html(
+                    '<p class="text-danger mb-0" style="font-size:0.875rem;">' +
+                    '<i class="fa fa-exclamation-circle"></i> ' +
+                    'Error looking up stock (' + xhr.status + ').</p>'
+                );
+            }
+        });
+    }
+
+    $('#id_size').on('change', lookupExistingStock);
+
+    if ($('#id_uniform_item').val()) {
+        lookupExistingStock();
+    }
+
     // =========================================================================
     // AVAILABLE QUANTITY CALCULATION
     // =========================================================================
-    
+
     function updateAvailableQuantity() {
-        const totalQuantity = parseInt($('#id_quantity').val()) || 0;
+        const totalQuantity    = parseInt($('#id_quantity').val()) || 0;
         const reservedQuantity = parseInt($('#id_reserved_quantity').val()) || 0;
-        const availableQuantity = Math.max(0, totalQuantity - reservedQuantity);
-        
-        // Update display
-        $('#available-quantity').text(availableQuantity);
-        
-        // Update status text and color
-        let statusText = '';
-        let statusClass = '';
-        
-        if (availableQuantity === 0) {
-            statusText = 'Out of Stock';
+        const availableQty     = Math.max(0, totalQuantity - reservedQuantity);
+
+        $('#available-quantity').text(availableQty);
+
+        let statusText, statusClass;
+        if (availableQty === 0) {
+            statusText  = 'Out of Stock';
             statusClass = 'text-danger';
-        } else if (availableQuantity < 10) {
-            statusText = 'Low Stock';
+        } else if (availableQty < 10) {
+            statusText  = 'Low Stock';
             statusClass = 'text-warning';
         } else {
-            statusText = 'In Stock';
+            statusText  = 'In Stock';
             statusClass = 'text-success';
         }
-        
+
         $('#stock-status-text')
             .text(statusText)
             .removeClass('text-danger text-warning text-success')
             .addClass(statusClass);
-        
-        // Show preview
+
         $('#available-preview').fadeIn();
-        
-        console.log(`Total: ${totalQuantity}, Reserved: ${reservedQuantity}, Available: ${availableQuantity}`);
     }
-    
-    $('#id_quantity, #id_reserved_quantity').on('input', function() {
-        updateAvailableQuantity();
-    });
-    
-    // Initialize on load
+
+    $('#id_quantity, #id_reserved_quantity').on('input', updateAvailableQuantity);
+
     updateAvailableQuantity();
-    
+
     // =========================================================================
     // FORM VALIDATION
     // =========================================================================
-    
+
     $('#stock-form').on('submit', function(e) {
-        console.log('='.repeat(80));
-        console.log('FORM SUBMISSION STARTED');
-        console.log('='.repeat(80));
-        
         let isValid = true;
         const errors = [];
-        
-        // Required fields validation
+
         const uniformItem = $('#id_uniform_item').val();
-        const size = $('#id_size').val();
-        const quantity = $('#id_quantity').val();
-        
-        if (!uniformItem) {
-            errors.push('Uniform item is required');
+        const size        = $('#id_size').val();
+        const quantity    = $('#id_quantity').val();
+
+        const itemRequiresSizing = uniformItem
+            ? (ITEM_REQUIRES_SIZING[uniformItem] === true)
+            : false;
+
+        if (!uniformItem) { errors.push('Uniform item is required'); isValid = false; }
+
+        if (itemRequiresSizing && !size) {
+            errors.push('Size is required for this item');
             isValid = false;
         }
-        
-        if (!size) {
-            errors.push('Size is required');
-            isValid = false;
-        }
-        
-        if (!quantity || quantity === '') {
-            errors.push('Quantity is required');
-            isValid = false;
-        }
-        
-        // Reserved quantity validation
-        const totalQty = parseInt(quantity) || 0;
+
+        if (!quantity || quantity === '') { errors.push('Quantity is required'); isValid = false; }
+
+        const totalQty    = parseInt(quantity) || 0;
         const reservedQty = parseInt($('#id_reserved_quantity').val()) || 0;
-        
+
         if (reservedQty > totalQty) {
             errors.push('Reserved quantity cannot exceed total quantity');
             isValid = false;
         }
-        
+
         if (!isValid) {
             e.preventDefault();
-            console.error('❌ Form validation failed:', errors);
-            
-            // Show errors
-            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
-            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
-            errorHtml += '<ul class="mb-0">';
-            errors.forEach(function(error) {
-                errorHtml += '<li>' + error + '</li>';
+
+            let errorHtml =
+                '<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> ' +
+                'Please fix the following errors:</h5><ul class="mb-0">';
+            errors.forEach(function(err) {
+                errorHtml += '<li>' + err + '</li>';
             });
-            errorHtml += '</ul>';
-            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
-            errorHtml += '</div>';
-            
-            // Insert at top of form
+            errorHtml +=
+                '</ul><button type="button" class="btn-close" ' +
+                'data-bs-dismiss="alert" aria-label="Close"></button></div>';
+
             $('#stock-form').prepend(errorHtml);
-            
-            // Scroll to top
-            $('html, body').animate({
-                scrollTop: 0
-            }, 500);
-            
+            $('html, body').animate({ scrollTop: 0 }, 500);
             return false;
         }
-        
-        console.log('✅ Form validation passed');
-        console.log('Submitting form...');
     });
-    
-    console.log('='.repeat(80));
-    console.log('✅ FORM INITIALIZATION COMPLETE');
-    console.log('='.repeat(80));
+
 });
 </script>
 {% endblock %}

@@ -1,0 +1,1111 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   CONTRACT DETAIL PAGE
+   ============================================================================ */
+
+/* ---- Hero ---- */
+.contract-hero {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    overflow: hidden;
+}
+
+.hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.hero-ref {
+    font-size: 11px;
+    color: #6c757d;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.hero-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.3;
+}
+
+.hero-sub {
+    font-size: 13px;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+.hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 16px;
+}
+
+.hero-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.hero-amounts {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.hero-amount-box {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 14px 20px;
+    text-align: right;
+    min-width: 140px;
+}
+
+.hero-amount-box.accent {
+    border-color: #4361ee;
+    background: #eef0ff;
+}
+
+.hero-amount-label {
+    font-size: 10px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+}
+
+.hero-amount-value {
+    font-size: 22px;
+    font-weight: 800;
+    margin-top: 4px;
+    color: #1a1a2e;
+}
+
+.hero-amount-box.accent .hero-amount-value { color: #4361ee; }
+
+/* ---- Status Badge ---- */
+.status-badge-lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.status-badge-lg.draft      { background: #e9ecef; color: #495057; }
+.status-badge-lg.review     { background: #dbeafe; color: #1e40af; }
+.status-badge-lg.approved   { background: #d1ecf1; color: #0c5460; }
+.status-badge-lg.signed     { background: #d1fae5; color: #065f46; }
+.status-badge-lg.active     { background: #d4edda; color: #155724; }
+.status-badge-lg.expired    { background: #f8d7da; color: #721c24; }
+.status-badge-lg.terminated { background: #fff3cd; color: #856404; }
+.status-badge-lg.cancelled  { background: #e2e3e5; color: #383d41; }
+.status-badge-lg.renewed    { background: #e8f5e9; color: #1b5e20; }
+
+/* ---- Expiry Warning Banner ---- */
+.expiry-banner {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-left: 4px solid #f39c12;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.expiry-banner i { color: #f39c12; font-size: 1.2rem; margin-top: 1px; flex-shrink: 0; }
+.expiry-banner-title { font-size: 13px; font-weight: 700; color: #7c5200; margin-bottom: 3px; }
+.expiry-banner-text  { font-size: 12px; color: #9a6400; }
+
+/* ---- Termination Banner ---- */
+.termination-banner {
+    background: #fff5f0;
+    border: 1px solid #fed7aa;
+    border-left: 4px solid #ea580c;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.termination-banner i { color: #ea580c; font-size: 1.2rem; margin-top: 1px; flex-shrink: 0; }
+.termination-banner-title { font-size: 13px; font-weight: 700; color: #7c2d12; margin-bottom: 3px; }
+.termination-banner-text  { font-size: 12px; color: #9a3412; }
+
+/* ---- Detail Cards ---- */
+.detail-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 22px;
+    overflow: hidden;
+}
+
+.detail-card-header {
+    background: #f8f9fa;
+    padding: 13px 22px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.detail-card-header .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.detail-card-body { padding: 22px; }
+
+/* ---- Info Rows ---- */
+.info-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+.info-row:last-child { border-bottom: none; }
+.info-label {
+    width: 190px;
+    min-width: 190px;
+    font-size: 11.5px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    font-weight: 600;
+    padding-right: 14px;
+    padding-top: 2px;
+}
+.info-value {
+    flex: 1;
+    font-size: 13.5px;
+    color: #1a1a2e;
+    font-weight: 500;
+    word-break: break-word;
+}
+.info-value.mono { font-family: 'Courier New', monospace; font-size: 12.5px; }
+
+/* ---- Salary Rate Grid ---- */
+.rate-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+.rate-box {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+}
+
+.rate-label { font-size: 10px; color: #6c757d; text-transform: uppercase; letter-spacing: .5px; }
+.rate-value { font-size: 18px; font-weight: 800; color: #1a1a2e; margin-top: 6px; }
+.rate-box.primary { background: #eef0ff; border-color: #c5cefb; }
+.rate-box.primary .rate-value { color: #4361ee; }
+
+/* ---- Benefits Table ---- */
+.benefits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.benefits-table thead th {
+    background: #f8f9fa;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #6c757d;
+    border-bottom: 2px solid #e9ecef;
+    white-space: nowrap;
+}
+.benefits-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+}
+.benefits-table tbody tr:last-child td { border-bottom: none; }
+.benefits-table tbody tr:hover { background: #fafbfc; }
+
+/* ---- Sidebar Summary Cards ---- */
+.summary-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+.summary-card-header {
+    background: #f8f9fa;
+    padding: 12px 18px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.summary-card-body { padding: 16px 18px; }
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label  { color: #6c757d; font-size: 12px; }
+.summary-row .s-value  { font-weight: 600; color: #1a1a2e; }
+.summary-row .s-value.green  { color: #27ae60; }
+.summary-row .s-value.red    { color: #e74c3c; }
+.summary-row .s-value.blue   { color: #4361ee; }
+.summary-row .s-value.muted  { color: #6c757d; }
+
+.summary-row.total-row { border-top: 2px solid #dee2e6; margin-top: 4px; padding-top: 10px; }
+.summary-row.total-row .s-label { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.summary-row.total-row .s-value { font-size: 16px; font-weight: 800; }
+
+/* Salary highlight box */
+.salary-box {
+    background: linear-gradient(135deg, #eef0ff 0%, #e8f0ff 100%);
+    border: 1px solid #c5cefb;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 16px;
+}
+.salary-box .label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .5px; }
+.salary-box .value { font-size: 28px; font-weight: 800; color: #4361ee; margin-top: 4px; }
+.salary-box .freq  { font-size: 11px; color: #6c757d; margin-top: 3px; }
+
+/* ---- Timeline ---- */
+.timeline { position: relative; padding-left: 28px; }
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 9px; top: 0; bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+.tl-item { position: relative; padding-bottom: 18px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-dot {
+    position: absolute;
+    left: -24px; top: 2px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #6c757d;
+    background: #6c757d;
+}
+.tl-dot.success { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
+.tl-dot.danger  { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+.tl-dot.warning { background: #f39c12; box-shadow: 0 0 0 2px #f39c12; }
+.tl-dot.info    { background: #2980b9; box-shadow: 0 0 0 2px #2980b9; }
+.tl-dot.accent  { background: #4361ee; box-shadow: 0 0 0 2px #4361ee; }
+
+.tl-content { background: #f8f9fa; border-radius: 8px; padding: 10px 14px; }
+.tl-title { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.tl-date  { font-size: 11px; color: #6c757d; margin-top: 2px; }
+.tl-note  { font-size: 12px; color: #495057; margin-top: 5px; font-style: italic; }
+
+/* ---- Expiry progress ---- */
+.expiry-progress-wrap { margin-bottom: 16px; }
+.progress-labels { display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; margin-bottom: 6px; }
+.progress-bar-track { height: 8px; background: #e9ecef; border-radius: 8px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #4361ee, #7c93ff); transition: width .6s ease; }
+.progress-bar-fill.warning { background: linear-gradient(90deg, #f39c12, #ffc107); }
+.progress-bar-fill.danger  { background: linear-gradient(90deg, #e74c3c, #ff6b6b); }
+
+/* ---- Empty mini ---- */
+.empty-mini { text-align: center; padding: 28px 20px; color: #adb5bd; }
+.empty-mini i { font-size: 2.2rem; display: block; margin-bottom: 8px; opacity: .4; }
+.empty-mini p { font-size: 12px; margin: 0; }
+
+@media (max-width: 992px) {
+    .rate-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+    .hero-top { flex-direction: column; }
+    .hero-amounts { flex-direction: column; }
+    .hero-amount-box { min-width: 100%; text-align: left; }
+    .info-label { width: 130px; min-width: 130px; }
+    .rate-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media print {
+    .app-page-title, #modal-container,
+    .summary-card:has(.d-grid) { display: none !important; }
+    .contract-hero, .detail-card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+    .col-lg-4 .summary-card { break-inside: avoid; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-file icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Contract Detail
+                <div class="page-title-subheading">
+                    {{ contract.contract_number }} &mdash; {{ contract.staff.full_name }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'hr:contract_list' %}" class="btn btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </a>
+            <a href="{% url 'hr:staff_profile' contract.staff.pk %}" class="btn btn-outline-secondary me-1">
+                <i class="fa fa-user me-1"></i> Staff Profile
+            </a>
+            <button type="button" class="btn btn-outline-secondary me-1" onclick="window.print()">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+            {% if contract.status in 'DRAFT,REVIEW,APPROVED' %}
+            <a href="{% url 'hr:contract_edit' contract.pk %}" class="btn btn-warning me-1">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            {% endif %}
+            {% if contract.status == 'DRAFT' or contract.status == 'REVIEW' %}
+            <button class="btn btn-primary me-1"
+                    hx-get="{% url 'hr:contract_activate_modal' contract.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-1"></i> Activate
+            </button>
+            {% endif %}
+            {% if contract.status == 'ACTIVE' %}
+            <button class="btn btn-outline-info me-1"
+                    hx-get="{% url 'hr:contract_renew_modal' contract.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-redo me-1"></i> Renew
+            </button>
+            <button class="btn btn-outline-warning me-1"
+                    hx-get="{% url 'hr:contract_terminate_modal' contract.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-ban me-1"></i> Terminate
+            </button>
+            {% endif %}
+            <button class="btn btn-outline-danger"
+                    hx-get="{% url 'hr:contract_delete_modal' contract.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i> Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- Expiry warning (active contracts expiring soon) -->
+{% if contract.status == 'ACTIVE' and metrics.days_until_expiry is not None and metrics.days_until_expiry <= 30 and metrics.days_until_expiry >= 0 %}
+<div class="expiry-banner">
+    <i class="fa fa-exclamation-triangle"></i>
+    <div>
+        <div class="expiry-banner-title">Contract Expiring Soon</div>
+        <div class="expiry-banner-text">
+            This contract expires on {{ contract.end_date|date:"d M Y" }}
+            — {{ metrics.days_until_expiry }} day{{ metrics.days_until_expiry|pluralize }} remaining.
+            Consider renewing before it expires.
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Termination notice -->
+{% if contract.status == 'TERMINATED' %}
+<div class="termination-banner">
+    <i class="fa fa-ban"></i>
+    <div>
+        <div class="termination-banner-title">Contract Terminated</div>
+        <div class="termination-banner-text">
+            {% if contract.termination_date %}Terminated on {{ contract.termination_date|date:"d M Y" }}.{% endif %}
+            {% if contract.termination_reason %}Reason: {{ contract.get_termination_reason_display }}.{% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== HERO ===== -->
+<div class="contract-hero">
+    <div class="hero-top">
+        <div>
+            <div class="hero-ref">{{ contract.contract_number }}</div>
+            <div class="hero-name">{{ contract.staff.full_name }}</div>
+            <div class="hero-sub">
+                {{ contract.staff.staff_id }}
+                {% if contract.staff.primary_department %}
+                    &middot; {{ contract.staff.primary_department.name }}
+                {% endif %}
+                &middot; {{ contract.job_title }}
+            </div>
+            <div style="margin-top: 12px;">
+                <span class="status-badge-lg {{ contract.status|lower }}">
+                    {% if contract.status == 'DRAFT' %}<i class="fa fa-pencil-alt"></i>
+                    {% elif contract.status == 'REVIEW' %}<i class="fa fa-search"></i>
+                    {% elif contract.status == 'APPROVED' %}<i class="fa fa-check"></i>
+                    {% elif contract.status == 'SIGNED' %}<i class="fa fa-pen-nib"></i>
+                    {% elif contract.status == 'ACTIVE' %}<i class="fa fa-circle"></i>
+                    {% elif contract.status == 'EXPIRED' %}<i class="fa fa-calendar-times"></i>
+                    {% elif contract.status == 'TERMINATED' %}<i class="fa fa-ban"></i>
+                    {% elif contract.status == 'CANCELLED' %}<i class="fa fa-times-circle"></i>
+                    {% elif contract.status == 'RENEWED' %}<i class="fa fa-redo"></i>
+                    {% endif %}
+                    {{ contract.get_status_display }}
+                </span>
+                {% if metrics.is_probationary %}
+                    <span class="ms-2" style="background:#fff3cd;color:#856404;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;">
+                        <i class="fa fa-clock me-1"></i>On Probation
+                    </span>
+                {% endif %}
+                {% if metrics.is_permanent %}
+                    <span class="ms-2" style="background:#d4edda;color:#155724;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;">
+                        <i class="fa fa-infinity me-1"></i>Permanent
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="hero-amounts">
+            <div class="hero-amount-box">
+                <div class="hero-amount-label">Basic Salary</div>
+                <div class="hero-amount-value">{{ contract.basic_salary|format_currency }}</div>
+                <div style="font-size:10px;color:#6c757d;margin-top:2px;">{{ contract.get_salary_frequency_display }}</div>
+            </div>
+            <div class="hero-amount-box accent">
+                <div class="hero-amount-label">Monthly Equivalent</div>
+                <div class="hero-amount-value">{{ metrics.monthly_salary|format_currency }}</div>
+                <div style="font-size:10px;color:#4361ee;margin-top:2px;">Per month</div>
+            </div>
+        </div>
+    </div>
+    <div class="hero-meta">
+        <div class="hero-meta-item"><i class="fa fa-calendar-alt"></i> {{ contract.start_date|date:"d M Y" }} – {% if contract.end_date %}{{ contract.end_date|date:"d M Y" }}{% else %}Indefinite{% endif %}</div>
+        <div class="hero-meta-item"><i class="fa fa-tag"></i> {{ contract.get_contract_type_display }}</div>
+        {% if metrics.duration_in_months %}
+        <div class="hero-meta-item"><i class="fa fa-hourglass-half"></i> {{ metrics.duration_in_months }} month{{ metrics.duration_in_months|pluralize }}</div>
+        {% endif %}
+        <div class="hero-meta-item"><i class="fa fa-clock"></i> {{ contract.working_hours_per_week }}h / week</div>
+    </div>
+</div>
+
+<div class="row">
+
+    <!-- ============================================================ -->
+    <!-- MAIN (LEFT) COLUMN                                           -->
+    <!-- ============================================================ -->
+    <div class="col-lg-8">
+
+        <!-- ---- CONTRACT DETAILS ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-info-circle text-primary"></i> Contract Details</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Contract Number</div>
+                            <div class="info-value mono">{{ contract.contract_number }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Contract Type</div>
+                            <div class="info-value">{{ contract.get_contract_type_display }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Status</div>
+                            <div class="info-value">{{ contract.get_status_display }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Start Date</div>
+                            <div class="info-value">{{ contract.start_date|date:"d M Y" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">End Date</div>
+                            <div class="info-value">
+                                {% if contract.end_date %}
+                                    {{ contract.end_date|date:"d M Y" }}
+                                    {% if metrics.days_until_expiry is not None %}
+                                        {% if metrics.days_until_expiry < 0 %}
+                                            <span class="badge bg-danger ms-1" style="font-size:10px;">Expired</span>
+                                        {% elif metrics.days_until_expiry <= 30 %}
+                                            <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">{{ metrics.days_until_expiry }}d left</span>
+                                        {% endif %}
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted fst-italic">Permanent — no end date</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if contract.signed_date %}
+                        <div class="info-row">
+                            <div class="info-label">Signed Date</div>
+                            <div class="info-value">{{ contract.signed_date|date:"d M Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Job Title</div>
+                            <div class="info-value fw-semibold">{{ contract.job_title }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Working Hours/Week</div>
+                            <div class="info-value">{{ contract.working_hours_per_week }} hours</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Annual Leave</div>
+                            <div class="info-value">{{ contract.annual_leave_days }} days</div>
+                        </div>
+                        {% if contract.probation_period_months %}
+                        <div class="info-row">
+                            <div class="info-label">Probation Period</div>
+                            <div class="info-value">{{ contract.probation_period_months }} month{{ contract.probation_period_months|pluralize }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-row">
+                            <div class="info-label">Auto-Renew</div>
+                            <div class="info-value">
+                                {% if contract.auto_renew %}
+                                    <span class="badge bg-success" style="font-size:11px;">Yes — every {{ contract.renewal_period_months }} months</span>
+                                {% else %}
+                                    <span class="text-muted">No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if contract.renewal_due_date %}
+                        <div class="info-row">
+                            <div class="info-label">Renewal Due</div>
+                            <div class="info-value">{{ contract.renewal_due_date|date:"d M Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if contract.job_description %}
+                <hr class="my-3">
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Job Description</div>
+                    <div class="info-value" style="font-size:13px; line-height:1.6;">{{ contract.job_description|linebreaksbr }}</div>
+                </div>
+                {% endif %}
+                {% if contract.special_terms %}
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Special Terms</div>
+                    <div class="info-value" style="font-size:13px; line-height:1.6;">{{ contract.special_terms|linebreaksbr }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ---- SALARY BREAKDOWN ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-money-bill-wave text-success"></i> Salary Rates</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="rate-grid">
+                    <div class="rate-box primary">
+                        <div class="rate-label">Monthly</div>
+                        <div class="rate-value">{{ metrics.monthly_salary|format_currency }}</div>
+                    </div>
+                    <div class="rate-box">
+                        <div class="rate-label">Annual</div>
+                        <div class="rate-value">{{ metrics.annual_salary|format_currency }}</div>
+                    </div>
+                    <div class="rate-box">
+                        <div class="rate-label">Daily Rate</div>
+                        <div class="rate-value">{{ metrics.daily_rate|format_currency }}</div>
+                    </div>
+                    <div class="rate-box">
+                        <div class="rate-label">Hourly Rate</div>
+                        <div class="rate-value">{{ metrics.hourly_rate|format_currency }}</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <div class="info-row">
+                        <div class="info-label">Basic Salary</div>
+                        <div class="info-value fw-semibold">{{ contract.basic_salary|format_currency }} <small class="text-muted">/ {{ contract.get_salary_frequency_display|lower }}</small></div>
+                    </div>
+                    <div class="info-row" style="border:0;">
+                        <div class="info-label">Salary Frequency</div>
+                        <div class="info-value">{{ contract.get_salary_frequency_display }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- TERMINATION ---- -->
+        {% if contract.status == 'TERMINATED' %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-ban text-danger"></i> Termination Details</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Termination Date</div>
+                            <div class="info-value">{{ contract.termination_date|date:"d M Y"|default:"—" }}</div>
+                        </div>
+                        <div class="info-row" style="border:0;">
+                            <div class="info-label">Reason</div>
+                            <div class="info-value">{{ contract.get_termination_reason_display|default:"—" }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Notice Period</div>
+                            <div class="info-value">{{ contract.termination_notice_period_days }} days</div>
+                        </div>
+                        {% if contract.termination_notes %}
+                        <div class="info-row" style="border:0;">
+                            <div class="info-label">Notes</div>
+                            <div class="info-value" style="font-size:13px;">{{ contract.termination_notes }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ---- BENEFITS ---- -->
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-gift text-info"></i> Benefits</span>
+            </div>
+            <div class="detail-card-body" style="padding:0;">
+                {% if benefits %}
+                <table class="benefits-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Benefit</th>
+                            <th>Description</th>
+                            <th>Provider</th>
+                            <th class="text-end">Value</th>
+                            <th>Period</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for benefit in benefits %}
+                        <tr>
+                            <td class="text-muted small">{{ forloop.counter }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ benefit.get_benefit_type_display }}</div>
+                                {% if benefit.policy_number %}
+                                <small class="text-muted mono">{{ benefit.policy_number }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div style="font-size:13px;">{{ benefit.description }}</div>
+                                {% if benefit.coverage_details %}
+                                <small class="text-muted">{{ benefit.coverage_details|truncatewords:8 }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ benefit.provider|default:"—" }}</td>
+                            <td class="text-end fw-semibold">
+                                {% if benefit.monetary_value %}
+                                    {{ benefit.monetary_value|format_currency }}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="small">{{ benefit.start_date|date:"M Y" }}</div>
+                                {% if benefit.end_date %}
+                                <div class="small text-muted">to {{ benefit.end_date|date:"M Y" }}</div>
+                                {% else %}
+                                <div class="small text-muted">ongoing</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-mini">
+                    <i class="fa fa-gift"></i>
+                    <p>No benefits assigned to this contract.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ---- NOTES ---- -->
+        {% if contract.notes %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-sticky-note text-secondary"></i> Notes</span>
+            </div>
+            <div class="detail-card-body">
+                <p style="font-size:13px; line-height:1.7; color:#495057; margin:0;">{{ contract.notes|linebreaksbr }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ============================================================ -->
+    <!-- SIDEBAR (RIGHT) COLUMN                                       -->
+    <!-- ============================================================ -->
+    <div class="col-lg-4">
+
+        <!-- ---- SALARY HIGHLIGHT ---- -->
+        <div class="salary-box">
+            <div class="label">Monthly Salary</div>
+            <div class="value">{{ metrics.monthly_salary|format_currency }}</div>
+            <div class="freq">{{ contract.get_salary_frequency_display }} · Basic: {{ contract.basic_salary|format_currency }}</div>
+        </div>
+
+        <!-- ---- CONTRACT TIMELINE / EXPIRY ---- -->
+        {% if contract.end_date and metrics.duration_in_months %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-hourglass-half text-primary"></i> Contract Duration
+            </div>
+            <div class="summary-card-body">
+                {% if metrics.days_until_expiry is not None %}
+                <div class="expiry-progress-wrap">
+                    <div class="progress-labels">
+                        <span>{{ contract.start_date|date:"d M Y" }}</span>
+                        <span>{{ contract.end_date|date:"d M Y" }}</span>
+                    </div>
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill {% if metrics.days_until_expiry <= 0 %}danger{% elif metrics.days_until_expiry <= 30 %}warning{% endif %}"
+                             id="contractProgressBar">
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="summary-row">
+                    <span class="s-label">Duration</span>
+                    <span class="s-value">{{ metrics.duration_in_months }} month{{ metrics.duration_in_months|pluralize }}</span>
+                </div>
+                {% if metrics.days_until_expiry is not None %}
+                <div class="summary-row">
+                    <span class="s-label">Days Remaining</span>
+                    <span class="s-value {% if metrics.days_until_expiry <= 0 %}red{% elif metrics.days_until_expiry <= 30 %}s-value{% endif %}">
+                        {% if metrics.days_until_expiry <= 0 %}
+                            Expired {{ metrics.days_until_expiry|abs_value }} days ago
+                        {% else %}
+                            {{ metrics.days_until_expiry }} day{{ metrics.days_until_expiry|pluralize }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+                {% if contract.renewal_due_date %}
+                <div class="summary-row">
+                    <span class="s-label">Renewal Due</span>
+                    <span class="s-value">{{ contract.renewal_due_date|date:"d M Y" }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ---- SALARY SUMMARY ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-calculator text-success"></i> Salary Summary
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Basic ({{ contract.get_salary_frequency_display }})</span>
+                    <span class="s-value">{{ contract.basic_salary|format_currency }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Monthly Equivalent</span>
+                    <span class="s-value blue">{{ metrics.monthly_salary|format_currency }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Annual Equivalent</span>
+                    <span class="s-value green">{{ metrics.annual_salary|format_currency }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Daily Rate</span>
+                    <span class="s-value muted">{{ metrics.daily_rate|format_currency }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Hourly Rate</span>
+                    <span class="s-value muted">{{ metrics.hourly_rate|format_currency }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- APPROVAL TIMELINE ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-history text-secondary"></i> Audit Trail
+            </div>
+            <div class="summary-card-body">
+                <div class="timeline">
+                    <div class="tl-item">
+                        <div class="tl-dot info"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Contract Created</div>
+                            <div class="tl-date">{{ contract.created_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+
+                    {% if contract.approved_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Approved</div>
+                            <div class="tl-date">{{ contract.approved_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if contract.signed_date %}
+                    <div class="tl-item">
+                        <div class="tl-dot accent"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Signed</div>
+                            <div class="tl-date">{{ contract.signed_date|date:"d M Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if contract.status == 'ACTIVE' %}
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Contract Active</div>
+                            <div class="tl-date">Since {{ contract.start_date|date:"d M Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if contract.status == 'TERMINATED' and contract.terminated_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot danger"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Terminated</div>
+                            <div class="tl-date">{{ contract.terminated_at|date:"d M Y, H:i" }}</div>
+                            {% if contract.termination_reason %}
+                            <div class="tl-note">{{ contract.get_termination_reason_display }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if contract.status == 'EXPIRED' %}
+                    <div class="tl-item">
+                        <div class="tl-dot warning"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Expired</div>
+                            <div class="tl-date">{{ contract.end_date|date:"d M Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- QUICK ACTIONS ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-bolt text-warning"></i> Quick Actions
+            </div>
+            <div class="summary-card-body">
+                <div class="d-grid gap-2">
+                    {% if contract.status in 'DRAFT,REVIEW,APPROVED' %}
+                    <a href="{% url 'hr:contract_edit' contract.pk %}" class="btn btn-outline-warning btn-sm">
+                        <i class="fa fa-edit me-1"></i> Edit Contract
+                    </a>
+                    {% endif %}
+                    {% if contract.status == 'DRAFT' or contract.status == 'REVIEW' %}
+                    <button class="btn btn-outline-primary btn-sm"
+                            hx-get="{% url 'hr:contract_activate_modal' contract.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-check me-1"></i> Activate Contract
+                    </button>
+                    {% endif %}
+                    {% if contract.status == 'ACTIVE' %}
+                    <button class="btn btn-outline-info btn-sm"
+                            hx-get="{% url 'hr:contract_renew_modal' contract.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-redo me-1"></i> Renew Contract
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm"
+                            hx-get="{% url 'hr:contract_terminate_modal' contract.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-ban me-1"></i> Terminate
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'hr:staff_profile' contract.staff.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-user me-1"></i> Staff Profile
+                    </a>
+                    <a href="{% url 'hr:contract_list' %}?staff={{ contract.staff.pk }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Staff Contracts
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                        <i class="fa fa-print me-1"></i> Print Contract
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- RECORD INFO ---- -->
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-clock text-secondary"></i> Record Info
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">{{ contract.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">{{ contract.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+                {% if contract.approved_at %}
+                <div class="summary-row">
+                    <span class="s-label">Approved</span>
+                    <span class="s-value" style="font-size:12px;">{{ contract.approved_at|date:"d M Y" }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /col-lg-4 -->
+</div><!-- /row -->
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target.id !== 'modal-container') return;
+    const dialog = event.detail.target.querySelector('.modal-dialog');
+    if (!dialog) return;
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) { bootstrap.Modal.getInstance(wrapper)?.dispose(); wrapper.remove(); }
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', () => {
+        wrapper.remove();
+        event.detail.target.innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (event) {
+    const xhr = event.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: xhr.getResponseHeader('HX-Alert-Title') || type,
+                text: message,
+                confirmButtonColor: type === 'success' ? '#4361ee' : type === 'error' ? '#dc3545' : '#f39c12',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+    // Contract duration progress bar
+    const bar = document.getElementById('contractProgressBar');
+    if (bar) {
+        const daysLeft     = {{ metrics.days_until_expiry|default:"null" }};
+        const totalMonths  = {{ metrics.duration_in_months|default:"null" }};
+        if (daysLeft !== null && totalMonths !== null && totalMonths > 0) {
+            const totalDays = totalMonths * 30;
+            const elapsed   = Math.max(0, totalDays - daysLeft);
+            const pct       = Math.min(100, Math.round((elapsed / totalDays) * 100));
+            bar.style.width = pct + '%';
+        } else {
+            bar.style.width = daysLeft !== null && daysLeft <= 0 ? '100%' : '50%';
+        }
+    }
+});
+</script>
+{% endblock %}

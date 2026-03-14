@@ -1,537 +1,354 @@
-<!-- exams/results/class_dashboard.html -->
 {% extends 'base.html' %}
 {% load static %}
-{% load widget_tweaks %}
-{% load exam_filters %}
 
 {% block extra_css %}
 <style>
-/* Mode Toggle */
+/* ── Page shell ──────────────────────────────────────────────────────────── */
+.dash-header {
+    background: linear-gradient(135deg, #1a1f3a 0%, #2d3461 55%, #3a4080 100%);
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+.dash-header::before {
+    content: '';
+    position: absolute; right: -50px; top: -50px;
+    width: 200px; height: 200px;
+    background: rgba(255,255,255,.04); border-radius: 50%;
+}
+.dash-header::after {
+    content: '';
+    position: absolute; right: 70px; bottom: -70px;
+    width: 140px; height: 140px;
+    background: rgba(255,255,255,.03); border-radius: 50%;
+}
+.dash-header-inner { position: relative; z-index: 1; }
+.dash-header h1   { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0 0 .2rem; letter-spacing: -.2px; }
+.dash-header .breadcrumb-bar { color: rgba(255,255,255,.55); font-size: .8rem; }
+.dash-header .breadcrumb-bar a { color: rgba(255,255,255,.7); text-decoration: none; }
+.dash-header .breadcrumb-bar a:hover { color: #fff; }
+.dash-header .breadcrumb-bar .sep { margin: 0 .4rem; }
+
+/* ── Session / mode bar ──────────────────────────────────────────────────── */
+.control-bar {
+    background: #fff;
+    border: 1px solid #e8eaf0;
+    border-radius: 10px;
+    padding: .75rem 1.25rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.control-bar select {
+    border: 1px solid #dee2e6; border-radius: 8px;
+    padding: .4rem .85rem; font-size: .875rem; color: #1a1f3a;
+    background: #f8f9fa; cursor: pointer; min-width: 200px;
+    transition: border-color .15s, box-shadow .15s;
+}
+.control-bar select:focus {
+    outline: none; border-color: #3d4fbd;
+    box-shadow: 0 0 0 3px rgba(61,79,189,.12); background: #fff;
+}
 .mode-toggle {
-    background: white;
-    border-radius: 8px;
-    padding: 5px;
-    display: inline-flex;
-    gap: 5px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex; gap: .35rem; margin-left: auto;
 }
-
-.mode-toggle .btn {
-    border: none;
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-weight: 500;
-    transition: all 0.3s;
+.mode-btn {
+    padding: .4rem .9rem; border-radius: 8px; font-size: .8rem;
+    font-weight: 600; text-decoration: none; transition: background .15s, color .15s;
+    display: inline-flex; align-items: center; gap: .4rem;
+    border: 1px solid #dee2e6; color: #6c757d; background: #f8f9fa;
 }
+.mode-btn.active { background: #1a1f3a; color: #fff; border-color: #1a1f3a; }
+.mode-btn:hover:not(.active) { background: #e9ecef; color: #1a1f3a; }
 
-.mode-toggle .btn.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+/* ── Stat cards ──────────────────────────────────────────────────────────── */
+.stat-card {
+    background: #fff; border: 1px solid #e8eaf0; border-radius: 10px;
+    padding: 1.1rem 1.25rem; display: flex; align-items: center;
+    gap: .85rem; height: 100%;
 }
-
-/* Stats Cards */
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    transition: transform 0.2s;
+.stat-icon {
+    width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
 }
+.stat-icon.blue   { background: #e8f0fe; color: #3d4fbd; }
+.stat-icon.green  { background: #e6f4ea; color: #1e8e3e; }
+.stat-icon.amber  { background: #fef7e0; color: #e37400; }
+.stat-icon.red    { background: #fce8e6; color: #c5221f; }
+.stat-icon.purple { background: #f3e8fd; color: #7b29c8; }
+.stat-icon.slate  { background: #f0f1f5; color: #5f6368; }
+.stat-val   { font-size: 1.45rem; font-weight: 700; color: #1a1f3a; line-height: 1; margin-bottom: .15rem; }
+.stat-label { font-size: .75rem; color: #9da3b4; font-weight: 500; }
 
-.stats-card:hover {
-    transform: translateY(-2px);
+/* ── Tab strip ───────────────────────────────────────────────────────────── */
+.cat-tabs {
+    display: flex; gap: .4rem; flex-wrap: wrap;
+    padding-bottom: .75rem; margin-bottom: 1.25rem;
+    border-bottom: 2px solid #f0f1f5;
 }
-
-.stats-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 28px;
-    color: white;
+.cat-tab {
+    padding: .5rem 1.1rem; border-radius: 8px 8px 0 0;
+    font-size: .82rem; font-weight: 600; cursor: pointer;
+    border: 1px solid transparent; border-bottom: none;
+    background: transparent; color: #6c757d;
+    transition: background .15s, color .15s, border-color .15s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: .4rem;
+    position: relative; bottom: -2px;
 }
-
-.stats-content h3 {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
+.cat-tab:hover { background: #f0f1f5; color: #1a1f3a; }
+.cat-tab.active {
+    background: #fff; color: #3d4fbd; font-weight: 700;
+    border-color: #e8eaf0; border-bottom-color: #fff;
 }
-
-.stats-label {
-    font-size: 0.875rem;
-    color: #6c757d;
-    margin-bottom: 5px;
+.cat-tab .tab-count {
+    background: #e8f0fe; color: #3d4fbd; border-radius: 20px;
+    font-size: .7rem; padding: .1rem .45rem; font-weight: 700;
 }
+.cat-tab.active .tab-count { background: #3d4fbd; color: #fff; }
 
-/* Category Tabs */
-.nav-tabs-custom {
-    border-bottom: 2px solid #dee2e6;
-    margin-bottom: 20px;
+/* Indicator while HTMX loads */
+.htmx-request .cat-tab.active::after {
+    content: ''; display: inline-block; width: 10px; height: 10px;
+    border: 2px solid #3d4fbd; border-top-color: transparent;
+    border-radius: 50%; animation: spin .5s linear infinite; margin-left: .4rem;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.nav-tabs-custom .nav-link {
-    border: none;
-    color: #6c757d;
-    font-weight: 500;
-    padding: 12px 20px;
-    transition: all 0.3s;
-    cursor: pointer;
+/* ── Results table ───────────────────────────────────────────────────────── */
+.results-wrap {
+    background: #fff; border: 1px solid #e8eaf0;
+    border-radius: 12px; overflow: hidden;
 }
-
-.nav-tabs-custom .nav-link:hover {
-    color: #667eea;
+.results-toolbar {
+    padding: .85rem 1.25rem; border-bottom: 1px solid #f0f1f5;
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
 }
+.results-toolbar h6 { margin: 0; font-size: .9rem; font-weight: 700; color: #1a1f3a; }
+.results-toolbar .toolbar-right { margin-left: auto; display: flex; gap: .5rem; }
 
-.nav-tabs-custom .nav-link.active {
-    color: #667eea;
-    border-bottom: 3px solid #667eea;
-    background: transparent;
-}
-
-/* Dashboard Table */
-.dashboard-table {
-    font-size: 0.9rem;
-}
-
-.dashboard-table th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    padding: 12px 8px;
-    text-align: center;
+.results-table-container { overflow-x: auto; }
+.results-table {
+    width: 100%; border-collapse: collapse; font-size: .82rem;
     white-space: nowrap;
 }
-
-.dashboard-table td {
-    padding: 8px;
-    text-align: center;
-    vertical-align: middle;
+.results-table th {
+    background: #f8f9fa; color: #6c757d; font-weight: 700;
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+    padding: .75rem 1rem; border-bottom: 1px solid #e8eaf0;
+    text-align: center; position: sticky; top: 0; z-index: 2;
 }
+.results-table th.col-name { text-align: left; min-width: 180px; left: 0; z-index: 3; }
+.results-table th.col-pos  { min-width: 50px; }
+.results-table th.col-subj { min-width: 120px; }
+.results-table th.col-total { min-width: 80px; background: #f0f1f5; }
+.results-table th.col-avg   { min-width: 80px; background: #f0f1f5; }
 
-.dashboard-table td.text-start {
-    text-align: left !important;
+.results-table td {
+    padding: .7rem 1rem; border-bottom: 1px solid #f0f1f5;
+    vertical-align: middle; text-align: center; color: #1a1f3a;
 }
-
-.score-cell {
+.results-table td.col-name {
+    text-align: left; position: sticky; left: 0; background: #fff; z-index: 1;
     font-weight: 600;
-    color: #495057;
-    font-size: 1rem;
 }
+.results-table tr:hover td { background: #fafbff; }
+.results-table tr:hover td.col-name { background: #fafbff; }
+.results-table tr:last-child td { border-bottom: none; }
 
-.grade-cell {
-    font-size: 0.85rem;
-    font-weight: 500;
+/* Position badge */
+.pos-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    font-size: .72rem; font-weight: 700;
 }
+.pos-badge.gold   { background: #fef7e0; color: #b45309; }
+.pos-badge.silver { background: #f0f1f5; color: #4b5563; }
+.pos-badge.bronze { background: #fde8d8; color: #92400e; }
+.pos-badge.other  { background: #f0f1f5; color: #6c757d; }
 
-/* List View Styles */
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid;
-    display: inline-block;
-}
-
-.status-badge.completed {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
-}
-
-.status-badge.published {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border-color: #bee5eb;
-}
-
-.status-badge.unpublished {
-    background-color: #fff3cd;
-    color: #856404;
-    border-color: #ffeeba;
-}
-
-.status-badge.not_started,
-.status-badge.in_progress {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
-}
-
+/* Score cell */
+.score-cell { display: flex; flex-direction: column; align-items: center; gap: .15rem; }
+.score-val { font-size: .9rem; font-weight: 600; color: #1a1f3a; }
+.score-val.no-score { color: #c0c4cc; }
 .grade-badge {
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-weight: 600;
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    font-size: .65rem; font-weight: 700; padding: .1rem .45rem; border-radius: 4px;
+    letter-spacing: .04em;
 }
+.grade-A  { background: #e6f4ea; color: #1e8e3e; }
+.grade-B  { background: #e8f0fe; color: #3d4fbd; }
+.grade-C  { background: #fef7e0; color: #b45309; }
+.grade-D  { background: #fde8d8; color: #c2410c; }
+.grade-F  { background: #fce8e6; color: #c5221f; }
+.grade-default { background: #f0f1f5; color: #5f6368; }
 
-/* Empty State */
-.empty-state {
-    padding: 60px 20px;
-    text-align: center;
-}
+/* Lock / publish indicators */
+.cell-indicators { display: flex; gap: .25rem; justify-content: center; margin-top: .15rem; }
+.ind { font-size: .62rem; padding: .1rem .3rem; border-radius: 3px; font-weight: 600; }
+.ind-lock    { background: #fce8e6; color: #c5221f; }
+.ind-pub     { background: #e6f4ea; color: #1e8e3e; }
 
-.empty-state-icon {
-    font-size: 4rem;
-    color: #dee2e6;
-}
+/* Totals column */
+.total-cell { font-size: .9rem; font-weight: 700; color: #1a1f3a; background: #f8f9fa; }
+.avg-cell   { font-size: .82rem; color: #6c757d; background: #f8f9fa; }
 
-/* Filter Section */
-.result-filters {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+/* Empty state */
+.empty-results {
+    padding: 4rem 2rem; text-align: center;
+    background: #fff; border: 1px solid #e8eaf0; border-radius: 12px;
 }
+.empty-results i { font-size: 2.5rem; color: #c8ceee; margin-bottom: 1rem; }
+.empty-results h6 { color: #6c757d; margin-bottom: .35rem; }
+.empty-results p  { font-size: .85rem; color: #9da3b4; margin: 0; }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .stats-card {
-        flex-direction: column;
-        text-align: center;
-    }
-    
-    .stats-icon {
-        margin-right: 0;
-        margin-bottom: 10px;
-    }
-    
-    .dashboard-table {
-        font-size: 0.8rem;
-    }
-    
-    .mode-toggle {
-        width: 100%;
-    }
-    
-    .mode-toggle .btn {
-        flex: 1;
-    }
+/* No category selected */
+.no-category {
+    padding: 3rem 2rem; text-align: center; color: #9da3b4;
+    background: #fff; border: 1px dashed #e8eaf0; border-radius: 12px;
 }
-
-@media print {
-    .app-page-title,
-    .page-title-actions,
-    .mode-toggle,
-    .btn,
-    .dropdown,
-    .result-filters {
-        display: none !important;
-    }
-}
+.no-category i { font-size: 2rem; margin-bottom: .75rem; }
 </style>
 {% endblock %}
 
+
 {% block content %}
 
-<!-- Page Title -->
-<div class="app-page-title">
-    <div class="page-title-wrapper">
-        <div class="page-title-heading">
-            <div class="page-title-icon">
-                <i class="pe-7s-note2 icon-gradient bg-happy-itmeo"></i>
-            </div>
+<!-- ── Page header ──────────────────────────────────────────────────────── -->
+<div class="dash-header">
+    <div class="dash-header-inner">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
             <div>
-                Results: {{ class_instance.get_display_name }}
-                <div class="page-title-subheading">
+                <div class="breadcrumb-bar mb-1">
+                    <a href="{% url 'exams:results_by_class' %}?session={{ session.pk }}">Results</a>
+                    <span class="sep">/</span>
                     {{ session.name }}
+                    <span class="sep">/</span>
+                    {{ class_instance.get_display_name }}
                 </div>
+                <h1>
+                    <i class="fas fa-chalkboard me-2 opacity-75"></i>
+                    {{ class_instance.get_display_name }}
+                    <span style="font-size:.85rem;font-weight:400;color:rgba(255,255,255,.55);margin-left:.5rem;">
+                        {{ class_instance.academic_level.name }}
+                    </span>
+                </h1>
             </div>
-        </div>
-        <div class="page-title-actions">
-            <div class="d-flex gap-2 flex-wrap">
-                <!-- Mode Toggle -->
-                <div class="mode-toggle">
-                    <a href="?session={{ session.pk }}&mode=dashboard{% if selected_category_abbr %}&tab={{ selected_category_abbr }}{% endif %}" 
-                       class="btn {% if view_mode == 'dashboard' %}active{% endif %}">
-                        <i class="fa fa-table me-1"></i>Dashboard
-                    </a>
-                    <a href="?session={{ session.pk }}&mode=list" 
-                       class="btn {% if view_mode == 'list' %}active{% endif %}">
-                        <i class="fa fa-list me-1"></i>List View
-                    </a>
-                </div>
-                
-                <!-- Action Buttons -->
-                <a href="{% url 'exams:results_by_class' %}" 
-                   class="btn btn-outline-secondary">
-                    <i class="fa fa-arrow-left me-1"></i>Back
+            <div class="d-flex gap-2 flex-wrap" style="position:relative;z-index:1;">
+                <a href="{% url 'exams:results_by_class' %}?session={{ session.pk %}"
+                   class="btn btn-sm btn-light">
+                    <i class="fas fa-arrow-left me-1"></i> All Classes
                 </a>
-                
-                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-                    <i class="fa fa-print me-1"></i>Print
-                </button>
+                <a href="{% url 'exams:examination_list' %}?academic_session={{ session.pk }}"
+                   class="btn btn-sm btn-light">
+                    <i class="fas fa-file-alt me-1"></i> Examinations
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Session Selector -->
-<div class="row mb-3">
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body py-2">
-                <form method="get" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="mode" value="{{ view_mode }}">
-                    {% if view_mode == 'dashboard' and selected_category_abbr %}
-                    <input type="hidden" name="tab" value="{{ selected_category_abbr }}">
-                    {% endif %}
-                    <label class="mb-0 fw-bold">Academic Session:</label>
-                    <select name="session" class="form-select w-auto" onchange="this.form.submit()">
-                        {% for sess in all_sessions %}
-                        <option value="{{ sess.pk }}" {% if sess.pk == session.pk %}selected{% endif %}>
-                            {{ sess.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </form>
+<!-- ── Control bar: session switcher + mode toggle ──────────────────────── -->
+<div class="control-bar">
+    <label style="font-size:.75rem;font-weight:700;color:#9da3b4;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;margin:0;">
+        <i class="fas fa-calendar-alt me-1"></i> Session
+    </label>
+    <select onchange="switchSession(this.value)">
+        {% for sess in all_sessions %}
+            <option value="{{ sess.pk }}" {% if sess.pk == session.pk %}selected{% endif %}>
+                {{ sess.name }}{% if sess.is_current %} — Current{% endif %}
+            </option>
+        {% endfor %}
+    </select>
+
+    <div class="mode-toggle">
+        <a href="?session={{ session.pk }}&mode=dashboard{% if selected_abbr %}&tab={{ selected_abbr }}{% endif %}"
+           class="mode-btn {% if view_mode == 'dashboard' %}active{% endif %}">
+            <i class="fas fa-th-large"></i> Overview
+        </a>
+        <a href="?session={{ session.pk }}&mode=list"
+           class="mode-btn {% if view_mode == 'list' %}active{% endif %}">
+            <i class="fas fa-list"></i> All Results
+        </a>
+    </div>
+</div>
+
+<!-- ── Stats row ────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="fas fa-users"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.total_students }}</div>
+                <div class="stat-label">Students</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="fas fa-file-alt"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.total_exams }}</div>
+                <div class="stat-label">Exams</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon slate"><i class="fas fa-layer-group"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.categories }}</div>
+                <div class="stat-label">Categories</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.results_entered }}</div>
+                <div class="stat-label">Entered</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="fas fa-eye"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.published_results }}</div>
+                <div class="stat-label">Published</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="fas fa-lock"></i></div>
+            <div>
+                <div class="stat-val">{{ stats.locked_results }}</div>
+                <div class="stat-label">Locked</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Statistics Cards -->
-<div class="row mb-3" id="stats-cards">
-    {% if view_mode == 'dashboard' %}
-        <!-- Dashboard Stats -->
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-primary">
-                    <i class="pe-7s-users"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Total Students</div>
-                    <h3>{{ stats.total_students|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-success">
-                    <i class="pe-7s-note2"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Total Exams</div>
-                    <h3>{{ stats.total_exams|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-info">
-                    <i class="pe-7s-folder"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Categories</div>
-                    <h3>{{ stats.categories|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-warning">
-                    <i class="pe-7s-check"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Results Entered</div>
-                    <h3>{{ stats.results_entered|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-    {% else %}
-        <!-- List View Stats -->
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-primary">
-                    <i class="pe-7s-note2"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Total Results</div>
-                    <h3>{{ stats.total|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-success">
-                    <i class="pe-7s-check"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Published</div>
-                    <h3>{{ stats.published|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-warning">
-                    <i class="pe-7s-lock"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Locked</div>
-                    <h3>{{ stats.locked|default:0 }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-icon bg-info">
-                    <i class="pe-7s-graph2"></i>
-                </div>
-                <div class="stats-content">
-                    <div class="stats-label">Pass Rate</div>
-                    <h3>{{ stats.pass_rate|default:0 }}%</h3>
-                </div>
-            </div>
-        </div>
-    {% endif %}
+<!-- ── Dashboard results: tabs + grid (HTMX target) ─────────────────────── -->
+<div id="results-container">
+    {% include 'exams/results/partials/_dashboard_results.html' %}
 </div>
-
-<!-- Main Content -->
-<section class="section">
-    <div class="row">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    
-                    {% if view_mode == 'dashboard' %}
-                        <!-- Dashboard Mode -->
-                        {% include 'exams/results/partials/_dashboard_content.html' %}
-                    {% else %}
-                        <!-- List Mode -->
-                        {% include 'exams/results/partials/_list_content.html' %}
-                    {% endif %}
-                    
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Modal Container -->
-<div id="modal-container"></div>
 
 {% endblock %}
 
+
 {% block extra_scripts %}
-<script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.10"></script>
 <script>
-// HTMX Modal Handler
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'modal-container') {
-        const modalContainer = document.getElementById('modal-container');
-        const modalDialog = modalContainer.querySelector('.modal-dialog');
-        
-        if (modalDialog) {
-            let modalWrapper = document.getElementById('dynamicModalWrapper');
-            
-            // Clean up existing modal
-            if (modalWrapper) {
-                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
-                if (existingModal) {
-                    existingModal.dispose();
-                }
-                modalWrapper.remove();
-            }
-            
-            // Create new modal wrapper
-            modalWrapper = document.createElement('div');
-            modalWrapper.className = 'modal fade';
-            modalWrapper.id = 'dynamicModalWrapper';
-            modalWrapper.setAttribute('tabindex', '-1');
-            modalWrapper.setAttribute('aria-hidden', 'true');
-            
-            modalWrapper.appendChild(modalDialog);
-            document.body.appendChild(modalWrapper);
-            
-            // Initialize and show modal
-            const currentModal = new bootstrap.Modal(modalWrapper, {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
-            
-            currentModal.show();
-            
-            // Clean up on hide
-            modalWrapper.addEventListener('hidden.bs.modal', function() {
-                modalWrapper.remove();
-                modalContainer.innerHTML = '';
-            });
-        }
-    }
-});
-
-// HTMX response handling for alerts
-document.body.addEventListener('htmx:afterRequest', function(event) {
-    const xhr = event.detail.xhr;
-    if (xhr) {
-        // Check for HX-Trigger header with alert data
-        const trigger = xhr.getResponseHeader('HX-Trigger');
-        if (trigger) {
-            try {
-                const triggerData = JSON.parse(trigger);
-                if (triggerData.showAlert) {
-                    const alertData = typeof triggerData.showAlert === 'string' 
-                        ? JSON.parse(triggerData.showAlert) 
-                        : triggerData.showAlert;
-                    
-                    // Show alert based on type
-                    const alertClass = alertData.type === 'success' ? 'alert-success' : 'alert-danger';
-                    const alertHtml = `
-                        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
-                            <strong>${alertData.type === 'success' ? 'Success!' : 'Error!'}</strong> ${alertData.message}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    `;
-                    
-                    // Insert alert at top of page
-                    const container = document.querySelector('.app-page-title') || document.body;
-                    container.insertAdjacentHTML('afterend', alertHtml);
-                    
-                    // Auto-dismiss after 5 seconds
-                    setTimeout(() => {
-                        const alert = document.querySelector('.alert');
-                        if (alert) {
-                            const bsAlert = new bootstrap.Alert(alert);
-                            bsAlert.close();
-                        }
-                    }, 5000);
-                }
-            } catch (e) {
-                console.error('Error parsing HTMX trigger data:', e);
-            }
-        }
-    }
-});
-
-// Initialize tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    initializeTooltips();
-});
-
-// Reinitialize tooltips after HTMX swaps
-document.body.addEventListener('htmx:afterSwap', function() {
-    initializeTooltips();
-});
-
-function initializeTooltips() {
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-}
-
-// Handle print button
-function printResults() {
-    window.print();
+function switchSession(sessionPk) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('session', sessionPk);
+    url.searchParams.set('mode', 'dashboard');
+    url.searchParams.delete('tab');
+    window.location.href = url.toString();
 }
 </script>
 {% endblock %}

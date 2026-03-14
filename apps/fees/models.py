@@ -2003,10 +2003,11 @@ class FeeInvoice(BaseModel):
     # -------------------------------------------------------------------------
     
     fee_structure = models.ForeignKey(
-        FeesStructure, 
-        verbose_name="Fee Structure",
+        FeesStructure,
         on_delete=models.CASCADE,
-        related_name='invoices'
+        related_name='invoices',
+        null=True,
+        blank=True  # Uniform invoices won't have one
     )
     
     # -------------------------------------------------------------------------
@@ -2098,6 +2099,36 @@ class FeeInvoice(BaseModel):
         related_name='fee_invoices', 
         help_text="Journal entry created for this invoice"
     )
+
+    def get_student_class(self):
+        """
+        Return the student's Class instance for this invoice's academic session.
+
+        Uses prefetched data (to_attr='prefetched_class_enrollments') when
+        available so no extra query is fired per row in list views.
+
+        Returns:
+            Class instance or None
+        """
+        # Fast path: view has prefetched enrollments onto the student object
+        if hasattr(self.student, 'prefetched_class_enrollments'):
+            for enrollment in self.student.prefetched_class_enrollments:
+                if enrollment.academic_session_id == self.academic_session_id:
+                    return enrollment.class_instance
+            return None
+
+        # Fallback: single targeted query (used in detail views, signals, etc.)
+        from academics.models import StudentClassEnrollment
+        enrollment = (
+            StudentClassEnrollment.objects
+            .filter(
+                student=self.student,
+                academic_session=self.academic_session,
+            )
+            .select_related('class_instance__academic_level')
+            .first()
+        )
+        return enrollment.class_instance if enrollment else None
 
     # -------------------------------------------------------------------------
     # HELPER METHODS TO GET ACCOUNTS FROM MAPPINGS

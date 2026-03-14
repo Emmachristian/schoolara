@@ -17,6 +17,13 @@ Modal types included:
 - Report option modals
 - Bulk operation modals
 - Utility modals
+
+CHANGES FROM PREVIOUS VERSION:
+- Fixed: uniform_sale_quick_view_modal select_related('academic_session')
+  replaced with select_related('fiscal_period__related_academic_session')
+  because academic_session is a @property, not a DB field.
+- Fixed: purchase_order_receive_modal status guard now includes 'APPROVED'
+  to match the action view in views.py which accepts APPROVED, ORDERED, PARTIAL.
 """
 
 from django.shortcuts import render, get_object_or_404
@@ -49,11 +56,9 @@ def measurement_type_delete_modal(request, type_pk):
     """Return delete confirmation modal for measurement type"""
     measurement_type = get_object_or_404(MeasurementType, pk=type_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for existing measurements
     measurement_count = measurement_type.student_measurements.count()
     if measurement_count > 0:
         can_delete = False
@@ -103,7 +108,6 @@ def student_measurement_delete_modal(request, measurement_pk):
     """Return delete confirmation modal for student measurement"""
     measurement = get_object_or_404(StudentMeasurement, pk=measurement_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
@@ -171,23 +175,19 @@ def uniform_size_delete_modal(request, size_pk):
     """Return delete confirmation modal for uniform size"""
     size = get_object_or_404(UniformSize, pk=size_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for items using this size
     item_count = size.uniform_items.count()
     if item_count > 0:
         can_delete = False
         warnings.append(f"Used by {item_count} uniform item(s)")
     
-    # Check for stock records
     stock_count = size.stock_records.count()
     if stock_count > 0:
         can_delete = False
         warnings.append(f"Has {stock_count} stock record(s)")
     
-    # Check for recommendations
     recommendation_count = size.student_recommendations.count()
     if recommendation_count > 0:
         warnings.append(f"Has {recommendation_count} student recommendation(s)")
@@ -236,21 +236,17 @@ def uniform_item_delete_modal(request, item_pk):
     """Return delete confirmation modal for uniform item"""
     item = get_object_or_404(UniformItem, pk=item_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
-    # Check for stock
     if item.current_stock > 0:
         can_delete = False
         warnings.append(f"Has {item.current_stock} units in stock")
     
-    # Check for sales
     sale_count = item.sale_items.count()
     if sale_count > 0:
         warnings.append(f"Has {sale_count} sale record(s)")
     
-    # Check for purchase orders
     po_count = item.purchase_order_items.count()
     if po_count > 0:
         warnings.append(f"Has {po_count} purchase order(s)")
@@ -300,7 +296,7 @@ def stock_adjustment_modal(request, item_pk):
 
 @login_required
 def stock_transfer_modal(request, item_pk):
-    """Return modal for transferring stock between locations"""
+    """Return modal for transferring stock between size variants"""
     item = get_object_or_404(UniformItem, pk=item_pk)
     
     stock_records = item.stock_records.select_related('size')
@@ -320,7 +316,6 @@ def purchase_order_delete_modal(request, po_pk):
     """Return delete confirmation modal for purchase order"""
     po = get_object_or_404(UniformPurchaseOrder, pk=po_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
@@ -378,7 +373,8 @@ def purchase_order_receive_modal(request, po_pk):
     po = get_object_or_404(UniformPurchaseOrder, pk=po_pk)
     
     warnings = []
-    if po.status not in ['ORDERED', 'PARTIAL']:
+    # FIX: action view accepts APPROVED, ORDERED, PARTIAL — guard must match.
+    if po.status not in ['APPROVED', 'ORDERED', 'PARTIAL']:
         warnings.append("Purchase order is not ready for receiving")
     
     items = po.items.select_related('uniform_item', 'size')
@@ -433,7 +429,6 @@ def uniform_sale_delete_modal(request, sale_pk):
     """Return delete confirmation modal for uniform sale"""
     sale = get_object_or_404(UniformSale, pk=sale_pk)
     
-    # Check if can be deleted
     can_delete = True
     warnings = []
     
@@ -531,8 +526,14 @@ def uniform_sale_issue_modal(request, sale_pk):
 @login_required
 def uniform_sale_quick_view_modal(request, sale_pk):
     """Quick view modal for uniform sale"""
+    # FIX: academic_session is a @property on UniformSale derived from
+    # fiscal_period.related_academic_session — it is not a DB field and
+    # cannot be used in select_related.
     sale = get_object_or_404(
-        UniformSale.objects.select_related('student', 'academic_session'),
+        UniformSale.objects.select_related(
+            'student',
+            'fiscal_period__related_academic_session',
+        ),
         pk=sale_pk
     )
     
@@ -541,39 +542,6 @@ def uniform_sale_quick_view_modal(request, sale_pk):
     return render(request, 'uniforms/sales/modals/quick_view.html', {
         'sale': sale,
         'item_count': item_count,
-    })
-
-
-@login_required
-def uniform_sale_create_invoice_modal(request, sale_pk):
-    """Return modal for creating invoice from uniform sale"""
-    sale = get_object_or_404(UniformSale, pk=sale_pk)
-    
-    has_invoice = sale.fee_invoice is not None
-    warnings = []
-    
-    if has_invoice:
-        warnings.append("Invoice already exists for this sale")
-    
-    return render(request, 'uniforms/sales/modals/create_invoice.html', {
-        'sale': sale,
-        'has_invoice': has_invoice,
-        'warnings': warnings,
-    })
-
-
-@login_required
-def uniform_sale_record_payment_modal(request, sale_pk):
-    """Return modal for recording payment for uniform sale"""
-    sale = get_object_or_404(UniformSale, pk=sale_pk)
-    
-    warnings = []
-    if sale.balance <= 0:
-        warnings.append("Sale is fully paid")
-    
-    return render(request, 'uniforms/sales/modals/record_payment.html', {
-        'sale': sale,
-        'warnings': warnings,
     })
 
 
@@ -750,6 +718,101 @@ def measurement_report_options_modal(request):
         'classes': classes,
     })
 
+# =============================================================================
+# UNIFORM STOCK MODALS
+# =============================================================================
+
+@login_required
+def uniform_stock_delete_modal(request, stock_pk):
+    """Delete confirmation modal for a stock record"""
+    stock = get_object_or_404(
+        UniformStock.objects.select_related('uniform_item', 'size'),
+        pk=stock_pk
+    )
+
+    can_delete = True
+    warnings = []
+
+    if stock.quantity > 0:
+        can_delete = False
+        warnings.append(
+            f"Record has {stock.quantity} unit(s) in stock — "
+            f"adjust quantity to zero before deleting"
+        )
+
+    if stock.reserved_quantity > 0:
+        can_delete = False
+        warnings.append(
+            f"Record has {stock.reserved_quantity} reserved unit(s) — "
+            f"release all reservations before deleting"
+        )
+
+    sale_count = stock.uniform_item.sale_items.filter(
+        size=stock.size
+    ).count()
+    if sale_count > 0:
+        warnings.append(
+            f"Item has {sale_count} historical sale(s) for this size — "
+            f"history will be preserved"
+        )
+
+    return render(request, 'uniforms/stock/modals/delete_stock.html', {
+        'stock': stock,
+        'can_delete': can_delete,
+        'warnings': warnings,
+    })
+
+@login_required
+def uniform_stock_quick_view_modal(request, stock_pk):
+    """Quick view modal for a stock record"""
+    stock = get_object_or_404(
+        UniformStock.objects.select_related('uniform_item', 'size'),
+        pk=stock_pk
+    )
+
+    return render(request, 'uniforms/stock/modals/quick_view.html', {
+        'stock': stock,
+    })
+
+
+@login_required
+def stock_receive_modal(request, stock_pk):
+    """Modal for recording stock received directly against a stock record"""
+    stock = get_object_or_404(
+        UniformStock.objects.select_related('uniform_item', 'size'),
+        pk=stock_pk
+    )
+
+    return render(request, 'uniforms/stock/modals/receive_stock.html', {
+        'stock': stock,
+    })
+
+
+@login_required
+def stock_transfer_modal(request, stock_pk):
+    """
+    Modal for transferring stock from one size variant to another.
+
+    NOTE: Takes stock_pk (not item_pk) so the modal knows the source
+    record and can pre-populate the from-size dropdown.
+    """
+    stock = get_object_or_404(
+        UniformStock.objects.select_related('uniform_item', 'size'),
+        pk=stock_pk
+    )
+
+    # Other size variants for the same item (transfer targets)
+    other_stock_records = (
+        UniformStock.objects
+        .filter(uniform_item=stock.uniform_item)
+        .exclude(pk=stock.pk)
+        .select_related('size')
+    )
+
+    return render(request, 'uniforms/stock/modals/stock_transfer.html', {
+        'stock': stock,
+        'other_stock_records': other_stock_records,
+    })
 
 @login_required
 def stock_valuation_modal(request):

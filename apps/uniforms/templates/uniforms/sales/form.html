@@ -3,6 +3,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% load widget_tweaks %}
+{% load currency_filters %}
 
 {% block extra_css %}
 <style>
@@ -14,7 +15,7 @@
         margin-bottom: 25px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
+
     .form-section-header {
         display: flex;
         align-items: center;
@@ -22,19 +23,19 @@
         padding-bottom: 15px;
         border-bottom: 2px solid #e9ecef;
     }
-    
+
     .form-section-header i {
         font-size: 1.5rem;
         color: #007bff;
         margin-right: 12px;
     }
-    
+
     .form-section-header h5 {
         margin: 0;
         color: #495057;
         font-weight: 600;
     }
-    
+
     .form-section-description {
         color: #6c757d;
         font-size: 0.9rem;
@@ -44,23 +45,23 @@
         border-left: 3px solid #007bff;
         border-radius: 4px;
     }
-    
+
     .required-field::after {
         content: " *";
         color: #dc3545;
     }
-    
+
     .form-help-text {
         display: block;
         margin-top: 5px;
         font-size: 0.875rem;
         color: #6c757d;
     }
-    
+
     .field-with-icon {
         position: relative;
     }
-    
+
     .field-with-icon i {
         position: absolute;
         left: 12px;
@@ -69,21 +70,21 @@
         color: #6c757d;
         z-index: 10;
     }
-    
+
     .field-with-icon input,
     .field-with-icon select:not(.select2-hidden-accessible) {
         padding-left: 38px;
     }
-    
+
     /* Select2 adjustments */
     .select2-container {
         width: 100% !important;
     }
-    
+
     .select2-container--bootstrap-5 .select2-selection {
         min-height: 38px;
     }
-    
+
     .info-card {
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
@@ -91,7 +92,7 @@
         padding: 20px;
         margin-bottom: 20px;
     }
-    
+
     .info-card h6 {
         color: #495057;
         font-weight: 600;
@@ -99,13 +100,13 @@
         padding-bottom: 10px;
         border-bottom: 2px solid #dee2e6;
     }
-    
+
     .errorlist {
         list-style: none;
         padding: 0;
         margin: 5px 0 0 0;
     }
-    
+
     .errorlist li {
         color: #dc3545;
         font-size: 0.875rem;
@@ -114,7 +115,7 @@
         border-radius: 4px;
         margin-top: 5px;
     }
-    
+
     .form-actions {
         display: flex;
         gap: 15px;
@@ -126,7 +127,7 @@
         bottom: 0;
         z-index: 100;
     }
-    
+
     .sidebar-sticky {
         position: sticky;
         top: 20px;
@@ -134,24 +135,24 @@
         overflow-y: auto;
         padding-right: 5px;
     }
-    
+
     .sidebar-sticky::-webkit-scrollbar {
         width: 8px;
     }
-    
+
     .sidebar-sticky::-webkit-scrollbar-track {
         background: transparent;
     }
-    
+
     .sidebar-sticky::-webkit-scrollbar-thumb {
         background: #ccc;
         border-radius: 4px;
     }
-    
+
     .sidebar-sticky::-webkit-scrollbar-thumb:hover {
         background: #999;
     }
-    
+
     .auto-info-badge {
         display: inline-block;
         background-color: #e3f2fd;
@@ -162,7 +163,24 @@
         font-weight: 600;
         margin-left: 8px;
     }
+
+    /* Cash auto-receipt notice shown inside the payment reference field area */
+    #cash-receipt-notice {
+        display: none;
+        padding: 10px 14px;
+        background-color: #e8f5e9;
+        border: 1px solid #c8e6c9;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        color: #2e7d32;
+    }
+
+    #cash-receipt-notice i {
+        margin-right: 6px;
+    }
 </style>
+
+
 {% endblock %}
 
 {% block content %}
@@ -213,20 +231,22 @@
 
 <form method="post" id="uniform-sale-form" novalidate>
     {% csrf_token %}
-    
+
     <div class="row">
         <!-- Left Column -->
         <div class="col-lg-8">
-            
-            <!-- Student & Session Information -->
+
+            <!-- Student Information -->
+            <!-- NOTE: academic_session is no longer a form field. It is derived
+                 automatically from fiscal_period.related_academic_session. -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-user"></i>
-                    <h5>Student & Session Information</h5>
+                    <h5>Student Information</h5>
                 </div>
-                
+
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-12 mb-3">
                         <label for="{{ form.student.id_for_label }}" class="form-label required-field">
                             {{ form.student.label }}
                         </label>
@@ -236,24 +256,16 @@
                         </small>
                         {{ form.student.errors }}
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ form.academic_session.id_for_label }}" class="form-label required-field">
-                            {{ form.academic_session.label }}
-                        </label>
-                        {% render_field form.academic_session class="form-select" %}
-                        {{ form.academic_session.errors }}
-                    </div>
                 </div>
             </div>
-            
+
             <!-- Sale Details -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-cart"></i>
                     <h5>Sale Details</h5>
                 </div>
-                
+
                 {% if not sale %}
                 <div class="alert alert-info mb-3">
                     <i class="fa fa-info-circle me-2"></i>
@@ -261,7 +273,7 @@
                     <span class="auto-info-badge">AUTO-GENERATED</span>
                 </div>
                 {% endif %}
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.sale_type.id_for_label }}" class="form-label required-field">
@@ -273,7 +285,7 @@
                         </small>
                         {{ form.sale_type.errors }}
                     </div>
-                    
+
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.sale_date.id_for_label }}" class="form-label required-field">
                             {{ form.sale_date.label }}
@@ -284,20 +296,7 @@
                         </small>
                         {{ form.sale_date.errors }}
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ form.fiscal_period.id_for_label }}" class="form-label required-field">
-                            {{ form.fiscal_period.label }}
-                        </label>
-                        {% render_field form.fiscal_period class="form-select" %}
-                        {% if not form.fiscal_period.initial and not sale %}
-                            <small class="form-help-text">
-                                <i class="fa fa-info-circle me-1"></i>Current fiscal period will be set automatically
-                            </small>
-                        {% endif %}
-                        {{ form.fiscal_period.errors }}
-                    </div>
-                    
+
                     <div class="col-md-6 mb-3" id="return-date-field" style="display: none;">
                         <label for="{{ form.return_date.id_for_label }}" class="form-label">
                             {{ form.return_date.label }}
@@ -310,56 +309,184 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Discount Information -->
-            <div class="form-section">
+
+            <!-- ================================================================
+                 UNIFORM ITEMS
+                 Items are managed client-side and submitted with the form.
+                 In edit mode, existing items are rendered as pre-filled rows.
+            ================================================================ -->
+            <div class="form-section" id="items-section">
                 <div class="form-section-header">
-                    <i class="pe-7s-ticket"></i>
-                    <h5>Discount Information</h5>
-                </div>
-                
-                <div class="form-section-description">
-                    <i class="fa fa-lightbulb"></i>
-                    Apply discounts at the sale level. Item-level discounts can be applied when adding items.
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ form.discount_amount.id_for_label }}" class="form-label">
-                            {{ form.discount_amount.label }}
-                        </label>
-                        {% render_field form.discount_amount class="form-control" placeholder="0.00" %}
-                        <small class="form-help-text">
-                            <i class="fa fa-tag me-1"></i>Fixed amount discount for this sale
-                        </small>
-                        {{ form.discount_amount.errors }}
+                    <i class="pe-7s-cart"></i>
+                    <h5>
+                        Uniform Items
+                        <span class="badge bg-secondary ms-2" id="item-count-badge">
+                            {% if sale %}{{ sale.items.count }}{% else %}0{% endif %}
+                        </span>
+                    </h5>
+                    <div class="ms-auto">
+                        <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="open-add-item-btn" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                            <i class="fa fa-plus" style="font-size:0.75rem;color:#fff;line-height:1;"></i>
+                            <span>Add Item</span>
+                        </button>
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ form.discount_reason.id_for_label }}" class="form-label">
-                            {{ form.discount_reason.label }}
-                        </label>
-                        {% render_field form.discount_reason class="form-control" placeholder="e.g., Staff discount, Bulk purchase..." %}
-                        <small class="form-help-text">
-                            <i class="fa fa-comment me-1"></i>Explain why discount is being applied
-                        </small>
-                        {{ form.discount_reason.errors }}
+                </div>
+
+                <!-- Items table -->
+                <div id="items-container">
+                    <div class="table-responsive" id="items-table-wrap" style="{% if not sale or not sale.items.exists %}display:none;{% endif %}">
+                        <table class="table table-sm align-middle mb-0" id="items-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Size</th>
+                                    <th class="text-center">Qty</th>
+                                    <th class="text-end">Unit Price</th>
+                                    <th class="text-end">Tax %</th>
+                                    <th class="text-end">Line Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="items-tbody">
+                                {% if sale %}
+                                {% for item in sale.items.all %}
+                                <tr class="item-row" data-index="{{ forloop.counter0 }}">
+                                    <td>
+                                        <strong>{{ item.uniform_item.name }}</strong>
+                                        {% if item.uniform_item.code %}<br><small class="text-muted">{{ item.uniform_item.code }}</small>{% endif %}
+                                        <input type="hidden" name="items[{{ forloop.counter0 }}][id]" value="{{ item.pk }}">
+                                        <input type="hidden" name="items[{{ forloop.counter0 }}][uniform_item]" value="{{ item.uniform_item.pk }}">
+                                    </td>
+                                    <td>
+                                        {{ item.size.name|default:"—" }}
+                                        {% if item.size %}<input type="hidden" name="items[{{ forloop.counter0 }}][size]" value="{{ item.size.pk }}">{% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="number" name="items[{{ forloop.counter0 }}][quantity]"
+                                               value="{{ item.quantity }}" min="1"
+                                               class="form-control form-control-sm text-center item-qty"
+                                               style="width:70px;">
+                                    </td>
+                                    <td class="text-end">
+                                        <input type="number" name="items[{{ forloop.counter0 }}][unit_price]"
+                                               value="{{ item.unit_price }}" min="0" step="0.01"
+                                               class="form-control form-control-sm text-end item-price"
+                                               style="width:100px;">
+                                    </td>
+                                    <td class="text-end">{{ item.tax_percentage|default:0|format_percentage }}
+                                        <input type="hidden" name="items[{{ forloop.counter0 }}][tax_percentage]" value="{{ item.tax_percentage }}">
+                                        {% if item.tax_rate %}<input type="hidden" name="items[{{ forloop.counter0 }}][tax_rate]" value="{{ item.tax_rate.pk }}">{% endif %}
+                                        <input type="hidden" name="items[{{ forloop.counter0 }}][unit_cost]" value="{{ item.unit_cost }}">
+                                    </td>
+                                    <td class="text-end fw-semibold item-line-total">
+                                        {{ item.total_price|amount }}
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-outline-danger btn-sm remove-item-btn">
+                                            <i class="fa fa-times"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div id="items-empty" class="text-center py-4 text-muted"
+                         style="{% if sale and sale.items.exists %}display:none;{% endif %}">
+                        <i class="pe-7s-box1" style="font-size:2.5rem;opacity:0.35;display:block;margin-bottom:10px;"></i>
+                        <p class="mb-0">No items yet. Click <strong>Add Item</strong> to start.</p>
+                    </div>
+                </div>
+
+                <!-- Running totals -->
+                <div id="items-totals" class="d-flex justify-content-end mt-3"
+                     style="{% if not sale or not sale.items.exists %}display:none!important;{% endif %}">
+                    <div style="min-width:260px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:14px 18px;">
+                        <div class="d-flex justify-content-between mb-1" style="font-size:0.9rem;">
+                            <span class="text-muted">Subtotal</span>
+                            <span id="tbl-subtotal">{% if sale %}{{ sale.subtotal|format_currency }}{% else %}{% get_currency_symbol %} 0.00{% endif %}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1" style="font-size:0.9rem;color:#28a745;" id="tbl-discount-row"
+                             {% if not sale or not sale.discount_amount %}style="display:none;"{% endif %}>
+                            <span>Discount</span>
+                            <span id="tbl-discount">-{% if sale %}{{ sale.discount_amount|format_currency }}{% else %}{% get_currency_symbol %} 0.00{% endif %}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1" style="font-size:0.9rem;color:#6c757d;" id="tbl-tax-row">
+                            <span>Tax</span>
+                            <span id="tbl-tax">{% if sale %}{{ sale.tax_amount|format_currency }}{% else %}{% get_currency_symbol %} 0.00{% endif %}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2 pt-2 fw-bold" style="border-top:2px solid #dee2e6;font-size:1rem;">
+                            <span>Total</span>
+                            <span id="tbl-total">{% if sale %}{{ sale.total_amount|format_currency }}{% else %}{% get_currency_symbol %} 0.00{% endif %}</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            
+
+            <div class="form-section">
+                <div class="form-section-header">
+                    <i class="pe-7s-ticket"></i>
+                    <h5>Discount</h5>
+                    <div class="ms-auto form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="discount-toggle"
+                               {% if form.discount_amount.value and form.discount_amount.value != '0.00' %}checked{% endif %}>
+                        <label class="form-check-label text-muted" for="discount-toggle">
+                            Apply discount
+                        </label>
+                    </div>
+                </div>
+
+                <div id="discount-fields" style="display: none;">
+                    <div class="form-section-description">
+                        <i class="fa fa-lightbulb"></i>
+                        Sale-level discount applied to the total. Item-level discounts can be set when adding items.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.discount_amount.id_for_label }}" class="form-label required-field">
+                                {{ form.discount_amount.label }}
+                            </label>
+                            {% render_field form.discount_amount class="form-control" placeholder="0.00" %}
+                            <small class="form-help-text">
+                                <i class="fa fa-tag me-1"></i>Fixed amount off the sale total
+                            </small>
+                            {{ form.discount_amount.errors }}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.discount_reason.id_for_label }}" class="form-label required-field">
+                                {{ form.discount_reason.label }}
+                            </label>
+                            {% render_field form.discount_reason class="form-control" placeholder="e.g., Staff child, Sibling discount, Bulk purchase..." %}
+                            <small class="form-help-text">
+                                <i class="fa fa-comment me-1"></i>Required — recorded for audit trail
+                            </small>
+                            {{ form.discount_reason.errors }}
+                        </div>
+                    </div>
+                </div>
+
+                <div id="discount-off-notice" class="text-muted" style="font-size: 0.875rem;">
+                    <i class="fa fa-tag me-1"></i>No discount applied. Toggle on to add one.
+                </div>
+            </div>
+
             <!-- Payment Information -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-cash"></i>
                     <h5>Payment Information</h5>
                 </div>
-                
+
                 <div class="form-section-description">
                     <i class="fa fa-info-circle"></i>
                     Payment details are optional during creation. You can record payment later or leave blank for credit sales.
                 </div>
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="{{ form.payment_method.id_for_label }}" class="form-label">
@@ -371,83 +498,41 @@
                         {% endif %}
                         {{ form.payment_method.errors }}
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
+
+                    <!-- Payment reference — shown for non-cash, hidden for cash -->
+                    <div class="col-md-6 mb-3" id="payment-reference-field">
                         <label for="{{ form.payment_reference.id_for_label }}" class="form-label">
                             {{ form.payment_reference.label }}
                         </label>
-                        {% render_field form.payment_reference class="form-control" placeholder="e.g., Cheque #, Transaction ID..." %}
-                        {% if form.payment_reference.help_text %}
-                            <small class="form-help-text">{{ form.payment_reference.help_text }}</small>
-                        {% endif %}
+
+                        {# Actual input — shown when payment method is not CASH #}
+                        <div id="payment-reference-input">
+                            {% render_field form.payment_reference class="form-control" %}
+                            <small class="form-help-text" id="payment-reference-help">
+                                <i class="fa fa-info-circle me-1"></i>
+                                Enter the MTN/Airtel transaction ID, cheque number, or bank transfer reference.
+                            </small>
+                        </div>
+
+                        {# Auto-receipt notice — shown when CASH is selected #}
+                        <div id="cash-receipt-notice">
+                            <i class="fa fa-check-circle"></i>
+                            Cash payment — a receipt number will be generated automatically on save.
+                            Leave this field blank.
+                        </div>
+
                         {{ form.payment_reference.errors }}
                     </div>
                 </div>
             </div>
-            
-            <!-- Financial Integration -->
-            <div class="form-section">
-                <div class="form-section-header">
-                    <i class="pe-7s-calculator"></i>
-                    <h5>Financial Integration</h5>
-                </div>
-                
-                <div class="form-section-description">
-                    <i class="fa fa-magic"></i>
-                    Automatic financial integration creates invoices and journal entries in the accounting system
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <div class="form-check form-switch">
-                            {% render_field form.auto_create_invoice class="form-check-input" id="id_auto_create_invoice" role="switch" %}
-                            <label class="form-check-label" for="id_auto_create_invoice">
-                                {{ form.auto_create_invoice.label }}
-                                <span class="auto-info-badge">RECOMMENDED</span>
-                            </label>
-                        </div>
-                        {% if form.auto_create_invoice.help_text %}
-                            <small class="form-help-text">{{ form.auto_create_invoice.help_text }}</small>
-                        {% else %}
-                            <small class="form-help-text">
-                                <i class="fa fa-file-invoice me-1"></i>Creates student fee invoice automatically when sale is finalized
-                            </small>
-                        {% endif %}
-                        {{ form.auto_create_invoice.errors }}
-                    </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <div class="form-check form-switch">
-                            {% render_field form.auto_create_journal_entry class="form-check-input" id="id_auto_create_journal_entry" role="switch" %}
-                            <label class="form-check-label" for="id_auto_create_journal_entry">
-                                {{ form.auto_create_journal_entry.label }}
-                                <span class="auto-info-badge">RECOMMENDED</span>
-                            </label>
-                        </div>
-                        {% if form.auto_create_journal_entry.help_text %}
-                            <small class="form-help-text">{{ form.auto_create_journal_entry.help_text }}</small>
-                        {% else %}
-                            <small class="form-help-text">
-                                <i class="fa fa-book me-1"></i>Creates accounting journal entry for proper financial tracking
-                            </small>
-                        {% endif %}
-                        {{ form.auto_create_journal_entry.errors }}
-                    </div>
-                </div>
-                
-                <div class="alert alert-warning mb-0">
-                    <i class="fa fa-exclamation-triangle me-2"></i>
-                    <strong>Note:</strong> Financial records are created when sale status changes to PENDING or PAID
-                </div>
-            </div>
-            
+
             <!-- Notes -->
             <div class="form-section">
                 <div class="form-section-header">
                     <i class="pe-7s-note2"></i>
                     <h5>Additional Notes</h5>
                 </div>
-                
+
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label for="{{ form.notes.id_for_label }}" class="form-label">
@@ -465,171 +550,125 @@
                     </div>
                 </div>
             </div>
-            
+
         </div>
-        
+
         <!-- Right Column - Guidelines & Info -->
         <div class="col-lg-4">
-            
-            <!-- Sticky Sidebar Container -->
+
             <div class="sidebar-sticky">
-                
+
                 {% if sale %}
                 <!-- Current Sale Information -->
                 <div class="info-card">
                     <h6><i class="pe-7s-info"></i> Sale Information</h6>
-                    
+
                     <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
                         <strong>Sale Number:</strong><br>
                         <span class="badge bg-primary">{{ sale.sale_number }}</span>
                     </div>
-                    
+
                     <div class="alert alert-secondary mb-2" style="font-size: 0.85rem;">
                         <strong>Current Status:</strong><br>
                         <span class="badge bg-secondary">{{ sale.get_status_display }}</span>
                     </div>
-                    
+
                     <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
                         <strong>Total Items:</strong> {{ sale.items.count }} item(s)
                     </div>
-                    
+
                     <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
-                        <strong>Total Amount:</strong> {{ sale.total_amount|floatformat:2 }}
+                        <strong>Total Amount:</strong> {{ sale.total_amount|format_currency }}
                     </div>
                 </div>
                 {% else %}
                 <!-- Creation Info -->
                 <div class="info-card">
                     <h6><i class="pe-7s-magic-wand"></i> Auto-Generation</h6>
-                    
+
                     <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-check-circle text-success me-1"></i>
                         Sale number generated automatically
                     </div>
-                    
+
                     <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-check-circle text-success me-1"></i>
-                        Fiscal period set to current period
+                        Fiscal period set to current active period automatically
                     </div>
-                    
-                    <div class="alert alert-info mb-0" style="font-size: 0.85rem;">
+
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
+                        <i class="fa fa-check-circle text-success me-1"></i>
+                        Academic session derived from fiscal period automatically
+                    </div>
+
+                    <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
                         <i class="fa fa-check-circle text-success me-1"></i>
                         Sale date defaults to today
                     </div>
+
+                    <div class="alert alert-info mb-0" style="font-size: 0.85rem;">
+                        <i class="fa fa-check-circle text-success me-1"></i>
+                        Cash receipt number generated automatically
+                    </div>
                 </div>
                 {% endif %}
-                
+
                 <!-- Sale Type Guide -->
                 <div class="info-card">
                     <h6><i class="pe-7s-light"></i> Sale Type Guide</h6>
-                    
+
                     <div class="alert alert-primary mb-2" style="font-size: 0.85rem;">
                         <strong>SALE:</strong> Regular paid purchase<br>
                         <small class="text-muted">Payment required, creates invoice</small>
                     </div>
-                    
+
                     <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
                         <strong>ISSUANCE:</strong> Free uniform distribution<br>
                         <small class="text-muted">No payment required, for free items</small>
                     </div>
-                    
+
                     <div class="alert alert-info mb-2" style="font-size: 0.85rem;">
                         <strong>LOAN:</strong> Temporary loan with return date<br>
                         <small class="text-muted">Return date required, tracked separately</small>
                     </div>
-                    
+
                     <div class="alert alert-warning mb-0" style="font-size: 0.85rem;">
                         <strong>REPLACEMENT:</strong> Replacement for damaged items<br>
                         <small class="text-muted">May have special pricing/discounts</small>
                     </div>
                 </div>
-                
-                <!-- Quick Tips -->
-                <div class="info-card">
-                    <h6><i class="pe-7s-help1"></i> Quick Tips</h6>
-                    
-                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Sale number is auto-generated by signals
-                    </div>
-                    
-                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Use Select2 search for quick student lookup
-                    </div>
-                    
-                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Select correct sale type for proper accounting
-                    </div>
-                    
-                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Add uniform items after creating the sale
-                    </div>
-                    
-                    <div class="alert alert-light mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Set return date for LOAN type sales
-                    </div>
-                    
-                    <div class="alert alert-light mb-0" style="font-size: 0.85rem;">
-                        <i class="fa fa-lightbulb text-warning me-1"></i>
-                        Enable auto-invoice for financial integration
-                    </div>
-                </div>
-                
+
                 <!-- Workflow Steps -->
                 <div class="info-card">
                     <h6><i class="pe-7s-notebook"></i> Sale Workflow</h6>
-                    
+
                     <div class="alert alert-secondary mb-2" style="font-size: 0.85rem;">
                         <strong>1. DRAFT:</strong> Create sale and add items<br>
                         <small class="text-muted">Initial status, can be edited</small>
                     </div>
-                    
+
                     <div class="alert alert-warning mb-2" style="font-size: 0.85rem;">
                         <strong>2. PENDING:</strong> Awaiting payment<br>
                         <small class="text-muted">Invoice created if enabled</small>
                     </div>
-                    
+
                     <div class="alert alert-success mb-2" style="font-size: 0.85rem;">
                         <strong>3. PAID:</strong> Payment received<br>
                         <small class="text-muted">Journal entry created if enabled</small>
                     </div>
-                    
+
                     <div class="alert alert-primary mb-0" style="font-size: 0.85rem;">
                         <strong>4. ISSUED:</strong> Items given to student<br>
                         <small class="text-muted">Stock updated, transaction complete</small>
                     </div>
                 </div>
-                
-                <!-- Important Notes -->
-                <div class="info-card">
-                    <h6><i class="pe-7s-attention"></i> Important Notes</h6>
-                    
-                    <div class="alert alert-danger mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-exclamation-circle me-1"></i>
-                        Sale date cannot be in the future
-                    </div>
-                    
-                    <div class="alert alert-warning mb-2" style="font-size: 0.85rem;">
-                        <i class="fa fa-exclamation-triangle me-1"></i>
-                        Return date must be after sale date
-                    </div>
-                    
-                    <div class="alert alert-info mb-0" style="font-size: 0.85rem;">
-                        <i class="fa fa-info-circle me-1"></i>
-                        Only DRAFT sales can be edited
-                    </div>
-                </div>
-                
+
             </div>
             <!-- End Sticky Sidebar Container -->
-            
+
         </div>
     </div>
-    
+
     <!-- Form Actions -->
     <div class="form-actions">
         {% if sale %}
@@ -641,16 +680,351 @@
                 <i class="fa fa-times"></i> Cancel
             </a>
         {% endif %}
-        <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
-            <i class="fa fa-save"></i> {{ submit_text|default:"Create Sale" }}
+        <button type="submit" name="action" value="save" class="btn btn-outline-primary btn-lg" id="submit-btn">
+            <i class="fa fa-save"></i> {{ submit_text|default:"Save Sale" }}
+        </button>
+        <button type="submit" name="action" value="finalize" class="btn btn-success btn-lg" id="finalize-btn">
+            <i class="fa fa-check"></i> Save &amp; Finalize
         </button>
     </div>
-    
+
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="pe-7s-cart me-2"></i> Add Uniform Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Uniform Item <span class="text-danger">*</span></label>
+                    <select id="modal-uniform-item" class="form-select">
+                        <option value="">— Select item —</option>
+                        {% for item in available_items %}
+                        <option value="{{ item.pk }}"
+                                data-name="{{ item.name }}"
+                                data-code="{{ item.code|default:'' }}"
+                                data-requires-sizing="{{ item.requires_sizing|yesno:'true,false' }}"
+                                data-price="{{ item.selling_price }}"
+                                data-cost="{{ item.unit_cost }}"
+                                data-stock="{{ item.current_stock }}"
+                                data-tax-pct="{{ item.tax_rate.rate|default:'0.00' }}"
+                                data-tax-rate="{{ item.tax_rate.pk|default:'' }}">
+                            {{ item.name }}{% if item.code %} ({{ item.code }}){% endif %} — {{ item.current_stock }} in stock
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="modal-stock-info" class="mb-2" style="display:none;">
+                    <small id="modal-stock-text"></small>
+                </div>
+
+                <div id="modal-size-field" class="mb-3" style="display:none;">
+                    <label class="form-label fw-semibold">Size <span class="text-danger">*</span></label>
+                    <select id="modal-size" class="form-select">
+                        <option value="">— Select size —</option>
+                    </select>
+                    <small id="modal-size-stock" class="text-muted mt-1 d-block"></small>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Quantity <span class="text-danger">*</span></label>
+                        <input type="number" id="modal-quantity" class="form-control" value="1" min="1" step="1">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Unit Price</label>
+                        <input type="text" id="modal-unit-price" class="form-control bg-light" readonly placeholder="Auto-filled from catalogue">
+                        <small class="text-muted">Catalogue price — cannot be overridden</small>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Line Total</label>
+                        <input type="text" id="modal-line-total" class="form-control" readonly placeholder="—">
+                    </div>
+                </div>
+
+                <div id="modal-error" class="alert alert-danger mt-2" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="modal-add-btn" disabled>
+                    <i class="fa fa-plus me-1"></i> Add to Sale
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 </form>
 
 {% endblock %}
 
 {% block extra_scripts %}
+
+<script>
+// =============================================================================
+// ITEMS MANAGER — client-side item rows, submitted with main form
+// =============================================================================
+(function() {
+    var AJAX_SIZES_BASE = '/uniforms/ajax/get-item-sizes/';
+    var itemIndex = parseInt('{{ sale.items.count|default:0 }}');
+    var CURRENCY = '{% get_currency_symbol %}';
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function getRows() {
+        return document.querySelectorAll('#items-tbody .item-row');
+    }
+
+    function formatMoney(value) {
+        return CURRENCY + ' ' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function recalcTotals() {
+        var subtotal = 0;
+        var taxTotal = 0;
+        var discountInput = parseFloat(document.getElementById('id_discount_amount') ? document.getElementById('id_discount_amount').value : '0') || 0;
+
+        getRows().forEach(function(row) {
+            var qty   = parseFloat(row.querySelector('.item-qty').value) || 0;
+            var price = parseFloat(row.querySelector('.item-price').value) || 0;
+            var taxPct = parseFloat(row.querySelector('.item-tax-pct').value) || 0;
+            var line  = qty * price;
+            var tax   = (line * taxPct) / 100;
+            subtotal += line;
+            taxTotal += tax;
+            row.querySelector('.item-line-total').textContent = formatMoney(line);
+        });
+
+        var total = subtotal + taxTotal - discountInput;
+
+        document.getElementById('tbl-subtotal').textContent = formatMoney(subtotal);
+        document.getElementById('tbl-tax').textContent = formatMoney(taxTotal);
+        document.getElementById('tbl-total').textContent = formatMoney(total);
+        document.getElementById('item-count-badge').textContent = getRows().length;
+
+        var wrap  = document.getElementById('items-table-wrap');
+        var empty = document.getElementById('items-empty');
+        var tots  = document.getElementById('items-totals');
+
+        if (getRows().length > 0) {
+            wrap.style.display  = '';
+            empty.style.display = 'none';
+            tots.style.removeProperty('display');
+        } else {
+            wrap.style.display  = 'none';
+            empty.style.display = '';
+            tots.style.display  = 'none';
+        }
+    }
+
+    function addRow(data) {
+        var idx  = itemIndex++;
+        var tbody = document.getElementById('items-tbody');
+        var tr   = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.dataset.index = idx;
+
+        tr.innerHTML =
+            '<td>' +
+                '<strong>' + data.name + '</strong>' +
+                (data.code ? '<br><small class="text-muted">' + data.code + '</small>' : '') +
+                '<input type="hidden" name="items[' + idx + '][uniform_item]" value="' + data.itemId + '">' +
+            '</td>' +
+            '<td>' +
+                (data.sizeName || '—') +
+                (data.sizeId ? '<input type="hidden" name="items[' + idx + '][size]" value="' + data.sizeId + '">' : '') +
+            '</td>' +
+            '<td class="text-center">' +
+                '<input type="number" name="items[' + idx + '][quantity]" value="' + data.quantity + '" min="1" ' +
+                'class="form-control form-control-sm text-center item-qty" style="width:70px;">' +
+            '</td>' +
+            '<td class="text-end">' +
+                '<input type="number" name="items[' + idx + '][unit_price]" value="' + data.price + '" min="0" step="0.01" ' +
+                'class="form-control form-control-sm text-end item-price" style="width:100px;">' +
+            '</td>' +
+            '<td class="text-end">' + (data.taxPct || 0) + '%' +
+                '<input type="hidden" class="item-tax-pct" name="items[' + idx + '][tax_percentage]" value="' + (data.taxPct || 0) + '">' +
+                (data.taxRateId ? '<input type="hidden" name="items[' + idx + '][tax_rate]" value="' + data.taxRateId + '">' : '') +
+                '<input type="hidden" name="items[' + idx + '][unit_cost]" value="' + data.cost + '">' +
+            '</td>' +
+            '<td class="text-end fw-semibold item-line-total">' + formatMoney(0) + '</td>' +
+            '<td>' +
+                '<button type="button" class="btn btn-outline-danger btn-sm remove-item-btn">' +
+                    '<i class="fa fa-times"></i>' +
+                '</button>' +
+            '</td>';
+
+        tbody.appendChild(tr);
+
+        // Bind qty/price change
+        tr.querySelector('.item-qty').addEventListener('input', recalcTotals);
+        tr.querySelector('.item-price').addEventListener('input', recalcTotals);
+
+        // Bind remove
+        tr.querySelector('.remove-item-btn').addEventListener('click', function() {
+            tr.remove();
+            recalcTotals();
+        });
+
+        recalcTotals();
+    }
+
+    // ── Wire up existing rows (edit mode) ─────────────────────────────────
+    document.querySelectorAll('#items-tbody .item-row').forEach(function(tr) {
+        tr.querySelector('.item-qty') && tr.querySelector('.item-qty').addEventListener('input', recalcTotals);
+        tr.querySelector('.item-price') && tr.querySelector('.item-price').addEventListener('input', recalcTotals);
+        tr.querySelector('.remove-item-btn') && tr.querySelector('.remove-item-btn').addEventListener('click', function() {
+            tr.remove();
+            recalcTotals();
+        });
+    });
+
+    // Recalc when discount changes
+    var discountInput = document.getElementById('id_discount_amount');
+    if (discountInput) discountInput.addEventListener('input', recalcTotals);
+
+    // ── Modal logic — variables captured immediately (modal is in DOM at page load) ──
+    var $itemSel   = document.getElementById('modal-uniform-item');
+    var $sizeSel   = document.getElementById('modal-size');
+    var $sizeField = document.getElementById('modal-size-field');
+    var $stockInfo = document.getElementById('modal-stock-info');
+    var $stockTxt  = document.getElementById('modal-stock-text');
+    var $sizeStock = document.getElementById('modal-size-stock');
+    var $qty       = document.getElementById('modal-quantity');
+    var $price     = document.getElementById('modal-unit-price');
+    var $lineTotal = document.getElementById('modal-line-total');
+    var $addBtn    = document.getElementById('modal-add-btn');
+    var $errorBox  = document.getElementById('modal-error');
+    var rawPrice   = 0;  // numeric price used in all calculations
+
+    function setModalPrice(value) {
+        rawPrice = parseFloat(value) || 0;
+        $price.value = rawPrice > 0 ? formatMoney(rawPrice) : '';
+    }
+
+    function validateModal() {
+        var opt = $itemSel.options[$itemSel.selectedIndex];
+        var requiresSizing = opt && opt.dataset.requiresSizing === 'true';
+        var qty = parseInt($qty.value);
+        $addBtn.disabled = !($itemSel.value && (!requiresSizing || $sizeSel.value) && qty >= 1);
+    }
+
+    function recalcModalTotal() {
+        var qty = parseInt($qty.value) || 0;
+        $lineTotal.value = (qty > 0 && rawPrice > 0) ? formatMoney(qty * rawPrice) : '';
+    }
+
+    // Item selected
+    $itemSel.addEventListener('change', function() {
+        $errorBox.style.display = 'none';
+        var opt = this.options[this.selectedIndex];
+        if (!this.value) {
+            $sizeField.style.display = 'none';
+            $stockInfo.style.display = 'none';
+            rawPrice = 0;
+            $price.value = '';
+            $lineTotal.value = '';
+            validateModal();
+            return;
+        }
+        setModalPrice(opt.dataset.price || 0);
+        recalcModalTotal();
+
+        if (opt.dataset.requiresSizing === 'true') {
+            $sizeField.style.display = 'block';
+            $stockInfo.style.display = 'none';
+            $sizeSel.innerHTML = '<option value="">Loading sizes...</option>';
+
+            fetch(AJAX_SIZES_BASE + this.value + '/')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    $sizeSel.innerHTML = '<option value="">— Select size —</option>';
+                    (data.sizes || []).forEach(function(s) {
+                        var o = document.createElement('option');
+                        o.value = s.id;
+                        o.textContent = s.name + ' (' + s.available + ' in stock)';
+                        o.dataset.available = s.available;
+                        o.dataset.price = s.price || opt.dataset.price;
+                        o.dataset.name  = s.name;
+                        $sizeSel.appendChild(o);
+                    });
+                })
+                .catch(function() {
+                    $sizeSel.innerHTML = '<option value="">Error loading sizes</option>';
+                });
+        } else {
+            $sizeField.style.display = 'none';
+            var stock = parseInt(opt.dataset.stock) || 0;
+            $stockInfo.style.display = 'block';
+            $stockTxt.textContent = stock + ' units in stock';
+            $stockTxt.className = stock > 0 ? 'text-success' : 'text-danger fw-bold';
+        }
+        validateModal();
+    });
+
+    // Size selected
+    $sizeSel.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        if (opt && opt.dataset.price) setModalPrice(opt.dataset.price);
+        if (opt && opt.dataset.available !== undefined) {
+            var av = parseInt(opt.dataset.available);
+            $sizeStock.textContent = av + ' in stock';
+            $sizeStock.className = 'mt-1 d-block small ' + (av > 0 ? 'text-success' : 'text-danger fw-bold');
+        }
+        recalcModalTotal();
+        validateModal();
+    });
+
+    // Qty changes — price is read-only so only qty triggers recalc
+    $qty.addEventListener('input', function() { recalcModalTotal(); validateModal(); });
+
+    // Add to sale
+    $addBtn.addEventListener('click', function() {
+        var opt     = $itemSel.options[$itemSel.selectedIndex];
+        var sizeOpt = $sizeSel.options[$sizeSel.selectedIndex];
+
+        addRow({
+            itemId:    $itemSel.value,
+            name:      opt.dataset.name,
+            code:      opt.dataset.code || '',
+            sizeId:    $sizeSel.value || null,
+            sizeName:  ($sizeSel.value && sizeOpt) ? sizeOpt.dataset.name || sizeOpt.textContent.split(' (')[0] : null,
+            quantity:  parseInt($qty.value) || 1,
+            price:     rawPrice || parseFloat(($itemSel.options[$itemSel.selectedIndex] || {}).dataset && $itemSel.options[$itemSel.selectedIndex].dataset.price) || 0,
+            cost:      parseFloat(opt.dataset.cost) || 0,
+            taxPct:    parseFloat(opt.dataset.taxPct) || 0,
+            taxRateId: opt.dataset.taxRate || null,
+        });
+
+        bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+    });
+
+    // Reset on close
+    document.getElementById('addItemModal').addEventListener('hidden.bs.modal', function() {
+        $itemSel.value = '';
+        $sizeSel.innerHTML = '<option value="">— Select size —</option>';
+        $sizeField.style.display = 'none';
+        $stockInfo.style.display = 'none';
+        $qty.value = '1';
+        rawPrice = 0;
+        $price.value = '';
+        $lineTotal.value = '';
+        $sizeStock.textContent = '';
+        $addBtn.disabled = true;
+        $errorBox.style.display = 'none';
+    });
+
+    // Initial recalc for edit mode
+    recalcTotals();
+
+    console.log('✓ Items manager initialized');
+})();
+</script>
+
 <!-- Select2 for Student Search -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
@@ -662,11 +1036,11 @@ $(document).ready(function() {
     console.log('UNIFORM SALE FORM INITIALIZATION');
     console.log('Form Mode:', '{{ sale|yesno:"EDIT,CREATE" }}');
     console.log('='.repeat(80));
-    
+
     // =========================================================================
     // SELECT2 INITIALIZATION FOR STUDENT SEARCH
     // =========================================================================
-    
+
     $('.select2-student').select2({
         theme: 'bootstrap-5',
         width: '100%',
@@ -676,222 +1050,295 @@ $(document).ready(function() {
         templateResult: formatStudent,
         templateSelection: formatStudentSelection
     });
-    
-    // Format student option in dropdown
+
     function formatStudent(student) {
-        if (!student.id) {
-            return student.text;
-        }
-        
-        var $student = $(
+        if (!student.id) return student.text;
+        return $(
             '<div class="select2-student-option">' +
-                '<div class="student-name" style="font-weight: 600;">' + student.text + '</div>' +
+                '<div class="student-name" style="font-weight:600;">' + student.text + '</div>' +
             '</div>'
         );
-        
-        return $student;
     }
-    
-    // Format selected student
+
     function formatStudentSelection(student) {
         return student.text || 'Select student...';
     }
-    
+
     console.log('✓ Select2 initialized for student search');
-    
+
     // =========================================================================
-    // SALE TYPE CONDITIONAL FIELDS
+    // SALE TYPE — show/hide return date
     // =========================================================================
-    
+
     function updateSaleTypeFields() {
         const saleType = $('#id_sale_type').val();
         const $returnDateField = $('#return-date-field');
-        
+
         if (saleType === 'LOAN') {
             $returnDateField.slideDown(300);
             console.log('→ Return date field shown (LOAN type selected)');
         } else {
             $returnDateField.slideUp(300);
             $('#id_return_date').val('');
-            console.log('→ Return date field hidden');
         }
-        
-        console.log(`Sale type selected: ${saleType}`);
     }
-    
-    // Initialize on page load
+
     updateSaleTypeFields();
-    
-    // Update on change
-    $('#id_sale_type').on('change', function() {
-        updateSaleTypeFields();
-    });
-    
+    $('#id_sale_type').on('change', updateSaleTypeFields);
+
     console.log('✓ Sale type conditional logic initialized');
-    
+
+
+    // =========================================================================
+    // DISCOUNT TOGGLE
+    // =========================================================================
+
+    function updateDiscountFields() {
+        const isOn = $("#discount-toggle").is(":checked");
+        if (isOn) {
+            $("#discount-fields").slideDown(300);
+            $("#discount-off-notice").hide();
+        } else {
+            $("#discount-fields").slideUp(300);
+            $("#discount-off-notice").show();
+            $("#id_discount_amount").val("0.00");
+            $("#id_discount_reason").val("");
+        }
+    }
+
+    updateDiscountFields();
+    $("#discount-toggle").on("change", updateDiscountFields);
+
+    console.log("✓ Discount toggle initialized");
+
+    // =========================================================================
+    // PAYMENT METHOD — show/hide payment reference vs. cash receipt notice
+    //
+    // Logic:
+    //   • No method selected  → show input with generic help text
+    //   • CASH selected        → hide input, show green auto-receipt notice
+    //   • Any other method     → show input with method-specific help text
+    // =========================================================================
+
+    const PM_HELP = {
+        mtn:    'Enter the MTN Mobile Money transaction ID (e.g. AB123456789).',
+        airtel: 'Enter the Airtel Money transaction ID (e.g. CI123456789).',
+        cheque: 'Enter the cheque number printed on the cheque.',
+        bank:   'Enter the bank transfer reference or deposit slip number.',
+        card:   'Enter the POS receipt number or card authorisation code.',
+    };
+
+    const DEFAULT_PM_HELP = 'Enter the transaction ID, reference number, or receipt number from your payment provider.';
+
+    function getPaymentHelp(methodText) {
+        const lower = (methodText || '').toLowerCase();
+        for (const [key, help] of Object.entries(PM_HELP)) {
+            if (lower.includes(key)) return help;
+        }
+        return DEFAULT_PM_HELP;
+    }
+
+    function updatePaymentReferenceField() {
+        const $select       = $('#id_payment_method');
+        const selectedText  = $select.find('option:selected').text().trim();
+        const selectedVal   = $select.val();
+
+        const $input        = $('#payment-reference-input');
+        const $helpText     = $('#payment-reference-help');
+        const $cashNotice   = $('#cash-receipt-notice');
+        const $refInput     = $('#id_payment_reference');
+
+        if (!selectedVal) {
+            $cashNotice.hide();
+            $input.show();
+            $helpText.html(
+                '<i class="fa fa-info-circle me-1"></i>' +
+                'Enter the transaction ID or reference number for this payment.'
+            );
+            $refInput.prop('disabled', false);
+            console.log('→ Payment method cleared — showing reference input');
+            return;
+        }
+
+        const isCash = selectedText.toLowerCase().includes('cash');
+
+        if (isCash) {
+            $input.hide();
+            $cashNotice.show();
+            $refInput.val('').prop('disabled', true);
+            console.log('→ Cash selected — hiding reference input, showing auto-receipt notice');
+        } else {
+            $cashNotice.hide();
+            $input.show();
+            $refInput.prop('disabled', false);
+            $helpText.html(
+                '<i class="fa fa-info-circle me-1"></i>' + getPaymentHelp(selectedText)
+            );
+            console.log('→ Non-cash method selected: ' + selectedText);
+        }
+    }
+
+    updatePaymentReferenceField();
+    $('#id_payment_method').on('change', updatePaymentReferenceField);
+
+    console.log('✓ Payment reference toggle initialized');
+
     // =========================================================================
     // FORM VALIDATION
+    // NOTE: academic_session is no longer a form field — removed from required
+    //       field checks. It is derived from fiscal_period automatically.
     // =========================================================================
-    
+
     $('#uniform-sale-form').on('submit', function(e) {
         console.log('='.repeat(80));
         console.log('FORM SUBMISSION VALIDATION');
         console.log('='.repeat(80));
-        
+
         let isValid = true;
         const errors = [];
-        
-        // Remove any existing error alerts
-        $('.alert-danger').remove();
-        
-        // Required fields validation
+
+        $(this).find('.client-error-alert').remove();
+
+        // ── Required fields ──────────────────────────────────────────────────
         const requiredFields = [
-            { id: 'id_student', label: 'Student' },
-            { id: 'id_academic_session', label: 'Academic Session' },
+            { id: 'id_student',   label: 'Student' },
             { id: 'id_sale_type', label: 'Sale Type' },
             { id: 'id_sale_date', label: 'Sale Date' },
-            { id: 'id_fiscal_period', label: 'Fiscal Period' }
         ];
-        
+
         requiredFields.forEach(function(field) {
             const $field = $('#' + field.id);
-            const value = $field.val();
-            const trimmedValue = value ? $.trim(value) : '';
-            
-            if (trimmedValue.length === 0) {
+            const value  = $.trim($field.val() || '');
+
+            if (!value) {
                 errors.push(field.label + ' is required');
                 $field.addClass('is-invalid');
                 isValid = false;
-                console.error(`✗ ${field.label} is required`);
+                console.error('✗ ' + field.label + ' is required');
             } else {
                 $field.removeClass('is-invalid');
-                console.log(`✓ ${field.label} validated`);
+                console.log('✓ ' + field.label + ' validated');
             }
         });
-        
-        // Validate return date for loans
-        const saleType = $('#id_sale_type').val();
+
+        // ── Return date for LOAN ──────────────────────────────────────────────
+        const saleType   = $('#id_sale_type').val();
         const returnDate = $('#id_return_date').val();
-        const saleDate = $('#id_sale_date').val();
-        
+        const saleDate   = $('#id_sale_date').val();
+
         if (saleType === 'LOAN') {
             if (!returnDate) {
                 errors.push('Return date is required for loaned items');
                 $('#id_return_date').addClass('is-invalid');
                 isValid = false;
-                console.error('✗ Return date is required for LOAN type');
+                console.error('✗ Return date required for LOAN');
+            } else if (saleDate && new Date(returnDate) < new Date(saleDate)) {
+                errors.push('Return date cannot be before sale date');
+                $('#id_return_date').addClass('is-invalid');
+                isValid = false;
+                console.error('✗ Return date is before sale date');
             } else {
                 $('#id_return_date').removeClass('is-invalid');
                 console.log('✓ Return date validated');
             }
-            
-            // Check if return date is after sale date
-            if (returnDate && saleDate) {
-                if (new Date(returnDate) < new Date(saleDate)) {
-                    errors.push('Return date cannot be before sale date');
-                    $('#id_return_date').addClass('is-invalid');
-                    isValid = false;
-                    console.error('✗ Return date is before sale date');
-                }
+        }
+        // ── Discount (only when toggle is on) ────────────────────────────────
+        if ($('#discount-toggle').is(':checked')) {
+            const discountAmount = parseFloat($('#id_discount_amount').val()) || 0;
+            const discountReason = $.trim($('#id_discount_reason').val() || '');
+            if (discountAmount <= 0) {
+                errors.push('Discount amount must be greater than 0 when discount is applied');
+                $('#id_discount_amount').addClass('is-invalid');
+                isValid = false;
+                console.error('✗ Discount amount required');
+            } else if (!discountReason) {
+                errors.push('Discount reason is required when a discount is applied');
+                $('#id_discount_reason').addClass('is-invalid');
+                isValid = false;
+                console.error('✗ Discount reason required');
+            } else {
+                $('#id_discount_amount, #id_discount_reason').removeClass('is-invalid');
             }
         }
-        
-        // Validate discount reason if discount amount is provided
-        const discountAmount = $('#id_discount_amount').val();
-        const discountReason = $('#id_discount_reason').val();
-        
-        if (discountAmount && parseFloat(discountAmount) > 0 && !discountReason) {
-            errors.push('Discount reason is required when discount amount is provided');
-            $('#id_discount_reason').addClass('is-invalid');
+
+        // ── Payment reference required for non-cash methods ───────────────────
+        const $pmSelect      = $('#id_payment_method');
+        const pmText         = $pmSelect.find('option:selected').text().toLowerCase();
+        const pmVal          = $pmSelect.val();
+        const payRef         = $.trim($('#id_payment_reference').val() || '');
+        const isCashSelected = pmText.includes('cash');
+
+        if (pmVal && !isCashSelected && !payRef) {
+            errors.push('Payment reference is required for ' + $pmSelect.find('option:selected').text() + ' payments');
+            $('#id_payment_reference').addClass('is-invalid');
             isValid = false;
-            console.error('✗ Discount reason required for discount amount');
+            console.error('✗ Payment reference required for non-cash method');
         } else {
-            $('#id_discount_reason').removeClass('is-invalid');
+            $('#id_payment_reference').removeClass('is-invalid');
         }
-        
+
+        // ── Show errors if any ────────────────────────────────────────────────
         if (!isValid) {
             e.preventDefault();
-            console.error('❌ Form validation failed');
-            console.error('Errors:', errors);
-            
-            // Create and show error alert
-            let errorHtml = '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
-            errorHtml += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
-            errorHtml += '<ul class="mb-0">';
-            errors.forEach(function(error) {
-                errorHtml += '<li>' + error + '</li>';
-            });
-            errorHtml += '</ul>';
-            errorHtml += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
-            errorHtml += '</div>';
-            
-            // Insert error alert at top of form
-            $('#uniform-sale-form').prepend(errorHtml);
-            
-            // Scroll to top to show errors
+            console.error('❌ Form validation failed:', errors);
+
+            let html = '<div class="alert alert-danger alert-dismissible fade show client-error-alert" role="alert">';
+            html += '<h5 class="alert-heading"><i class="fa fa-exclamation-triangle"></i> Please fix the following errors:</h5>';
+            html += '<ul class="mb-0">';
+            errors.forEach(function(err) { html += '<li>' + err + '</li>'; });
+            html += '</ul>';
+            html += '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            html += '</div>';
+
+            $('#uniform-sale-form').prepend(html);
             $('html, body').animate({
                 scrollTop: $('#uniform-sale-form').offset().top - 100
             }, 500);
-            
+
             return false;
         }
-        
-        console.log('✅ All validations passed');
-        console.log('Submitting form...');
-        
-        // Disable submit button to prevent double submission
+
+        console.log('✅ All validations passed — submitting');
+
         $('#submit-btn').prop('disabled', true).html(
             '<i class="fa fa-spinner fa-spin"></i> Saving...'
         );
     });
-    
+
     console.log('✓ Form validation initialized');
-    
+
     // =========================================================================
     // FIELD INTERACTIVITY
     // =========================================================================
-    
-    // Clear is-invalid class on field change
+
     $('input, select, textarea').on('change input', function() {
         $(this).removeClass('is-invalid');
     });
-    
-    // Auto-format discount amount
+
     $('#id_discount_amount').on('blur', function() {
-        let value = $(this).val();
-        if (value && !isNaN(value)) {
-            $(this).val(parseFloat(value).toFixed(2));
+        const val = $(this).val();
+        if (val && !isNaN(val)) {
+            $(this).val(parseFloat(val).toFixed(2));
         }
     });
-    
+
     console.log('✓ Field interactivity initialized');
-    
+
     // =========================================================================
-    // HELPFUL TOOLTIPS & UI ENHANCEMENTS
+    // TOOLTIPS & UI ENHANCEMENTS
     // =========================================================================
-    
-    // Initialize Bootstrap tooltips if any
+
     $('[data-bs-toggle="tooltip"]').tooltip();
-    
-    // Highlight auto-generated info badges on hover
+
     $('.auto-info-badge').hover(
-        function() {
-            $(this).css('transform', 'scale(1.05)');
-        },
-        function() {
-            $(this).css('transform', 'scale(1)');
-        }
+        function() { $(this).css('transform', 'scale(1.05)'); },
+        function() { $(this).css('transform', 'scale(1)'); }
     );
-    
+
     console.log('✓ UI enhancements applied');
-    
-    // =========================================================================
-    // COMPLETION LOG
-    // =========================================================================
-    
+
     console.log('='.repeat(80));
     console.log('✅ FORM INITIALIZATION COMPLETE');
-    console.log('Ready for user interaction');
     console.log('='.repeat(80));
 });
 </script>

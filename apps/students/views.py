@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.contrib import messages
-from django.db.models import Q, Count, Sum, Avg, Prefetch, F
+from django.db.models import Q, Count, Sum, Avg, Prefetch, F, Case, When, IntegerField
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db import transaction
@@ -156,8 +156,11 @@ def students_dashboard(request):
 
 def get_filtered_students(request):
     """
-    Helper function to get filtered student queryset
-    Reusable across student_list, exports, and print views
+    Helper function to get filtered student queryset.
+    Reusable across student_list, exports, and print views.
+
+    Ordering: active students always first, then by most recent admission date,
+    then by admission number for stable tie-breaking.
     """
     students = Student.objects.select_related(
         'current_academic_level',
@@ -167,37 +170,45 @@ def get_filtered_students(request):
         'guardian_relationships'
     ).annotate(
         guardian_count=Count('guardians', distinct=True),
-        sibling_count=Count('sibling_relationships', distinct=True)
-    ).order_by('-admission_date', 'admission_number')
-    
-    # Get filter parameters
-    query = request.GET.get('q', '').strip()
-    enrollment_status = request.GET.get('enrollment_status', '')
-    gender = request.GET.get('gender', '')
+        sibling_count=Count('sibling_relationships', distinct=True),
+        # 0 = ACTIVE floats to top; 1 = everything else follows
+        status_order=Case(
+            When(enrollment_status='ACTIVE', then=0),
+            default=1,
+            output_field=IntegerField()
+        )
+    ).order_by('status_order', '-admission_date', 'admission_number')
+
+    # -------------------------------------------------------------------------
+    # FILTER PARAMETERS
+    # -------------------------------------------------------------------------
+
+    query                  = request.GET.get('q', '').strip()
+    enrollment_status      = request.GET.get('enrollment_status', '')
+    gender                 = request.GET.get('gender', '')
     current_academic_level = request.GET.get('current_academic_level', '')
     admission_academic_level = request.GET.get('admission_academic_level', '')
-    nationality = request.GET.get('nationality', '')
-    religious_affiliation = request.GET.get('religious_affiliation', '')
-    health_condition = request.GET.get('health_condition', '')
-    blood_type = request.GET.get('blood_type', '')
-    has_special_needs = request.GET.get('has_special_needs', '')
+    nationality            = request.GET.get('nationality', '')
+    religious_affiliation  = request.GET.get('religious_affiliation', '')
+    health_condition       = request.GET.get('health_condition', '')
+    blood_type             = request.GET.get('blood_type', '')
+    has_special_needs      = request.GET.get('has_special_needs', '')
     transportation_required = request.GET.get('transportation_required', '')
-    
-    # Date filters
-    admission_date_from = request.GET.get('admission_date_from', '')
-    admission_date_to = request.GET.get('admission_date_to', '')
-    
-    # Age filters
-    min_age = request.GET.get('age_min', '')
-    max_age = request.GET.get('age_max', '')
-    
-    # Apply text search with multi-word support
+    admission_date_from    = request.GET.get('admission_date_from', '')
+    admission_date_to      = request.GET.get('admission_date_to', '')
+    min_age                = request.GET.get('age_min', '')
+    max_age                = request.GET.get('age_max', '')
+
+    # -------------------------------------------------------------------------
+    # TEXT SEARCH — multi-word AND logic across key fields
+    # -------------------------------------------------------------------------
+
     if query:
-        words = query.strip().split()
+        words = query.split()
         if words:
             combined_q = Q()
             for word in words:
-                word_q = (
+                combined_q &= (
                     Q(admission_number__icontains=word) |
                     Q(national_student_number__icontains=word) |
                     Q(first_name__icontains=word) |
@@ -207,10 +218,12 @@ def get_filtered_students(request):
                     Q(personal_email__icontains=word) |
                     Q(birth_certificate_number__icontains=word)
                 )
-                combined_q &= word_q
             students = students.filter(combined_q)
-    
-    # Apply choice filters
+
+    # -------------------------------------------------------------------------
+    # CHOICE FILTERS
+    # -------------------------------------------------------------------------
+
     if enrollment_status:
         students = students.filter(enrollment_status=enrollment_status)
     if gender:
@@ -227,37 +240,60 @@ def get_filtered_students(request):
         students = students.filter(health_condition=health_condition)
     if blood_type:
         students = students.filter(blood_type=blood_type)
-    
-    # Apply boolean filters
+
+    # -------------------------------------------------------------------------
+    # BOOLEAN FILTERS
+    # -------------------------------------------------------------------------
+
     if has_special_needs:
-        students = students.filter(has_special_needs=(has_special_needs.lower() == 'true'))
+        students = students.filter(
+            has_special_needs=(has_special_needs.lower() == 'true')
+        )
     if transportation_required:
-        students = students.filter(transportation_required=(transportation_required.lower() == 'true'))
-    
-    # Apply date filters
+        students = students.filter(
+            transportation_required=(transportation_required.lower() == 'true')
+        )
+
+    # -------------------------------------------------------------------------
+    # DATE RANGE FILTERS
+    # -------------------------------------------------------------------------
+
     if admission_date_from:
         students = students.filter(admission_date__gte=admission_date_from)
     if admission_date_to:
         students = students.filter(admission_date__lte=admission_date_to)
-    
-    # Apply age filters using SCHOOL timezone
+
+    # -------------------------------------------------------------------------
+    # AGE RANGE FILTERS — computed against school timezone today
+    # -------------------------------------------------------------------------
+
     if min_age or max_age:
         today = get_school_today()
-        
+
         if max_age:
             try:
-                min_birth_date = date(today.year - int(max_age) - 1, today.month, today.day)
+                # Youngest allowed birth date for this max age
+                min_birth_date = date(
+                    today.year - int(max_age) - 1,
+                    today.month,
+                    today.day
+                )
                 students = students.filter(date_of_birth__gte=min_birth_date)
             except (ValueError, TypeError):
                 pass
-        
+
         if min_age:
             try:
-                max_birth_date = date(today.year - int(min_age), today.month, today.day)
+                # Oldest allowed birth date for this min age
+                max_birth_date = date(
+                    today.year - int(min_age),
+                    today.month,
+                    today.day
+                )
                 students = students.filter(date_of_birth__lte=max_birth_date)
             except (ValueError, TypeError):
                 pass
-    
+
     return students
 
 
