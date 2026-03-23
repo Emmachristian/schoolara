@@ -133,21 +133,26 @@ urlpatterns = [
     # =============================================================================
     # List View (handles BOTH full page AND HTMX search/filter)
     path('teachers/', views.teacher_list, name='teacher_list'),
-    
+ 
     # CRUD Views
     path('teachers/create/', views.teacher_create, name='teacher_create'),
     path('teachers/<uuid:pk>/', views.teacher_profile, name='teacher_profile'),
     path('teachers/<uuid:pk>/edit/', views.teacher_edit, name='teacher_edit'),
-    
+ 
     # Action Views
     path('teachers/<uuid:pk>/delete/', views.teacher_delete, name='teacher_delete'),
     path('teachers/<uuid:pk>/reactivate/', views.teacher_reactivate, name='teacher_reactivate'),
     path('teachers/<uuid:pk>/deactivate/', views.teacher_deactivate, name='teacher_deactivate'),
-    
+ 
+    # Print & Export
+    path('teachers/print/', views.teacher_print_view, name='teacher_print_view'),
+    path('teachers/export/excel/', views.export_teachers_excel, name='export_teachers_excel'),
+ 
     # Modal Views (confirmation/action modals ONLY - no forms)
     path('teachers/<uuid:pk>/modal/delete/', modal_views.teacher_delete_modal, name='teacher_delete_modal'),
     path('teachers/<uuid:pk>/modal/reactivate/', modal_views.teacher_reactivate_modal, name='teacher_reactivate_modal'),
     path('teachers/<uuid:pk>/modal/deactivate/', modal_views.teacher_deactivate_modal, name='teacher_deactivate_modal'),
+ 
     
     # =============================================================================
     # ATTENDANCE

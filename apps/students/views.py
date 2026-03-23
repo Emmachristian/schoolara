@@ -15,6 +15,10 @@ All views delegate business logic to services.py where appropriate
 Uses stats.py for comprehensive statistics and analytics
 Uses SweetAlert2 for all notifications via Django messages
 Preserves SessionWizardView for student registration
+
+Note: PDF export is handled via the print views (student_print_view /
+guardian_print_view), which render printer-friendly HTML that the browser
+or a headless renderer can save as PDF.
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -35,13 +39,6 @@ import logging
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from io import BytesIO
 
 from core.utils import get_school_today, format_money
 
@@ -511,9 +508,14 @@ def student_list(request):
     else:
         return render(request, 'students/list.html', context)
 
+
 @login_required
 def student_print_view(request):
-    """Generate printable student list with selected fields"""
+    """
+    Generate printable student list with selected fields.
+    This view also serves as the PDF export path — users can print to PDF
+    directly from the browser using the print dialog.
+    """
     
     # Get selected fields from the modal
     selected_fields = request.GET.getlist('fields')
@@ -541,42 +543,69 @@ def student_print_view(request):
             female=Count('id', filter=Q(gender='F')),
             special_needs=Count('id', filter=Q(has_special_needs=True)),
         )
-    
-    # Field display names mapping
-    field_names = {
-        'admission_number': 'Admission Number',
-        'full_name': 'Full Name',
-        'first_name': 'First Name',
-        'last_name': 'Last Name',
+
+    # Full column header labels
+    field_names_full = {
+        'admission_number':        'Admission Number',
+        'full_name':               'Full Name',
+        'first_name':              'First Name',
+        'last_name':               'Last Name',
         'national_student_number': 'National Student Number',
-        'date_of_birth': 'Date of Birth',
-        'age': 'Age',
-        'gender': 'Gender',
-        'nationality': 'Nationality',
-        'phone_number': 'Phone',
-        'personal_email': 'Email',
-        'home_address': 'Home Address',
-        'current_academic_level': 'Current Grade/Class',
-        'admission_academic_level': 'Admission Grade/Class',
-        'enrollment_status': 'Status',
-        'admission_date': 'Admission Date',
-        'health_condition': 'Health',
-        'has_special_needs': 'Special Needs',
-        'transportation_required': 'Transport',
-        'religious_affiliation': 'Religion',
+        'date_of_birth':           'Date of Birth',
+        'age':                     'Age',
+        'gender':                  'Gender',
+        'nationality':             'Nationality',
+        'phone_number':            'Phone Number',
+        'personal_email':          'Email',
+        'home_address':            'Home Address',
+        'current_academic_level':  'Current Grade/Class',
+        'admission_academic_level':'Admission Grade/Class',
+        'enrollment_status':       'Enrollment Status',
+        'admission_date':          'Admission Date',
+        'health_condition':        'Health Condition',
+        'has_special_needs':       'Special Needs',
+        'transportation_required': 'Transportation Required',
+        'religious_affiliation':   'Religious Affiliation',
     }
-    
-    # Create ordered list of field display names for template
+
+    # Short column header labels
+    field_names_short = {
+        'admission_number':        'Adm. No.',
+        'full_name':               'Name',
+        'first_name':              'First Name',
+        'last_name':               'Last Name',
+        'national_student_number': 'NSN',
+        'date_of_birth':           'DOB',
+        'age':                     'Age',
+        'gender':                  'Gender',
+        'nationality':             'Nationality',
+        'phone_number':            'Phone',
+        'personal_email':          'Email',
+        'home_address':            'Address',
+        'current_academic_level':  'Grade',
+        'admission_academic_level':'Adm. Grade',
+        'enrollment_status':       'Status',
+        'admission_date':          'Adm. Date',
+        'health_condition':        'Health',
+        'has_special_needs':       'Sp. Needs',
+        'transportation_required': 'Transport',
+        'religious_affiliation':   'Religion',
+    }
+
+    short_headers = request.GET.get('short_headers') == 'true'
+    field_names = field_names_short if short_headers else field_names_full
+
+    # Build ordered header labels for the selected fields
     selected_field_names = [
-        field_names.get(field, field.replace('_', ' ').title()) 
+        field_names.get(field, field.replace('_', ' ').title())
         for field in selected_fields
     ]
-    
-    # Get school context explicitly for print view
-    school = None
-    if hasattr(request.user, 'profile') and hasattr(request.user.profile, 'school'):
-        school = request.user.profile.school
-    
+
+    # Get school context
+    school = getattr(getattr(request.user, 'profile', None), 'school', None)
+    level_display  = request.GET.get('level_display', 'name')
+    gender_display = request.GET.get('gender_display', 'full')
+
     context = {
         'students': students,
         'stats': stats,
@@ -585,14 +614,15 @@ def student_print_view(request):
         'selected_field_names': selected_field_names,
         'field_names': field_names,
         'landscape': landscape_mode,
-        
-        # Add school context explicitly
-        'school_name': school.name if school else 'School',
-        'school_logo': school.logo.url if (school and school.logo) else None,
+        'short_headers': short_headers,
+        'level_display': level_display,
+        'gender_display': gender_display,
+        'school_name': school.full_name if school else 'School',
+        'school_logo': school.school_logo.url if (school and school.school_logo) else None,
         'school_address': school.address if school else '',
-        'school_contact': school.phone if school else '',
+        'school_contact': school.contact_phone if school else '',
     }
-    
+
     return render(request, 'students/print.html', context)
 
 
@@ -1069,6 +1099,7 @@ def guardian_list(request):
     else:
         return render(request, 'guardians/list.html', context)
 
+
 @login_required
 def guardian_create(request):
     """Create new guardian"""
@@ -1224,7 +1255,11 @@ def guardian_delete(request, pk):
 
 @login_required
 def guardian_print_view(request):
-    """Generate printable guardian list"""
+    """
+    Generate printable guardian list.
+    This view also serves as the PDF export path — users can print to PDF
+    directly from the browser using the print dialog.
+    """
     
     selected_fields = request.GET.getlist('fields')
     if not selected_fields:
@@ -1946,113 +1981,118 @@ def birthday_report(request):
 
 @login_required
 def export_students_excel(request):
-    """Export students to Excel"""
-    
+    """
+    Export students to Excel.
+    Respects active filters AND the columns selected in the export modal.
+    Falls back to a sensible default column set if none are passed.
+    """
+
     students = get_filtered_students(request)
-    
-    # Create workbook
+
+    # 'name' (default) or 'code'
+    level_display = request.GET.get('level_display', 'name')
+    level_attr = 'code' if level_display == 'code' else 'name'
+
+    # 'full' (default) or 'short'
+    gender_display = request.GET.get('gender_display', 'full')
+
+    def get_level(level_obj):
+        if not level_obj:
+            return ''
+        return getattr(level_obj, level_attr, level_obj.name)
+
+    def get_gender(student):
+        if gender_display == 'short':
+            return student.gender or ''
+        return student.get_gender_display()
+
+    # ── Column definitions ────────────────────────────────────────────────────
+    # Each entry: (query_param_value, header_label, callable(student) → value)
+    ALL_COLUMNS = [
+        ('admission_number',       'Admission Number',       lambda s: s.admission_number),
+        ('full_name',              'Full Name',              lambda s: s.get_full_name()),
+        ('first_name',             'First Name',             lambda s: s.first_name),
+        ('last_name',              'Last Name',              lambda s: s.last_name),
+        ('national_student_number','National Student Number',lambda s: s.national_student_number or ''),
+        ('birth_certificate_number','Birth Cert. Number',   lambda s: s.birth_certificate_number or ''),
+        ('date_of_birth',          'Date of Birth',         lambda s: s.date_of_birth.strftime('%Y-%m-%d') if s.date_of_birth else ''),
+        ('age',                    'Age',                   lambda s: s.age or ''),
+        ('gender',                 'Gender',                lambda s: get_gender(s)),
+        ('nationality',            'Nationality',           lambda s: str(s.nationality) if s.nationality else ''),
+        ('religious_affiliation',  'Religious Affiliation', lambda s: s.get_religious_affiliation_display() if s.religious_affiliation else ''),
+        ('phone_number',           'Phone Number',          lambda s: s.phone_number or ''),
+        ('personal_email',         'Email',                 lambda s: s.personal_email or ''),
+        ('home_address',           'Home Address',          lambda s: s.home_address or ''),
+        ('district',               'District',              lambda s: s.district or ''),
+        ('region',                 'Region',                lambda s: s.region or ''),
+        ('current_academic_level', 'Current Grade/Class',   lambda s: get_level(s.current_academic_level)),
+        ('admission_academic_level','Admission Grade/Class',lambda s: get_level(s.admission_academic_level)),
+        ('enrollment_status',      'Enrollment Status',     lambda s: s.get_enrollment_status_display()),
+        ('admission_date',         'Admission Date',        lambda s: s.admission_date.strftime('%Y-%m-%d') if s.admission_date else ''),
+        ('previous_school',        'Previous School',       lambda s: s.previous_school or ''),
+        ('health_condition',       'Health Condition',      lambda s: s.get_health_condition_display() if s.health_condition else ''),
+        ('blood_type',             'Blood Type',            lambda s: s.get_blood_type_display() if s.blood_type else ''),
+        ('has_special_needs',      'Special Needs',         lambda s: 'Yes' if s.has_special_needs else 'No'),
+        ('medical_conditions',     'Medical Conditions',    lambda s: s.medical_conditions or ''),
+        ('allergies',              'Allergies',             lambda s: s.allergies or ''),
+        ('transportation_required','Transportation Required',lambda s: 'Yes' if s.transportation_required else 'No'),
+        ('transport_route',        'Transport Route',       lambda s: s.transport_route or ''),
+        ('pickup_point',           'Pickup Point',          lambda s: s.pickup_point or ''),
+    ]
+
+    COLUMN_MAP = {col[0]: col for col in ALL_COLUMNS}
+
+    DEFAULT_FIELDS = [
+        'admission_number', 'full_name', 'gender', 'current_academic_level',
+        'enrollment_status', 'phone_number',
+    ]
+
+    selected = request.GET.getlist('fields') or DEFAULT_FIELDS
+    # Preserve the user's chosen order; skip unknown keys silently
+    columns = [COLUMN_MAP[f] for f in selected if f in COLUMN_MAP]
+    if not columns:
+        columns = [COLUMN_MAP[f] for f in DEFAULT_FIELDS]
+
+    # ── Build workbook ────────────────────────────────────────────────────────
     wb = Workbook()
     ws = wb.active
     ws.title = "Students"
-    
-    # Headers
-    headers = [
-        'Admission Number', 'Full Name', 'Gender', 'Date of Birth', 'Age',
-        'Current Grade', 'Status', 'Phone', 'Email', 'Admission Date'
-    ]
-    ws.append(headers)
-    
-    # Style headers
+
+    header_fill = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    data_align = Alignment(vertical='center', wrap_text=False)
+
+    # Header row
+    ws.append([col[1] for col in columns])
     for cell in ws[1]:
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        cell.font = Font(bold=True, color='FFFFFF')
-    
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+    ws.row_dimensions[1].height = 30
+
     # Data rows
     for student in students:
-        ws.append([
-            student.admission_number,
-            student.get_full_name(),
-            student.get_gender_display(),
-            student.date_of_birth.strftime('%Y-%m-%d') if student.date_of_birth else '',
-            student.age,
-            str(student.current_academic_level) if student.current_academic_level else '',
-            student.get_enrollment_status_display(),
-            student.phone_number or '',
-            student.personal_email or '',
-            student.admission_date.strftime('%Y-%m-%d') if student.admission_date else '',
-        ])
-    
-    # Prepare response
+        ws.append([col[2](student) for col in columns])
+
+    # Auto-size columns (capped at 60)
+    for col_cells in ws.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 60)
+
+    # Apply data row alignment
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = data_align
+
+    # ── Response ──────────────────────────────────────────────────────────────
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="students_{timezone.now().strftime("%Y%m%d")}.xlsx"'
-    
-    wb.save(response)
-    return response
-
-
-@login_required
-def export_students_pdf(request):
-    """Export students to PDF"""
-    
-    students = get_filtered_students(request)
-    
-    # Create PDF
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
-    elements = []
-    
-    # Styles
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#1a1a1a'),
-        spaceAfter=30,
-        alignment=TA_CENTER
+    response['Content-Disposition'] = (
+        f'attachment; filename="students_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
     )
-    
-    # Title
-    elements.append(Paragraph('Student List', title_style))
-    elements.append(Spacer(1, 20))
-    
-    # Table data
-    data = [['Admission #', 'Name', 'Gender', 'Age', 'Grade', 'Status']]
-    
-    for student in students:
-        data.append([
-            student.admission_number,
-            student.get_full_name()[:30],
-            student.get_gender_display(),
-            str(student.age),
-            str(student.current_academic_level)[:20] if student.current_academic_level else '',
-            student.get_enrollment_status_display()
-        ])
-    
-    # Create table
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    elements.append(table)
-    doc.build(elements)
-    
-    # Prepare response
-    buffer.seek(0)
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="students_{timezone.now().strftime("%Y%m%d")}.pdf"'
-    
+    wb.save(response)
     return response
 
 
@@ -2101,69 +2141,6 @@ def export_guardians_excel(request):
     response['Content-Disposition'] = f'attachment; filename="guardians_{timezone.now().strftime("%Y%m%d")}.xlsx"'
     
     wb.save(response)
-    return response
-
-
-@login_required
-def export_guardians_pdf(request):
-    """Export guardians to PDF"""
-    
-    guardians = get_filtered_guardians(request)
-    
-    # Create PDF
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
-    elements = []
-    
-    # Styles
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#1a1a1a'),
-        spaceAfter=30,
-        alignment=TA_CENTER
-    )
-    
-    # Title
-    elements.append(Paragraph('Guardian List', title_style))
-    elements.append(Spacer(1, 20))
-    
-    # Table data
-    data = [['Name', 'Type', 'Phone', 'Email', 'Occupation', '# Students']]
-    
-    for guardian in guardians:
-        data.append([
-            guardian.get_full_name()[:30],
-            guardian.get_guardian_type_display(),
-            guardian.primary_phone,
-            guardian.email[:25] if guardian.email else '',
-            guardian.occupation[:20] if guardian.occupation else '',
-            str(guardian.student_count),
-        ])
-    
-    # Create table
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    elements.append(table)
-    doc.build(elements)
-    
-    # Prepare response
-    buffer.seek(0)
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="guardians_{timezone.now().strftime("%Y%m%d")}.pdf"'
-    
     return response
 
 

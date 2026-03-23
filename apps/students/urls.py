@@ -51,7 +51,6 @@ urlpatterns = [
     # Print & Export
     path('students/print/', views.student_print_view, name='student_print_view'),
     path('students/export/excel/', views.export_students_excel, name='export_students_excel'),
-    path('students/export/pdf/', views.export_students_pdf, name='export_students_pdf'),
 
     # Modal Views (load modal HTML only)
     path('students/<uuid:pk>/modal/delete/', modal_views.student_delete_modal, name='student_delete_modal'),
@@ -77,7 +76,6 @@ urlpatterns = [
     # Print & Export
     path('guardians/print/', views.guardian_print_view, name='guardian_print_view'),
     path('guardians/export/excel/', views.export_guardians_excel, name='export_guardians_excel'),
-    path('guardians/export/pdf/', views.export_guardians_pdf, name='export_guardians_pdf'),
 
     # Modal Views (load modal HTML only)
     path('guardians/<uuid:pk>/modal/delete/', modal_views.guardian_delete_modal, name='guardian_delete_modal'),

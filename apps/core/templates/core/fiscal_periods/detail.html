@@ -1,0 +1,962 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   FISCAL PERIOD DETAIL
+   ============================================================================ */
+
+/* ---- Hero ---- */
+.period-hero {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.hero-number {
+    font-size: 11px;
+    color: #6c757d;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 700;
+}
+
+.hero-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #1a1a2e;
+}
+
+.hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 14px;
+}
+
+.hero-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.hero-progress-box {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 16px 24px;
+    min-width: 200px;
+    text-align: center;
+}
+
+.hero-progress-pct {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    color: #1a1a2e;
+}
+
+.hero-progress-label {
+    font-size: 11px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-top: 4px;
+}
+
+.hero-progress-bar {
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.hero-progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width .6s ease;
+}
+
+/* ---- Status Badges ---- */
+.status-badge-lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.sb-draft    { background: #e9ecef;  color: #495057; }
+.sb-active   { background: #d1f2eb;  color: #1b5e20; }
+.sb-closed   { background: #fff3cd;  color: #856404; }
+.sb-locked   { background: #fde8e8;  color: #c62828; }
+
+/* ---- Cards ---- */
+.detail-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 22px;
+    overflow: hidden;
+}
+
+.detail-card-header {
+    background: #f8f9fa;
+    padding: 14px 22px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.detail-card-header .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.detail-card-body { padding: 22px; }
+
+/* ---- Info Rows ---- */
+.info-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+    width: 180px;
+    min-width: 180px;
+    font-size: 11.5px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    font-weight: 600;
+    padding-right: 14px;
+    padding-top: 2px;
+}
+
+.info-value {
+    flex: 1;
+    font-size: 13.5px;
+    color: #1a1a2e;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.info-value.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12.5px;
+}
+
+/* ---- Stat Blocks ---- */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+.stat-block {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+}
+.stat-number { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.stat-label  { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .4px; }
+
+/* ---- Permission Pills ---- */
+.perm-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.perm-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.perm-yes  { background: #d1f2eb; color: #1b5e20; }
+.perm-no   { background: #f1f3f5; color: #9e9e9e; border: 1px solid #e0e0e0; }
+.perm-warn { background: #fff8e1; color: #f57f17; }
+
+/* ---- Summary (Sidebar) Cards ---- */
+.summary-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+
+.summary-card-header {
+    background: #f8f9fa;
+    padding: 12px 18px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.summary-card-body { padding: 16px 18px; }
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+}
+
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label { color: #6c757d; font-size: 12px; }
+.summary-row .s-value { font-weight: 600; color: #1a1a2e; }
+.summary-row .s-value.green { color: #27ae60; }
+.summary-row .s-value.red   { color: #e74c3c; }
+.summary-row .s-value.blue  { color: #2980b9; }
+
+.summary-row.total-row {
+    border-top: 2px solid #dee2e6;
+    padding-top: 10px;
+    margin-top: 4px;
+}
+.summary-row.total-row .s-label { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.summary-row.total-row .s-value { font-size: 16px; font-weight: 800; }
+
+/* ---- Collection Progress ---- */
+.progress-bar-track {
+    height: 10px;
+    background: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 6px 0 4px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    transition: width .6s ease;
+}
+
+/* ---- Timeline ---- */
+.timeline { position: relative; padding-left: 28px; }
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 9px; top: 0; bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.tl-item { position: relative; padding-bottom: 18px; }
+.tl-item:last-child { padding-bottom: 0; }
+
+.tl-dot {
+    position: absolute;
+    left: -24px; top: 3px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #6c757d;
+    box-shadow: 0 0 0 2px #6c757d;
+}
+.tl-dot.success { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
+.tl-dot.danger  { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+.tl-dot.warning { background: #f39c12; box-shadow: 0 0 0 2px #f39c12; }
+.tl-dot.info    { background: #2980b9; box-shadow: 0 0 0 2px #2980b9; }
+
+.tl-content { background: #f8f9fa; border-radius: 8px; padding: 10px 14px; }
+.tl-title   { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.tl-date    { font-size: 11px; color: #6c757d; margin-top: 2px; }
+.tl-note    { font-size: 12px; color: #495057; margin-top: 5px; font-style: italic; }
+
+/* ---- Empty State ---- */
+.empty-mini { text-align: center; padding: 30px 20px; color: #adb5bd; }
+.empty-mini i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: .5; }
+.empty-mini p { font-size: 13px; margin: 0; }
+
+@media (max-width: 768px) {
+    .hero-top          { flex-direction: column; }
+    .hero-progress-box { min-width: 100%; }
+    .stat-grid         { grid-template-columns: repeat(2, 1fr); }
+    .info-label        { width: 130px; min-width: 130px; }
+}
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-date icon-gradient bg-mean-fruit"></i>
+            </div>
+            <div>
+                Fiscal Period Detail
+                <div class="page-title-subheading">
+                    {{ period.fiscal_year.name }} &mdash; {{ period.get_period_type_display }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex align-items-center gap-2 flex-wrap">
+            <a href="{% url 'core:fiscal_management' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Fiscal Management
+            </a>
+            <a href="{% url 'core:fiscal_year_detail' period.fiscal_year.pk %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-calendar me-1"></i> {{ period.fiscal_year.name }}
+            </a>
+            {% if not period.is_locked %}
+            <button class="btn btn-warning btn-sm"
+                data-bs-toggle="modal" data-bs-target="#periodModal"
+                onclick="loadPeriodForm('{{ period.pk }}')">
+                <i class="fa fa-edit me-1"></i> Edit
+            </button>
+            {% endif %}
+            {% if period.is_active and not period.is_closed %}
+            <button class="btn btn-secondary btn-sm"
+                onclick="quickAction('period', '{{ period.pk }}', 'close', event)">
+                <i class="pe-7s-lock me-1"></i> Close Period
+            </button>
+            {% endif %}
+            {% if period.is_closed and not period.is_locked %}
+            <button class="btn btn-danger btn-sm"
+                onclick="quickAction('period', '{{ period.pk }}', 'lock', event)">
+                <i class="fa fa-lock me-1"></i> Lock
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% comment %}Hero — mirrors expense hero style{% endcomment %}
+<div class="period-hero">
+    <div class="hero-top">
+        <div>
+            <div class="hero-number">{{ period.code }}</div>
+            <div class="hero-title">{{ period.name }}</div>
+            <div style="margin-top:10px;">
+                {% if period.status == 'DRAFT' %}
+                <span class="status-badge-lg sb-draft"><i class="fa fa-pencil-alt"></i> Draft</span>
+                {% elif period.status == 'ACTIVE' %}
+                <span class="status-badge-lg sb-active"><i class="fa fa-play-circle"></i> Active</span>
+                {% elif period.status == 'CLOSED' %}
+                <span class="status-badge-lg sb-closed"><i class="fa fa-check-circle"></i> Closed</span>
+                {% elif period.status == 'LOCKED' %}
+                <span class="status-badge-lg sb-locked"><i class="fa fa-lock"></i> Locked</span>
+                {% endif %}
+                {% if progress_info.is_current %}
+                <span class="badge bg-success ms-2" style="font-size:12px;">Current</span>
+                {% endif %}
+                {% if progress_info.is_in_grace_period %}
+                <span class="badge bg-warning text-dark ms-2" style="font-size:12px;">Grace Period</span>
+                {% endif %}
+                {% if progress_info.is_past and not period.is_closed %}
+                <span class="badge bg-danger ms-2" style="font-size:12px;">Ended — Not Closed</span>
+                {% endif %}
+                {% if progress_info.is_upcoming %}
+                <span class="badge bg-info ms-2" style="font-size:12px;">Upcoming</span>
+                {% endif %}
+            </div>
+            <div class="hero-meta">
+                <div class="hero-meta-item">
+                    <i class="fa fa-calendar-alt"></i>
+                    {{ period.start_date|date:"d M Y" }} &ndash; {{ period.end_date|date:"d M Y" }}
+                </div>
+                <div class="hero-meta-item">
+                    <i class="fa fa-tag"></i> {{ period.get_period_type_display }}
+                </div>
+                <div class="hero-meta-item">
+                    <i class="fa fa-hashtag"></i> Period {{ period.period_number }}
+                </div>
+                {% if period.related_academic_session %}
+                <div class="hero-meta-item">
+                    <i class="fa fa-graduation-cap"></i> {{ period.related_academic_session }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="hero-progress-box">
+            <div class="hero-progress-pct"
+                style="color:{% if progress_info.progress_percentage >= 100 %}#6c757d{% elif progress_info.progress_percentage >= 75 %}#e67e22{% else %}#27ae60{% endif %};">
+                {{ progress_info.progress_percentage }}%
+            </div>
+            <div class="hero-progress-label">Complete</div>
+            <div class="hero-progress-bar">
+                <div class="hero-progress-fill"
+                    style="width:{{ progress_info.progress_percentage }}%;
+                    background:{% if progress_info.progress_percentage >= 100 %}#6c757d{% elif progress_info.progress_percentage >= 75 %}#e67e22{% else %}#27ae60{% endif %};">
+                </div>
+            </div>
+            <div style="margin-top:10px; font-size:12px; color:#6c757d;">
+                {{ progress_info.days_remaining }} day{{ progress_info.days_remaining|pluralize }} remaining
+            </div>
+        </div>
+    </div>
+</div>
+
+{% comment %}Quick stat blocks under the hero{% endcomment %}
+<div class="stat-grid">
+    <div class="stat-block">
+        <div class="stat-number text-primary">{{ progress_info.total_days }}</div>
+        <div class="stat-label">Total Days</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number text-success">{{ progress_info.days_elapsed }}</div>
+        <div class="stat-label">Elapsed</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number
+            {% if progress_info.days_remaining <= 14 %}text-danger
+            {% elif progress_info.days_remaining <= 30 %}text-warning
+            {% else %}text-info{% endif %}">
+            {{ progress_info.days_remaining }}
+        </div>
+        <div class="stat-label">Remaining</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number text-secondary">{{ period.get_duration_weeks }}</div>
+        <div class="stat-label">Weeks</div>
+    </div>
+</div>
+
+
+<div class="row">
+
+    {% comment %}=== LEFT / MAIN COLUMN =={% endcomment %}
+    <div class="col-lg-8">
+
+        {% comment %}Period Details card{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-info-circle text-primary"></i> Period Details</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Period Code</div>
+                            <div class="info-value mono">{{ period.code }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Period Number</div>
+                            <div class="info-value">{{ period.period_number }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Period Type</div>
+                            <div class="info-value">{{ period.get_period_type_display }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Fiscal Year</div>
+                            <div class="info-value">
+                                <a href="{% url 'core:fiscal_year_detail' period.fiscal_year.pk %}" class="text-primary">
+                                    {{ period.fiscal_year.name }}
+                                </a>
+                                <br>
+                                <small class="text-muted">{{ period.fiscal_year.get_status_display }}</small>
+                            </div>
+                        </div>
+                        {% if period.related_academic_session %}
+                        <div class="info-row">
+                            <div class="info-label">Academic Session</div>
+                            <div class="info-value">{{ period.related_academic_session }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Start Date</div>
+                            <div class="info-value">{{ period.start_date|date:"d M Y" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">End Date</div>
+                            <div class="info-value">{{ period.end_date|date:"d M Y" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Duration</div>
+                            <div class="info-value">
+                                {{ progress_info.total_days }} days
+                                &nbsp;&middot;&nbsp;
+                                {{ period.get_duration_weeks }} weeks
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Grace Period</div>
+                            <div class="info-value">
+                                {% if period.grace_period_days > 0 %}
+                                    {{ period.grace_period_days }} day{{ period.grace_period_days|pluralize }}
+                                    {% if progress_info.is_in_grace_period %}
+                                    <span class="badge bg-warning text-dark ms-1">Active now</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">None</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if period.auto_close_date %}
+                        <div class="info-row">
+                            <div class="info-label">Auto-Close Date</div>
+                            <div class="info-value">{{ period.auto_close_date|date:"d M Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if period.description %}
+                <hr class="my-3">
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Description</div>
+                    <div class="info-value" style="font-size:13px; line-height:1.6;">{{ period.description }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% comment %}Transaction Permissions card{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-shield-alt text-info"></i> Transaction Permissions</span>
+            </div>
+            <div class="detail-card-body">
+                <div class="perm-grid mb-3">
+                    <span class="perm-pill {% if progress_info.can_accept_transactions %}perm-yes{% else %}perm-no{% endif %}">
+                        <i class="fa fa-{% if progress_info.can_accept_transactions %}check{% else %}times{% endif %}"></i>
+                        Accept Transactions
+                    </span>
+                    <span class="perm-pill {% if period.allow_invoice_generation %}perm-yes{% else %}perm-no{% endif %}">
+                        <i class="fa fa-{% if period.allow_invoice_generation %}check{% else %}times{% endif %}"></i>
+                        Generate Invoices
+                    </span>
+                    <span class="perm-pill {% if period.allow_refunds %}perm-yes{% else %}perm-no{% endif %}">
+                        <i class="fa fa-{% if period.allow_refunds %}check{% else %}times{% endif %}"></i>
+                        Process Refunds
+                    </span>
+                    <span class="perm-pill {% if period.allow_advance_payments %}perm-yes{% else %}perm-no{% endif %}">
+                        <i class="fa fa-{% if period.allow_advance_payments %}check{% else %}times{% endif %}"></i>
+                        Advance Payments
+                    </span>
+                    <span class="perm-pill {% if period.allow_arrears_payments %}perm-yes{% else %}perm-no{% endif %}">
+                        <i class="fa fa-{% if period.allow_arrears_payments %}check{% else %}times{% endif %}"></i>
+                        Arrears Payments
+                    </span>
+                    {% if period.require_approval_for_transactions %}
+                    <span class="perm-pill perm-warn">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        Approval Required
+                    </span>
+                    {% endif %}
+                </div>
+
+                {% if not progress_info.can_accept_transactions %}
+                <div style="background:#fde8e8; border:1px solid #f5c6cb; border-left:4px solid #e74c3c;
+                            border-radius:0 8px 8px 0; padding:12px 16px; font-size:13px;">
+                    <i class="fa fa-exclamation-circle text-danger me-2"></i>
+                    <strong>Transactions blocked.</strong>
+                    {% if period.is_closed %}Period is closed.
+                    {% elif period.is_locked %}Period is locked.
+                    {% elif not period.is_active %}Period is not active.
+                    {% elif progress_info.is_past %}Period has ended.
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% comment %}Financial Summary card{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-chart-bar text-success"></i> Financial Summary</span>
+            </div>
+            <div class="detail-card-body">
+                {% with invoiced=period.get_total_invoiced collected=period.get_total_collected rate=period.get_collection_rate %}
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number text-primary" style="font-size:20px;">
+                                {{ invoiced|floatformat:0|intcomma }}
+                            </div>
+                            <div class="stat-label">Total Invoiced</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number text-success" style="font-size:20px;">
+                                {{ collected|floatformat:0|intcomma }}
+                            </div>
+                            <div class="stat-label">Collected</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number
+                                {% if rate >= 90 %}text-success
+                                {% elif rate >= 60 %}text-warning
+                                {% else %}text-danger{% endif %}"
+                                style="font-size:20px;">
+                                {{ rate }}%
+                            </div>
+                            <div class="stat-label">Collection Rate</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:12px; color:#6c757d; margin-bottom:5px;">
+                    Collection progress &mdash; {{ rate }}% collected
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill"
+                        style="width:{{ rate }}%;
+                        background:{% if rate >= 90 %}#27ae60{% elif rate >= 60 %}#f39c12{% else %}#e74c3c{% endif %};">
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+
+        {% comment %}Internal Notes card{% endcomment %}
+        {% if period.notes %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title"><i class="fa fa-sticky-note text-warning"></i> Internal Notes</span>
+            </div>
+            <div class="detail-card-body">
+                <p class="text-muted mb-0" style="white-space:pre-wrap; font-size:13.5px; line-height:1.7;">{{ period.notes }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{% comment %}/col-lg-8{% endcomment %}
+
+
+    {% comment %}=== RIGHT / SIDEBAR COLUMN ==={% endcomment %}
+    <div class="col-lg-4">
+
+        {% comment %}Status & Lifecycle{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-info-circle text-secondary"></i> Status &amp; Lifecycle
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Status</span>
+                    <span class="s-value">
+                        {% if period.status == 'ACTIVE' %}<span class="badge bg-success">Active</span>
+                        {% elif period.status == 'CLOSED' %}<span class="badge bg-warning text-dark">Closed</span>
+                        {% elif period.status == 'LOCKED' %}<span class="badge bg-danger">Locked</span>
+                        {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Is Active</span>
+                    <span class="s-value">
+                        {% if period.is_active %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Is Closed</span>
+                    <span class="s-value">
+                        {% if period.is_closed %}<span class="badge bg-warning text-dark">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Is Locked</span>
+                    <span class="s-value">
+                        {% if period.is_locked %}<span class="badge bg-danger">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Can Transact</span>
+                    <span class="s-value">
+                        {% if progress_info.can_accept_transactions %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-danger">No</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Today</span>
+                    <span class="s-value" style="font-size:12px;">{{ today|date:"d M Y" }}</span>
+                </div>
+            </div>
+        </div>
+
+        {% comment %}Closure & Audit Timeline{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-history text-secondary"></i> History
+            </div>
+            <div class="summary-card-body">
+                <div class="timeline">
+
+                    <div class="tl-item">
+                        <div class="tl-dot info"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Period Created</div>
+                            <div class="tl-date">{{ period.created_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+
+                    {% if period.is_active or period.is_closed or period.is_locked %}
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Activated</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if period.closed_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot warning"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Period Closed</div>
+                            <div class="tl-date">{{ period.closed_at|date:"d M Y, H:i" }}</div>
+                            <div class="tl-note">By {{ period.get_closed_by_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if period.locked_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot danger"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Locked for Audit</div>
+                            <div class="tl-date">{{ period.locked_at|date:"d M Y, H:i" }}</div>
+                            <div class="tl-note">By {{ period.get_locked_by_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if progress_info.is_past and not period.is_closed %}
+                    <div class="tl-item">
+                        <div class="tl-dot danger"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Period Ended (Not Closed)</div>
+                            <div class="tl-date">{{ period.end_date|date:"d M Y" }}</div>
+                            <div class="tl-note" style="color:#e74c3c;">Action required — close this period.</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+        {% comment %}Quick Actions{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-bolt text-warning"></i> Quick Actions
+            </div>
+            <div class="summary-card-body">
+                <div class="d-grid gap-2">
+                    {% if not period.is_locked %}
+                    <button class="btn btn-outline-warning btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#periodModal"
+                        onclick="loadPeriodForm('{{ period.pk }}')">
+                        <i class="fa fa-edit me-1"></i> Edit Period
+                    </button>
+                    {% endif %}
+
+                    {% if not period.is_active and not period.is_closed and not period.is_locked %}
+                    <button class="btn btn-outline-success btn-sm"
+                        onclick="quickAction('period', '{{ period.pk }}', 'activate', event)">
+                        <i class="fa fa-play me-1"></i> Activate Period
+                    </button>
+                    {% endif %}
+
+                    {% if period.is_active and not period.is_closed %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                        onclick="quickAction('period', '{{ period.pk }}', 'close', event)">
+                        <i class="pe-7s-lock me-1"></i> Close Period
+                    </button>
+                    {% endif %}
+
+                    {% if period.is_closed and not period.is_locked %}
+                    <button class="btn btn-outline-danger btn-sm"
+                        onclick="quickAction('period', '{{ period.pk }}', 'lock', event)">
+                        <i class="fa fa-lock me-1"></i> Lock for Audit
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm"
+                        onclick="quickAction('period', '{{ period.pk }}', 'reopen', event)">
+                        <i class="fa fa-undo me-1"></i> Reopen Period
+                    </button>
+                    {% endif %}
+
+                    {% if period.is_locked %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                        onclick="quickAction('period', '{{ period.pk }}', 'unlock', event)">
+                        <i class="fa fa-unlock me-1"></i> Unlock
+                    </button>
+                    {% endif %}
+
+                    <a href="{% url 'core:fiscal_year_detail' period.fiscal_year.pk %}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-calendar me-1"></i> View Fiscal Year
+                    </a>
+                    <a href="{% url 'core:fiscal_management' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Fiscal Years
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% comment %}Record Info{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-clock text-secondary"></i> Record Info
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">{{ period.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">{{ period.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+                {% if period.closed_at %}
+                <div class="summary-row">
+                    <span class="s-label">Closed</span>
+                    <span class="s-value" style="font-size:12px;">{{ period.closed_at|date:"d M Y" }}</span>
+                </div>
+                {% endif %}
+                {% if period.locked_at %}
+                <div class="summary-row">
+                    <span class="s-label">Locked</span>
+                    <span class="s-value" style="font-size:12px;">{{ period.locked_at|date:"d M Y" }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{% comment %}/col-lg-4{% endcomment %}
+
+</div>{% comment %}/row{% endcomment %}
+
+
+{% comment %}Edit modal — same pattern as fiscal_management{% endcomment %}
+<div class="modal fade" id="periodModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" id="periodModalContent">
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading form&hellip;</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+'use strict';
+
+function getCsrfToken() {
+    for (const c of document.cookie.split(';')) {
+        const [k, v] = c.trim().split('=');
+        if (k === 'csrftoken') return decodeURIComponent(v);
+    }
+    return '';
+}
+
+function loadPeriodForm(periodId) {
+    const url    = "{% url 'core:period_modal_edit' pk='00000000-0000-0000-0000-000000000000' %}"
+        .replace('00000000-0000-0000-0000-000000000000', periodId);
+    const target = document.getElementById('periodModalContent');
+    if (!target) return;
+
+    target.innerHTML = `<div class="modal-body text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading form&hellip;</p></div>`;
+
+    if (typeof htmx !== 'undefined') {
+        htmx.ajax('GET', url, { target: '#periodModalContent', swap: 'innerHTML' });
+        return;
+    }
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.text())
+        .then(html => { target.innerHTML = html; });
+}
+
+function quickAction(type, id, action, event) {
+    const labels = {
+        activate: 'Activate this period?',
+        close:    'Close this period? This will prevent new transactions.',
+        lock:     'Lock this period for audit compliance?',
+        unlock:   'Unlock this period? Use with caution.',
+        reopen:   'Reopen this period? New transactions will be allowed.',
+    };
+    if (!confirm(labels[action] || `Perform "${action}"?`)) return;
+
+    const url = "{% url 'core:period_quick_action' pk='00000000-0000-0000-0000-000000000000' action='activate' %}"
+        .replace('00000000-0000-0000-0000-000000000000', id)
+        .replace('activate', action);
+
+    const btn  = event && event.target ? event.target.closest('button') : null;
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+
+    fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } })
+        .then(response => {
+            const redirect = response.headers.get('HX-Redirect');
+            if (redirect)        { window.location.href = redirect; }
+            else if (response.ok){ window.location.reload(); }
+            else                 { throw new Error(`Server returned ${response.status}`); }
+        })
+        .catch(err => {
+            console.error('Quick action error:', err);
+            alert('Error performing action. Please try again.');
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        .forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

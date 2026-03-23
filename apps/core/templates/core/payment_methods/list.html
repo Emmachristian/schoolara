@@ -1,0 +1,438 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   PAYMENT METHODS — LIST PAGE
+   ============================================================================ */
+
+/* ── Stats Cards ── */
+.stats-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+.stats-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    font-size: 26px;
+    color: white;
+    flex-shrink: 0;
+}
+.stats-label {
+    font-size: 11px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
+}
+.stats-content h3 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+    color: #2d3748;
+}
+
+/* ── Filters ── */
+.payment-filters {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.filter-header {
+    margin-bottom: 18px;
+}
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ── Table ── */
+.table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: visible !important;
+}
+.table { margin-bottom: 0; min-width: 960px; }
+.table thead th {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 14px 12px;
+    white-space: nowrap;
+}
+.table tbody td {
+    vertical-align: middle;
+    padding: 12px;
+    position: relative;
+    overflow: visible;
+}
+.table tbody tr:hover { background: #f8f9fa; }
+
+/* ── Method type badge colour map ── */
+.method-badge-CASH          { background: #28a745 !important; }
+.method-badge-MOBILE_MONEY  { background: #fd7e14 !important; }
+.method-badge-BANK_TRANSFER { background: #007bff !important; }
+.method-badge-CHEQUE        { background: #6f42c1 !important; }
+.method-badge-CARD          { background: #17a2b8 !important; }
+.method-badge-DIRECT_DEBIT  { background: #e83e8c !important; }
+.method-badge-STANDING_ORDER{ background: #20c997 !important; }
+.method-badge-OTHER         { background: #6c757d !important; }
+
+/* ── Dropdown ── */
+.dropdown { position: static !important; }
+.dropdown-menu { z-index: 1050 !important; }
+
+/* ── Empty state ── */
+.empty-state {
+    text-align: center;
+    padding: 70px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 14px;
+    margin: 24px 0;
+    border: 2px dashed #dee2e6;
+}
+.empty-state-icon {
+    font-size: 4.5rem;
+    color: #dee2e6;
+    margin-bottom: 20px;
+    display: block;
+    animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-8px); }
+}
+
+/* ── Pagination ── */
+.page-link { color: #667eea; }
+.page-link:hover { background: #667eea; color: white; border-color: #667eea; }
+.page-item.active .page-link { background: #667eea; border-color: #667eea; }
+
+/* ── Card animate ── */
+.card-animate { animation: fadeInUp 0.4s ease-out; }
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Status indicator dot ── */
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+@media (max-width: 768px) {
+    .payment-filters { padding: 14px; }
+    .dropdown-menu { min-width: 200px; right: 0 !important; left: auto !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Page Title ── -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-credit icon-gradient bg-premium-dark"></i>
+            </div>
+            <div>
+                Payment Methods
+                <div class="page-title-subheading">
+                    Configure and manage accepted payment channels
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <div class="btn-group" role="group">
+                <a href="{% url 'core:payment_method_create' %}" class="btn btn-primary">
+                    <i class="fa fa-plus me-1"></i> Add Method
+                </a>
+                <a href="{% url 'core:payment_method_print_view' %}?{{ request.GET.urlencode }}"
+                   target="_blank" class="btn btn-outline-secondary">
+                    <i class="fa fa-print me-1"></i> Print
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- ── Statistics Cards ── -->
+<div class="row mb-4" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon" style="background: linear-gradient(135deg,#667eea,#764ba2);">
+                <i class="pe-7s-credit"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Methods</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-cash"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Cash</div>
+                <h3>{{ stats.cash|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-warning">
+                <i class="pe-7s-phone"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Mobile Money</div>
+                <h3>{{ stats.mobile_money|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info">
+                <i class="pe-7s-safe"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Bank Transfer</div>
+                <h3>{{ stats.bank_transfer|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Main Content ── -->
+<section class="section">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="main-card mb-3 card card-animate">
+                <div class="card-body">
+
+                    <!-- Filter Header -->
+                    <div class="filter-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <h5 class="card-title mb-0">
+                                <i class="pe-7s-credit me-2 text-primary"></i>
+                                Payment Methods Directory
+                                <span class="badge bg-secondary ms-2">{{ stats.total|default:0 }} total</span>
+                            </h5>
+                            <div class="filter-actions">
+                                {% if stats.with_fees %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fa fa-percent me-1"></i>{{ stats.with_fees }} with fees
+                                    </span>
+                                {% endif %}
+                                {% if stats.requires_approval %}
+                                    <span class="badge bg-info">
+                                        <i class="fa fa-shield me-1"></i>{{ stats.requires_approval }} require approval
+                                    </span>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fa fa-times me-1"></i> Reset
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
+                                    <i class="fa fa-refresh me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filters -->
+                    <div class="payment-filters">
+                        <form id="searchForm"
+                              class="row g-3"
+                              hx-get="{% url 'core:payment_method_search' %}"
+                              hx-target="#method-results"
+                              hx-trigger="change, keyup changed delay:400ms from:input[name='q']">
+
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Search</label>
+                                {% if filter_form.q %}
+                                    {{ filter_form.q|add_class:"form-control form-control-sm" }}
+                                {% else %}
+                                    <input type="text" name="q" class="form-control form-control-sm"
+                                           placeholder="Name, code, bank…" value="{{ request.GET.q }}">
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Method Type</label>
+                                {% if filter_form.method_type %}
+                                    {{ filter_form.method_type|add_class:"form-select form-select-sm" }}
+                                {% else %}
+                                    <select name="method_type" class="form-select form-select-sm">
+                                        <option value="">All Types</option>
+                                        <option value="CASH">Cash</option>
+                                        <option value="MOBILE_MONEY">Mobile Money</option>
+                                        <option value="BANK_TRANSFER">Bank Transfer</option>
+                                        <option value="CHEQUE">Cheque</option>
+                                        <option value="CARD">Card</option>
+                                        <option value="DIRECT_DEBIT">Direct Debit</option>
+                                        <option value="STANDING_ORDER">Standing Order</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Status</label>
+                                {% if filter_form.is_active %}
+                                    {{ filter_form.is_active|add_class:"form-select form-select-sm" }}
+                                {% else %}
+                                    <select name="is_active" class="form-select form-select-sm">
+                                        <option value="">All</option>
+                                        <option value="true">Active</option>
+                                        <option value="false">Inactive</option>
+                                    </select>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Has Fees</label>
+                                {% if filter_form.has_transaction_fee %}
+                                    {{ filter_form.has_transaction_fee|add_class:"form-select form-select-sm" }}
+                                {% else %}
+                                    <select name="has_transaction_fee" class="form-select form-select-sm">
+                                        <option value="">All</option>
+                                        <option value="true">With Fees</option>
+                                        <option value="false">No Fees</option>
+                                    </select>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-1 d-flex align-items-end">
+                                <button type="submit" class="btn btn-sm btn-primary w-100">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                            </div>
+
+                        </form>
+                    </div>
+
+                    <!-- Results Container (HTMX target) -->
+                    <div id="method-results"
+                         hx-get="{% url 'core:payment_method_search' %}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading…</span>
+                            </div>
+                            <p class="text-muted mb-0">Loading payment methods…</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Dynamic modal container -->
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── HTMX modal handler ─────────────────────────────────────────────────────
+
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+
+    const container = document.getElementById('modal-container');
+    const dialog    = container.querySelector('.modal-dialog');
+    if (!dialog) return;
+
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) {
+        const existing = bootstrap.Modal.getInstance(wrapper);
+        if (existing) existing.dispose();
+        wrapper.remove();
+    }
+
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id        = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        container.innerHTML = '';
+        currentModal = null;
+    });
+});
+
+// ── Handle HX-Redirect from modal responses ────────────────────────────────
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const redirect = e.detail.xhr.getResponseHeader('HX-Redirect');
+    if (redirect) {
+        if (currentModal) currentModal.hide();
+        window.location.href = redirect;
+    }
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function resetFilters() {
+    window.location.href = "{% url 'core:payment_method_list' %}";
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+});
+</script>
+{% endblock %}

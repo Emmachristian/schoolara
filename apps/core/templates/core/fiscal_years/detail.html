@@ -1,0 +1,1154 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   FISCAL YEAR DETAIL  —  design system mirrors expense_detail / period_detail
+   ============================================================================ */
+
+/* ---- Hero ---- */
+.fiscal-hero {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 28px 32px;
+    color: #1a1a2e;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.hero-number {
+    font-size: 12px;
+    color: #6c757d;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.hero-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #1a1a2e;
+}
+
+.hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 16px;
+}
+
+.hero-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.hero-stat-box {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 16px 28px;
+    text-align: center;
+    min-width: 160px;
+}
+
+.hero-stat-label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .6px; }
+.hero-stat-value { font-size: 32px; font-weight: 800; margin-top: 4px; line-height: 1; }
+.hero-stat-sub   { font-size: 12px; color: #6c757d; margin-top: 6px; }
+
+.hero-progress-bar {
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.hero-progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width .6s ease;
+}
+
+/* ---- Status Badges ---- */
+.status-badge-lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.sb-draft  { background: #e9ecef;  color: #495057; }
+.sb-active { background: #d1f2eb;  color: #1b5e20; }
+.sb-closed { background: #fff3cd;  color: #856404; }
+.sb-locked { background: #fde8e8;  color: #c62828; }
+
+/* ---- Quick-stat strip ---- */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.stat-block {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+}
+
+.stat-number { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.stat-label  { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: .4px; }
+
+/* ---- Cards ---- */
+.detail-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 22px;
+    overflow: hidden;
+}
+
+.detail-card-header {
+    background: #f8f9fa;
+    padding: 14px 22px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.detail-card-header .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.detail-card-body { padding: 22px; }
+
+/* ---- Info Rows ---- */
+.info-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+    width: 190px;
+    min-width: 190px;
+    font-size: 11.5px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    font-weight: 600;
+    padding-right: 14px;
+    padding-top: 2px;
+}
+
+.info-value {
+    flex: 1;
+    font-size: 13.5px;
+    color: #1a1a2e;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.info-value.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12.5px;
+}
+
+/* ---- Periods Table ---- */
+.periods-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.periods-table thead th {
+    background: #f8f9fa;
+    padding: 11px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #6c757d;
+    border-bottom: 2px solid #e9ecef;
+    white-space: nowrap;
+}
+
+.periods-table tbody td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+}
+
+.periods-table tbody tr:last-child td { border-bottom: none; }
+.periods-table tbody tr:hover         { background: #fafbfc; }
+.periods-table tbody tr.row-active    { background: #f0fdf4; }
+
+/* ---- Progress bars (inline) ---- */
+.mini-progress {
+    height: 7px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    width: 100px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+.mini-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .5s ease;
+}
+
+/* ---- Collection Progress (sidebar) ---- */
+.progress-bar-track {
+    height: 10px;
+    background: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 6px 0 4px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    transition: width .6s ease;
+}
+
+/* ---- Summary Cards (sidebar) ---- */
+.summary-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+
+.summary-card-header {
+    background: #f8f9fa;
+    padding: 12px 18px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.summary-card-body { padding: 16px 18px; }
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+}
+
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label   { color: #6c757d; font-size: 12px; }
+.summary-row .s-value   { font-weight: 600; color: #1a1a2e; }
+.summary-row .s-value.green { color: #27ae60; }
+.summary-row .s-value.red   { color: #e74c3c; }
+.summary-row .s-value.blue  { color: #2980b9; }
+
+.summary-row.total-row {
+    border-top: 2px solid #dee2e6;
+    padding-top: 10px;
+    margin-top: 4px;
+}
+.summary-row.total-row .s-label { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.summary-row.total-row .s-value { font-size: 16px; font-weight: 800; }
+
+/* ---- Timeline ---- */
+.timeline { position: relative; padding-left: 28px; }
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 9px; top: 0; bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.tl-item { position: relative; padding-bottom: 18px; }
+.tl-item:last-child { padding-bottom: 0; }
+
+.tl-dot {
+    position: absolute;
+    left: -24px; top: 3px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #6c757d;
+    box-shadow: 0 0 0 2px #6c757d;
+}
+
+.tl-dot.success { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
+.tl-dot.danger  { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+.tl-dot.warning { background: #f39c12; box-shadow: 0 0 0 2px #f39c12; }
+.tl-dot.info    { background: #2980b9; box-shadow: 0 0 0 2px #2980b9; }
+
+.tl-content { background: #f8f9fa; border-radius: 8px; padding: 10px 14px; }
+.tl-title   { font-weight: 700; font-size: 13px; color: #1a1a2e; }
+.tl-date    { font-size: 11px; color: #6c757d; margin-top: 2px; }
+.tl-note    { font-size: 12px; color: #495057; margin-top: 5px; font-style: italic; }
+
+/* ---- Empty state ---- */
+.empty-mini { text-align: center; padding: 30px 20px; color: #adb5bd; }
+.empty-mini i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: .5; }
+.empty-mini p { font-size: 13px; margin: 0; }
+
+@media (max-width: 768px) {
+    .hero-top     { flex-direction: column; }
+    .hero-stat-box{ min-width: 100%; }
+    .stat-grid    { grid-template-columns: repeat(2, 1fr); }
+    .info-label   { width: 130px; min-width: 130px; }
+    .mini-progress{ width: 60px; }
+}
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-date icon-gradient bg-mean-fruit"></i>
+            </div>
+            <div>
+                Fiscal Year Detail
+                <div class="page-title-subheading">
+                    {{ fiscal_year.start_date|date:"d M Y" }} &ndash; {{ fiscal_year.end_date|date:"d M Y" }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex align-items-center gap-2 flex-wrap">
+            <a href="{% url 'core:fiscal_management' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Fiscal Management
+            </a>
+
+            {% if not fiscal_year.is_locked %}
+            <button class="btn btn-warning btn-sm"
+                data-bs-toggle="modal" data-bs-target="#fiscalYearModal"
+                onclick="loadFiscalYearForm('{{ fiscal_year.pk }}')">
+                <i class="fa fa-edit me-1"></i> Edit
+            </button>
+            {% endif %}
+
+            {% if not fiscal_year.is_active and not fiscal_year.is_closed and not fiscal_year.is_locked %}
+            <button class="btn btn-success btn-sm"
+                onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'activate', event)">
+                <i class="fa fa-play me-1"></i> Activate
+            </button>
+            {% endif %}
+
+            {% if not fiscal_year.is_closed and not fiscal_year.is_locked %}
+            <button class="btn btn-secondary btn-sm"
+                onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'close', event)">
+                <i class="pe-7s-lock me-1"></i> Close Year
+            </button>
+            {% endif %}
+
+            {% if fiscal_year.is_closed and not fiscal_year.is_locked %}
+            <button class="btn btn-danger btn-sm"
+                onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'lock', event)">
+                <i class="fa fa-lock me-1"></i> Lock
+            </button>
+            {% endif %}
+
+            {% if fiscal_year.is_locked %}
+            <button class="btn btn-outline-secondary btn-sm"
+                onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'unlock', event)">
+                <i class="fa fa-unlock me-1"></i> Unlock
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+
+{% comment %}Hero — mirrors expense hero exactly{% endcomment %}
+<div class="fiscal-hero">
+    <div class="hero-top">
+        <div>
+            <div class="hero-number">{{ fiscal_year.code }}</div>
+            <div class="hero-title">{{ fiscal_year.name }}</div>
+
+            <div style="margin-top: 10px;">
+                {% if fiscal_year.status == 'DRAFT' %}
+                <span class="status-badge-lg sb-draft"><i class="fa fa-pencil-alt"></i> Draft</span>
+                {% elif fiscal_year.status == 'ACTIVE' %}
+                <span class="status-badge-lg sb-active"><i class="fa fa-play-circle"></i> Active</span>
+                {% elif fiscal_year.status == 'CLOSED' %}
+                <span class="status-badge-lg sb-closed"><i class="fa fa-check-circle"></i> Closed</span>
+                {% elif fiscal_year.status == 'LOCKED' %}
+                <span class="status-badge-lg sb-locked"><i class="fa fa-lock"></i> Locked</span>
+                {% endif %}
+
+                {% if fiscal_year.is_active %}
+                <span class="badge bg-success ms-2" style="font-size:12px;">Current Year</span>
+                {% endif %}
+            </div>
+
+            <div class="hero-meta">
+                <div class="hero-meta-item">
+                    <i class="fa fa-calendar-alt"></i>
+                    {{ fiscal_year.start_date|date:"d M Y" }} &ndash; {{ fiscal_year.end_date|date:"d M Y" }}
+                </div>
+                <div class="hero-meta-item">
+                    <i class="fa fa-layer-group"></i>
+                    {{ periods|length }} period{{ periods|length|pluralize }}
+                </div>
+                <div class="hero-meta-item">
+                    <i class="fa fa-clock"></i>
+                    {{ fiscal_year.get_duration_days }} days total
+                </div>
+            </div>
+        </div>
+
+        <div class="hero-stat-box">
+            <div class="hero-stat-label">Year Progress</div>
+            <div class="hero-stat-value"
+                style="color:{% if fiscal_year.get_progress_percentage >= 100 %}#6c757d{% elif fiscal_year.get_progress_percentage >= 75 %}#e67e22{% else %}#27ae60{% endif %};">
+                {{ fiscal_year.get_progress_percentage }}%
+            </div>
+            <div class="hero-progress-bar">
+                <div class="hero-progress-fill"
+                    style="width:{{ fiscal_year.get_progress_percentage }}%;
+                    background:{% if fiscal_year.get_progress_percentage >= 100 %}#6c757d{% elif fiscal_year.get_progress_percentage >= 75 %}#e67e22{% else %}#27ae60{% endif %};">
+                </div>
+            </div>
+            <div class="hero-stat-sub">{{ fiscal_year.get_remaining_days }} days remaining</div>
+        </div>
+    </div>
+</div>
+
+
+{% comment %}Quick-stat strip{% endcomment %}
+<div class="stat-grid">
+    <div class="stat-block">
+        <div class="stat-number text-primary">{{ fiscal_year.get_duration_days }}</div>
+        <div class="stat-label">Total Days</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number text-success">{{ fiscal_year.get_elapsed_days }}</div>
+        <div class="stat-label">Elapsed</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number
+            {% if fiscal_year.get_remaining_days <= 30 %}text-danger
+            {% elif fiscal_year.get_remaining_days <= 90 %}text-warning
+            {% else %}text-info{% endif %}">
+            {{ fiscal_year.get_remaining_days }}
+        </div>
+        <div class="stat-label">Remaining</div>
+    </div>
+    <div class="stat-block">
+        <div class="stat-number text-secondary">{{ periods|length }}</div>
+        <div class="stat-label">Periods</div>
+    </div>
+</div>
+
+
+<div class="row">
+
+    {% comment %}======= LEFT / MAIN COLUMN ======={% endcomment %}
+    <div class="col-lg-8">
+
+        {% comment %}Year details card{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title">
+                    <i class="fa fa-info-circle text-primary"></i> Fiscal Year Details
+                </span>
+            </div>
+            <div class="detail-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Year Code</div>
+                            <div class="info-value mono">{{ fiscal_year.code }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Start Date</div>
+                            <div class="info-value">{{ fiscal_year.start_date|date:"d M Y" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">End Date</div>
+                            <div class="info-value">{{ fiscal_year.end_date|date:"d M Y" }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Duration</div>
+                            <div class="info-value">
+                                {{ fiscal_year.get_duration_days }} days
+                                &nbsp;&middot;&nbsp;
+                                ~{{ fiscal_year.get_duration_weeks }} weeks
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-row">
+                            <div class="info-label">Status</div>
+                            <div class="info-value">
+                                {% if fiscal_year.status == 'ACTIVE' %}
+                                <span class="badge bg-success">Active</span>
+                                {% elif fiscal_year.status == 'CLOSED' %}
+                                <span class="badge bg-warning text-dark">Closed</span>
+                                {% elif fiscal_year.status == 'LOCKED' %}
+                                <span class="badge bg-danger">Locked</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Draft</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Active</div>
+                            <div class="info-value">
+                                {% if fiscal_year.is_active %}
+                                <span class="badge bg-success">Yes</span>
+                                {% else %}
+                                <span class="badge bg-secondary">No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Locked</div>
+                            <div class="info-value">
+                                {% if fiscal_year.is_locked %}
+                                <span class="badge bg-danger">Yes</span>
+                                {% else %}
+                                <span class="badge bg-secondary">No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Today</div>
+                            <div class="info-value">{{ today|date:"d M Y" }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if fiscal_year.description %}
+                <hr class="my-3">
+                <div class="info-row" style="border:0;">
+                    <div class="info-label">Description</div>
+                    <div class="info-value" style="font-size:13px; line-height:1.6;">
+                        {{ fiscal_year.description }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+
+        {% comment %}Accounting Periods table — main content of a fiscal year detail{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title">
+                    <i class="fa fa-calendar-check text-success"></i>
+                    Accounting Periods
+                    <span class="badge bg-secondary ms-1" style="font-size:11px; font-weight:600;">
+                        {{ periods|length }}
+                    </span>
+                </span>
+                {% if not fiscal_year.is_locked %}
+                <button class="btn btn-sm btn-outline-success"
+                    data-bs-toggle="modal" data-bs-target="#periodModal"
+                    onclick="loadPeriodForm(null, '{{ fiscal_year.pk }}')">
+                    <i class="fa fa-plus me-1"></i> Add Period
+                </button>
+                {% endif %}
+            </div>
+
+            <div style="padding: 0;">
+                {% if periods %}
+                <div class="table-responsive">
+                    <table class="periods-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Dates</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for period in periods %}
+                            <tr {% if period.is_active %}class="row-active"{% endif %}>
+
+                                <td class="text-muted" style="width:40px;">
+                                    {{ period.period_number }}
+                                </td>
+
+                                <td>
+                                    <a href="{% url 'core:fiscal_period_detail' period.pk %}"
+                                        class="fw-bold text-primary" style="font-size:13.5px;">
+                                        {{ period.name }}
+                                    </a>
+                                    {% if period.is_active %}
+                                    <span class="badge bg-success ms-1" style="font-size:10px;">Active</span>
+                                    {% endif %}
+                                    {% if period.is_in_grace_period %}
+                                    <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">Grace</span>
+                                    {% endif %}
+                                    <br>
+                                    <span class="mono text-muted" style="font-size:11px;">{{ period.code }}</span>
+                                </td>
+
+                                <td style="white-space:nowrap;">
+                                    <span style="font-size:13px;">
+                                        {{ period.start_date|date:"d M" }} &ndash; {{ period.end_date|date:"d M Y" }}
+                                    </span>
+                                    <br>
+                                    <small class="text-muted">{{ period.get_duration_days }} days</small>
+                                </td>
+
+                                <td>
+                                    <span class="badge bg-secondary" style="font-size:11px;">
+                                        {{ period.get_period_type_display }}
+                                    </span>
+                                </td>
+
+                                <td>
+                                    {% if period.status == 'ACTIVE' %}
+                                    <span class="badge bg-success" style="font-size:11px;">Active</span>
+                                    {% elif period.status == 'CLOSED' %}
+                                    <span class="badge bg-warning text-dark" style="font-size:11px;">Closed</span>
+                                    {% elif period.status == 'LOCKED' %}
+                                    <span class="badge bg-danger" style="font-size:11px;">Locked</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" style="font-size:11px;">Draft</span>
+                                    {% endif %}
+                                </td>
+
+                                <td style="white-space:nowrap;">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <div class="mini-progress">
+                                            <div class="mini-progress-fill"
+                                                style="width:{{ period.get_progress_percentage }}%;
+                                                background:{% if period.get_progress_percentage >= 100 %}#6c757d{% elif period.get_progress_percentage >= 75 %}#e67e22{% else %}#27ae60{% endif %};">
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">{{ period.get_progress_percentage }}%</small>
+                                    </div>
+                                </td>
+
+                                <td class="text-center" style="width:100px;">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'core:fiscal_period_detail' period.pk %}"
+                                            class="btn btn-outline-info btn-sm" title="View">
+                                            <i class="fa fa-eye"></i>
+                                        </a>
+
+                                        {% if not period.is_locked %}
+                                        <button class="btn btn-outline-warning btn-sm" title="Edit"
+                                            data-bs-toggle="modal" data-bs-target="#periodModal"
+                                            onclick="loadPeriodForm('{{ period.pk }}')">
+                                            <i class="fa fa-edit"></i>
+                                        </button>
+                                        {% endif %}
+
+                                        {% if not period.is_active and not period.is_closed and not period.is_locked %}
+                                        <button class="btn btn-outline-success btn-sm" title="Activate"
+                                            onclick="quickAction('period', '{{ period.pk }}', 'activate', event)">
+                                            <i class="fa fa-play"></i>
+                                        </button>
+                                        {% endif %}
+
+                                        {% if period.is_active and not period.is_closed %}
+                                        <button class="btn btn-outline-secondary btn-sm" title="Close"
+                                            onclick="quickAction('period', '{{ period.pk }}', 'close', event)">
+                                            <i class="pe-7s-lock"></i>
+                                        </button>
+                                        {% endif %}
+
+                                        {% if period.is_closed and not period.is_locked %}
+                                        <button class="btn btn-outline-danger btn-sm" title="Lock"
+                                            onclick="quickAction('period', '{{ period.pk }}', 'lock', event)">
+                                            <i class="fa fa-lock"></i>
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" title="Reopen"
+                                            onclick="quickAction('period', '{{ period.pk }}', 'reopen', event)">
+                                            <i class="fa fa-undo"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% comment %}Period summary footer{% endcomment %}
+                <div style="padding: 12px 22px; background:#f8f9fa; border-top:1px solid #e9ecef;
+                            font-size:12px; color:#6c757d; display:flex; gap:20px; flex-wrap:wrap;">
+                    {% with p_active=periods|length %}
+                    <span><i class="fa fa-circle text-success me-1" style="font-size:9px;"></i>
+                        {{ fiscal_year.get_active_periods_count }} active</span>
+                    <span><i class="fa fa-circle text-warning me-1" style="font-size:9px;"></i>
+                        {{ fiscal_year.get_closed_periods_count }} closed</span>
+                    <span><i class="fa fa-circle text-danger me-1" style="font-size:9px;"></i>
+                        {{ fiscal_year.get_locked_periods_count }} locked</span>
+                    <span><i class="fa fa-circle text-secondary me-1" style="font-size:9px;"></i>
+                        {{ fiscal_year.get_draft_periods_count }} draft</span>
+                    {% endwith %}
+                </div>
+
+                {% else %}
+                <div class="empty-mini">
+                    <i class="pe-7s-calendar"></i>
+                    <p>No periods defined for this fiscal year.</p>
+                    {% if not fiscal_year.is_locked %}
+                    <p style="margin-top:6px;">
+                        <a href="#" class="text-success fw-bold"
+                            data-bs-toggle="modal" data-bs-target="#periodModal"
+                            onclick="loadPeriodForm(null, '{{ fiscal_year.pk }}')">
+                            <i class="fa fa-plus me-1"></i> Add the first period
+                        </a>
+                    </p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+
+        {% comment %}Financial summary card{% endcomment %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title">
+                    <i class="fa fa-chart-bar text-success"></i> Financial Summary
+                </span>
+            </div>
+            <div class="detail-card-body">
+                {% with invoiced=fiscal_year.get_total_invoiced collected=fiscal_year.get_total_collected rate=fiscal_year.get_collection_rate %}
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number text-primary" style="font-size:20px;">
+                                {{ invoiced|floatformat:0|intcomma }}
+                            </div>
+                            <div class="stat-label">Total Invoiced</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number text-success" style="font-size:20px;">
+                                {{ collected|floatformat:0|intcomma }}
+                            </div>
+                            <div class="stat-label">Collected</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="stat-block">
+                            <div class="stat-number
+                                {% if rate >= 90 %}text-success
+                                {% elif rate >= 60 %}text-warning
+                                {% else %}text-danger{% endif %}"
+                                style="font-size:20px;">
+                                {{ rate }}%
+                            </div>
+                            <div class="stat-label">Collection Rate</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:12px; color:#6c757d; margin-bottom:5px;">
+                    Collection progress &mdash; {{ rate }}% of total invoiced amount collected
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill"
+                        style="width:{{ rate }}%;
+                        background:{% if rate >= 90 %}#27ae60{% elif rate >= 60 %}#f39c12{% else %}#e74c3c{% endif %};">
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+
+
+        {% comment %}Notes card{% endcomment %}
+        {% if fiscal_year.description %}
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <span class="card-title">
+                    <i class="fa fa-sticky-note text-warning"></i> Notes
+                </span>
+            </div>
+            <div class="detail-card-body">
+                <p class="text-muted mb-0"
+                    style="white-space:pre-wrap; font-size:13.5px; line-height:1.7;">
+                    {{ fiscal_year.description }}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{% comment %}/col-lg-8{% endcomment %}
+
+
+    {% comment %}======= RIGHT / SIDEBAR COLUMN ======={% endcomment %}
+    <div class="col-lg-4">
+
+        {% comment %}Period breakdown summary{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-chart-pie text-info"></i> Period Breakdown
+            </div>
+            <div class="summary-card-body">
+                {% for period in periods %}
+                <div class="summary-row">
+                    <span class="s-label">
+                        <a href="{% url 'core:fiscal_period_detail' period.pk %}"
+                            class="text-muted text-decoration-none">
+                            {{ period.name }}
+                        </a>
+                    </span>
+                    <span class="s-value">
+                        {% if period.status == 'ACTIVE' %}
+                        <span class="badge bg-success" style="font-size:10px;">Active</span>
+                        {% elif period.status == 'CLOSED' %}
+                        <span class="badge bg-warning text-dark" style="font-size:10px;">Closed</span>
+                        {% elif period.status == 'LOCKED' %}
+                        <span class="badge bg-danger" style="font-size:10px;">Locked</span>
+                        {% else %}
+                        <span class="badge bg-secondary" style="font-size:10px;">Draft</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% empty %}
+                <p class="text-muted text-center small mb-0">No periods yet</p>
+                {% endfor %}
+            </div>
+        </div>
+
+
+        {% comment %}Lifecycle / audit timeline{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-history text-secondary"></i> History
+            </div>
+            <div class="summary-card-body">
+                <div class="timeline">
+
+                    <div class="tl-item">
+                        <div class="tl-dot info"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Year Created</div>
+                            <div class="tl-date">{{ fiscal_year.created_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+
+                    {% if fiscal_year.is_active or fiscal_year.is_closed or fiscal_year.is_locked %}
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Activated</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if fiscal_year.closed_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot warning"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Year Closed</div>
+                            <div class="tl-date">{{ fiscal_year.closed_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if fiscal_year.locked_at %}
+                    <div class="tl-item">
+                        <div class="tl-dot danger"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Locked for Audit</div>
+                            <div class="tl-date">{{ fiscal_year.locked_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+
+        {% comment %}Quick Actions{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-bolt text-warning"></i> Quick Actions
+            </div>
+            <div class="summary-card-body">
+                <div class="d-grid gap-2">
+
+                    {% if not fiscal_year.is_locked %}
+                    <button class="btn btn-outline-warning btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#fiscalYearModal"
+                        onclick="loadFiscalYearForm('{{ fiscal_year.pk }}')">
+                        <i class="fa fa-edit me-1"></i> Edit Fiscal Year
+                    </button>
+                    {% endif %}
+
+                    {% if not fiscal_year.is_active and not fiscal_year.is_closed and not fiscal_year.is_locked %}
+                    <button class="btn btn-outline-success btn-sm"
+                        onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'activate', event)">
+                        <i class="fa fa-play me-1"></i> Activate Year
+                    </button>
+                    {% endif %}
+
+                    {% if not fiscal_year.is_closed and not fiscal_year.is_locked %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                        onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'close', event)">
+                        <i class="pe-7s-lock me-1"></i> Close Year
+                    </button>
+                    {% endif %}
+
+                    {% if fiscal_year.is_closed and not fiscal_year.is_locked %}
+                    <button class="btn btn-outline-danger btn-sm"
+                        onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'lock', event)">
+                        <i class="fa fa-lock me-1"></i> Lock for Audit
+                    </button>
+                    {% endif %}
+
+                    {% if fiscal_year.is_locked %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                        onclick="quickAction('fiscal-year', '{{ fiscal_year.pk }}', 'unlock', event)">
+                        <i class="fa fa-unlock me-1"></i> Unlock
+                    </button>
+                    {% endif %}
+
+                    {% if not fiscal_year.is_locked %}
+                    <button class="btn btn-outline-success btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#periodModal"
+                        onclick="loadPeriodForm(null, '{{ fiscal_year.pk }}')">
+                        <i class="fa fa-plus me-1"></i> Add Period
+                    </button>
+                    {% endif %}
+
+                    <a href="{% url 'core:fiscal_management' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Fiscal Years
+                    </a>
+
+                </div>
+            </div>
+        </div>
+
+
+        {% comment %}Record Info{% endcomment %}
+        <div class="summary-card">
+            <div class="summary-card-header">
+                <i class="fa fa-clock text-secondary"></i> Record Info
+            </div>
+            <div class="summary-card-body">
+                <div class="summary-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value" style="font-size:12px;">
+                        {{ fiscal_year.created_at|date:"d M Y, H:i" }}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value" style="font-size:12px;">
+                        {{ fiscal_year.updated_at|date:"d M Y, H:i" }}
+                    </span>
+                </div>
+                {% if fiscal_year.closed_at %}
+                <div class="summary-row">
+                    <span class="s-label">Closed</span>
+                    <span class="s-value" style="font-size:12px;">
+                        {{ fiscal_year.closed_at|date:"d M Y" }}
+                    </span>
+                </div>
+                {% endif %}
+                {% if fiscal_year.locked_at %}
+                <div class="summary-row">
+                    <span class="s-label">Locked</span>
+                    <span class="s-value" style="font-size:12px;">
+                        {{ fiscal_year.locked_at|date:"d M Y" }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{% comment %}/col-lg-4{% endcomment %}
+
+</div>{% comment %}/row{% endcomment %}
+
+
+{% comment %}Fiscal year edit modal{% endcomment %}
+<div class="modal fade" id="fiscalYearModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" id="fiscalYearModalContent">
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading form&hellip;</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% comment %}Period add/edit modal{% endcomment %}
+<div class="modal fade" id="periodModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" id="periodModalContent">
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading form&hellip;</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+'use strict';
+
+function getCsrfToken() {
+    for (const c of document.cookie.split(';')) {
+        const [k, v] = c.trim().split('=');
+        if (k === 'csrftoken') return decodeURIComponent(v);
+    }
+    return '';
+}
+
+function loadIntoModal(url, targetId) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+
+    target.innerHTML = `<div class="modal-body text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading form&hellip;</p></div>`;
+
+    if (typeof htmx !== 'undefined') {
+        htmx.ajax('GET', url, { target: '#' + targetId, swap: 'innerHTML' });
+        return;
+    }
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.text())
+        .then(html => { target.innerHTML = html; });
+}
+
+function loadFiscalYearForm(fiscalYearId) {
+    const url = "{% url 'core:fiscal_year_modal_edit' pk='00000000-0000-0000-0000-000000000000' %}"
+        .replace('00000000-0000-0000-0000-000000000000', fiscalYearId);
+    loadIntoModal(url, 'fiscalYearModalContent');
+}
+
+function loadPeriodForm(periodId, fiscalYearId) {
+    let url;
+    if (periodId) {
+        url = "{% url 'core:period_modal_edit' pk='00000000-0000-0000-0000-000000000000' %}"
+            .replace('00000000-0000-0000-0000-000000000000', periodId);
+    } else {
+        url = "{% url 'core:period_modal_create' %}";
+        if (fiscalYearId) url += `?fiscal_year_id=${fiscalYearId}`;
+    }
+    loadIntoModal(url, 'periodModalContent');
+}
+
+function quickAction(type, id, action, event) {
+    const labels = {
+        activate: `Activate this ${type}?`,
+        close:    `Close this ${type}? This will prevent new transactions.`,
+        lock:     `Lock this ${type} for audit compliance?`,
+        unlock:   `Unlock this ${type}? Use with caution.`,
+        reopen:   `Reopen this ${type}? New transactions will be allowed.`,
+    };
+    if (!confirm(labels[action] || `Perform "${action}"?`)) return;
+
+    const urlTemplate = type === 'fiscal-year'
+        ? "{% url 'core:fiscal_year_quick_action' pk='00000000-0000-0000-0000-000000000000' action='activate' %}"
+        : "{% url 'core:period_quick_action'      pk='00000000-0000-0000-0000-000000000000' action='activate' %}";
+
+    const url = urlTemplate
+        .replace('00000000-0000-0000-0000-000000000000', id)
+        .replace('activate', action);
+
+    const btn  = event && event.target ? event.target.closest('button') : null;
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled  = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    }
+
+    fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } })
+        .then(response => {
+            const redirect = response.headers.get('HX-Redirect');
+            if (redirect)         { window.location.href = redirect; }
+            else if (response.ok) { window.location.reload(); }
+            else                  { throw new Error(`Server returned ${response.status}`); }
+        })
+        .catch(err => {
+            console.error('Quick action error:', err);
+            alert('Error performing action. Please try again.');
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        .forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

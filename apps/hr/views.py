@@ -526,14 +526,14 @@ def staff_list(request):
     """Handle BOTH full page loads AND HTMX search/filter requests"""
     filter_form = StaffFilterForm(request.GET or None)
     staff = get_filtered_staff(request)
-    
+
     # Calculate statistics
     total = staff.count()
-    
+
     stats = {
-        'total': total,
-        'active': staff.filter(is_active=True).count(),
-        'full_time': staff.filter(employment_status='FT').count(),
+        'total_staff': total,
+        'active_staff': staff.filter(is_active=True).count(),
+        'full_time_staff': staff.filter(employment_status='FT').count(),
         'part_time': staff.filter(employment_status='PT').count(),
         'contract': staff.filter(employment_status='CT').count(),
         'male': staff.filter(gender='M').count(),
@@ -541,15 +541,15 @@ def staff_list(request):
         'with_active_contract': staff.filter(active_contract_count__gt=0).count(),
         'teachers': staff.filter(teacher__isnull=False).count(),
     }
-    
+
     # Pagination
     paginator = Paginator(staff, 10)
     page_number = request.GET.get('page', 1)
     staff_page = paginator.get_page(page_number)
-    
+
     # Detect HTMX request
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     context = {
         'staff_page': staff_page,
         'paginator': paginator,
@@ -557,7 +557,7 @@ def staff_list(request):
         'filter_form': filter_form,
         'is_htmx': is_htmx,
     }
-    
+
     # Return appropriate template
     if is_htmx:
         return render(request, 'hr/staff/partials/_staff_results.html', context)
@@ -639,138 +639,182 @@ def staff_profile(request, pk):
 
 @login_required
 def staff_print_view(request):
-    """Generate printable staff list"""
-    
+    """
+    Generate printable staff list with selected fields.
+    Serves as the PDF export path — users print to PDF via the browser dialog.
+    """
     selected_fields = request.GET.getlist('fields')
     if not selected_fields:
         selected_fields = [
-            'staff_id', 'full_name', 'date_of_birth', 'gender',
+            'staff_id', 'full_name', 'gender',
             'primary_department', 'employment_status', 'phone_number'
         ]
-    
-    include_stats = request.GET.get('include_stats') == 'true'
+
+    include_stats  = request.GET.get('include_stats') == 'true'
     landscape_mode = request.GET.get('landscape') == 'true'
-    
+    short_headers  = request.GET.get('short_headers') == 'true'
+    gender_display = request.GET.get('gender_display', 'full')
+
     staff = get_filtered_staff(request)
-    
+
     stats = None
     if include_stats:
         total = staff.count()
         active_count = staff.filter(is_active=True).count()
-        
         stats = {
-            'total': total,
-            'active': active_count,
-            'active_percentage': round((active_count / total * 100), 1) if total > 0 else 0,
-            'male': staff.filter(gender='M').count(),
-            'female': staff.filter(gender='F').count(),
+            'total':     total,
+            'active':    active_count,
+            'male':      staff.filter(gender='M').count(),
+            'female':    staff.filter(gender='F').count(),
             'full_time': staff.filter(employment_status='FT').count(),
         }
-    
-    field_names = {
-        'staff_id': 'Staff ID',
-        'full_name': 'Full Name',
-        'first_name': 'First Name',
-        'last_name': 'Last Name',
-        'date_of_birth': 'Date of Birth',
-        'age': 'Age',
-        'gender': 'Gender',
-        'nationality': 'Nationality',
-        'phone_number': 'Phone',
-        'personal_email': 'Email',
-        'primary_department': 'Department',
-        'employment_status': 'Employment Status',
-        'date_of_joining': 'Date of Joining',
-        'marital_status': 'Marital Status',
+
+    field_names_full = {
+        'staff_id':            'Staff ID',
+        'full_name':           'Full Name',
+        'first_name':          'First Name',
+        'last_name':           'Last Name',
+        'date_of_birth':       'Date of Birth',
+        'gender':              'Gender',
+        'nationality':         'Nationality',
+        'national_id':         'National ID',
+        'marital_status':      'Marital Status',
+        'religious_affiliation': 'Religious Affiliation',
+        'phone_number':        'Phone Number',
+        'personal_email':      'Email',
+        'primary_department':  'Department',
+        'employment_status':   'Employment Status',
+        'date_of_joining':     'Date of Joining',
+        'date_of_leaving':     'Date of Leaving',
+        'is_active':           'Active Status',
+    }
+
+    field_names_short = {
+        'staff_id':            'Staff ID',
+        'full_name':           'Name',
+        'first_name':          'First',
+        'last_name':           'Last',
+        'date_of_birth':       'DOB',
+        'gender':              'Gender',
+        'nationality':         'Nationality',
+        'national_id':         'Nat. ID',
+        'marital_status':      'Marital',
         'religious_affiliation': 'Religion',
-        'national_id': 'National ID',
+        'phone_number':        'Phone',
+        'personal_email':      'Email',
+        'primary_department':  'Dept.',
+        'employment_status':   'Emp. Status',
+        'date_of_joining':     'Joined',
+        'date_of_leaving':     'Left',
+        'is_active':           'Active',
     }
-    
+
+    field_names = field_names_short if short_headers else field_names_full
     selected_field_names = [
-        field_names.get(field, field.replace('_', ' ').title()) 
-        for field in selected_fields
+        field_names.get(f, f.replace('_', ' ').title()) for f in selected_fields
     ]
-    
+
+    school = getattr(getattr(request.user, 'profile', None), 'school', None)
+
     context = {
-        'staff': staff,
-        'stats': stats,
-        'now': timezone.now(),
-        'selected_fields': selected_fields,
+        'staff':               staff,
+        'stats':               stats,
+        'now':                 timezone.now(),
+        'selected_fields':     selected_fields,
         'selected_field_names': selected_field_names,
-        'field_names': field_names,
-        'landscape': landscape_mode,
-        'title': 'Staff Report',
+        'field_names':         field_names,
+        'landscape':           landscape_mode,
+        'short_headers':       short_headers,
+        'gender_display':      gender_display,
+        'title':               'Staff Report',
+        'school_name':         school.full_name if school else 'School',
+        'school_logo':         school.school_logo.url if (school and school.school_logo) else None,
+        'school_address':      school.address if school else '',
+        'school_contact':      school.contact_phone if school else '',
     }
-    
+
     return render(request, 'hr/staff/print.html', context)
 
 
 @login_required
 def export_staff_excel(request):
-    """Export staff to Excel with filters applied"""
-    
+    """
+    Export staff to Excel.
+    Respects active filters AND columns selected in the export modal.
+    """
     staff = get_filtered_staff(request)
-    
-    # Create workbook
+
+    gender_display = request.GET.get('gender_display', 'full')
+
+    def get_gender(s):
+        if gender_display == 'short':
+            return s.gender or ''
+        return s.get_gender_display()
+
+    ALL_COLUMNS = [
+        ('staff_id',            'Staff ID',            lambda s: s.staff_id),
+        ('full_name',           'Full Name',            lambda s: s.full_name()),
+        ('first_name',          'First Name',           lambda s: s.first_name),
+        ('last_name',           'Last Name',            lambda s: s.last_name),
+        ('date_of_birth',       'Date of Birth',        lambda s: s.date_of_birth.strftime('%Y-%m-%d') if s.date_of_birth else ''),
+        ('gender',              'Gender',               lambda s: get_gender(s)),
+        ('nationality',         'Nationality',          lambda s: str(s.nationality) if s.nationality else ''),
+        ('national_id',         'National ID',          lambda s: s.national_id or ''),
+        ('marital_status',      'Marital Status',       lambda s: s.get_marital_status_display() if s.marital_status else ''),
+        ('religious_affiliation','Religious Affiliation',lambda s: s.religious_affiliation or ''),
+        ('phone_number',        'Phone Number',         lambda s: s.phone_number or ''),
+        ('personal_email',      'Email',                lambda s: s.personal_email or ''),
+        ('primary_department',  'Department',           lambda s: s.primary_department.name if s.primary_department else ''),
+        ('employment_status',   'Employment Status',    lambda s: s.get_employment_status_display()),
+        ('date_of_joining',     'Date of Joining',      lambda s: s.date_of_joining.strftime('%Y-%m-%d') if s.date_of_joining else ''),
+        ('date_of_leaving',     'Date of Leaving',      lambda s: s.date_of_leaving.strftime('%Y-%m-%d') if s.date_of_leaving else ''),
+        ('qualification',       'Qualification',        lambda s: s.qualification or ''),
+        ('is_active',           'Active',               lambda s: 'Yes' if s.is_active else 'No'),
+    ]
+
+    COLUMN_MAP = {col[0]: col for col in ALL_COLUMNS}
+    DEFAULT_FIELDS = ['staff_id', 'full_name', 'gender', 'primary_department',
+                      'employment_status', 'phone_number']
+
+    selected = request.GET.getlist('fields') or DEFAULT_FIELDS
+    columns  = [COLUMN_MAP[f] for f in selected if f in COLUMN_MAP] or \
+               [COLUMN_MAP[f] for f in DEFAULT_FIELDS]
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Staff"
-    
-    # Define styles
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", size=12)
-    header_alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Headers
-    headers = [
-        '#', 'Staff ID', 'Full Name', 'Gender', 'Department',
-        'Employment Status', 'Date of Joining', 'Phone', 'Email', 'Active'
-    ]
-    ws.append(headers)
-    
+
+    header_fill  = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
+    header_font  = Font(bold=True, color='FFFFFF', size=11)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    data_align   = Alignment(vertical='center')
+
+    ws.append([col[1] for col in columns])
     for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_alignment
-    
-    # Data rows
-    for idx, s in enumerate(staff, start=1):
-        ws.append([
-            idx,
-            s.staff_id,
-            s.full_name(),
-            s.get_gender_display(),
-            s.primary_department.name if s.primary_department else '',
-            s.get_employment_status_display(),
-            s.date_of_joining.strftime('%Y-%m-%d') if s.date_of_joining else '',
-            s.phone_number,
-            s.personal_email,
-            'Yes' if s.is_active else 'No',
-        ])
-    
-    # Auto-adjust column widths
-    for column in ws.columns:
-        max_length = 0
-        column_letter = get_column_letter(column[0].column)
-        for cell in column:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(cell.value)
-            except:
-                pass
-        adjusted_width = min(max_length + 2, 50)
-        ws.column_dimensions[column_letter].width = adjusted_width
-    
-    # Create response
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = header_align
+    ws.row_dimensions[1].height = 28
+
+    for s in staff:
+        ws.append([col[2](s) for col in columns])
+
+    for col_cells in ws.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 60)
+
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = data_align
+
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    filename = f"staff_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
+    response['Content-Disposition'] = (
+        f'attachment; filename="staff_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
+    )
     wb.save(response)
     return response
-
 
 @login_required
 def staff_activate(request, pk):
@@ -1748,53 +1792,38 @@ def teacher_list(request):
     """Handle BOTH full page loads AND HTMX search/filter requests"""
     filter_form = TeacherFilterForm(request.GET or None)
     teachers = get_filtered_teachers(request)
-    
-    # Calculate comprehensive stats
+
     total = teachers.count()
-    all_teachers = teachers
-    
+
     stats = {
-        'total': total,
-        'active': all_teachers.filter(is_active=True).count(),
-        'inactive': all_teachers.filter(is_active=False).count(),
-        'active_staff': all_teachers.filter(staff__is_active=True).count(),
-        'class_teachers': all_teachers.filter(is_class_teacher=True, is_active=True).count(),
-        'non_class_teachers': all_teachers.filter(is_class_teacher=False, is_active=True).count(),
-        'can_teach_online': all_teachers.filter(can_teach_online=True, is_active=True).count(),
-        'cannot_teach_online': all_teachers.filter(can_teach_online=False, is_active=True).count(),
-        'avg_teaching_load': round(all_teachers.filter(
-            is_active=True
-        ).aggregate(
-            Avg('current_teaching_load')
-        )['current_teaching_load__avg'] or 0, 2),
-        'avg_max_hours': round(all_teachers.filter(
-            is_active=True
-        ).aggregate(
-            Avg('max_hours_per_week')
-        )['max_hours_per_week__avg'] or 0, 2),
-        'overloaded': all_teachers.filter(
-            is_active=True,
-            current_teaching_load__gt=F('max_hours_per_week')
-        ).count(),
+        'total_teachers':          total,
+        'active_teachers':         teachers.filter(is_active=True).count(),
+        'inactive_teachers':       teachers.filter(is_active=False).count(),
+        'class_teachers':          teachers.filter(is_class_teacher=True, is_active=True).count(),
+        'teachers_can_teach_online': teachers.filter(can_teach_online=True, is_active=True).count(),
+        'overloaded':              teachers.filter(
+                                       is_active=True,
+                                       current_teaching_load__gt=F('max_hours_per_week')
+                                   ).count(),
+        'avg_teaching_load':       round(teachers.filter(is_active=True).aggregate(
+                                       Avg('current_teaching_load')
+                                   )['current_teaching_load__avg'] or 0, 1),
     }
-    
-    # Pagination
+
     paginator = Paginator(teachers, 20)
     page_number = request.GET.get('page', 1)
     teachers_page = paginator.get_page(page_number)
-    
-    # Detect HTMX request
+
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     context = {
         'teachers_page': teachers_page,
-        'paginator': paginator,
-        'stats': stats,
-        'filter_form': filter_form,
-        'is_htmx': is_htmx,
+        'paginator':     paginator,
+        'stats':         stats,
+        'filter_form':   filter_form,
+        'is_htmx':       is_htmx,
     }
-    
-    # Return appropriate template
+
     if is_htmx:
         return render(request, 'hr/teachers/partials/_teacher_results.html', context)
     else:
@@ -2025,6 +2054,183 @@ def teacher_delete(request, pk):
                 extra_tags='sweetalert'
             )
             return redirect('hr:staff_profile', pk=staff_pk)
+
+# =============================================================================
+# TEACHER PRINT & EXPORT
+# =============================================================================
+
+@login_required
+def teacher_print_view(request):
+    """
+    Generate printable teacher list with selected fields.
+    Serves as the PDF export path — users print to PDF via the browser dialog.
+    """
+    selected_fields = request.GET.getlist('fields')
+    if not selected_fields:
+        selected_fields = [
+            'staff_id', 'full_name', 'gender', 'primary_department',
+            'specialization', 'employment_status', 'phone_number'
+        ]
+
+    include_stats  = request.GET.get('include_stats') == 'true'
+    landscape_mode = request.GET.get('landscape') == 'true'
+    short_headers  = request.GET.get('short_headers') == 'true'
+    gender_display = request.GET.get('gender_display', 'full')
+
+    teachers = get_filtered_teachers(request)
+
+    stats = None
+    if include_stats:
+        total = teachers.count()
+        active_count = teachers.filter(is_active=True).count()
+        stats = {
+            'total':               total,
+            'active':              active_count,
+            'class_teachers':      teachers.filter(is_class_teacher=True).count(),
+            'can_teach_online':    teachers.filter(can_teach_online=True).count(),
+        }
+
+    field_names_full = {
+        'staff_id':              'Staff ID',
+        'full_name':             'Full Name',
+        'gender':                'Gender',
+        'primary_department':    'Department',
+        'specialization':        'Specialization',
+        'employment_status':     'Employment Status',
+        'phone_number':          'Phone Number',
+        'personal_email':        'Email',
+        'date_of_joining':       'Date of Joining',
+        'digital_literacy_level':'Digital Literacy',
+        'is_class_teacher':      'Class Teacher',
+        'can_teach_online':      'Can Teach Online',
+        'current_teaching_load': 'Current Load (hrs)',
+        'max_hours_per_week':    'Max Hours/Week',
+        'is_active':             'Active Status',
+    }
+
+    field_names_short = {
+        'staff_id':              'Staff ID',
+        'full_name':             'Name',
+        'gender':                'Gender',
+        'primary_department':    'Dept.',
+        'specialization':        'Specialization',
+        'employment_status':     'Emp. Status',
+        'phone_number':          'Phone',
+        'personal_email':        'Email',
+        'date_of_joining':       'Joined',
+        'digital_literacy_level':'Digital',
+        'is_class_teacher':      'Class Tchr',
+        'can_teach_online':      'Online',
+        'current_teaching_load': 'Load (h)',
+        'max_hours_per_week':    'Max (h)',
+        'is_active':             'Active',
+    }
+
+    field_names = field_names_short if short_headers else field_names_full
+    selected_field_names = [
+        field_names.get(f, f.replace('_', ' ').title()) for f in selected_fields
+    ]
+
+    school = getattr(getattr(request.user, 'profile', None), 'school', None)
+
+    context = {
+        'teachers':            teachers,
+        'stats':               stats,
+        'now':                 timezone.now(),
+        'selected_fields':     selected_fields,
+        'selected_field_names': selected_field_names,
+        'field_names':         field_names,
+        'landscape':           landscape_mode,
+        'short_headers':       short_headers,
+        'gender_display':      gender_display,
+        'title':               'Teacher Report',
+        'school_name':         school.full_name if school else 'School',
+        'school_logo':         school.school_logo.url if (school and school.school_logo) else None,
+        'school_address':      school.address if school else '',
+        'school_contact':      school.contact_phone if school else '',
+    }
+
+    return render(request, 'hr/teachers/print.html', context)
+
+
+@login_required
+def export_teachers_excel(request):
+    """
+    Export teachers to Excel.
+    Respects active filters AND columns selected in the export modal.
+    """
+    teachers = get_filtered_teachers(request)
+
+    gender_display = request.GET.get('gender_display', 'full')
+
+    def get_gender(t):
+        if gender_display == 'short':
+            return t.staff.gender or ''
+        return t.staff.get_gender_display()
+
+    ALL_COLUMNS = [
+        ('staff_id',              'Staff ID',              lambda t: t.staff.staff_id),
+        ('full_name',             'Full Name',             lambda t: t.staff.full_name()),
+        ('first_name',            'First Name',            lambda t: t.staff.first_name),
+        ('last_name',             'Last Name',             lambda t: t.staff.last_name),
+        ('gender',                'Gender',                lambda t: get_gender(t)),
+        ('primary_department',    'Department',            lambda t: t.staff.primary_department.name if t.staff.primary_department else ''),
+        ('employment_status',     'Employment Status',     lambda t: t.staff.get_employment_status_display()),
+        ('phone_number',          'Phone Number',          lambda t: t.staff.phone_number or ''),
+        ('personal_email',        'Email',                 lambda t: t.staff.personal_email or ''),
+        ('date_of_joining',       'Date of Joining',       lambda t: t.staff.date_of_joining.strftime('%Y-%m-%d') if t.staff.date_of_joining else ''),
+        ('specialization',        'Specialization',        lambda t: t.specialization or ''),
+        ('digital_literacy_level','Digital Literacy',      lambda t: t.get_digital_literacy_level_display()),
+        ('is_class_teacher',      'Class Teacher',         lambda t: 'Yes' if t.is_class_teacher else 'No'),
+        ('can_teach_online',      'Can Teach Online',      lambda t: 'Yes' if t.can_teach_online else 'No'),
+        ('current_teaching_load', 'Current Load (hrs)',    lambda t: t.current_teaching_load),
+        ('max_hours_per_week',    'Max Hours/Week',        lambda t: t.max_hours_per_week),
+        ('is_active',             'Active',                lambda t: 'Yes' if t.is_active else 'No'),
+    ]
+
+    COLUMN_MAP = {col[0]: col for col in ALL_COLUMNS}
+    DEFAULT_FIELDS = ['staff_id', 'full_name', 'gender', 'primary_department',
+                      'specialization', 'employment_status', 'phone_number']
+
+    selected = request.GET.getlist('fields') or DEFAULT_FIELDS
+    columns  = [COLUMN_MAP[f] for f in selected if f in COLUMN_MAP] or \
+               [COLUMN_MAP[f] for f in DEFAULT_FIELDS]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Teachers"
+
+    header_fill  = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
+    header_font  = Font(bold=True, color='FFFFFF', size=11)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    data_align   = Alignment(vertical='center')
+
+    ws.append([col[1] for col in columns])
+    for cell in ws[1]:
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = header_align
+    ws.row_dimensions[1].height = 28
+
+    for t in teachers:
+        ws.append([col[2](t) for col in columns])
+
+    for col_cells in ws.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 60)
+
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = data_align
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="teachers_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
+    )
+    wb.save(response)
+    return response
 
 
 # =============================================================================

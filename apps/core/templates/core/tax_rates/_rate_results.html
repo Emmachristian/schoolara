@@ -1,0 +1,265 @@
+{# core/templates/core/tax_rates/_rate_results.html #}
+{% load static %}
+{% load widget_tweaks %}
+
+<div class="table-responsive" style="overflow:visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="45">#</th>
+                <th>Name</th>
+                <th width="170">Tax Type</th>
+                <th width="100" class="text-center">Rate (%)</th>
+                <th width="130">Effective From</th>
+                <th width="130">Effective To</th>
+                <th width="90"  class="text-center">Fees</th>
+                <th width="90"  class="text-center">Services</th>
+                <th width="90"  class="text-center">Status</th>
+                <th width="100" class="text-center">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if tax_rates_page %}
+                {% for rate in tax_rates_page %}
+                <tr {% if not rate.is_active %}class="table-secondary text-muted"{% endif %}>
+
+                    <td class="text-muted small">
+                        {{ forloop.counter0|add:tax_rates_page.start_index }}
+                    </td>
+
+                    <!-- Name + description -->
+                    <td>
+                        <a href="{% url 'core:tax_rate_detail' rate.pk %}"
+                           class="fw-semibold text-dark text-decoration-none">
+                            {{ rate.name }}
+                        </a>
+                        {% if rate.description %}
+                            <div class="mt-1">
+                                <small class="text-muted">{{ rate.description|truncatewords:10 }}</small>
+                            </div>
+                        {% endif %}
+                        {% if rate.legal_reference %}
+                            <div class="mt-1">
+                                <code class="small text-muted bg-light px-1 rounded">{{ rate.legal_reference|truncatechars:30 }}</code>
+                            </div>
+                        {% endif %}
+                    </td>
+
+                    <!-- Tax type badge -->
+                    <td>
+                        <span class="badge text-white tax-badge-{{ rate.tax_type }}">
+                            {{ rate.get_tax_type_display }}
+                        </span>
+                    </td>
+
+                    <!-- Rate -->
+                    <td class="text-center">
+                        <span class="fw-bold fs-6">{{ rate.rate }}%</span>
+                    </td>
+
+                    <!-- Effective from -->
+                    <td>{{ rate.effective_from|date:"d M Y" }}</td>
+
+                    <!-- Effective to -->
+                    <td>
+                        {% if rate.effective_to %}
+                            {{ rate.effective_to|date:"d M Y" }}
+                        {% else %}
+                            <span class="badge bg-success" style="font-size:10px;">Open-ended</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Applies to fees -->
+                    <td class="text-center">
+                        {% if rate.applies_to_fees %}
+                            <i class="fa fa-check-circle text-success"></i>
+                        {% else %}
+                            <i class="fa fa-times-circle text-muted"></i>
+                        {% endif %}
+                    </td>
+
+                    <!-- Applies to services -->
+                    <td class="text-center">
+                        {% if rate.applies_to_services %}
+                            <i class="fa fa-check-circle text-success"></i>
+                        {% else %}
+                            <i class="fa fa-times-circle text-muted"></i>
+                        {% endif %}
+                    </td>
+
+                    <!-- Status -->
+                    <td class="text-center">
+                        {% if not rate.is_active %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% elif rate.is_effective %}
+                            <span class="badge bg-success">Effective</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Scheduled</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="text-center">
+                        <div class="dropdown">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <a class="dropdown-item"
+                                   href="{% url 'core:tax_rate_detail' rate.pk %}">
+                                    <i class="fa fa-eye me-2 text-success"></i>View Details
+                                </a>
+                                <a class="dropdown-item"
+                                   href="{% url 'core:tax_rate_edit' rate.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                </a>
+                                <hr class="dropdown-divider">
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'core:tax_rate_delete_modal' rate.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i class="pe-7s-graph1 empty-state-icon"></i>
+                            <h5 class="mt-2 mb-2">No Tax Rates Found</h5>
+                            <p class="text-muted mb-3">Adjust your filters or create a new tax rate.</p>
+                            <a href="{% url 'core:tax_rate_create' %}" class="btn btn-primary">
+                                <i class="fa fa-plus me-1"></i> Add Tax Rate
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if tax_rates_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-muted small">
+            Showing {{ tax_rates_page.start_index }}–{{ tax_rates_page.end_index }}
+            of {{ tax_rates_page.paginator.count }} rate{{ tax_rates_page.paginator.count|pluralize }}
+        </div>
+        <nav aria-label="Tax rate pagination">
+            <ul class="pagination pagination-sm mb-0">
+                {% if tax_rates_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'core:tax_rate_search' %}"
+                                hx-target="#rate-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ tax_rates_page.previous_page_number }}"}'>«</button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">«</span></li>
+                {% endif %}
+
+                {% for page_num in tax_rates_page.paginator.page_range %}
+                    {% if page_num == tax_rates_page.number %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% elif page_num >= tax_rates_page.number|add:"-2" and page_num <= tax_rates_page.number|add:"2" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'core:tax_rate_search' %}"
+                                    hx-target="#rate-results"
+                                    hx-include="#searchForm"
+                                    hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if tax_rates_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'core:tax_rate_search' %}"
+                                hx-target="#rate-results"
+                                hx-include="#searchForm"
+                                hx-vals='{"page": "{{ tax_rates_page.next_page_number }}"}'>»</button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">»</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.tax-badge-VAT           { background:#007bff !important; }
+.tax-badge-WHT_INTEREST  { background:#6f42c1 !important; }
+.tax-badge-WHT_DIVIDEND  { background:#e83e8c !important; }
+.tax-badge-LOCAL_SERVICE { background:#20c997 !important; }
+.tax-badge-EDUCATION_TAX { background:#fd7e14 !important; }
+.tax-badge-OTHER         { background:#6c757d !important; }
+
+.table-responsive { overflow-x:auto; overflow-y:visible !important; }
+.dropdown         { position:static !important; }
+.dropdown-menu    { z-index:1050 !important; }
+.empty-state      { text-align:center; padding:60px 20px; }
+.empty-state-icon { font-size:4rem; opacity:.25; display:block; margin-bottom:12px; }
+</style>
+
+<!-- OOB stats update -->
+{% if is_htmx %}
+<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                <i class="pe-7s-graph1"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Rates</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary">
+                <i class="fa fa-percentage" style="font-size:22px;"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">VAT Rates</div>
+                <h3>{{ stats.vat|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon" style="background:#6f42c1 !important;">
+                <i class="fa fa-hand-holding-usd" style="font-size:22px;"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">WHT Rates</div>
+                <h3>{{ stats.wht|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success">
+                <i class="pe-7s-check"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Apply to Fees</div>
+                <h3>{{ stats.applies_to_fees|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

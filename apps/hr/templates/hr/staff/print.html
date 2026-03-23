@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Report — {{ school_name }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink:        #111827;
+            --ink-mid:    #374151;
+            --ink-soft:   #6b7280;
+            --ink-faint:  #d1d5db;
+            --accent:     #1e3a5f;
+            --accent-bg:  #eef2f7;
+            --stripe:     #f9fafb;
+            --white:      #ffffff;
+            --success:    #16a34a;
+            --radius:     4px;
+            --table-font:  12pt;
+            --cell-pad-v:  7px;
+            --cell-pad-h:  10px;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background: var(--white);
+            padding: 24px 32px;
+            line-height: 1.5;
+        }
+
+        /* ── Screen toolbar ── */
+        .screen-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--accent);
+            color: var(--white);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .screen-toolbar span { font-size: 0.85rem; opacity: 0.85; }
+        .toolbar-actions { display: flex; gap: 8px; }
+        .btn-print, .btn-close {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; border-radius: var(--radius);
+            font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            border: none; text-decoration: none; transition: opacity 0.15s;
+        }
+        .btn-print { background: var(--white); color: var(--accent); }
+        .btn-close  { background: rgba(255,255,255,0.15); color: var(--white); }
+        .btn-print:hover, .btn-close:hover { opacity: 0.85; }
+        #font-info { font-size: 0.75rem; opacity: 0.7; font-style: italic; }
+
+        /* ── Document header ── */
+        .doc-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding-bottom: 16px;
+            border-bottom: 3px solid var(--accent);
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+        .doc-header-left { display: flex; align-items: center; gap: 16px; }
+        .school-logo { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; }
+        .school-logo-placeholder {
+            width: 64px; height: 64px;
+            background: var(--accent-bg); border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem; color: var(--accent); font-weight: 700; flex-shrink: 0;
+        }
+        .school-info h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.55rem; color: var(--accent); line-height: 1.2; margin-bottom: 4px;
+        }
+        .school-info p { font-size: 0.84rem; color: var(--ink-soft); line-height: 1.45; }
+        .doc-header-right { text-align: right; flex-shrink: 0; }
+        .doc-header-right h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.25rem; color: var(--ink); margin-bottom: 4px;
+        }
+        .doc-header-right p { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.6; }
+
+        /* ── Stats bar ── */
+        .stats-bar {
+            display: flex;
+            background: var(--accent-bg);
+            border: 1px solid var(--ink-faint);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 18px;
+        }
+        .stat-cell { flex: 1; padding: 10px 14px; border-right: 1px solid var(--ink-faint); text-align: center; }
+        .stat-cell:last-child { border-right: none; }
+        .stat-cell .stat-value { font-size: 1.3rem; font-weight: 600; color: var(--accent); display: block; line-height: 1; margin-bottom: 3px; }
+        .stat-cell .stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-soft); }
+
+        /* ── Table ── */
+        .table-wrap { width: 100%; overflow: hidden; border: 1px solid var(--ink-faint); border-radius: var(--radius); }
+        table { width: 100%; border-collapse: collapse; font-size: var(--table-font); }
+        thead tr { background: var(--accent); color: var(--white); }
+        thead th {
+            padding: var(--cell-pad-v) var(--cell-pad-h);
+            text-align: left; font-weight: 600; font-size: 0.82em;
+            text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;
+        }
+        thead th:first-child { width: 36px; text-align: center; }
+        tbody tr:nth-child(even) { background: var(--stripe); }
+        tbody tr:nth-child(odd)  { background: var(--white); }
+        tbody td {
+            padding: var(--cell-pad-v) var(--cell-pad-h);
+            border-bottom: 1px solid var(--ink-faint);
+            vertical-align: middle; color: var(--ink-mid);
+            word-break: break-word; overflow-wrap: anywhere;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        td:first-child { text-align: center; color: var(--ink-soft); font-size: 0.8em; width: 36px; white-space: nowrap; }
+
+        .cell-name  { color: var(--ink); }
+        .cell-id    { font-family: monospace; font-size: 0.85em; color: var(--accent); background: var(--accent-bg); padding: 2px 6px; border-radius: 3px; display: inline-block; white-space: nowrap; }
+        .gender-m   { color: #1d4ed8; }
+        .gender-f   { color: #be185d; }
+        .bool-yes   { color: var(--success); }
+        .bool-no    { color: var(--ink-soft); }
+
+        .emp-pill {
+            display: inline-block; padding: 2px 8px; border-radius: 20px;
+            font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
+        }
+        .emp-ft { background: #dcfce7; color: #15803d; }
+        .emp-pt { background: #fef9c3; color: #92400e; }
+        .emp-ct { background: #dbeafe; color: #1d4ed8; }
+        .emp-pr { background: #e0e7ff; color: #3730a3; }
+        .emp-in { background: #ede9fe; color: #6d28d9; }
+        .emp-vo { background: #fce7f3; color: #9d174d; }
+        .emp-rt { background: #f1f5f9; color: #64748b; }
+        .emp-tr { background: #fee2e2; color: #dc2626; }
+        .emp-rs { background: #fee2e2; color: #dc2626; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-soft); }
+
+        /* ── Footer ── */
+        .doc-footer {
+            margin-top: 20px; padding-top: 12px;
+            border-top: 1px solid var(--ink-faint);
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 0.75rem; color: var(--ink-soft);
+        }
+
+        /* ── Print ── */
+        @media print {
+            @page {
+                margin: 12mm 10mm;
+                {% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}
+            }
+            body            { padding: 0; background: white; }
+            .screen-toolbar { display: none !important; }
+            .doc-header     { page-break-inside: avoid; }
+            .stats-bar      { page-break-inside: avoid; }
+            .table-wrap     { border: none; }
+            thead           { display: table-header-group; }
+            tbody tr        { page-break-inside: avoid; }
+            a               { text-decoration: none; color: inherit; }
+        }
+        @media screen { body { max-width: 1200px; margin: 0 auto; } }
+    </style>
+</head>
+<body>
+
+    <!-- Screen toolbar -->
+    <div class="screen-toolbar">
+        <div>
+            <span>Preview — use Print / Save PDF to export.</span>&nbsp;
+            <span id="font-info"></span>
+        </div>
+        <div class="toolbar-actions">
+            <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+            <button class="btn-close" onclick="window.close()">✕ Close</button>
+        </div>
+    </div>
+
+    <!-- Document header -->
+    <div class="doc-header">
+        <div class="doc-header-left">
+            {% if school_logo %}
+                <img src="{{ school_logo }}" alt="{{ school_name }}" class="school-logo">
+            {% else %}
+                <div class="school-logo-placeholder">{{ school_name|first|upper }}</div>
+            {% endif %}
+            <div class="school-info">
+                <h1>{{ school_name }}</h1>
+                {% if school_address %}<p>{{ school_address }}</p>{% endif %}
+                {% if school_contact %}<p>{{ school_contact }}</p>{% endif %}
+            </div>
+        </div>
+        <div class="doc-header-right">
+            <h2>{{ title|default:"Staff Report" }}</h2>
+            <p>
+                Generated: {{ now|date:"d M Y, H:i" }}<br>
+                Total records: {{ staff|length }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Stats bar -->
+    {% if stats %}
+    <div class="stats-bar">
+        <div class="stat-cell">
+            <span class="stat-value">{{ stats.total|default:0 }}</span>
+            <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-value">{{ stats.active|default:0 }}</span>
+            <span class="stat-label">Active</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-value">{{ stats.male|default:0 }}</span>
+            <span class="stat-label">Male</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-value">{{ stats.female|default:0 }}</span>
+            <span class="stat-label">Female</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-value">{{ stats.full_time|default:0 }}</span>
+            <span class="stat-label">Full-Time</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Table -->
+    <div class="table-wrap">
+        <table id="staff-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    {% for field_name in selected_field_names %}
+                        <th>{{ field_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if staff %}
+                    {% for s in staff %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        {% for field in selected_fields %}
+                        <td>
+                            {% if field == 'staff_id' %}
+                                <span class="cell-id">{{ s.staff_id }}</span>
+
+                            {% elif field == 'full_name' %}
+                                <span class="cell-name">{{ s.full_name }}</span>
+
+                            {% elif field == 'first_name' %}
+                                {{ s.first_name }}
+
+                            {% elif field == 'last_name' %}
+                                {{ s.last_name }}
+
+                            {% elif field == 'date_of_birth' %}
+                                {% if s.date_of_birth %}{{ s.date_of_birth|date:"d M Y" }}{% else %}—{% endif %}
+
+                            {% elif field == 'gender' %}
+                                {% if gender_display == 'short' %}
+                                    {% if s.gender == 'M' %}<span class="gender-m">M</span>
+                                    {% elif s.gender == 'F' %}<span class="gender-f">F</span>
+                                    {% else %}—{% endif %}
+                                {% else %}
+                                    {% if s.gender == 'M' %}<span class="gender-m">Male</span>
+                                    {% elif s.gender == 'F' %}<span class="gender-f">Female</span>
+                                    {% else %}—{% endif %}
+                                {% endif %}
+
+                            {% elif field == 'nationality' %}
+                                {{ s.nationality|default:"—" }}
+
+                            {% elif field == 'national_id' %}
+                                {{ s.national_id|default:"—" }}
+
+                            {% elif field == 'marital_status' %}
+                                {{ s.get_marital_status_display|default:"—" }}
+
+                            {% elif field == 'religious_affiliation' %}
+                                {{ s.religious_affiliation|default:"—" }}
+
+                            {% elif field == 'phone_number' %}
+                                {{ s.phone_number|default:"—" }}
+
+                            {% elif field == 'personal_email' %}
+                                {{ s.personal_email|default:"—" }}
+
+                            {% elif field == 'primary_department' %}
+                                {% if s.primary_department %}{{ s.primary_department.name }}{% else %}—{% endif %}
+
+                            {% elif field == 'employment_status' %}
+                                {% with e=s.employment_status|lower %}
+                                    <span class="emp-pill emp-{{ e }}">{{ s.get_employment_status_display }}</span>
+                                {% endwith %}
+
+                            {% elif field == 'date_of_joining' %}
+                                {% if s.date_of_joining %}{{ s.date_of_joining|date:"d M Y" }}{% else %}—{% endif %}
+
+                            {% elif field == 'date_of_leaving' %}
+                                {% if s.date_of_leaving %}{{ s.date_of_leaving|date:"d M Y" }}{% else %}—{% endif %}
+
+                            {% elif field == 'is_active' %}
+                                {% if s.is_active %}<span class="bool-yes">Active</span>{% else %}<span class="bool-no">Inactive</span>{% endif %}
+
+                            {% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="{{ selected_fields|length|add:1 }}">
+                            <div class="empty-state">
+                                <strong>No staff found</strong>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Footer -->
+    <div class="doc-footer">
+        <span>{{ school_name }} &mdash; {{ title|default:"Staff Report" }}</span>
+        <span>{{ now|date:"d M Y" }}</span>
+    </div>
+
+    <script>
+    (function () {
+        var IS_LANDSCAPE = {{ landscape|yesno:"true,false" }};
+        var cols = document.querySelectorAll('#staff-table thead th').length;
+
+        var fontSize, padV, padH;
+        if      (cols <= 3)  { fontSize = '11pt';  padV = '7px';  padH = '11px'; }
+        else if (cols <= 5)  { fontSize = '10pt';  padV = '6px';  padH = '10px'; }
+        else if (cols <= 7)  { fontSize = '9pt';   padV = '5px';  padH = '9px';  }
+        else if (cols <= 9)  { fontSize = '8.5pt'; padV = '5px';  padH = '8px';  }
+        else if (cols <= 11) { fontSize = '8pt';   padV = '4px';  padH = '7px';  }
+        else                 { fontSize = '7.5pt'; padV = '4px';  padH = '6px';  }
+
+        var root = document.documentElement;
+        root.style.setProperty('--table-font', fontSize);
+        root.style.setProperty('--cell-pad-v', padV);
+        root.style.setProperty('--cell-pad-h', padH);
+
+        var info = document.getElementById('font-info');
+        if (info) {
+            var hint = cols + ' column' + (cols !== 1 ? 's' : '') + ' — table font: ' + fontSize + '.';
+            if (!IS_LANDSCAPE && cols >= 7) hint += ' Tip: reprint with Landscape for more room.';
+            info.textContent = hint;
+        }
+    })();
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,275 @@
+{# core/templates/core/units/_unit_results.html #}
+{% load static %}
+{% load widget_tweaks %}
+
+<div class="table-responsive" style="overflow:visible;">
+    <table class="table table-hover table-striped table-bordered">
+        <thead>
+            <tr>
+                <th width="45">#</th>
+                <th>Name</th>
+                <th width="80"  class="text-center">Abbrev.</th>
+                <th width="60"  class="text-center">Symbol</th>
+                <th width="140">Type</th>
+                <th width="160">Base Unit</th>
+                <th width="140" class="text-end">Conv. Factor</th>
+                <th width="80"  class="text-center">Derived</th>
+                <th width="90"  class="text-center">Status</th>
+                <th width="100" class="text-center">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if units_page %}
+                {% for unit in units_page %}
+                <tr {% if not unit.is_active %}class="table-secondary text-muted"{% endif %}>
+
+                    <td class="text-muted small">{{ forloop.counter0|add:units_page.start_index }}</td>
+
+                    <!-- Name -->
+                    <td>
+                        <a href="{% url 'core:unit_of_measure_detail' unit.pk %}"
+                           class="fw-semibold text-dark text-decoration-none">
+                            {{ unit.name }}
+                        </a>
+                        {% if unit.description %}
+                            <div class="mt-1">
+                                <small class="text-muted">{{ unit.description|truncatewords:8 }}</small>
+                            </div>
+                        {% endif %}
+                    </td>
+
+                    <!-- Abbreviation -->
+                    <td class="text-center">
+                        <code class="fs-6 fw-bold">{{ unit.abbreviation }}</code>
+                    </td>
+
+                    <!-- Symbol -->
+                    <td class="text-center">
+                        {% if unit.symbol %}
+                            <code class="text-muted">{{ unit.symbol }}</code>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Type badge -->
+                    <td>
+                        <span class="badge text-white uom-badge-{{ unit.uom_type }}">
+                            <i class="{{ unit.get_type_icon_class }} me-1"></i>
+                            {{ unit.get_uom_type_display }}
+                        </span>
+                    </td>
+
+                    <!-- Base unit -->
+                    <td>
+                        {% if unit.base_unit %}
+                            <a href="{% url 'core:unit_of_measure_detail' unit.base_unit.pk %}"
+                               class="text-primary text-decoration-none small">
+                                {{ unit.base_unit.name }}
+                            </a>
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <code>{{ unit.base_unit.abbreviation }}</code>
+                                </small>
+                            </div>
+                        {% else %}
+                            <span class="badge bg-success" style="font-size:10px;">
+                                <i class="fa fa-anchor me-1"></i>Base
+                            </span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Conversion factor -->
+                    <td class="text-end">
+                        {% if unit.base_unit %}
+                            <code class="small">{{ unit.format_conversion_factor }}</code>
+                            <div class="mt-1">
+                                <small class="text-muted" style="font-size:10px;">
+                                    1 {{ unit.abbreviation }} = {{ unit.format_conversion_factor }} {{ unit.base_unit.abbreviation }}
+                                </small>
+                            </div>
+                        {% else %}
+                            <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Derived count -->
+                    <td class="text-center">
+                        {% if unit.derived_units_count %}
+                            <span class="badge bg-info">{{ unit.derived_units_count }}</span>
+                        {% else %}
+                            <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Status -->
+                    <td class="text-center">
+                        {% if unit.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="text-center">
+                        <div class="dropdown">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end">
+                                <a class="dropdown-item" href="{% url 'core:unit_of_measure_detail' unit.pk %}">
+                                    <i class="fa fa-eye me-2 text-success"></i>View Details
+                                </a>
+                                <a class="dropdown-item" href="{% url 'core:unit_of_measure_edit' unit.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                </a>
+                                <hr class="dropdown-divider">
+                                <button type="button" class="dropdown-item text-danger"
+                                        hx-get="{% url 'core:unit_of_measure_delete_modal' unit.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i class="pe-7s-ruler empty-state-icon"></i>
+                            <h5 class="mt-2 mb-2">No Units Found</h5>
+                            <p class="text-muted mb-3">Try adjusting your filters, or create your first unit.</p>
+                            <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                <a href="{% url 'core:unit_of_measure_create' %}" class="btn btn-primary">
+                                    <i class="fa fa-plus me-1"></i> Add Unit
+                                </a>
+                                <button type="button" class="btn btn-outline-info"
+                                        hx-get="{% url 'core:create_standard_units_modal' %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-magic me-1"></i> Load Standard Units
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if units_page.paginator.num_pages > 1 %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-muted small">
+            Showing {{ units_page.start_index }}–{{ units_page.end_index }}
+            of {{ units_page.paginator.count }} unit{{ units_page.paginator.count|pluralize }}
+        </div>
+        <nav aria-label="Unit pagination">
+            <ul class="pagination pagination-sm mb-0">
+                {% if units_page.has_previous %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'core:unit_of_measure_search' %}"
+                                hx-target="#unit-results" hx-include="#searchForm"
+                                hx-vals='{"page":"{{ units_page.previous_page_number }}"}'>«</button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">«</span></li>
+                {% endif %}
+
+                {% for page_num in units_page.paginator.page_range %}
+                    {% if page_num == units_page.number %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% elif page_num >= units_page.number|add:"-2" and page_num <= units_page.number|add:"2" %}
+                        <li class="page-item">
+                            <button class="page-link"
+                                    hx-get="{% url 'core:unit_of_measure_search' %}"
+                                    hx-target="#unit-results" hx-include="#searchForm"
+                                    hx-vals='{"page":"{{ page_num }}"}'>{{ page_num }}</button>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if units_page.has_next %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'core:unit_of_measure_search' %}"
+                                hx-target="#unit-results" hx-include="#searchForm"
+                                hx-vals='{"page":"{{ units_page.next_page_number }}"}'>»</button>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">»</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.uom-badge-LENGTH   { background:#007bff !important; }
+.uom-badge-WEIGHT   { background:#28a745 !important; }
+.uom-badge-VOLUME   { background:#17a2b8 !important; }
+.uom-badge-AREA     { background:#ffc107 !important; color:#212529 !important; }
+.uom-badge-QUANTITY { background:#6f42c1 !important; }
+.uom-badge-TIME     { background:#fd7e14 !important; }
+.uom-badge-OTHER    { background:#6c757d !important; }
+
+.table-responsive { overflow-x:auto; overflow-y:visible !important; }
+.dropdown         { position:static !important; }
+.dropdown-menu    { z-index:1050 !important; }
+.empty-state      { text-align:center; padding:60px 20px; }
+.empty-state-icon { font-size:4rem; opacity:.25; display:block; margin-bottom:12px; }
+</style>
+
+<!-- OOB stats update -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                <i class="pe-7s-tools"></i>
+            </div>
+            <div class="stats-content">
+                <div class="stats-label">Active Units</div>
+                <h3>{{ stats.active|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-success"><i class="pe-7s-star"></i></div>
+            <div class="stats-content">
+                <div class="stats-label">Base Units</div>
+                <h3>{{ stats.base_units|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-info"><i class="pe-7s-refresh-2"></i></div>
+            <div class="stats-content">
+                <div class="stats-label">Derived Units</div>
+                <h3>{{ stats.derived_units|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-icon bg-primary"><i class="pe-7s-box1"></i></div>
+            <div class="stats-content">
+                <div class="stats-label">Quantity Units</div>
+                <h3>{{ stats.quantity|default:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
