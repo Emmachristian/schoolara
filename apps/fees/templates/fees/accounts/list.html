@@ -1,318 +1,101 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load widget_tweaks %}
 {% load currency_filters %}
+{% load widget_tweaks %}
 
 {% block extra_css %}
 <style>
-/* ============================================================================
-   ACCOUNT STATUS BADGE STYLING
-   ============================================================================ */
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid;
-    display: inline-block;
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --radius:    10px;
 }
 
-.status-badge.active {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
-}
-
-.status-badge.suspended {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
-}
-
-.status-badge.frozen {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border-color: #bee5eb;
-}
-
-.status-badge.closed {
-    background-color: #e2e3e5;
-    color: #383d41;
-    border-color: #d6d8db;
-}
-
-/* ============================================================================
-   BALANCE INDICATORS
-   ============================================================================ */
-
-.balance-indicator {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.balance-indicator.positive {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.balance-indicator.negative {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.balance-indicator.zero {
-    background-color: #e2e3e5;
-    color: #383d41;
-}
-
-/* ============================================================================
-   FILTERS & SEARCH SECTION
-   ============================================================================ */
-
-.account-filters {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 25px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.filter-header {
-    margin-bottom: 20px;
-}
-
-.filter-actions {
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 3px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
+.stat-sub   { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+.list-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.list-card-head {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     flex-wrap: wrap;
+    gap: 10px;
+}
+.list-card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+}
+.filter-bar {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+}
+.filter-bar .form-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px;
+}
+.filter-bar .form-control,
+.filter-bar .form-select {
+    border-radius: 8px; border-color: #dee2e6; font-size: 13px;
+}
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.1);
 }
 
-.card-animate {
-    animation: fadeInUp 0.5s ease-out;
+.collection-bar {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 8px;
 }
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* ============================================================================
-   STATISTICS SUMMARY
-   ============================================================================ */
-
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.stats-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 28px;
-    color: white;
-}
-
-.stats-content {
-    flex: 1;
-}
-
-.stats-label {
-    font-size: 12px;
-    color: #6c757d;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-}
-
-.stats-content h3 {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
-}
-
-.stats-sublabel {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-top: 5px;
-}
-
-/* ============================================================================
-   TABLE STYLING
-   ============================================================================ */
-
-.table-responsive {
-    border-radius: 8px;
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table {
-    margin-bottom: 0;
-}
-
-.table thead th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    color: #495057;
-    padding: 15px 12px;
-}
-
-.table tbody td {
-    vertical-align: middle;
-    padding: 12px;
-    position: relative;
-    overflow: visible;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* ============================================================================
-   DROPDOWN MENU FIX
-   ============================================================================ */
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
-
-.empty-state {
-    text-align: center;
-    padding: 80px 30px;
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 15px;
-    margin: 30px 0;
-    border: 2px dashed #dee2e6;
-}
-
-.empty-state-icon {
-    font-size: 5rem;
-    color: #dee2e6;
-    margin-bottom: 25px;
-    animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-}
-
-/* ============================================================================
-   PAGINATION
-   ============================================================================ */
-
-.pagination {
-    margin: 20px 0;
-}
-
-.page-link {
-    color: #667eea;
-    border: 1px solid #dee2e6;
-    padding: 0.5rem 0.75rem;
-}
-
-.page-link:hover {
-    background-color: #667eea;
-    color: white;
-    border-color: #667eea;
-}
-
-.page-item.active .page-link {
-    background-color: #667eea;
-    border-color: #667eea;
-}
-
-/* ============================================================================
-   STUDENT AVATAR
-   ============================================================================ */
-
-.student-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e9ecef;
-}
-
-.avatar-placeholder {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: #f8f9fa;
-    color: #556ee6;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 0.9rem;
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
-@media (max-width: 768px) {
-    .student-avatar,
-    .avatar-placeholder {
-        width: 35px;
-        height: 35px;
-    }
-    
-    .account-filters {
-        padding: 15px;
-    }
-    
-    .stats-card {
-        margin-bottom: 15px;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
+.collection-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    border-radius: 3px;
+    transition: width .4s ease;
 }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
@@ -322,312 +105,244 @@
             <div>
                 Student Accounts
                 <div class="page-title-subheading">
-                    Monitor student financial accounts, balances, and transaction history
+                    Track student balances, outstanding fees and credit positions
                 </div>
-            </div>
-        </div>
-        <div class="page-title-actions">
-            <div class="btn-group" role="group">
-                <a href="{% url 'fees:export_student_accounts_excel' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success">
-                    <i class="fa fa-file-excel me-1"></i> Export
-                </a>
-                <a href="{% url 'fees:account_list_print' %}?{{ request.GET.urlencode }}" target="_blank" class="btn btn-outline-secondary">
-                    <i class="fa fa-print me-1"></i> Print
-                </a>
-                <a href="{% url 'fees:dashboard' %}" class="btn btn-outline-primary">
-                    <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
-                </a>
             </div>
         </div>
     </div>
 </div>
 
 {% if messages %}
-    <script>
-        {% for message in messages %}
-            {% if 'sweetalert' in message.tags %}
-                {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
-                    showSuccess('{{ message|escapejs }}');
-                {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
-                    showError('{{ message|escapejs }}');
-                {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
-                    showWarning('{{ message|escapejs }}');
-                {% else %}
-                    showInfo('{{ message|escapejs }}');
-                {% endif %}
-            {% endif %}
-        {% endfor %}
-    </script>
+<script>
+{% for message in messages %}
+    {% if 'success' in message.tags %}showSuccess('{{ message|escapejs }}');
+    {% elif 'error' in message.tags %}showError('{{ message|escapejs }}');
+    {% elif 'warning' in message.tags %}showWarning('{{ message|escapejs }}');
+    {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+{% endfor %}
+</script>
 {% endif %}
 
-<!-- Statistics Cards -->
-<div class="row mb-2" id="stats-cards">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-wallet"></i>
+<!-- ── Stat cards ── -->
+<div class="row mb-2 flex-nowrap overflow-auto" id="stats-cards">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-primary">
+                <i class="pe-7s-users"></i>
             </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Accounts</div>
-                <h3>{{ stats.total_accounts|default:0|format_number }}</h3>
-                <div class="stats-sublabel">
-                    <span class="text-success">{{ stats.by_status.active|default:0 }} Active</span>
+            <div>
+                <div class="stat-label">Total Accounts</div>
+                <div class="stat-value">
+                    {{ stats.total_accounts|format_number }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.by_status.active|format_number }} active
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-danger">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-danger">
                 <i class="pe-7s-attention"></i>
             </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Outstanding</div>
-                <h3>{{ stats.debt_analysis.total_outstanding|default:0|money_short }}</h3>
-                <div class="stats-sublabel">
-                    From {{ stats.debt_analysis.total_debtors|default:0 }} debtors
+            <div>
+                <div class="stat-label">Outstanding</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.total_outstanding|money_short }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.debt_analysis.total_debtors|format_number }}
+                    student{{ stats.debt_analysis.total_debtors|pluralize }}
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-cash"></i>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-success">
+                <i class="pe-7s-piggy"></i>
             </div>
-            <div class="stats-content">
-                <div class="stats-label">Credit Balances</div>
-                <h3>{{ stats.debt_analysis.total_credit|default:0|amount_no_decimals }}</h3>
-                <div class="stats-sublabel">
-                    From {{ stats.debt_analysis.accounts_with_credit|default:0 }} accounts
+            <div>
+                <div class="stat-label">Credit Balances</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.total_credit|money_short }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.debt_analysis.accounts_with_credit|format_number }}
+                    student{{ stats.debt_analysis.accounts_with_credit|pluralize }}
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-graph2"></i>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-info">
+                <i class="pe-7s-check"></i>
             </div>
-            <div class="stats-content">
-                <div class="stats-label">Collection Rate</div>
-                <h3>{{ stats.collection_rate|default:0|floatformat:1 }}%</h3>
-                <div class="stats-sublabel">
-                    {{ stats.debt_analysis.zero_balance_accounts|default:0 }} settled
+            <div>
+                <div class="stat-label">Settled</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.zero_balance_accounts|format_number }}
+                </div>
+                <div class="stat-sub">zero balance</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon" style="background:#6d28d9;">
+                <i class="pe-7s-graph1"></i>
+            </div>
+            <div style="width:100%;">
+                <div class="stat-label">Collection Rate</div>
+                <div class="stat-value">
+                    {{ stats.collection_rate|floatformat:1 }}%
+                </div>
+                <div class="collection-bar">
+                    <div class="collection-bar-fill"
+                         style="width:{{ stats.collection_rate|floatformat:0 }}%">
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
 </div>
 
-<!-- Main Content Section -->
-<section class="section">
-    <div class="row">
-        <div class="col-lg-12">
-            <!-- Results Card -->
-            <div class="main-card mb-3 card card-animate">
-                <div class="card-body">
-                    
-                    <!-- Filter Header -->
-                    <div class="filter-header">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                            <h5 class="card-title mb-0">
-                                <i class="pe-7s-wallet me-2 text-primary"></i>
-                                Student Accounts Directory
-                            </h5>
-                            <div class="filter-actions">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
-                                    <i class="fa fa-times me-1"></i> Reset Filters
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
-                                    <i class="fa fa-refresh me-1"></i> Refresh
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+<!-- ── Main card ── -->
+<div class="list-card">
 
-                    <!-- Search & Filters with HTMX -->
-                    <div class="account-filters">
-                        <form id="searchForm" class="row g-3"
-                              hx-get="{% url 'fees:account_list' %}"
-                              hx-target="#account-list"
-                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
-                            
-                            <!-- Search Input -->
-                            <div class="col-md-4">
-                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.q.label }}
-                                </label>
-                                {{ filter_form.q }}
-                            </div>
-                            
-                            <!-- Status Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.status.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.status.label }}
-                                </label>
-                                {{ filter_form.status }}
-                            </div>
-
-                            <!-- Balance Status Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.balance_status.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.balance_status.label }}
-                                </label>
-                                {{ filter_form.balance_status }}
-                            </div>
-
-                            <!-- Min Balance Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.min_balance.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.min_balance.label }}
-                                </label>
-                                {{ filter_form.min_balance }}
-                            </div>
-
-                            <!-- Max Balance Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.max_balance.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.max_balance.label }}
-                                </label>
-                                {{ filter_form.max_balance }}
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Results Container -->
-                    <div id="account-list"
-                         hx-get="{% url 'fees:account_list' %}"
-                         hx-trigger="load"
-                         hx-swap="innerHTML">
-                        <!-- Initial loading state -->
-                        <div class="text-center py-5">
-                            <div class="spinner-border text-primary mb-3" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="text-muted mb-0">Loading student accounts...</p>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-wallet text-primary"></i> Student Accounts
+        </span>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary"
+                    onclick="window.location.href='{% url 'fees:account_list' %}'">
+                <i class="fa fa-times me-1"></i> Reset
+            </button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    hx-get="{% url 'fees:account_list' %}"
+                    hx-target="#account-list"
+                    hx-include="#searchForm">
+                <i class="fa fa-refresh me-1"></i> Refresh
+            </button>
         </div>
     </div>
-</section>
 
-<!-- ========================================== -->
-<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
-<!-- ========================================== -->
-<div id="modal-container" style="display: none;">
-    <!-- Modal content loaded here via HTMX -->
+    <!-- Filters -->
+    <div class="filter-bar">
+        <form id="searchForm"
+              hx-get="{% url 'fees:account_list' %}"
+              hx-target="#account-list"
+              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">{{ filter_form.q.label }}</label>
+                    {{ filter_form.q|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.status.label }}</label>
+                    {{ filter_form.status|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.balance_status.label }}</label>
+                    {{ filter_form.balance_status|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.min_balance.label }}</label>
+                    {{ filter_form.min_balance|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.max_balance.label }}</label>
+                    {{ filter_form.max_balance|add_class:"form-control form-control-sm" }}
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results -->
+    <div id="account-list"
+         hx-get="{% url 'fees:account_list' %}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="text-muted mb-0">Loading accounts...</p>
+        </div>
+    </div>
+
 </div>
+
+<div id="modal-container"></div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// HTMX EVENT LISTENERS
-// ============================================================================
+let currentModal = null;
 
-// Handle alerts from response headers
-document.body.addEventListener('htmx:beforeSwap', function(event) {
-    const xhr = event.detail.xhr;
-    const message = xhr.getResponseHeader('HX-Alert-Message');
-    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
-    const title = xhr.getResponseHeader('HX-Alert-Title');
-    
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container')
+                           .querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, {
+        backdrop: true, keyboard: true,
+    });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+
+    if (close === 'true' && currentModal) currentModal.hide();
+
     if (message && typeof Swal !== 'undefined') {
         setTimeout(() => {
             Swal.fire({
-                icon: type,
-                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
-                text: message,
-                confirmButtonText: 'OK',
-                confirmButtonColor: type === 'success' ? '#28a745' : 
-                                   type === 'error' ? '#dc3545' : 
-                                   type === 'warning' ? '#ffc107' : '#17a2b8',
-                timer: type === 'success' ? 3000 : null,
-                timerProgressBar: type === 'success'
+                icon:             type,
+                title:            title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text:             message,
+                confirmButtonColor: type === 'success' ? '#15803d'
+                                  : type === 'error'   ? '#dc2626'
+                                  : '#b45309',
+                timer:            type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') {
+                    htmx.trigger(document.getElementById('account-list'), 'load');
+                }
             });
         }, 300);
     }
-});
-
-// ============================================================================
-// DYNAMIC MODAL HANDLER
-// ============================================================================
-
-let currentModal = null;
-
-// Show modal after HTMX loads content into #modal-container
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'modal-container') {
-        const modalContainer = document.getElementById('modal-container');
-        const modalDialog = modalContainer.querySelector('.modal-dialog');
-        
-        if (modalDialog) {
-            // Create a proper Bootstrap modal structure
-            let modalWrapper = document.getElementById('dynamicModalWrapper');
-            
-            // Remove existing modal wrapper if it exists
-            if (modalWrapper) {
-                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
-                if (existingModal) {
-                    existingModal.dispose();
-                }
-                modalWrapper.remove();
-            }
-            
-            // Create new modal wrapper
-            modalWrapper = document.createElement('div');
-            modalWrapper.className = 'modal fade';
-            modalWrapper.id = 'dynamicModalWrapper';
-            modalWrapper.setAttribute('tabindex', '-1');
-            modalWrapper.setAttribute('aria-hidden', 'true');
-            
-            // Move the modal-dialog into the wrapper
-            modalWrapper.appendChild(modalDialog);
-            
-            // Append to body (outside app-container)
-            document.body.appendChild(modalWrapper);
-            
-            // Initialize and show modal
-            currentModal = new bootstrap.Modal(modalWrapper, {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
-            
-            currentModal.show();
-            
-            // Clean up when hidden
-            modalWrapper.addEventListener('hidden.bs.modal', function() {
-                modalWrapper.remove();
-                modalContainer.innerHTML = '';
-                currentModal = null;
-            });
-        }
-    }
-});
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-function resetFilters() {
-    window.location.href = "{% url 'fees:account_list' %}";
-}
-
-// Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
 });
 </script>
 {% endblock %}

@@ -1,407 +1,296 @@
-<!-- uniforms/templates/uniforms/sales/partials/_sale_results.html -->
-
-{% load static %}
+{# uniforms/templates/uniforms/sales/partials/_sale_results.html #}
 {% load currency_filters %}
 
-<!-- Sales Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+.sale-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.sale-tbl thead th { background:#f8fafc; padding:10px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.sale-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.sale-tbl tbody tr:last-child td { border-bottom:none; }
+.sale-tbl tbody tr:hover td { background:#fafbff !important; }
+.sale-tbl tbody tr.row-cancelled td { color:#94a3b8; }
+.sale-tbl tbody tr.row-returned td  { color:#94a3b8; }
+
+.sale-num  { font-family:'Courier New',monospace; font-weight:700; font-size:13px; color:#1d4ed8; text-decoration:none; display:block; }
+.sale-num:hover { text-decoration:underline; }
+.sale-date { font-size:11px; color:#94a3b8; margin-top:1px; }
+
+.stu-name { font-weight:600; font-size:13px; color:#0f172a; text-decoration:none; display:block; }
+.stu-name:hover { color:#1d4ed8; }
+.stu-adm  { font-family:'Courier New',monospace; font-size:11px; color:#64748b; margin-top:1px; }
+
+/* Sale type chip */
+.type-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:4px; font-size:10.5px; font-weight:700; }
+.tc-sale { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.tc-loan { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.tc-gift { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+
+/* Status pills */
+.st-pill { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.sp-draft     { background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; }
+.sp-pending   { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.sp-paid      { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.sp-partial   { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.sp-issued    { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.sp-cancelled { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+.sp-returned  { background:#fdf4ff; color:#a21caf; border:1px solid #f0abfc; }
+
+.amount-main { font-size:14px; font-weight:700; color:#0f172a; }
+.amount-bal  { font-size:10.5px; color:#dc2626; font-weight:700; margin-top:1px; }
+.amount-ok   { font-size:10.5px; color:#15803d; margin-top:1px; }
+
+.pag-bar { padding:12px 16px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:12.5px; color:#64748b; }
+.tbl-empty { text-align:center; padding:56px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.8rem; display:block; margin-bottom:12px; opacity:.35; }
+.tbl-empty p { font-size:13px; margin:0 0 16px; }
+
+/* OOB stat cards */
+.stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px 20px; display:flex; align-items:center; gap:14px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:44px; height:44px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:20px; font-weight:700; color:#0f172a; line-height:1; }
+.stat-value-sub { font-size:10px; color:#94a3b8; margin-top:2px; }
+
+.dropdown-menu  { font-size:.85rem; min-width:190px; border:1px solid #e2e8f0; border-radius:8px; }
+.dropdown-item  { padding:6px 14px; }
+.dropdown-header{ font-size:.7rem; padding:6px 14px 2px; }
+</style>
+
+{% if sales_page %}
+<div style="overflow-x:auto;">
+    <table class="sale-tbl">
         <thead>
             <tr>
-                <th width="50">#</th>
-                <th>Sale Number</th>
+                <th style="width:38px;">#</th>
+                <th>Sale</th>
                 <th>Student</th>
-                <th>Sale Date</th>
-                <th>Items</th>
-                <th>Total Amount</th>
-                <th>Payment</th>
-                <th>Status</th>
-                <th>Type</th>
-                <th width="120">Actions</th>
+                <th class="text-center">Type</th>
+                <th class="text-center">Status</th>
+                <th class="text-center">Items</th>
+                <th class="text-center">Amount</th>
+                <th class="text-center" style="width:60px;">Actions</th>
             </tr>
         </thead>
         <tbody>
-            {% if sales_page %}
-                {% for sale in sales_page %}
-                <tr>
-                    <td>{{ forloop.counter|add:sales_page.start_index|add:"-1" }}</td>
+            {% for sale in sales_page %}
+            <tr class="{% if sale.cancelled %}row-cancelled{% elif sale.returned %}row-returned{% endif %}">
+                <td style="color:#94a3b8;font-size:12px;">{{ sales_page.start_index|add:forloop.counter0 }}</td>
 
-                    <!-- Sale Number -->
-                    <td>
-                        <span class="category-code">{{ sale.sale_number }}</span>
-                        {% if sale.fiscal_period %}
-                            <br><small class="text-muted">FP: {{ sale.fiscal_period.name }}</small>
-                        {% endif %}
-                    </td>
+                {# ── Sale number ── #}
+                <td>
+                    <a href="{% url 'uniforms:uniform_sale_detail' sale.pk %}" class="sale-num">
+                        {{ sale.sale_number }}
+                    </a>
+                    <div class="sale-date">{{ sale.sale_date|date:"d M Y" }}</div>
+                </td>
 
-                    <!-- Student -->
-                    <td>
-                        <div>
-                            <h6 class="mb-0">{{ sale.student.get_full_name }}</h6>
-                            <small class="text-muted">
-                                <i class="fa fa-id-card me-1"></i>{{ sale.student.admission_number }}
-                            </small>
-                            {% if sale.student.current_class %}
-                                <br><small class="text-muted">
-                                    <i class="fa fa-graduation-cap me-1"></i>{{ sale.student.current_class.name }}
-                                </small>
-                            {% endif %}
+                {# ── Student ── #}
+                <td>
+                    <a href="{% url 'students:student_profile' sale.student.pk %}" class="stu-name">
+                        {{ sale.student.get_full_name }}
+                    </a>
+                    <div class="stu-adm">{{ sale.student.admission_number }}</div>
+                </td>
+
+                {# ── Type ── #}
+                <td class="text-center">
+                    {% if sale.sale_type == 'SALE' %}
+                        <span class="type-chip tc-sale"><i class="fa fa-tag" style="font-size:9px;"></i>Sale</span>
+                    {% elif sale.sale_type == 'LOAN' %}
+                        <span class="type-chip tc-loan"><i class="fa fa-clock" style="font-size:9px;"></i>Loan</span>
+                    {% elif sale.sale_type == 'GIFT' %}
+                        <span class="type-chip tc-gift"><i class="fa fa-gift" style="font-size:9px;"></i>Gift</span>
+                    {% else %}
+                        <span class="type-chip tc-sale">{{ sale.get_sale_type_display }}</span>
+                    {% endif %}
+                </td>
+
+                {# ── Status ── #}
+                <td class="text-center">
+                    {% if sale.cancelled %}
+                        <span class="st-pill sp-cancelled"><i class="fa fa-times-circle" style="font-size:9px;"></i>Cancelled</span>
+                    {% elif sale.returned %}
+                        <span class="st-pill sp-returned"><i class="fa fa-undo" style="font-size:9px;"></i>Returned</span>
+                    {% elif sale.status == 'DRAFT' %}
+                        <span class="st-pill sp-draft"><i class="fa fa-pencil-alt" style="font-size:9px;"></i>Draft</span>
+                    {% elif sale.status == 'PENDING' %}
+                        <span class="st-pill sp-pending"><i class="fa fa-clock" style="font-size:9px;"></i>Pending</span>
+                    {% elif sale.status == 'PAID' %}
+                        <span class="st-pill sp-paid"><i class="fa fa-check" style="font-size:9px;"></i>Paid</span>
+                    {% elif sale.status == 'PARTIAL' %}
+                        <span class="st-pill sp-partial"><i class="fa fa-adjust" style="font-size:9px;"></i>Partial</span>
+                    {% elif sale.status == 'ISSUED' %}
+                        <span class="st-pill sp-issued"><i class="fa fa-check-circle" style="font-size:9px;"></i>Issued</span>
+                    {% endif %}
+                </td>
+
+                {# ── Items ── #}
+                <td class="text-center">
+                    <span style="font-size:15px;font-weight:700;">{{ sale.items.count }}</span>
+                </td>
+
+                {# ── Amount ── #}
+                <td class="text-center">
+                    <div class="amount-main">{{ sale.total_amount|money }}</div>
+                    {% if sale.balance and sale.balance > 0 %}
+                        <div class="amount-bal">
+                            <i class="fa fa-exclamation-triangle" style="font-size:9px;"></i>
+                            {{ sale.balance|money }} due
                         </div>
-                    </td>
+                    {% elif not sale.cancelled and not sale.returned %}
+                        <div class="amount-ok"><i class="fa fa-check" style="font-size:9px;"></i> paid</div>
+                    {% endif %}
+                </td>
 
-                    <!-- Sale Date -->
-                    <!-- FIX 2: academic_session is a @property that can return None — guard before accessing .name -->
-                    <td>
-                        <strong>{{ sale.sale_date|date:"d M Y" }}</strong>
-                        {% if sale.academic_session %}
-                            <br><small class="text-muted">{{ sale.academic_session.name }}</small>
-                        {% endif %}
-                    </td>
-
-                    <!-- Items Count -->
-                    <td>
-                        <span class="badge bg-info">
-                            <i class="fa fa-shopping-bag me-1"></i>{{ sale.items.count }} item(s)
-                        </span>
-                    </td>
-
-                    <!-- Total Amount -->
-                    <td>
-                        <div>
-                            {% if sale.is_active %}
-                                <strong class="text-primary">{{ sale.total_amount|format_currency }}</strong>
-                            {% else %}
-                                <strong class="text-muted text-decoration-line-through">{{ sale.total_amount|format_currency }}</strong>
-                            {% endif %}
-                            {% if sale.discount_amount > 0 %}
-                                <br><span class="badge bg-success mt-1">
-                                    <i class="fa fa-tag me-1"></i>-{{ sale.discount_amount|amount }} disc.
-                                </span>
-                            {% endif %}
-                            {% if sale.tax_amount > 0 %}
-                                <br><small class="text-muted">+{{ sale.tax_amount|amount }} tax</small>
-                            {% endif %}
-                        </div>
-                    </td>
-
-                    <!-- Payment -->
-                    <td>
-                        {% if not sale.is_active %}
-                            <span class="badge bg-secondary">N/A</span>
-                        {% else %}
-                            <div>
-                                <strong class="text-success">{{ sale.paid_amount|format_currency }}</strong>
-                                {% if sale.balance > 0 %}
-                                    <br><span class="badge bg-warning text-dark mt-1">
-                                        Due: {{ sale.balance|amount }}
-                                    </span>
-                                {% else %}
-                                    <br><span class="badge bg-success mt-1">
-                                        <i class="fa fa-check me-1"></i>Paid
-                                    </span>
-                                {% endif %}
-                            </div>
-                        {% endif %}
-                    </td>
-
-                    <!-- Status -->
-                    <td>
-                        {% if sale.cancelled %}
-                            <span class="badge bg-danger">
-                                <i class="fa fa-ban me-1"></i>Cancelled
-                            </span>
-                            {% if sale.cancelled_on %}
-                                <br><small class="text-muted mt-1 d-block">{{ sale.cancelled_on|date:"d M Y" }}</small>
-                            {% endif %}
-                        {% elif sale.returned %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-undo me-1"></i>Returned
-                            </span>
-                            {% if sale.returned_on %}
-                                <br><small class="text-muted mt-1 d-block">{{ sale.returned_on|date:"d M Y" }}</small>
-                            {% endif %}
-                        {% elif sale.status == 'DRAFT' %}
-                            <span class="badge bg-secondary">Draft</span>
-                        {% elif sale.status == 'PENDING' %}
-                            <span class="badge bg-warning text-dark">Pending</span>
-                        {% elif sale.status == 'PAID' %}
-                            <span class="badge bg-success">Paid</span>
-                        {% elif sale.status == 'PARTIAL' %}
-                            <span class="badge bg-info">Partial</span>
-                        {% elif sale.status == 'ISSUED' %}
-                            <span class="badge bg-primary">Issued</span>
-                        {% endif %}
-                        {% if sale.issued_at %}
-                            <br><small class="text-success mt-1 d-block">
-                                <i class="fa fa-box-open me-1"></i>Issued
-                            </small>
-                        {% endif %}
-                    </td>
-
-                    <!-- Sale Type -->
-                    <td>
-                        {% if sale.sale_type == 'SALE' %}
-                            <span class="badge bg-primary">Sale</span>
-                        {% elif sale.sale_type == 'ISSUANCE' %}
-                            <span class="badge bg-success">Free</span>
-                        {% elif sale.sale_type == 'LOAN' %}
-                            <span class="badge bg-info">Loan</span>
-                            {% if sale.return_date %}
-                                <br><small class="text-muted mt-1 d-block">Due: {{ sale.return_date|date:"d M Y" }}</small>
-                            {% endif %}
-                        {% elif sale.sale_type == 'REPLACEMENT' %}
-                            <span class="badge bg-warning text-dark">Replace</span>
-                        {% endif %}
-                    </td>
-
-                    <!-- Actions -->
-                    <!--
-                        FIX 1: can_be_cancelled() / can_be_returned() return (bool, str) tuples.
-                        Tuples are always truthy in Django templates, so the actions would always
-                        show. Use the bool properties can_be_cancelled_bool / can_be_returned_bool
-                        instead. Add to UniformSale in models.py:
-
-                            @property
-                            def can_be_cancelled_bool(self):
-                                ok, _ = self.can_be_cancelled()
-                                return ok
-
-                            @property
-                            def can_be_returned_bool(self):
-                                ok, _ = self.can_be_returned()
-                                return ok
-
-                        FIX 3: The five modal URLs from the original template do not exist in
-                        views.py and raise NoReverseMatch. Replaced with direct-navigation hrefs
-                        and inline POST forms using views that do exist.
-                    -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-
-                                <a class="dropdown-item text-success"
+                {# ── Actions ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
                                    href="{% url 'uniforms:uniform_sale_detail' sale.pk %}">
-                                    <i class="fa fa-eye me-2"></i>View Details
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
                                 </a>
-
-                                {% if sale.status == 'DRAFT' and sale.is_active %}
-                                    <a class="dropdown-item text-warning"
-                                       href="{% url 'uniforms:uniform_sale_edit' sale.pk %}">
-                                        <i class="fa fa-edit me-2"></i>Edit
-                                    </a>
-                                {% endif %}
-
-                                <hr class="dropdown-divider">
-                                <h6 class="dropdown-header">Status Actions</h6>
-
-                                {% if sale.status == 'DRAFT' and sale.is_active %}
-                                    <a class="dropdown-item text-primary"
-                                       href="{% url 'uniforms:uniform_sale_finalize' sale.pk %}">
-                                        <i class="fa fa-check-circle me-2"></i>Finalize Sale
-                                    </a>
-                                {% endif %}
-
-                                {% if sale.is_active %}
-                                    {% if sale.status == 'PAID' or sale.status == 'PARTIAL' %}
-                                        <form method="post"
-                                              action="{% url 'uniforms:uniform_sale_issue' sale.pk %}">
-                                            {% csrf_token %}
-                                            <button type="submit" class="dropdown-item text-success">
-                                                <i class="fa fa-box-open me-2"></i>Issue Items
-                                            </button>
-                                        </form>
-                                    {% endif %}
-                                {% endif %}
-
-                                {% if sale.can_be_cancelled_bool %}
-                                    <a class="dropdown-item text-warning"
-                                       href="{% url 'uniforms:uniform_sale_detail' sale.pk %}#cancel">
-                                        <i class="fa fa-ban me-2"></i>Cancel Sale
-                                    </a>
-                                {% endif %}
-
-                                {% if sale.can_be_returned_bool %}
-                                    <a class="dropdown-item text-danger"
-                                       href="{% url 'uniforms:uniform_sale_detail' sale.pk %}#return">
-                                        <i class="fa fa-undo me-2"></i>Return Items
-                                    </a>
-                                {% endif %}
-
-                                <hr class="dropdown-divider">
-                                <h6 class="dropdown-header">Financial</h6>
-
-                                {% if sale.fee_invoice %}
-                                    <a class="dropdown-item text-info"
-                                       href="{% url 'fees:invoice_detail' sale.fee_invoice.pk %}">
-                                        <i class="fa fa-receipt me-2"></i>View Invoice
-                                    </a>
-                                {% endif %}
-
-                                {% if sale.journal_entry %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-success">
-                                            <i class="fa fa-book me-1"></i>Journal Entry Created
-                                        </small>
-                                    </div>
-                                {% endif %}
-
-                                <hr class="dropdown-divider">
-                                <h6 class="dropdown-header">Print</h6>
-
-                                <a class="dropdown-item text-primary"
-                                   href="{% url 'uniforms:uniform_sale_print_detail' sale.pk %}"
-                                   target="_blank">
-                                    <i class="fa fa-print me-2"></i>Print Receipt
+                            </li>
+                            {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:uniform_sale_edit' sale.pk %}">
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Edit
                                 </a>
-
-                                {% if sale.fee_invoice %}
-                                    <a class="dropdown-item text-primary"
-                                       href="{% url 'uniforms:uniform_sale_print_invoice' sale.pk %}"
-                                       target="_blank">
-                                        <i class="fa fa-file-invoice me-2"></i>Print Invoice
-                                    </a>
-                                {% endif %}
-
-                                <hr class="dropdown-divider">
-
-                                {% if sale.status == 'DRAFT' %}
-                                    <form method="post"
-                                          action="{% url 'uniforms:uniform_sale_delete' sale.pk %}"
-                                          onsubmit="return confirm('Delete sale {{ sale.sale_number }}? This cannot be undone.');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="dropdown-item text-danger">
-                                            <i class="fa fa-trash me-2"></i>Delete
-                                        </button>
-                                    </form>
-                                {% endif %}
-
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="10" class="text-center py-5">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <p class="mt-2 mb-0 text-muted">No uniform sales found matching your filters.</p>
-                            <small class="text-muted">Try adjusting your search criteria or create a new sale.</small>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
+                            </li>
+                            {% endif %}
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'students:student_profile' sale.student.pk %}">
+                                    <i class="fa fa-user me-2"></i>Student Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Workflow</h6></li>
+                            {% if sale.status in 'PENDING,PARTIAL' and not sale.cancelled %}
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:uniform_sale_edit' sale.pk %}">
+                                    <i class="fa fa-money-bill me-2 text-success"></i>Record Payment
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if sale.status in 'PAID,PARTIAL' and not sale.cancelled %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:uniform_sale_issue_modal' sale.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-box-open me-2 text-info"></i>Issue Items
+                                </button>
+                            </li>
+                            {% endif %}
+                            {% if sale.status == 'ISSUED' and not sale.returned %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:uniform_sale_return_modal' sale.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-undo me-2 text-warning"></i>Process Return
+                                </button>
+                            </li>
+                            {% endif %}
+                            {% if not sale.cancelled and not sale.returned and sale.status != 'ISSUED' %}
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:uniform_sale_cancel_modal' sale.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-times me-2"></i>Cancel Sale
+                                </button>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 </div>
 
-<!-- Pagination -->
 {% if sales_page.paginator.num_pages > 1 %}
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <div class="text-muted">
-            Showing {{ sales_page.start_index }} - {{ sales_page.end_index }} of {{ sales_page.paginator.count }} sales
-        </div>
-        <nav aria-label="Uniform sales pagination">
-            <ul class="pagination mb-0">
-                {% if sales_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'uniforms:uniform_sale_list' %}"
-                                hx-target="#sale-results"
-                                hx-swap="innerHTML"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ sales_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">«</span></li>
-                {% endif %}
-
-                {% for page_num in sales_page.paginator.page_range %}
-                    {% if page_num == sales_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > sales_page.number|add:"-3" and page_num < sales_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'uniforms:uniform_sale_list' %}"
-                                    hx-target="#sale-results"
-                                    hx-swap="innerHTML"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-
-                {% if sales_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'uniforms:uniform_sale_list' %}"
-                                hx-target="#sale-results"
-                                hx-swap="innerHTML"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ sales_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">»</span></li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ sales_page.start_index }}</strong>–<strong>{{ sales_page.end_index }}</strong>
+        of <strong>{{ sales_page.paginator.count|format_number }}</strong> sale{{ sales_page.paginator.count|pluralize }}
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if sales_page.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_sale_list' %}"
+                    hx-target="#sale-results" hx-include="#searchForm"
+                    hx-vals='{"page":"{{ sales_page.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+        {% for p in sales_page.paginator.page_range %}
+            {% if p == sales_page.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > sales_page.number|add:"-3" and p < sales_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'uniforms:uniform_sale_list' %}"
+                            hx-target="#sale-results" hx-include="#searchForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+        {% if sales_page.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_sale_list' %}"
+                    hx-target="#sale-results" hx-include="#searchForm"
+                    hx-vals='{"page":"{{ sales_page.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
 </div>
 {% endif %}
 
-<!-- Out-of-band stats update for HTMX requests -->
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-server"></i>
+    <p>
+        {% if request.GET.q or request.GET.status or request.GET.sale_type %}
+            No sales match your filters.
+        {% else %}No sales have been created yet.{% endif %}
+    </p>
+    <a href="{% url 'uniforms:uniform_sale_create' %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:600;border-radius:6px;
+              background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>New Sale
+    </a>
+</div>
+{% endif %}
+
+{# ── OOB stat refresh ── #}
 {% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary"><i class="pe-7s-cart"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Sales</div>
-                <h3>{{ stats.total|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning"><i class="pe-7s-hourglass"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Pending</div>
-                <h3>{{ stats.pending|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success"><i class="pe-7s-check"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Paid</div>
-                <h3>{{ stats.paid|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info"><i class="pe-7s-cash"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Revenue</div>
-                <h3>{{ stats.total_revenue|default:0|money_short }}</h3>
-            </div>
-        </div>
-    </div>
+<div class="row mb-2" id="stat-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6 mb-3"><div class="stat-card"><div class="stat-icon bg-primary"><i class="pe-7s-server"></i></div><div><div class="stat-label">Total</div><div class="stat-value">{{ stats.total|default:0|format_number }}</div></div></div></div>
+    <div class="col-xl-3 col-md-6 mb-3"><div class="stat-card"><div class="stat-icon bg-warning"><i class="pe-7s-clock"></i></div><div><div class="stat-label">Pending</div><div class="stat-value">{{ stats.pending|default:0|format_number }}</div></div></div></div>
+    <div class="col-xl-3 col-md-6 mb-3"><div class="stat-card"><div class="stat-icon bg-info"><i class="pe-7s-cash"></i></div><div><div class="stat-label">Paid</div><div class="stat-value">{{ stats.paid|default:0|format_number }}</div><div class="stat-value-sub">awaiting issue</div></div></div></div>
+    <div class="col-xl-3 col-md-6 mb-3"><div class="stat-card"><div class="stat-icon bg-success"><i class="pe-7s-check"></i></div><div><div class="stat-label">Issued</div><div class="stat-value">{{ stats.issued|default:0|format_number }}</div></div></div></div>
+    <div class="col-xl-4 col-md-4 mb-3"><div class="stat-card"><div class="stat-icon bg-danger"><i class="pe-7s-close-circle"></i></div><div><div class="stat-label">Cancelled</div><div class="stat-value">{{ stats.cancelled|default:0|format_number }}</div></div></div></div>
+    <div class="col-xl-4 col-md-4 mb-3"><div class="stat-card"><div class="stat-icon bg-secondary"><i class="pe-7s-back-2"></i></div><div><div class="stat-label">Returned</div><div class="stat-value">{{ stats.returned|default:0|format_number }}</div></div></div></div>
+    <div class="col-xl-4 col-md-4 mb-3"><div class="stat-card"><div class="stat-icon bg-dark"><i class="pe-7s-graph1"></i></div><div><div class="stat-label">Revenue</div><div class="stat-value" style="font-size:16px;">{{ stats.total_revenue|default:0|money_short }}</div></div></div></div>
 </div>
 {% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, { popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); } });
+    });
+})();
+</script>

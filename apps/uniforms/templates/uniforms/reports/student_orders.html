@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.rep-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:22px; }
+.rep-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.rep-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+.filter-bar { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; margin-bottom:20px; }
+.filter-bar .form-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); margin-bottom:4px; }
+
+.rep-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.rep-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.rep-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.rep-tbl tbody tr:last-child td { border-bottom:none; }
+.rep-tbl tbody tr:hover td { background:var(--surface-2); }
+.rep-tbl tfoot td { padding:10px 14px; background:var(--surface-2); font-weight:700; border-top:2px solid var(--border); }
+
+.stu-avatar { width:34px; height:34px; border-radius:50%; background:var(--accent-lt); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; border:1px solid var(--accent-bd); flex-shrink:0; }
+.stu-row { display:flex; align-items:center; gap:10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Student Orders Report
+                <div class="page-title-subheading">Uniform purchase totals per student</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+        </div>
+    </div>
+</div>
+
+<form method="get" class="filter-bar">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label">Academic Session</label>
+            <select name="academic_session" class="form-select form-select-sm">
+                <option value="">All Sessions</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Class</label>
+            <select name="class" class="form-select form-select-sm">
+                <option value="">All Classes</option>
+            </select>
+        </div>
+        <div class="col-md-auto">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa fa-filter me-1"></i> Apply
+            </button>
+            <a href="{% url 'uniforms:student_orders_report' %}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+        </div>
+    </div>
+</form>
+
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title">
+            <i class="fa fa-trophy" style="color:var(--amber);"></i>
+            Students by Uniform Spend
+            <span style="font-weight:400;font-size:11px;color:var(--ink-faint);">highest first</span>
+        </h6>
+        <span style="font-size:12px;color:var(--ink-muted);">
+            {{ student_totals|length }} student{{ student_totals|length|pluralize }} · showing top 100
+        </span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th style="width:40px;">#</th>
+                    <th>Student</th>
+                    <th class="text-center">Sales</th>
+                    <th class="text-end">Total Amount</th>
+                    <th class="text-end">Paid</th>
+                    <th class="text-end">Balance</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in student_totals %}
+                <tr>
+                    <td style="color:var(--ink-faint);font-weight:700;font-size:13px;">{{ forloop.counter }}</td>
+                    <td>
+                        <div class="stu-row">
+                            <div class="stu-avatar">
+                                {{ row.student.first_name|first }}{{ row.student.last_name|first }}
+                            </div>
+                            <div>
+                                <a href="{% url 'students:student_profile' row.student.pk %}#uniforms"
+                                   style="font-weight:700;color:var(--ink);text-decoration:none;font-size:13px;display:block;">
+                                    {{ row.student.get_full_name }}
+                                </a>
+                                <span style="font-size:11px;color:var(--ink-faint);font-family:'Courier New',monospace;">
+                                    {{ row.student.admission_number }}
+                                </span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <span style="font-weight:700;font-size:14px;">{{ row.total_sales }}</span>
+                    </td>
+                    <td class="text-end" style="font-weight:700;font-size:14px;">
+                        {{ row.total_amount|money }}
+                    </td>
+                    <td class="text-end">
+                        <div style="font-weight:600;color:var(--green);">{{ row.paid_amount|money }}</div>
+                        {% with pct=row.paid_amount|percentage:row.total_amount %}
+                        <div style="margin-top:4px;height:4px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
+                            <div style="width:{% if pct > 100 %}100{% else %}{{ pct|floatformat:0 }}{% endif %}%;height:100%;background:{% if pct >= 100 %}var(--green){% elif pct >= 50 %}var(--amber){% else %}var(--red){% endif %};border-radius:3px;"></div>
+                        </div>
+                        <div style="font-size:10px;color:var(--ink-faint);margin-top:2px;">{{ pct|floatformat:0 }}% paid</div>
+                        {% endwith %}
+                    </td>
+                    <td class="text-end">
+                        {% if row.balance > 0 %}
+                            <span style="color:var(--red);font-weight:700;">{{ row.balance|money }}</span>
+                        {% else %}
+                            <span style="color:var(--ink-faint);">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a href="{% url 'uniforms:uniform_sale_list' %}?student={{ row.student.pk }}"
+                           class="btn btn-xs btn-outline-primary"
+                           style="font-size:11px;padding:2px 8px;">
+                            <i class="fa fa-eye" style="font-size:9px;"></i> Sales
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:36px;color:var(--ink-faint);">
+                        <i class="fa fa-users" style="font-size:2rem;opacity:.3;display:block;margin-bottom:10px;"></i>
+                        <p style="font-size:13px;margin:0;">No sales data found for the selected filters.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if student_totals %}
+            <tfoot>
+                <tr>
+                    <td colspan="3" style="color:var(--ink-muted);">Total ({{ student_totals|length }} students)</td>
+                    <td class="text-end">—</td>
+                    <td class="text-end">—</td>
+                    <td class="text-end">—</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+
+{% endblock %}

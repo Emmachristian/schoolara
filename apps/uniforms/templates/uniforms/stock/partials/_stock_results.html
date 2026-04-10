@@ -1,378 +1,341 @@
-<!-- uniforms/templates/uniforms/stock/partials/_stock_results.html -->
-
-{% load static %}
+{# uniforms/templates/uniforms/stock/partials/_stock_results.html #}
 {% load currency_filters %}
 
-<!-- Stock Records Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+.stk-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.stk-tbl thead th {
+    background:#f8fafc; padding:10px 14px;
+    font-size:10.5px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.55px; color:#64748b;
+    border-bottom:2px solid #e2e8f0; white-space:nowrap;
+}
+.stk-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color:#0f172a; }
+.stk-tbl tbody tr:last-child td { border-bottom:none; }
+.stk-tbl tbody tr:hover td { background:#fafbff !important; }
+
+/* ── Item cell ── */
+.item-name { font-weight:600; font-size:13px; color:#0f172a; text-decoration:none; display:block; }
+.item-name:hover { color:#1d4ed8; }
+.item-code { font-family:'Courier New',monospace; font-size:11px; color:#64748b; margin-top:1px; }
+
+/* ── Size badge ── */
+.size-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:42px; height:28px; padding:0 10px;
+    background:#eff6ff; border:1px solid #bfdbfe;
+    border-radius:6px; font-size:13px; font-weight:700; color:#1d4ed8;
+}
+.no-size-badge {
+    display:inline-flex; align-items:center; gap:3px; padding:3px 8px;
+    border-radius:5px; background:#f8fafc; border:1px solid #e2e8f0;
+    font-size:11.5px; font-weight:600; color:#64748b;
+}
+
+/* ── Quantity ── */
+.qty-main  { font-size:18px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.qty-ok    { color:#15803d; }
+.qty-low   { color:#b45309; }
+.qty-empty { color:#dc2626; }
+.qty-meta  { font-size:10.5px; color:#94a3b8; margin-top:2px; }
+
+.reserved-chip {
+    display:inline-flex; align-items:center; gap:3px; padding:2px 7px;
+    border-radius:4px; font-size:10.5px; font-weight:700;
+    background:#fef9c3; color:#854d0e; border:1px solid #fde047;
+}
+
+/* ── Value ── */
+.val-main { font-size:13px; font-weight:700; color:#0f172a; }
+.val-sub  { font-size:10.5px; color:#94a3b8; margin-top:1px; }
+
+/* ── Location ── */
+.loc-text { font-size:12.5px; color:#64748b; }
+.loc-bin  { font-family:'Courier New',monospace; font-size:11px; color:#94a3b8; margin-top:1px; }
+
+/* ── Pagination ── */
+.pag-bar {
+    padding:12px 16px; border-top:1px solid #e2e8f0; background:#f8fafc;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:8px; font-size:12.5px; color:#64748b;
+}
+
+/* ── Empty ── */
+.tbl-empty { text-align:center; padding:56px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.8rem; display:block; margin-bottom:12px; opacity:.35; }
+.tbl-empty p { font-size:13px; margin:0 0 16px; }
+
+/* ── OOB stat cards ── */
+.stat-card {
+    background:#fff; border:1px solid #e2e8f0; border-radius:10px;
+    padding:18px 22px; display:flex; align-items:center; gap:16px;
+    transition:box-shadow .2s;
+}
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:22px; font-weight:700; color:#0f172a; line-height:1; }
+.stat-value-sub { font-size:10.5px; color:#94a3b8; margin-top:2px; }
+
+.dropdown-menu   { font-size:.85rem; min-width:190px; border:1px solid #e2e8f0; border-radius:8px; }
+.dropdown-item   { padding:6px 14px; }
+.dropdown-header { font-size:.7rem; padding:6px 14px 2px; }
+</style>
+
+{% if stock_page %}
+<div style="overflow-x:auto;">
+    <table class="stk-tbl">
         <thead>
             <tr>
-                <th width="50">#</th>
-                <th>Item Code</th>
-                <th>Item Name</th>
-                <th>Size</th>
-                <th>Quantity</th>
-                <th>Reserved</th>
-                <th>Available</th>
+                <th style="width:38px;">#</th>
+                <th>Item</th>
+                <th class="text-center">Size</th>
+                <th class="text-center">Quantity</th>
+                <th class="text-center">Reserved</th>
+                <th class="text-center">Available</th>
+                <th class="text-center">Value (cost)</th>
                 <th>Location</th>
-                <th>Stock Value</th>
-                <th>Status</th>
-                <th width="120">Actions</th>
+                <th class="text-center" style="width:60px;">Actions</th>
             </tr>
         </thead>
         <tbody>
-            {% if stock_page %}
-                {% for stock in stock_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:stock_page.start_index|add:"-1" }}</td>
+            {% for stock in stock_page %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ stock_page.start_index|add:forloop.counter0 }}</td>
 
-                    <!-- Item Code -->
-                    <td>
-                        <span class="category-code">{{ stock.uniform_item.code }}</span>
-                        {% if stock.uniform_item.sku %}
-                            <br><small class="text-muted">SKU: {{ stock.uniform_item.sku }}</small>
-                        {% endif %}
-                    </td>
+                {# ── Item ── #}
+                <td>
+                    <a href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}" class="item-name">
+                        {{ stock.uniform_item.name }}
+                    </a>
+                    <div class="item-code">{{ stock.uniform_item.code }}</div>
+                </td>
 
-                    <!-- Item Name & Type -->
-                    <td>
-                        <div>
-                            <h6 class="mb-0">
-                                <a href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}"
-                                   class="text-decoration-none">
-                                    {{ stock.uniform_item.name }}
-                                </a>
-                            </h6>
-                            <small class="text-muted">
-                                <span class="badge bg-light text-dark border">
-                                    {{ stock.uniform_item.get_item_type_display }}
-                                </span>
-                                {% if stock.uniform_item.gender == 'M' %}
-                                    <span class="badge bg-info">Male</span>
-                                {% elif stock.uniform_item.gender == 'F' %}
-                                    <span class="badge bg-danger">Female</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Unisex</span>
-                                {% endif %}
-                            </small>
-                        </div>
-                    </td>
+                {# ── Size ── #}
+                <td class="text-center">
+                    {% if stock.size %}
+                        <span class="size-badge">{{ stock.size.name }}</span>
+                    {% else %}
+                        <span class="no-size-badge"><i class="fa fa-minus" style="font-size:9px;"></i>Unsized</span>
+                    {% endif %}
+                </td>
 
-                    <!-- Size -->
-                    <td>
-                        {% if stock.size %}
-                            <span class="badge bg-primary" style="font-size: 0.9rem; padding: 6px 12px;">
-                                {{ stock.size.name }}
-                            </span>
-                            {% if stock.size.size_type %}
-                                <br><small class="text-muted">{{ stock.size.get_size_type_display }}</small>
-                            {% endif %}
-                        {% else %}
-                            <span class="badge bg-secondary" style="font-size: 0.9rem; padding: 6px 12px;">
-                                No Size
-                            </span>
-                        {% endif %}
-                    </td>
+                {# ── Quantity ── #}
+                <td class="text-center">
+                    {% if stock.quantity == 0 %}
+                        <div class="qty-main qty-empty">0</div>
+                        <div class="qty-meta">Out of stock</div>
+                    {% elif stock.quantity <= stock.uniform_item.reorder_level %}
+                        <div class="qty-main qty-low">{{ stock.quantity }}</div>
+                        <div class="qty-meta">Low — reorder ≤{{ stock.uniform_item.reorder_level }}</div>
+                    {% else %}
+                        <div class="qty-main qty-ok">{{ stock.quantity }}</div>
+                    {% endif %}
+                </td>
 
-                    <!-- Total Quantity -->
-                    <td>
-                        <div class="text-center">
-                            <strong class="{% if stock.quantity == 0 %}text-danger{% elif stock.quantity <= stock.uniform_item.reorder_level %}text-warning{% else %}text-success{% endif %}">
-                                {{ stock.quantity }}
-                            </strong>
-                            <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
-                        </div>
-                    </td>
+                {# ── Reserved ── #}
+                <td class="text-center">
+                    {% if stock.reserved_quantity > 0 %}
+                        <span class="reserved-chip">
+                            <i class="fa fa-lock" style="font-size:9px;"></i>{{ stock.reserved_quantity }}
+                        </span>
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
 
-                    <!-- Reserved Quantity -->
-                    <td>
-                        <div class="text-center">
-                            {% if stock.reserved_quantity > 0 %}
-                                <strong class="text-info">{{ stock.reserved_quantity }}</strong>
-                                <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
-                            {% else %}
-                                <span class="text-muted">-</span>
-                            {% endif %}
-                        </div>
-                    </td>
+                {# ── Available ── #}
+                <td class="text-center">
+                    <span style="font-size:15px;font-weight:700;
+                                 color:{% if stock.available_quantity == 0 %}#dc2626{% elif stock.available_quantity <= stock.uniform_item.reorder_level %}#b45309{% else %}#15803d{% endif %};">
+                        {{ stock.available_quantity }}
+                    </span>
+                </td>
 
-                    <!-- Available Quantity -->
-                    <td>
-                        <div class="text-center">
-                            <strong class="{% if stock.available_quantity == 0 %}text-danger{% elif stock.available_quantity <= stock.uniform_item.reorder_level %}text-warning{% else %}text-success{% endif %}">
-                                {{ stock.available_quantity }}
-                            </strong>
-                            <br><small class="text-muted">{{ stock.uniform_item.unit_of_measure.abbreviation }}</small>
+                {# ── Value ── #}
+                <td class="text-center">
+                    <div class="val-main">{{ stock.total_cost_value|money }}</div>
+                    <div class="val-sub">sell {{ stock.total_selling_value|money }}</div>
+                </td>
 
-                            {% if stock.available_quantity <= stock.uniform_item.reorder_level and stock.available_quantity > 0 %}
-                                <br><span class="badge bg-warning text-dark mt-1">
-                                    <i class="fa fa-exclamation-triangle"></i> Low Stock
-                                </span>
-                            {% elif stock.available_quantity == 0 %}
-                                <br><span class="badge bg-danger mt-1">
-                                    <i class="fa fa-times-circle"></i> Out of Stock
-                                </span>
-                            {% endif %}
-                        </div>
-                    </td>
+                {# ── Location ── #}
+                <td>
+                    {% if stock.location %}
+                        <div class="loc-text">{{ stock.location }}</div>
+                    {% endif %}
+                    {% if stock.bin_number %}
+                        <div class="loc-bin">Bin: {{ stock.bin_number }}</div>
+                    {% endif %}
+                    {% if not stock.location and not stock.bin_number %}
+                        <span style="color:#94a3b8;font-size:12px;">—</span>
+                    {% endif %}
+                </td>
 
-                    <!-- Location -->
-                    <td>
-                        {% if stock.location %}
-                            <div>
-                                <i class="fa fa-map-marker-alt text-primary me-1"></i>
-                                <strong>{{ stock.location }}</strong>
-                                {% if stock.bin_number %}
-                                    <br><small class="text-muted">Bin: {{ stock.bin_number }}</small>
-                                {% endif %}
-                            </div>
-                        {% else %}
-                            <span class="text-muted">Not specified</span>
-                        {% endif %}
-                    </td>
-
-                    <!-- Stock Value -->
-                    <td>
-                        <div>
-                            <strong class="text-success">{{ stock.total_selling_value|money }}</strong>
-                            <br><small class="text-muted">Cost: {{ stock.total_cost_value|money }}</small>
-                            {% if stock.total_selling_value > stock.total_cost_value %}
-                                {% with profit=stock.total_selling_value|subtract_money:stock.total_cost_value %}
-                                    <br><small class="text-success">
-                                        Profit: {{ profit }}
-                                    </small>
-                                {% endwith %}
-                            {% endif %}
-                        </div>
-                    </td>
-
-                    <!-- Stock Status -->
-                    <td>
-                        {% if stock.available_quantity == 0 %}
-                            <span class="status-badge" style="background-color: #f8d7da; color: #721c24; border-color: #f5c6cb;">
-                                Out of Stock
-                            </span>
-                        {% elif stock.available_quantity <= stock.uniform_item.reorder_level %}
-                            <span class="status-badge" style="background-color: #fff3cd; color: #856404; border-color: #ffeaa7;">
-                                Low Stock
-                            </span>
-                        {% else %}
-                            <span class="status-badge" style="background-color: #d4edda; color: #155724; border-color: #c3e6cb;">
-                                In Stock
-                            </span>
-                        {% endif %}
-
-                        <br><small class="text-muted mt-1 d-block">
-                            Reorder at: {{ stock.uniform_item.reorder_level }}
-                        </small>
-                    </td>
-
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success"
+                {# ── Actions ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
                                    href="{% url 'uniforms:uniform_stock_detail' stock.pk %}">
-                                    <i class="fa fa-eye me-2"></i>View Details
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
                                 </a>
-
-                                <!-- Quick View Modal -->
-                                <button type="button" class="dropdown-item text-info"
-                                        hx-get="{% url 'uniforms:uniform_stock_quick_view_modal' stock.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i>Quick View
-                                </button>
-
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning"
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
                                    href="{% url 'uniforms:uniform_stock_edit' stock.pk %}">
-                                    <i class="fa fa-edit me-2"></i>Edit
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Edit
                                 </a>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- Stock Actions -->
-                                <h6 class="dropdown-header">Stock Actions</h6>
-
-                                <button type="button" class="dropdown-item text-primary"
-                                        hx-get="{% url 'uniforms:stock_adjustment_modal' stock.uniform_item.pk %}{% if stock.size %}?size={{ stock.size.pk }}{% endif %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-boxes me-2"></i>Adjust Quantity
-                                </button>
-
-                                {# Transfer only makes sense when there are size variants #}
-                                {% if stock.size %}
-                                <button type="button" class="dropdown-item text-info"
-                                        hx-get="{% url 'uniforms:stock_transfer_modal' stock.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-exchange-alt me-2"></i>Transfer Stock
-                                </button>
-                                {% endif %}
-
-                                <button type="button" class="dropdown-item text-success"
-                                        hx-get="{% url 'uniforms:stock_receive_modal' stock.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-truck me-2"></i>Receive Stock
-                                </button>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- View Item -->
-                                <a class="dropdown-item text-primary"
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
                                    href="{% url 'uniforms:uniform_item_detail' stock.uniform_item.pk %}">
-                                    <i class="fa fa-tshirt me-2"></i>View Item Details
+                                    <i class="fa fa-box-open me-2"></i>Item Detail
                                 </a>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- Print -->
-                                <a class="dropdown-item text-primary"
-                                   href="{% url 'uniforms:uniform_stock_print_detail' stock.pk %}"
-                                   target="_blank">
-                                    <i class="fa fa-print me-2"></i>Print Label
-                                </a>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- Delete — opens confirmation modal -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'uniforms:uniform_stock_delete_modal' stock.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i>Delete Record
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Stock Actions</h6></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:stock_receive_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-plus-circle me-2 text-success"></i>Receive Stock
                                 </button>
-
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="11" class="text-center py-5">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <p class="mt-2 mb-0 text-muted">No stock records found matching your filters.</p>
-                            <small class="text-muted">Try adjusting your search criteria or add new stock.</small>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
+                            </li>
+                            {% if stock.size %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:stock_transfer_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-exchange-alt me-2 text-info"></i>Transfer
+                                </button>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:uniform_stock_delete_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 </div>
 
-<!-- Pagination -->
 {% if stock_page.paginator.num_pages > 1 %}
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div class="text-muted">
-            Showing {{ stock_page.start_index }} - {{ stock_page.end_index }} of {{ stock_page.paginator.count }} records
-        </div>
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ stock_page.start_index }}</strong>–<strong>{{ stock_page.end_index }}</strong>
+        of <strong>{{ stock_page.paginator.count|format_number }}</strong>
+        record{{ stock_page.paginator.count|pluralize }}
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if stock_page.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_stock_list' %}"
+                    hx-target="#stock-results"
+                    hx-include="#searchForm"
+                    hx-vals='{"page":"{{ stock_page.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
 
-        <!-- Pagination Navigation -->
-        <nav aria-label="Stock pagination">
-            <ul class="pagination mb-0">
-                {% if stock_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'uniforms:uniform_stock_list' %}"
-                                hx-target="#stock-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ stock_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">«</span></li>
-                {% endif %}
+        {% for p in stock_page.paginator.page_range %}
+            {% if p == stock_page.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > stock_page.number|add:"-3" and p < stock_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'uniforms:uniform_stock_list' %}"
+                            hx-target="#stock-results"
+                            hx-include="#searchForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
 
-                {% for page_num in stock_page.paginator.page_range %}
-                    {% if page_num == stock_page.number %}
-                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
-                    {% elif page_num > stock_page.number|add:"-3" and page_num < stock_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'uniforms:uniform_stock_list' %}"
-                                    hx-target="#stock-results"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-
-                {% if stock_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'uniforms:uniform_stock_list' %}"
-                                hx-target="#stock-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ stock_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">»</span></li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+        {% if stock_page.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_stock_list' %}"
+                    hx-target="#stock-results"
+                    hx-include="#searchForm"
+                    hx-vals='{"page":"{{ stock_page.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
 </div>
 {% endif %}
 
-<!-- Out-of-band stats update (HTMX only) -->
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-layer-group"></i>
+    <p>
+        {% if request.GET.q %}
+            No stock records match your search.
+        {% else %}
+            No stock records found.
+        {% endif %}
+    </p>
+    <a href="{% url 'uniforms:uniform_stock_create' %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:600;border-radius:6px;
+              background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Create Stock Record
+    </a>
+</div>
+{% endif %}
+
+{# ── OOB stat refresh ── #}
 {% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary"><i class="pe-7s-box1"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Records</div>
-                <h3>{{ stats.total_records|default:0 }}</h3>
+<div class="row mb-3" id="stat-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-albums"></i></div>
+            <div>
+                <div class="stat-label">Stock Records</div>
+                <div class="stat-value">{{ stats.total_records|default:0|format_number }}</div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success"><i class="pe-7s-box2"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Quantity</div>
-                <h3>{{ stats.total_quantity|format_number }}</h3>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-box2"></i></div>
+            <div>
+                <div class="stat-label">Total Units</div>
+                <div class="stat-value">{{ stats.total_quantity|default:0|format_number }}</div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info"><i class="pe-7s-cash"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Value</div>
-                <h3>{{ stats.total_value|money_short }}</h3>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Low Stock</div>
+                <div class="stat-value"
+                     style="{% if stats.low_stock > 0 %}color:#b45309;{% endif %}">
+                    {{ stats.low_stock|default:0|format_number }}
+                </div>
+                <div class="stat-value-sub">at or below reorder level</div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning"><i class="pe-7s-attention"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Low Stock Items</div>
-                <h3>{{ stats.low_stock|default:0 }}</h3>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Total Value (cost)</div>
+                <div class="stat-value" style="font-size:18px;">{{ stats.total_value|default:0|money_short }}</div>
             </div>
         </div>
     </div>
@@ -380,14 +343,13 @@
 {% endif %}
 
 <script>
-if (typeof htmx !== 'undefined') {
-    htmx.on('htmx:afterSwap', function(event) {
-        if (event.detail.target.id === 'stock-results') {
-            const tooltipTriggerList = [].slice.call(
-                document.querySelectorAll('[data-bs-toggle="tooltip"]')
-            );
-            tooltipTriggerList.map(function(el) { return new bootstrap.Tooltip(el); });
-        }
+(function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
     });
-}
+})();
 </script>

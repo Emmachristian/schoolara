@@ -1,87 +1,38 @@
 {% load currency_filters %}
-
-<div class="modal-dialog">
-    <div class="modal-content">
-        <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title">
-                <i class="fa fa-box-open me-2"></i>Issue to Student
-            </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+<div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0;padding:16px 22px;">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:40px;height:40px;border-radius:10px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa fa-box-open" style="color:#15803d;"></i></div>
+            <div><h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#14532d;">Issue Uniform Items</h5><div style="font-size:11.5px;color:#15803d;margin-top:3px;">{{ sale.sale_number }} &middot; {{ sale.student.get_full_name }}</div></div>
         </div>
-        <div class="modal-body py-4">
-
-            <div class="alert alert-info text-start">
-                <strong>{{ sale.sale_number }}</strong><br>
-                <small>Student: {{ sale.student.get_full_name }}</small><br>
-                <small>Date: {{ sale.sale_date|date:"d M Y" }}</small><br>
-                <small>Total: {{ sale.total_amount|format_currency }}</small><br>
-                {% if sale.paid_amount %}
-                <small>Paid: {{ sale.paid_amount|format_currency }}</small><br>
-                <small>Balance:
-                    <span class="{{ sale.balance|balance_color_class }} fw-semibold">
-                        {{ sale.balance|format_currency }}
-                    </span>
-                </small>
-                {% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <form hx-post="{% url 'uniforms:uniform_sale_issue' sale.pk %}" hx-target="#modal-container" hx-swap="innerHTML">{% csrf_token %}
+    <div class="modal-body" style="padding:22px;max-height:65vh;overflow-y:auto;">
+        {% for warning in warnings %}<div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;color:#92400e;border-radius:0 7px 7px 0;padding:10px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:8px;font-size:13px;"><i class="fa fa-exclamation-triangle" style="flex-shrink:0;margin-top:1px;color:#b45309;"></i><span>{{ warning }}</span></div>{% endfor %}
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+            <div style="background:#f1f5f9;padding:8px 14px;border-bottom:1px solid #e2e8f0;display:grid;grid-template-columns:1fr 60px 80px;gap:8px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">
+                <span>Item</span><span style="text-align:center;">Qty</span><span style="text-align:right;">Total</span>
             </div>
-
-            <!-- Items -->
-            <div class="mb-3">
-                <strong class="d-block mb-2">Items to Issue</strong>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Item</th>
-                                <th class="text-center">Size</th>
-                                <th class="text-center">Qty</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            <tr>
-                                <td>{{ item.uniform_item.name }}</td>
-                                <td class="text-center">{{ item.size.name|default:"—" }}</td>
-                                <td class="text-center">{{ item.quantity }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            {% for item in items %}
+            <div style="padding:10px 14px;border-bottom:1px solid #f1f5f9;display:grid;grid-template-columns:1fr 60px 80px;gap:8px;align-items:center;">
+                <div>
+                    <div style="font-size:13px;font-weight:600;color:#0f172a;">{{ item.uniform_item.name }}</div>
+                    {% if item.size %}<div style="font-size:11.5px;color:#64748b;">Size: {{ item.size.name }}</div>{% endif %}
                 </div>
+                <div style="text-align:center;font-weight:600;">{{ item.quantity }}</div>
+                <div style="text-align:right;font-weight:600;color:#0f172a;">{{ item.total_price|money }}</div>
             </div>
-
-            {% if warnings %}
-            <div class="alert alert-warning text-start">
-                <strong><i class="fa fa-exclamation-circle me-2"></i>Note:</strong>
-                {% for warning in warnings %}
-                <div class="mt-1">{{ warning }}</div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            <div class="alert alert-primary text-start">
-                <strong><i class="fa fa-info-circle me-2"></i>This will:</strong>
-                <ul class="mb-0 mt-2">
-                    <li>Mark the sale as <strong>ISSUED</strong></li>
-                    <li>Deduct items from inventory stock</li>
-                    <li>Record the issuance timestamp and issuer</li>
-                </ul>
-            </div>
-
-            <form hx-post="{% url 'uniforms:uniform_sale_issue' sale.pk %}"
-                  hx-target="#modal-container"
-                  hx-swap="innerHTML">
-                {% csrf_token %}
-                <div class="modal-footer px-0 pb-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fa fa-times me-1"></i>Back
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa fa-box-open me-1"></i>Confirm Issuance
-                    </button>
-                </div>
-            </form>
-
+            {% endfor %}
+        </div>
+        <div>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Issued To (name of person collecting)</label>
+            <input type="text" name="issued_to" class="form-control form-control-sm" placeholder="{{ sale.student.get_full_name }}">
         </div>
     </div>
-</div>
+    <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal"><i class="fa fa-times me-1"></i> Cancel</button>
+        <button type="submit" class="btn btn-success btn-sm"><i class="fa fa-box-open me-1"></i> Confirm Issue</button>
+    </div>
+    </form>
+</div></div>

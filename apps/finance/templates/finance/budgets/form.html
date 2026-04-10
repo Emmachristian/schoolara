@@ -1,0 +1,486 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================
+   BUDGET FORM — matches expense form styling
+   ============================================================ */
+
+.form-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+}
+
+.form-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: #64748b;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 5px;
+}
+
+.form-control, .form-select {
+    font-size: 13.5px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 9px 13px;
+    color: #0f172a;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+    outline: none;
+}
+
+textarea.form-control { resize: vertical; min-height: 90px; }
+
+.field-help {
+    font-size: 11.5px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.required-star { color: #ef4444; margin-left: 2px; }
+
+/* Type option cards */
+.type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.type-card {
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s, background .15s;
+    position: relative;
+}
+
+.type-card input[type="radio"] { display: none; }
+
+.type-card:hover { border-color: #667eea; background: #f8f9ff; }
+
+.type-card.selected {
+    border-color: #667eea;
+    background: #eef2ff;
+}
+
+.type-card .type-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #fff; margin: 0 auto 8px;
+}
+
+.type-card .type-name {
+    font-size: 12.5px; font-weight: 600; color: #334155;
+}
+
+.type-card .type-desc {
+    font-size: 11px; color: #94a3b8; margin-top: 3px;
+}
+
+/* Sidebar summary */
+.summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px;
+    position: sticky;
+    top: 20px;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12.5px;
+}
+
+.summary-row:last-child { border-bottom: none; }
+.summary-key { color: #64748b; }
+.summary-val { color: #0f172a; font-weight: 500; text-align: right; max-width: 55%; word-break: break-word; }
+
+/* Action bar */
+.action-bar {
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    padding: 16px 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+}
+
+/* Error state */
+.form-control.is-invalid,
+.form-select.is-invalid { border-color: #ef4444; }
+.invalid-feedback { font-size: 11.5px; color: #ef4444; margin-top: 4px; }
+
+.errorlist { list-style: none; padding: 0; margin: 0; }
+.errorlist li { font-size: 11.5px; color: #ef4444; margin-top: 3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-piggy icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {% if budget %}Edit Budget{% else %}Create Budget{% endif %}
+                <div class="page-title-subheading">
+                    {% if budget %}
+                        Editing {{ budget.name }}
+                    {% else %}
+                        Define a new budget with revenue and expense targets
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'finance:budget_list' %}" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i> Back to Budgets
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Non-field errors -->
+{% if form.non_field_errors %}
+<div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+    <i class="fa fa-exclamation-triangle me-2"></i>
+    {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<form method="post" id="budgetForm" novalidate>
+    {% csrf_token %}
+
+    <div class="row">
+
+        <!-- ============================================================
+             LEFT COLUMN — Main form fields
+             ============================================================ -->
+        <div class="col-lg-8">
+
+            <!-- Basic Info -->
+            <div class="form-card">
+                <div class="form-section-title">
+                    <i class="fa fa-info-circle text-primary"></i> Basic Information
+                </div>
+                <div class="row g-3">
+
+                    <!-- Name -->
+                    <div class="col-12">
+                        <label class="form-label">
+                            Budget Name <span class="required-star">*</span>
+                        </label>
+                        {% render_field form.name class="form-control" placeholder="e.g. FY 2026 Operating Budget" %}
+                        {% if form.name.errors %}
+                            <ul class="errorlist">{% for e in form.name.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                    <!-- Description -->
+                    <div class="col-12">
+                        <label class="form-label">Description</label>
+                        {% render_field form.description class="form-control" placeholder="Brief description of this budget..." rows="3" %}
+                        {% if form.description.errors %}
+                            <ul class="errorlist">{% for e in form.description.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Budget Type -->
+            <div class="form-card">
+                <div class="form-section-title">
+                    <i class="fa fa-tag text-info"></i> Budget Type
+                    <span class="required-star">*</span>
+                </div>
+
+                <div class="type-grid" id="typeGrid">
+
+                    <label class="type-card {% if form.budget_type.value == 'OPERATING' %}selected{% endif %}" data-type="OPERATING">
+                        <input type="radio" name="{{ form.budget_type.html_name }}" value="OPERATING"
+                               {% if form.budget_type.value == 'OPERATING' %}checked{% endif %}>
+                        <div class="type-icon bg-primary"><i class="fa fa-cogs"></i></div>
+                        <div class="type-name">Operating</div>
+                        <div class="type-desc">Day-to-day expenses & revenue</div>
+                    </label>
+
+                    <label class="type-card {% if form.budget_type.value == 'CAPITAL' %}selected{% endif %}" data-type="CAPITAL">
+                        <input type="radio" name="{{ form.budget_type.html_name }}" value="CAPITAL"
+                               {% if form.budget_type.value == 'CAPITAL' %}checked{% endif %}>
+                        <div class="type-icon bg-success"><i class="fa fa-building"></i></div>
+                        <div class="type-name">Capital</div>
+                        <div class="type-desc">Long-term assets & investments</div>
+                    </label>
+
+                    <label class="type-card {% if form.budget_type.value == 'PROJECT' %}selected{% endif %}" data-type="PROJECT">
+                        <input type="radio" name="{{ form.budget_type.html_name }}" value="PROJECT"
+                               {% if form.budget_type.value == 'PROJECT' %}checked{% endif %}>
+                        <div class="type-icon bg-info"><i class="fa fa-tasks"></i></div>
+                        <div class="type-name">Project</div>
+                        <div class="type-desc">Specific project funding</div>
+                    </label>
+
+                    <label class="type-card {% if form.budget_type.value == 'DEPARTMENTAL' %}selected{% endif %}" data-type="DEPARTMENTAL">
+                        <input type="radio" name="{{ form.budget_type.html_name }}" value="DEPARTMENTAL"
+                               {% if form.budget_type.value == 'DEPARTMENTAL' %}checked{% endif %}>
+                        <div class="type-icon bg-warning"><i class="fa fa-sitemap"></i></div>
+                        <div class="type-name">Departmental</div>
+                        <div class="type-desc">Department-level budget</div>
+                    </label>
+
+                </div>
+
+                {% if form.budget_type.errors %}
+                <ul class="errorlist mt-2">{% for e in form.budget_type.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+
+            <!-- Period & Classification -->
+            <div class="form-card">
+                <div class="form-section-title">
+                    <i class="fa fa-calendar text-success"></i> Period & Classification
+                </div>
+                <div class="row g-3">
+
+                    <!-- Start Date -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Start Date <span class="required-star">*</span>
+                        </label>
+                        {% render_field form.start_date class="form-control" type="date" %}
+                        {% if form.start_date.errors %}
+                            <ul class="errorlist">{% for e in form.start_date.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                    <!-- End Date -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            End Date <span class="required-star">*</span>
+                        </label>
+                        {% render_field form.end_date class="form-control" type="date" %}
+                        {% if form.end_date.errors %}
+                            <ul class="errorlist">{% for e in form.end_date.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                    <!-- Fiscal Year -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Fiscal Year <span class="required-star">*</span>
+                        </label>
+                        {% render_field form.fiscal_year class="form-select" %}
+                        {% if form.fiscal_year.errors %}
+                            <ul class="errorlist">{% for e in form.fiscal_year.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                    <!-- Academic Session -->
+                    <div class="col-md-6">
+                        <label class="form-label">Academic Session</label>
+                        {% render_field form.academic_session class="form-select" %}
+                        <div class="field-help">Optional — link this budget to a term</div>
+                        {% if form.academic_session.errors %}
+                            <ul class="errorlist">{% for e in form.academic_session.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Parent Budget (optional) -->
+            <div class="form-card">
+                <div class="form-section-title">
+                    <i class="fa fa-sitemap text-warning"></i> Budget Hierarchy
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Parent Budget</label>
+                        {% render_field form.parent_budget class="form-select" %}
+                        <div class="field-help">Leave blank to create a top-level budget. Select a parent to create a sub-budget.</div>
+                        {% if form.parent_budget.errors %}
+                            <ul class="errorlist">{% for e in form.parent_budget.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ============================================================
+             RIGHT COLUMN — Summary sidebar
+             ============================================================ -->
+        <div class="col-lg-4">
+            <div class="summary-card">
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
+                    <i class="fa fa-info-circle me-1 text-primary"></i> Budget Summary
+                </div>
+
+                <div class="summary-row">
+                    <span class="summary-key">Status</span>
+                    <span class="summary-val">
+                        {% if budget %}
+                            {% if budget.status == 'DRAFT' %}<span style="color:#64748b;">Draft</span>
+                            {% elif budget.status == 'APPROVED' %}<span style="color:#0369a1;">Approved</span>
+                            {% elif budget.status == 'ACTIVE' %}<span style="color:#15803d;">Active</span>
+                            {% elif budget.status == 'CLOSED' %}<span style="color:#b91c1c;">Closed</span>
+                            {% else %}{{ budget.get_status_display }}{% endif %}
+                        {% else %}
+                            <span style="color:#64748b;">Draft (new)</span>
+                        {% endif %}
+                    </span>
+                </div>
+
+                {% if budget %}
+                <div class="summary-row">
+                    <span class="summary-key">Revenue Budget</span>
+                    <span class="summary-val" style="color:#15803d;">{{ budget.total_revenue_budget|money }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-key">Expense Budget</span>
+                    <span class="summary-val" style="color:#b91c1c;">{{ budget.total_expense_budget|money }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-key">Net Budget</span>
+                    <span class="summary-val" style="color:{% if budget.net_budget >= 0 %}#15803d{% else %}#b91c1c{% endif %};">
+                        {{ budget.net_budget|money }}
+                    </span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-key">Budget Lines</span>
+                    <span class="summary-val">{{ budget.lines.count }}</span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-key">Created</span>
+                    <span class="summary-val">{{ budget.created_at|date:"d M Y" }}</span>
+                </div>
+                {% else %}
+                <div class="summary-row">
+                    <span class="summary-key">Budget Lines</span>
+                    <span class="summary-val text-muted">Added after saving</span>
+                </div>
+                {% endif %}
+
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;">
+                    <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">
+                        <i class="fa fa-lightbulb me-1 text-warning"></i>
+                        Budget lines (revenue &amp; expense targets) are added from the budget detail page after saving.
+                    </p>
+                </div>
+
+                {% if budget and budget.parent_budget %}
+                <div style="margin-top:14px;">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Parent Budget</div>
+                    <a href="{% url 'finance:budget_detail' budget.parent_budget.pk %}"
+                       style="font-size:13px;font-weight:600;color:#667eea;text-decoration:none;">
+                        <i class="fa fa-level-up-alt me-1"></i>{{ budget.parent_budget.name }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /row -->
+
+    <!-- Action Bar -->
+    <div class="action-bar">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="{% if budget %}{% url 'finance:budget_detail' budget.pk %}{% else %}{% url 'finance:budget_list' %}{% endif %}"
+               class="btn btn-outline-secondary">
+                <i class="fa fa-times me-1"></i> Cancel
+            </a>
+            <div class="d-flex gap-2">
+                {% if not budget %}
+                <button type="submit" name="save_and_add_lines" value="1" class="btn btn-outline-primary">
+                    <i class="fa fa-plus me-1"></i> Save &amp; Add Lines
+                </button>
+                {% endif %}
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="fa fa-save me-1"></i>
+                    {% if budget %}Save Changes{% else %}Create Budget{% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── Budget type card selection ────────────────────────────────────────────────
+document.querySelectorAll('.type-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+        document.querySelectorAll('.type-card').forEach(c => c.classList.remove('selected'));
+        this.classList.add('selected');
+        this.querySelector('input[type="radio"]').checked = true;
+    });
+});
+
+// ── Date validation: end ≥ start ─────────────────────────────────────────────
+const startInput = document.querySelector('[name="{{ form.start_date.html_name }}"]');
+const endInput   = document.querySelector('[name="{{ form.end_date.html_name }}"]');
+
+function validateDates() {
+    if (!startInput.value || !endInput.value) return;
+    if (endInput.value < startInput.value) {
+        endInput.setCustomValidity('End date must be after start date');
+        endInput.classList.add('is-invalid');
+    } else {
+        endInput.setCustomValidity('');
+        endInput.classList.remove('is-invalid');
+    }
+}
+
+if (startInput && endInput) {
+    startInput.addEventListener('change', validateDates);
+    endInput.addEventListener('change', validateDates);
+}
+
+// ── Live name → title preview ─────────────────────────────────────────────────
+const nameInput = document.querySelector('[name="{{ form.name.html_name }}"]');
+if (nameInput) {
+    nameInput.addEventListener('input', function() {
+        const title = document.querySelector('.page-title-heading > div > div:first-child');
+        // no-op — just keeping the hook here for future use
+    });
+}
+</script>
+{% endblock %}

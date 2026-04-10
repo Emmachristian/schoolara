@@ -1,185 +1,166 @@
-{# core/templates/core/payment_methods/_method_results.html #}
-{# HTMX partial — rendered for both initial load and live-filter requests.   #}
-{# Returned by core:payment_method_search (same view as list, is_htmx=True). #}
-
+{# HTMX partial — rendered for both initial load and live-filter requests.  #}
+{# Returned by core:payment_method_list when HX-Request header is present.  #}
 {% load static %}
 {% load widget_tweaks %}
 
-<!-- ── Payment Methods Table ── -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="45">#</th>
-                <th width="60">Icon</th>
-                <th>Name / Code</th>
-                <th width="160">Type</th>
-                <th width="170">Provider / Bank</th>
-                <th width="100" class="text-center">Default</th>
-                <th width="110" class="text-center">Approval</th>
-                <th width="130" class="text-center">Transaction Fee</th>
-                <th width="90" class="text-center">Status</th>
-                <th width="110" class="text-center">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% if payment_methods_page %}
-                {% for method in payment_methods_page %}
-                <tr {% if not method.is_active %}class="table-secondary text-muted"{% endif %}>
+<div style="overflow-x:auto;">
+<table class="pm-table">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th style="width:52px;">Icon</th>
+            <th>Name / Code</th>
+            <th style="width:150px;">Type</th>
+            <th style="width:170px;">Provider / Bank</th>
+            <th style="width:90px;" class="text-center">Default</th>
+            <th style="width:100px;" class="text-center">Approval</th>
+            <th style="width:130px;" class="text-center">Fee</th>
+            <th style="width:85px;" class="text-center">Status</th>
+            <th style="width:70px;" class="text-center">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if payment_methods_page %}
+            {% for method in payment_methods_page %}
+            <tr {% if not method.is_active %}class="inactive"{% endif %}>
 
-                    <!-- Row number -->
-                    <td class="text-muted small">
-                        {{ forloop.counter0|add:payment_methods_page.start_index }}
-                    </td>
+                <td style="color:#94a3b8;font-size:12px;">
+                    {{ forloop.counter0|add:payment_methods_page.start_index }}
+                </td>
 
-                    <!-- Icon / colour swatch -->
-                    <td class="text-center">
-                        {% if method.color_code %}
-                            <span class="d-inline-flex align-items-center justify-content-center rounded"
-                                  style="width:34px;height:34px;background:{{ method.color_code }};">
-                                {% if method.icon %}
-                                    <i class="fa {{ method.icon }} text-white" style="font-size:14px;"></i>
-                                {% else %}
-                                    <i class="pe-7s-credit text-white"></i>
-                                {% endif %}
-                            </span>
-                        {% elif method.icon %}
-                            <span class="d-inline-flex align-items-center justify-content-center rounded bg-light"
-                                  style="width:34px;height:34px;">
-                                <i class="fa {{ method.icon }} text-secondary"></i>
-                            </span>
-                        {% else %}
-                            <span class="d-inline-flex align-items-center justify-content-center rounded bg-light"
-                                  style="width:34px;height:34px;">
-                                <i class="pe-7s-credit text-secondary"></i>
-                            </span>
-                        {% endif %}
-                    </td>
-
-                    <!-- Name / Code -->
-                    <td>
-                        <a href="{% url 'core:payment_method_detail' method.pk %}"
-                           class="fw-semibold text-dark text-decoration-none">
-                            {{ method.name }}
-                        </a>
-                        <div class="mt-1">
-                            <code class="small text-muted bg-light px-1 rounded">{{ method.code }}</code>
-                        </div>
-                        {% if method.processing_time %}
-                            <div class="mt-1">
-                                <small class="text-muted">
-                                    <i class="fa fa-clock-o me-1"></i>{{ method.processing_time }}
-                                </small>
-                            </div>
-                        {% endif %}
-                    </td>
-
-                    <!-- Method type -->
-                    <td>
-                        <span class="badge text-white method-badge-{{ method.method_type }}">
-                            {{ method.get_method_type_display }}
+                <td class="text-center">
+                    {% if method.color_code %}
+                        <span class="d-inline-flex align-items-center justify-content-center rounded"
+                              style="width:34px;height:34px;background:{{ method.color_code }};">
+                            {% if method.icon %}
+                                <i class="fa {{ method.icon }} text-white" style="font-size:13px;"></i>
+                            {% else %}
+                                <i class="pe-7s-credit text-white"></i>
+                            {% endif %}
                         </span>
-                    </td>
-
-                    <!-- Provider / Bank -->
-                    <td>
-                        {% if method.method_type == 'MOBILE_MONEY' and method.mobile_money_provider %}
-                            <div class="fw-semibold small">{{ method.get_mobile_money_provider_display }}</div>
-                        {% elif method.method_type == 'BANK_TRANSFER' and method.bank_name %}
-                            <div class="fw-semibold small">{{ method.bank_name }}</div>
-                            {% if method.bank_branch %}
-                                <small class="text-muted">{{ method.bank_branch }}</small>
+                    {% else %}
+                        <span class="d-inline-flex align-items-center justify-content-center rounded"
+                              style="width:34px;height:34px;background:#f1f5f9;">
+                            {% if method.icon %}
+                                <i class="fa {{ method.icon }} text-secondary" style="font-size:13px;"></i>
+                            {% else %}
+                                <i class="pe-7s-credit text-secondary"></i>
                             {% endif %}
-                        {% else %}
-                            <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
+                        </span>
+                    {% endif %}
+                </td>
 
-                    <!-- Default -->
-                    <td class="text-center">
-                        {% if method.is_default %}
-                            <span class="badge bg-primary">
-                                <i class="fa fa-star me-1"></i>Default
-                            </span>
-                        {% else %}
-                            <span class="text-muted small">—</span>
-                        {% endif %}
-                    </td>
+                <td>
+                    <a href="{% url 'core:payment_method_detail' method.pk %}"
+                       style="font-weight:600;font-size:13px;color:#0f172a;text-decoration:none;"
+                       class="d-block">
+                        {{ method.name }}
+                    </a>
+                    <code style="font-size:11px;color:#64748b;background:#f1f5f9;padding:1px 5px;border-radius:4px;">
+                        {{ method.code }}
+                    </code>
+                    {% if method.processing_time %}
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+                        <i class="fa fa-clock-o me-1"></i>{{ method.processing_time }}
+                    </div>
+                    {% endif %}
+                </td>
 
-                    <!-- Requires approval -->
-                    <td class="text-center">
-                        {% if method.requires_approval %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-shield me-1"></i>Required
-                            </span>
-                        {% else %}
-                            <span class="badge bg-light text-muted border">
-                                <i class="fa fa-check me-1"></i>None
-                            </span>
-                        {% endif %}
-                    </td>
+                <td>
+                    <span class="mbadge mbadge-{{ method.method_type }}">
+                        {{ method.get_method_type_display }}
+                    </span>
+                </td>
 
-                    <!-- Transaction fee -->
-                    <td class="text-center">
-                        {% if method.has_transaction_fee %}
-                            <span class="badge bg-info">
-                                {% if method.transaction_fee_type == 'PERCENTAGE' %}
-                                    {{ method.transaction_fee_amount }}%
-                                {% elif method.transaction_fee_type == 'FIXED' %}
-                                    Fixed
-                                {% else %}
-                                    Tiered
-                                {% endif %}
-                            </span>
-                            {% if method.fee_bearer %}
-                                <div class="mt-1">
-                                    <small class="text-muted">{{ method.get_fee_bearer_display }}</small>
-                                </div>
+                <td>
+                    {% if method.method_type == 'MOBILE_MONEY' and method.mobile_money_provider %}
+                        <div style="font-weight:600;font-size:12.5px;">{{ method.get_mobile_money_provider_display }}</div>
+                    {% elif method.method_type == 'BANK_TRANSFER' and method.bank_name %}
+                        <div style="font-weight:600;font-size:12.5px;">{{ method.bank_name }}</div>
+                        {% if method.bank_branch %}
+                        <div style="font-size:11px;color:#64748b;">{{ method.bank_branch }}</div>
+                        {% endif %}
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if method.is_default %}
+                        <span class="mbadge" style="background:#1d4ed8;">
+                            <i class="fa fa-star me-1" style="font-size:9px;"></i>Default
+                        </span>
+                    {% else %}
+                        <span style="color:#94a3b8;font-size:12px;">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if method.requires_approval %}
+                        <span class="mbadge" style="background:#d97706;">
+                            <i class="fa fa-shield me-1" style="font-size:9px;"></i>Required
+                        </span>
+                    {% else %}
+                        <span style="font-size:11px;color:#94a3b8;">None</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if method.has_transaction_fee %}
+                        <span class="mbadge" style="background:#0891b2;">
+                            {% if method.transaction_fee_type == 'PERCENTAGE' %}
+                                {{ method.transaction_fee_amount }}%
+                            {% elif method.transaction_fee_type == 'FIXED' %}
+                                Fixed
+                            {% else %}
+                                Tiered
                             {% endif %}
-                        {% else %}
-                            <span class="text-muted small">No fee</span>
+                        </span>
+                        {% if method.fee_bearer %}
+                        <div style="font-size:11px;color:#64748b;margin-top:3px;">
+                            {{ method.get_fee_bearer_display }}
+                        </div>
                         {% endif %}
-                    </td>
+                    {% else %}
+                        <span style="font-size:11px;color:#94a3b8;">No fee</span>
+                    {% endif %}
+                </td>
 
-                    <!-- Status -->
-                    <td class="text-center">
-                        {% if method.is_active %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-circle me-1" style="font-size:7px;vertical-align:middle;"></i>Active
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary">
-                                <i class="fa fa-circle me-1" style="font-size:7px;vertical-align:middle;"></i>Inactive
-                            </span>
-                        {% endif %}
-                    </td>
+                <td class="text-center">
+                    {% if method.is_active %}
+                        <span class="s-pill sp-active">
+                            <i class="fa fa-circle" style="font-size:7px;"></i> Active
+                        </span>
+                    {% else %}
+                        <span class="s-pill sp-inactive">
+                            <i class="fa fa-circle" style="font-size:7px;"></i> Inactive
+                        </span>
+                    {% endif %}
+                </td>
 
-                    <!-- Actions dropdown -->
-                    <td class="text-center">
-                        <div class="dropdown">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                <i class="fa fa-ellipsis-v"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-
-                                <!-- View -->
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
                                 <a class="dropdown-item"
                                    href="{% url 'core:payment_method_detail' method.pk %}">
-                                    <i class="fa fa-eye me-2 text-success"></i>View Details
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Details
                                 </a>
-
-                                <!-- Edit -->
+                            </li>
+                            <li>
                                 <a class="dropdown-item"
                                    href="{% url 'core:payment_method_edit' method.pk %}">
                                     <i class="fa fa-edit me-2 text-warning"></i>Edit
                                 </a>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- Toggle status -->
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
                                 <button type="button" class="dropdown-item"
                                         hx-get="{% url 'core:payment_method_toggle_status_modal' method.pk %}"
                                         hx-target="#modal-container"
@@ -190,184 +171,167 @@
                                         <i class="fa fa-toggle-on me-2 text-success"></i>Activate
                                     {% endif %}
                                 </button>
-
-                                <hr class="dropdown-divider">
-
-                                <!-- Delete (only if not default) -->
-                                {% if not method.is_default %}
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% if not method.is_default %}
+                                <li>
                                     <button type="button" class="dropdown-item text-danger"
                                             hx-get="{% url 'core:payment_method_delete_modal' method.pk %}"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
                                         <i class="fa fa-trash me-2"></i>Delete
                                     </button>
-                                {% else %}
-                                    <span class="dropdown-item text-muted disabled">
+                                </li>
+                            {% else %}
+                                <li>
+                                    <span class="dropdown-item text-muted" style="cursor:default;">
                                         <i class="fa fa-lock me-2"></i>Cannot delete default
                                     </span>
-                                {% endif %}
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </td>
 
-                            </div>
-                        </div>
-                    </td>
-
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="10">
-                        <div class="empty-state">
-                            <i class="pe-7s-credit empty-state-icon"></i>
-                            <h5 class="mt-2 mb-2">No Payment Methods Found</h5>
-                            <p class="text-muted mb-3">
-                                Adjust your filters, or add your first payment method.
-                            </p>
-                            <a href="{% url 'core:payment_method_create' %}" class="btn btn-primary">
-                                <i class="fa fa-plus me-1"></i>Add Payment Method
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="10">
+                    <div class="tbl-empty">
+                        <i class="pe-7s-credit"></i>
+                        <p>
+                            {% if request.GET %}
+                                No payment methods match your current filters.
+                            {% else %}
+                                No payment methods have been configured yet.
+                            {% endif %}
+                        </p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{% url 'core:payment_method_create' %}"
+                               style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                                <i class="fa fa-plus" style="font-size:11px;"></i>Add Method
                             </a>
+                            {% if request.GET %}
+                                <a href="{% url 'core:payment_method_list' %}"
+                                   style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                                    <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                                </a>
+                            {% endif %}
                         </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                    </div>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
 </div>
 
-<!-- ── Pagination ── -->
+<!-- ── Pagination ─────────────────────────────────────────────── -->
 {% if payment_methods_page.paginator.num_pages > 1 %}
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="text-muted small">
-            Showing {{ payment_methods_page.start_index }}–{{ payment_methods_page.end_index }}
-            of {{ payment_methods_page.paginator.count }} method{{ payment_methods_page.paginator.count|pluralize }}
-        </div>
-        <nav aria-label="Payment method pagination">
-            <ul class="pagination pagination-sm mb-0">
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ payment_methods_page.start_index }}</strong>–<strong>{{ payment_methods_page.end_index }}</strong>
+        of <strong>{{ payment_methods_page.paginator.count }}</strong>
+        method{{ payment_methods_page.paginator.count|pluralize }}
+    </span>
+    <nav aria-label="Payment method pagination">
+        <ul class="pagination pagination-sm mb-0">
 
-                <!-- Previous -->
-                {% if payment_methods_page.has_previous %}
+            {% if payment_methods_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'core:payment_method_list' %}"
+                        hx-target="#method-results"
+                        hx-include="#searchForm"
+                        hx-vals='{"page": "{{ payment_methods_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for page_num in payment_methods_page.paginator.page_range %}
+                {% if page_num == payment_methods_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                {% elif page_num >= payment_methods_page.number|add:"-2" and page_num <= payment_methods_page.number|add:"2" %}
                     <li class="page-item">
                         <button class="page-link"
-                                hx-get="{% url 'core:payment_method_search' %}"
+                                hx-get="{% url 'core:payment_method_list' %}"
                                 hx-target="#method-results"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ payment_methods_page.previous_page_number }}"}'>
-                            «
-                        </button>
+                                hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</button>
                     </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">«</span></li>
                 {% endif %}
+            {% endfor %}
 
-                <!-- Page numbers (window of ±2 around current) -->
-                {% for page_num in payment_methods_page.paginator.page_range %}
-                    {% if page_num == payment_methods_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num >= payment_methods_page.number|add:"-2" and page_num <= payment_methods_page.number|add:"2" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'core:payment_method_search' %}"
-                                    hx-target="#method-results"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
+            {% if payment_methods_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'core:payment_method_list' %}"
+                        hx-target="#method-results"
+                        hx-include="#searchForm"
+                        hx-vals='{"page": "{{ payment_methods_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
 
-                <!-- Next -->
-                {% if payment_methods_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'core:payment_method_search' %}"
-                                hx-target="#method-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ payment_methods_page.next_page_number }}"}'>
-                            »
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">»</span></li>
-                {% endif %}
-
-            </ul>
-        </nav>
-    </div>
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<!-- ── Scoped styles (only need to load once; harmless on repeat swaps) ── -->
-<style>
-.method-badge-CASH          { background: #28a745 !important; }
-.method-badge-MOBILE_MONEY  { background: #fd7e14 !important; }
-.method-badge-BANK_TRANSFER { background: #007bff !important; }
-.method-badge-CHEQUE        { background: #6f42c1 !important; }
-.method-badge-CARD          { background: #17a2b8 !important; }
-.method-badge-DIRECT_DEBIT  { background: #e83e8c !important; }
-.method-badge-STANDING_ORDER{ background: #20c997 !important; }
-.method-badge-OTHER         { background: #6c757d !important; }
-
-.table-responsive { overflow-x: auto; overflow-y: visible !important; }
-.dropdown         { position: static !important; }
-.dropdown-menu    { z-index: 1050 !important; }
-
-.empty-state        { text-align: center; padding: 60px 20px; }
-.empty-state-icon   { font-size: 4rem; opacity: 0.25; display: block; margin-bottom: 12px; }
-
-@media (max-width: 768px) {
-    .dropdown-menu { min-width: 200px; right: 0 !important; left: auto !important; }
-}
-</style>
-
-<!-- ── OOB stats update (only on HTMX requests) ── -->
+<!-- ── OOB stats update on HTMX requests ──────────────────────── -->
 {% if is_htmx %}
-<div class="row mb-4" id="stats-cards" hx-swap-oob="true">
+<div class="row" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon" style="background: linear-gradient(135deg,#667eea,#764ba2);">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);">
                 <i class="pe-7s-credit"></i>
             </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Methods</div>
-                <h3>{{ stats.active|default:0 }}</h3>
+            <div>
+                <div class="stat-label">Active Methods</div>
+                <div class="stat-value">{{ stats.active|default:0 }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-cash"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Cash</div>
-                <h3>{{ stats.cash|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Cash</div>
+                <div class="stat-value">{{ stats.cash|default:0 }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-phone"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Mobile Money</div>
-                <h3>{{ stats.mobile_money|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-phone"></i></div>
+            <div>
+                <div class="stat-label">Mobile Money</div>
+                <div class="stat-value">{{ stats.mobile_money|default:0 }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-safe"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Bank Transfer</div>
-                <h3>{{ stats.bank_transfer|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-safe"></i></div>
+            <div>
+                <div class="stat-label">Bank Transfer</div>
+                <div class="stat-value">{{ stats.bank_transfer|default:0 }}</div>
             </div>
         </div>
     </div>
 </div>
 {% endif %}
+
+<!-- ── Tooltip re-init after HTMX swap ─────────────────────────── -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+})();
+</script>

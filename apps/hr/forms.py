@@ -61,7 +61,7 @@ from .models import (
     Department, Designation, Contract,
     Staff, StaffDesignation, Teacher,
     Attendance, Payroll, PayrollAllowance,
-    PayrollDeduction, PayrollBonus,
+    PayrollDeduction, PayrollBonus, PayrollPayment,  
 )
 from academics.models import AcademicLevel, Subject, Class
 
@@ -366,8 +366,13 @@ class PayrollFilterForm(DateRangeFilterForm):
     """
     Filter form for payroll search.
 
-    FIX: fiscal_year filter now traverses fiscal_period__fiscal_year so it
-    maps to an actual DB relationship on Payroll.
+    CHANGES FROM PREVIOUS VERSION
+    ──────────────────────────────
+    1. fiscal_year filter traverses fiscal_period__fiscal_year (not a direct
+       Payroll FK — already fixed in previous version).
+    2. currency filter added — useful when a school has a mix of payrolls
+       denominated in different currencies (e.g. USD for expat teachers,
+       SSD for local staff at a South Sudan school).
     """
 
     staff = forms.ModelChoiceField(
@@ -404,6 +409,17 @@ class PayrollFilterForm(DateRangeFilterForm):
         choices=[('', _('All Statuses'))] + list(Payroll.STATUS_CHOICES),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+    currency = forms.ChoiceField(
+        label=_('Currency'),
+        choices=[],          # populated in __init__ from live data + school default
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text=_(
+            'Filter by payroll currency. '
+            'Useful when staff are paid in different currencies.'
+        ),
     )
 
     payment_method = forms.ModelChoiceField(
@@ -462,12 +478,12 @@ class PayrollFilterForm(DateRangeFilterForm):
         label=_('Quick Filter'),
         choices=[
             ('', _('Custom Range')),
-            ('current_month', _('Current Month')),
-            ('last_month', _('Last Month')),
+            ('current_month',   _('Current Month')),
+            ('last_month',      _('Last Month')),
             ('current_quarter', _('Current Quarter')),
-            ('current_year', _('Current Year')),
-            ('last_quarter', _('Last Quarter')),
-            ('last_year', _('Last Year')),
+            ('current_year',    _('Current Year')),
+            ('last_quarter',    _('Last Quarter')),
+            ('last_year',       _('Last Year')),
         ],
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
@@ -476,6 +492,7 @@ class PayrollFilterForm(DateRangeFilterForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         try:
             from core.models import FiscalPeriod, FiscalYear, PaymentMethod
 
@@ -496,6 +513,62 @@ class PayrollFilterForm(DateRangeFilterForm):
         except Exception as e:
             logger.error(f"PayrollFilterForm: error setting querysets: {e}")
 
+        # ── Currency choices ──────────────────────────────────────────────────
+        # Build from:
+        #   1. School's configured base currency (always first)
+        #   2. Any other currencies that already appear in Payroll records
+        # This avoids showing a long static list when only 1-2 currencies
+        # are actually in use.
+        self.fields['currency'].choices = self._build_currency_choices()
+
+    # -------------------------------------------------------------------------
+    # HELPERS
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _build_currency_choices():
+        """
+        Return currency choices populated from live Payroll data.
+
+        Always includes:
+          - blank option ('All Currencies')
+          - school's configured base currency
+          - any other currencies found in existing Payroll records
+
+        Falls back gracefully if FinancialSettings or Payroll are unavailable.
+        """
+        choices = [('', _('All Currencies'))]
+
+        try:
+            from core.models import FinancialSettings
+            school_currency = FinancialSettings.get_school_currency() or 'UGX'
+            choices.append((school_currency, f'{school_currency} ({_("School Currency")})'))
+        except Exception:
+            school_currency = 'UGX'
+            choices.append(('UGX', 'UGX (School Currency)'))
+
+        try:
+            # Currencies actually in use beyond the school currency
+            other_currencies = (
+                Payroll.objects
+                .exclude(currency=school_currency)
+                .exclude(currency='')
+                .values_list('currency', flat=True)
+                .distinct()
+                .order_by('currency')
+            )
+            for code in other_currencies:
+                if code:
+                    choices.append((code, code))
+        except Exception as e:
+            logger.debug(f"PayrollFilterForm._build_currency_choices: {e}")
+
+        return choices
+
+    # -------------------------------------------------------------------------
+    # VALIDATION
+    # -------------------------------------------------------------------------
+
     def clean(self):
         """Apply quick filters and validate date ranges."""
         cleaned_data = super().clean()
@@ -508,32 +581,32 @@ class PayrollFilterForm(DateRangeFilterForm):
 
             if quick_filter == 'current_month':
                 first_day = today.replace(day=1)
-                last_day = today.replace(day=monthrange(today.year, today.month)[1])
+                last_day  = today.replace(day=monthrange(today.year, today.month)[1])
                 cleaned_data['pay_period_from'] = first_day
-                cleaned_data['pay_period_to'] = last_day
+                cleaned_data['pay_period_to']   = last_day
 
             elif quick_filter == 'last_month':
-                first_of_current = today.replace(day=1)
-                last_of_previous = first_of_current - timedelta(days=1)
+                first_of_current  = today.replace(day=1)
+                last_of_previous  = first_of_current - timedelta(days=1)
                 cleaned_data['pay_period_from'] = last_of_previous.replace(day=1)
-                cleaned_data['pay_period_to'] = last_of_previous
+                cleaned_data['pay_period_to']   = last_of_previous
 
             elif quick_filter == 'current_quarter':
-                quarter = (today.month - 1) // 3 + 1
+                quarter     = (today.month - 1) // 3 + 1
                 first_month = (quarter - 1) * 3 + 1
-                first_day = today.replace(month=first_month, day=1)
-                last_month = first_month + 2
-                last_year = today.year
+                first_day   = today.replace(month=first_month, day=1)
+                last_month  = first_month + 2
+                last_year   = today.year
                 if last_month > 12:
                     last_month %= 12
-                    last_year += 1
+                    last_year  += 1
                 last_day = date(last_year, last_month, monthrange(last_year, last_month)[1])
                 cleaned_data['pay_period_from'] = first_day
-                cleaned_data['pay_period_to'] = last_day
+                cleaned_data['pay_period_to']   = last_day
 
             elif quick_filter == 'current_year':
-                cleaned_data['pay_period_from'] = today.replace(month=1, day=1)
-                cleaned_data['pay_period_to'] = today.replace(month=12, day=31)
+                cleaned_data['pay_period_from'] = today.replace(month=1,  day=1)
+                cleaned_data['pay_period_to']   = today.replace(month=12, day=31)
 
             elif quick_filter == 'last_quarter':
                 current_quarter = (today.month - 1) // 3 + 1
@@ -543,18 +616,18 @@ class PayrollFilterForm(DateRangeFilterForm):
                     first_month, year = ((current_quarter - 2) * 3) + 1, today.year
                 last_month = first_month + 2
                 cleaned_data['pay_period_from'] = date(year, first_month, 1)
-                cleaned_data['pay_period_to'] = date(
+                cleaned_data['pay_period_to']   = date(
                     year, last_month, monthrange(year, last_month)[1]
                 )
 
             elif quick_filter == 'last_year':
                 last_year = today.year - 1
-                cleaned_data['pay_period_from'] = date(last_year, 1, 1)
-                cleaned_data['pay_period_to'] = date(last_year, 12, 31)
+                cleaned_data['pay_period_from'] = date(last_year, 1,  1)
+                cleaned_data['pay_period_to']   = date(last_year, 12, 31)
 
         # Validate payment date range
         payment_from = cleaned_data.get('payment_date_from')
-        payment_to = cleaned_data.get('payment_date_to')
+        payment_to   = cleaned_data.get('payment_date_to')
         if payment_from and payment_to and payment_to < payment_from:
             raise ValidationError({
                 'payment_date_to': _('Payment "to" date cannot be before "from" date'),
@@ -562,13 +635,17 @@ class PayrollFilterForm(DateRangeFilterForm):
 
         # Validate pay period range
         pay_from = cleaned_data.get('pay_period_from')
-        pay_to = cleaned_data.get('pay_period_to')
+        pay_to   = cleaned_data.get('pay_period_to')
         if pay_from and pay_to and pay_to < pay_from:
             raise ValidationError({
                 'pay_period_to': _('Pay period "to" date cannot be before "from" date'),
             })
 
         return cleaned_data
+
+    # -------------------------------------------------------------------------
+    # APPLY FILTERS
+    # -------------------------------------------------------------------------
 
     def apply_filters(self, queryset):
         """
@@ -590,18 +667,19 @@ class PayrollFilterForm(DateRangeFilterForm):
         if data.get('fiscal_period'):
             queryset = queryset.filter(fiscal_period=data['fiscal_period'])
 
-        # FIX: traverse the FK relationship instead of filtering on a
-        # non-existent fiscal_year field directly on Payroll.
+        # Traverse the FK relationship — Payroll has no direct fiscal_year field
         if data.get('fiscal_year'):
-            queryset = queryset.filter(
-                fiscal_period__fiscal_year=data['fiscal_year']
-            )
+            queryset = queryset.filter(fiscal_period__fiscal_year=data['fiscal_year'])
 
         if data.get('pay_frequency'):
             queryset = queryset.filter(pay_frequency=data['pay_frequency'])
 
         if data.get('status'):
             queryset = queryset.filter(status=data['status'])
+
+        # Currency filter — blank = all currencies
+        if data.get('currency'):
+            queryset = queryset.filter(currency=data['currency'])
 
         if data.get('payment_method'):
             queryset = queryset.filter(payment_method=data['payment_method'])
@@ -1200,8 +1278,15 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
     • basic_salary  — pre-filled from the staff member's active contract when a
                       staff value is present on initialisation.
     • bank_account  — pre-filled from staff.bank_account_number.
-    • payment_date  — defaults to the last day of the current month (consistent
-                      with how school payrolls are typically disbursed).
+    • currency      — pre-filled from FinancialSettings.school_currency so the
+                      form always reflects the school's configured base currency.
+
+    Fiscal Period
+    ─────────────
+    fiscal_period is NOT a form field. It is resolved automatically by
+    Payroll.save() via get_applicable_fiscal_period(), which looks up the
+    correct FiscalPeriod for the submitted pay_period_start / pay_period_end
+    dates. No hidden input or JS injection is required.
 
     Calculation
     ───────────
@@ -1224,7 +1309,7 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
 
     # Fields locked once a payroll is PAID (notes / payment_reference remain editable)
     _PAID_LOCKED_FIELDS = [
-        'staff', 'fiscal_period', 'pay_frequency',
+        'staff', 'pay_frequency',
         'pay_period_start', 'pay_period_end', 'payment_date',
         'basic_salary', 'nssf_employer',
         'currency', 'exchange_rate',
@@ -1237,7 +1322,6 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
         model = Payroll
         fields = [
             'staff',
-            'fiscal_period',
             'pay_frequency',
             'pay_period_start',
             'pay_period_end',
@@ -1258,7 +1342,6 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
 
         widgets = {
             'staff': forms.Select(attrs={'class': 'form-select'}),
-            'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
             'pay_frequency': forms.Select(attrs={'class': 'form-select'}),
             'pay_period_start': DatePickerInput(),
             'pay_period_end': DatePickerInput(),
@@ -1271,7 +1354,7 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
             'exchange_rate': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '0.000001',
-                'placeholder': _('1.000000 for UGX payrolls'),
+                'placeholder': _('1.000000 for base-currency payrolls'),
             }),
             'total_working_days': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -1306,17 +1389,16 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Querysets
+        # ── Resolve school currency once so it is used consistently below ──
+        school_currency = self._get_school_currency()
+
+        # ── Querysets ────────────────────────────────────────────────────────
         self.fields['staff'].queryset = Staff.objects.filter(
             is_active=True
         ).order_by('first_name', 'last_name')
 
         try:
-            from core.models import FiscalPeriod, PaymentMethod
-
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
-                is_closed=False
-            ).order_by('-start_date')
+            from core.models import PaymentMethod
 
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True
@@ -1324,20 +1406,20 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
         except Exception as e:
             logger.error(f"PayrollForm: error setting querysets: {e}")
 
-        # Defaults for new payrolls
+        # ── Defaults for new payrolls ─────────────────────────────────────────
         if not self.is_bound and not self.instance.pk:
             from core.utils import get_school_today
 
-            today = get_school_today()
+            today     = get_school_today()
             first_day = today.replace(day=1)
-            last_day = today.replace(day=monthrange(today.year, today.month)[1])
+            last_day  = today.replace(day=monthrange(today.year, today.month)[1])
 
             self.fields['pay_period_start'].initial = first_day
-            self.fields['pay_period_end'].initial = last_day
-            # Consistent default: last day of month (same rationale as pay_period_end)
-            self.fields['payment_date'].initial = last_day
-            self.fields['pay_frequency'].initial = 'MONTHLY'
-            self.fields['currency'].initial = 'UGX'
+            self.fields['pay_period_end'].initial   = last_day
+            self.fields['pay_frequency'].initial    = 'MONTHLY'
+
+            # Currency — sourced from FinancialSettings, not hardcoded
+            self.fields['currency'].initial      = school_currency
             self.fields['exchange_rate'].initial = Decimal('1.000000')
             self.fields['nssf_employer'].initial = Decimal('0.00')
 
@@ -1346,34 +1428,37 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
             if staff:
                 self._prepopulate_from_staff(staff)
 
-        # Lock fields for reversed / paid payrolls
+        # ── Status: always DRAFT on create; locked on reversed / paid edits ───
+        if not self.instance.pk:
+            self.fields['status'].initial  = 'DRAFT'
+            self.fields['status'].disabled = True
+            self.fields['status'].help_text = _(
+                'New payrolls always start as Draft. '
+                'Approve and pay them from the detail page.'
+            )
+
+        # ── Lock fields for reversed / paid payrolls ──────────────────────────
         if self.instance.pk:
             if self.instance.reversed:
                 for field in self.fields:
-                    self.fields[field].disabled = True
+                    self.fields[field].disabled  = True
                     self.fields[field].help_text = _('Cannot edit a reversed payroll')
 
-            elif self.instance.status == 'PAID':
+            elif self.instance.status in ('PAID', 'PARTIAL'):
                 for field_name in self._PAID_LOCKED_FIELDS:
                     if field_name in self.fields:
-                        self.fields[field_name].disabled = True
+                        self.fields[field_name].disabled  = True
                         self.fields[field_name].help_text = _(
                             'Cannot modify a paid payroll'
                         )
 
-        # Help text
-        self.fields['fiscal_period'].help_text = _(
-            'Accounting period (e.g., Term 1). '
-            'Multiple monthly payrolls can exist within one fiscal period.'
-        )
+        # ── Help text ─────────────────────────────────────────────────────────
         self.fields['pay_period_start'].help_text = _(
-            'Start of the period being paid (e.g., Jan 1 for January salary)'
+            'Start of the period being paid (e.g., Jan 1 for January salary). '
+            'The fiscal period is resolved automatically from these dates.'
         )
         self.fields['pay_period_end'].help_text = _(
             'End of the period being paid (e.g., Jan 31 for January salary)'
-        )
-        self.fields['payment_date'].help_text = _(
-            'Date when salary will be / was actually paid (defaults to last day of month)'
         )
         self.fields['basic_salary'].help_text = _(
             'Base salary for this period, pre-filled from the active contract. '
@@ -1382,6 +1467,14 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
         self.fields['nssf_employer'].help_text = _(
             "School's NSSF contribution — not deducted from employee. "
             'Included in employer total cost reporting.'
+        )
+        self.fields['currency'].help_text = _(
+            f'Pre-filled from school financial settings ({school_currency}). '
+            'Change only for foreign-currency payrolls.'
+        )
+        self.fields['exchange_rate'].help_text = _(
+            f'Rate to base currency ({school_currency}) at time of payment. '
+            'Leave as 1.000000 for same-currency payrolls.'
         )
         self.fields['bank_account'].help_text = _(
             'Pre-filled from staff record. Edit only if payment account differs.'
@@ -1395,10 +1488,32 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
         self.fields['is_prorated'].help_text = _(
             'Check if salary should be prorated based on days worked'
         )
+        self.fields['payment_date'].label    = _('Scheduled Payment Date')
+        self.fields['payment_date'].required = False
+        self.fields['payment_date'].help_text = _(
+            'Expected date salary will be disbursed. Leave blank if not yet known — '
+            'actual payment dates are recorded per instalment from the payroll detail page.'
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # HELPERS
     # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_school_currency() -> str:
+        """
+        Return the school's configured base currency code.
+        Falls back to 'UGX' if FinancialSettings are not yet configured.
+        """
+        try:
+            from core.models import FinancialSettings
+            return FinancialSettings.get_school_currency() or 'UGX'
+        except Exception as e:
+            logger.warning(
+                f"PayrollForm: could not read school currency from FinancialSettings, "
+                f"defaulting to UGX. Error: {e}"
+            )
+            return 'UGX'
 
     def _resolve_initial_staff(self):
         """
@@ -1417,11 +1532,9 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
 
     def _prepopulate_from_staff(self, staff):
         """Pre-fill basic_salary and bank_account from the staff record."""
-        # Bank account
         if staff.bank_account_number and not self.fields['bank_account'].initial:
             self.fields['bank_account'].initial = staff.bank_account_number
 
-        # Basic salary from active contract
         try:
             contract = Contract.get_staff_active_contract(staff)
             if contract and contract.basic_salary:
@@ -1436,15 +1549,6 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
     # FIELD-LEVEL VALIDATION
     # ─────────────────────────────────────────────────────────────────────────
 
-    def clean_fiscal_period(self):
-        fiscal_period = self.cleaned_data.get('fiscal_period')
-        if fiscal_period and getattr(fiscal_period, 'is_closed', False):
-            raise ValidationError(_(
-                f'Cannot create payroll in closed period: {fiscal_period.name}. '
-                'Please select an open fiscal period.'
-            ))
-        return fiscal_period
-
     def clean_exchange_rate(self):
         exchange_rate = self.cleaned_data.get('exchange_rate')
         if exchange_rate is not None and exchange_rate <= Decimal('0'):
@@ -1452,8 +1556,18 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
         return exchange_rate
 
     def clean_currency(self):
-        currency = self.cleaned_data.get('currency', 'UGX')
-        return currency.upper().strip() if currency else 'UGX'
+        """Normalise to uppercase and log when value differs from school base currency."""
+        raw      = self.cleaned_data.get('currency', '')
+        currency = raw.upper().strip() if raw else self._get_school_currency()
+
+        school_currency = self._get_school_currency()
+        if currency != school_currency:
+            logger.info(
+                f"PayrollForm: currency '{currency}' differs from school base "
+                f"currency '{school_currency}'. Exchange rate required."
+            )
+
+        return currency
 
     def clean_nssf_employer(self):
         nssf_employer = self.cleaned_data.get('nssf_employer')
@@ -1468,68 +1582,33 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
     def clean(self):
         cleaned_data = super().clean()
 
-        staff = cleaned_data.get('staff')
-        fiscal_period = cleaned_data.get('fiscal_period')
+        staff            = cleaned_data.get('staff')
         pay_period_start = cleaned_data.get('pay_period_start')
-        pay_period_end = cleaned_data.get('pay_period_end')
-        payment_date = cleaned_data.get('payment_date')
-        basic_salary = cleaned_data.get('basic_salary')
+        pay_period_end   = cleaned_data.get('pay_period_end')
+        basic_salary     = cleaned_data.get('basic_salary')
+        currency         = cleaned_data.get('currency') or self._get_school_currency()
+        exchange_rate    = cleaned_data.get('exchange_rate')
 
-        # Pay period ordering
+        # ── Foreign-currency payroll: exchange rate must not be 1.0 ──────────
+        school_currency = self._get_school_currency()
+        if currency and currency != school_currency:
+            if exchange_rate and exchange_rate == Decimal('1.000000'):
+                self.add_error(
+                    'exchange_rate',
+                    _(
+                        f'Currency is set to {currency} but exchange rate is 1.000000. '
+                        f'Please enter the actual rate to {school_currency}.'
+                    ),
+                )
+
+        # ── Pay period ordering ───────────────────────────────────────────────
         if pay_period_start and pay_period_end:
             if pay_period_end < pay_period_start:
                 raise ValidationError({
                     'pay_period_end': _('Pay period end cannot be before start'),
                 })
 
-        # All dates must fall within the fiscal period
-        if fiscal_period and pay_period_start and pay_period_end:
-            if pay_period_start < fiscal_period.start_date:
-                raise ValidationError({
-                    'pay_period_start': _(
-                        f'Pay period cannot start before fiscal period '
-                        f'({fiscal_period.start_date})'
-                    ),
-                })
-
-            if pay_period_end > fiscal_period.end_date:
-                raise ValidationError({
-                    'pay_period_end': _(
-                        f'Pay period cannot end after fiscal period '
-                        f'({fiscal_period.end_date})'
-                    ),
-                })
-
-            if payment_date:
-                if payment_date < fiscal_period.start_date:
-                    raise ValidationError({
-                        'payment_date': _(
-                            f'Payment date cannot be before fiscal period start '
-                            f'({fiscal_period.start_date})'
-                        ),
-                    })
-
-                grace_days = getattr(fiscal_period, 'grace_period_days', 0)
-                max_allowed_date = (
-                    fiscal_period.end_date + timedelta(days=grace_days)
-                    if grace_days > 0
-                    else fiscal_period.end_date
-                )
-
-                if payment_date > max_allowed_date:
-                    grace_note = (
-                        f' (including {grace_days} days grace period)'
-                        if grace_days > 0
-                        else ''
-                    )
-                    raise ValidationError({
-                        'payment_date': _(
-                            f'Payment date cannot be after fiscal period end '
-                            f'({fiscal_period.end_date}){grace_note}'
-                        ),
-                    })
-
-        # Duplicate payroll check
+        # ── Duplicate payroll check ───────────────────────────────────────────
         if staff and pay_period_start and pay_period_end:
             duplicate_qs = Payroll.objects.filter(
                 staff=staff,
@@ -1549,9 +1628,9 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
                     'Each staff member can only have one active payroll per pay period.'
                 ))
 
-        # Proration requires both day fields
-        is_prorated = cleaned_data.get('is_prorated')
-        days_worked = cleaned_data.get('days_worked')
+        # ── Proration requires both day fields ────────────────────────────────
+        is_prorated        = cleaned_data.get('is_prorated')
+        days_worked        = cleaned_data.get('days_worked')
         total_working_days = cleaned_data.get('total_working_days')
 
         if is_prorated and not (days_worked and total_working_days):
@@ -1568,13 +1647,13 @@ class PayrollForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, for
                     'days_worked': _('Days worked cannot exceed total working days'),
                 })
 
-        # Non-blocking salary sanity check against active contract
+        # ── Non-blocking salary sanity check against active contract ──────────
         if staff and basic_salary and basic_salary > Decimal('0'):
             try:
                 contract = Contract.get_staff_active_contract(staff)
                 if contract and contract.basic_salary and contract.basic_salary > Decimal('0'):
                     contract_salary = contract.basic_salary
-                    difference_pct = abs(basic_salary - contract_salary) / contract_salary * 100
+                    difference_pct  = abs(basic_salary - contract_salary) / contract_salary * 100
                     if difference_pct > Decimal('10'):
                         self.add_error(
                             None,
@@ -1777,7 +1856,140 @@ class PayrollBonusForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin
 
         return cleaned_data
 
+# =============================================================================
+# PAYROLL PAYMENT FORM
+# =============================================================================
 
+class PayrollPaymentForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsMixin, forms.ModelForm):
+    """
+    Form for recording a single payment instalment against a payroll.
+    Used in the payroll_record_payment_modal view.
+
+    CURRENCY NOTE
+    -------------
+    PayrollPayment.amount is always in the parent Payroll's currency.
+    If the payroll is denominated in a foreign currency (e.g. USD for an
+    expat teacher at a South Sudan school), the amount field help text
+    shows both the payroll-currency balance and the school-currency
+    equivalent so the cashier knows the real value of the payment.
+    """
+
+    amount = MoneyField(label=_('Amount Paid'))
+
+    class Meta:
+        model = PayrollPayment
+        fields = ['amount', 'payment_date', 'payment_method', 'payment_reference', 'notes']
+
+        widgets = {
+            'payment_date': DatePickerInput(),
+            'payment_method': forms.Select(attrs={'class': 'form-select'}),
+            'payment_reference': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': _(
+                    'Bank ref, cheque number, mobile money ref — auto-generated if blank'
+                ),
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': _('Optional notes about this payment instalment'),
+            }),
+        }
+
+    def __init__(self, payroll, *args, **kwargs):
+        self.payroll = payroll
+        super().__init__(*args, **kwargs)
+
+        self.fields['amount'].required       = True
+        self.fields['payment_date'].required = True
+        self.fields['payment_method'].required = True
+
+        try:
+            from core.models import PaymentMethod
+            self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
+                is_active=True
+            ).order_by('name')
+            # Default to payroll's payment method
+            if payroll.payment_method_id:
+                self.fields['payment_method'].initial = payroll.payment_method_id
+        except Exception as e:
+            logger.error(f"PayrollPaymentForm: error setting payment_method queryset: {e}")
+
+        if not self.is_bound:
+            from core.utils import get_school_today
+            self.fields['payment_date'].initial = get_school_today()
+
+            # Default amount to remaining balance
+            balance = payroll.balance_due
+            if balance > Decimal('0.00'):
+                self.fields['amount'].initial = balance
+
+        # ── Help text — show school-currency equivalent for foreign payrolls ──
+        self.fields['amount'].help_text = self._build_amount_help_text()
+        self.fields['payment_reference'].help_text = _(
+            'Leave blank to auto-generate a PP/YYYY/MM/NNNN reference.'
+        )
+
+    # -------------------------------------------------------------------------
+    # HELPERS
+    # -------------------------------------------------------------------------
+
+    def _build_amount_help_text(self):
+        """
+        Return a help text string for the amount field.
+
+        For same-currency payrolls:
+            'Balance due: 1,500,000. Maximum allowed: 1,500,000.'
+
+        For foreign-currency payrolls (e.g. USD payroll at SSD school):
+            'Balance due: 500.00 USD (657,500.00 SSD at rate 1315.000000).
+             Enter amount in USD.'
+        """
+        payroll = self.payroll
+        balance = payroll.balance_due
+
+        try:
+            from core.models import FinancialSettings
+            school_currency = FinancialSettings.get_school_currency()
+        except Exception:
+            school_currency = 'UGX'
+
+        payroll_currency = payroll.currency or school_currency
+
+        if payroll_currency and payroll_currency != school_currency:
+            balance_in_school = (
+                balance * (payroll.exchange_rate or Decimal('1.000000'))
+            ).quantize(Decimal('0.01'))
+
+            return _(
+                f'Balance due: {balance:,.2f} {payroll_currency} '
+                f'({balance_in_school:,.2f} {school_currency} '
+                f'at rate {payroll.exchange_rate}). '
+                f'Enter amount in {payroll_currency}.'
+            )
+
+        return _(
+            f'Balance due: {balance:,.2f}. '
+            f'Maximum allowed: {balance:,.2f}.'
+        )
+
+    # -------------------------------------------------------------------------
+    # VALIDATION
+    # -------------------------------------------------------------------------
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+        if amount and amount <= Decimal('0.00'):
+            raise ValidationError(_('Amount must be greater than zero.'))
+
+        if amount and amount > self.payroll.balance_due:
+            raise ValidationError(_(
+                f'Amount ({amount:,.2f}) exceeds balance due '
+                f'({self.payroll.balance_due:,.2f}). '
+                f'Cannot overpay a payroll.'
+            ))
+        return amount
+    
 # =============================================================================
 # PAYROLL REVERSAL FORM
 # FIX: statutory_adjustments_notes is always present in self.fields.
@@ -2107,7 +2319,7 @@ PayrollAllowanceFormSet = inlineformset_factory(
     Payroll,
     PayrollAllowance,
     form=PayrollAllowanceForm,
-    extra=1,
+    extra=0,          
     can_delete=True,
 )
 
@@ -2115,7 +2327,7 @@ PayrollDeductionFormSet = inlineformset_factory(
     Payroll,
     PayrollDeduction,
     form=PayrollDeductionForm,
-    extra=1,
+    extra=0,          
     can_delete=True,
 )
 
@@ -2123,7 +2335,7 @@ PayrollBonusFormSet = inlineformset_factory(
     Payroll,
     PayrollBonus,
     form=PayrollBonusForm,
-    extra=1,
+    extra=0,          
     can_delete=True,
 )
 
@@ -3017,7 +3229,26 @@ class StaffDesignationForm(BootstrapFormMixin, RequiredFieldsMixin, MoneyFieldsM
 # =============================================================================
 
 class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating / editing teacher profiles with soft-delete support."""
+    """Form for editing teacher profiles with soft-delete support."""
+
+    # Declared explicitly so they render as <select multiple> enhanced by
+    # Select2, rather than raw JSON textareas. Choices come from the model
+    # so there is a single source of truth.
+    available_days = forms.MultipleChoiceField(
+        label=_('Available Days'),
+        choices=Teacher.AVAILABLE_DAYS_CHOICES,
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select'}),
+        help_text=_('Days this teacher is available to teach'),
+    )
+
+    preferred_time_slots = forms.MultipleChoiceField(
+        label=_('Preferred Time Slots'),
+        choices=Teacher.PREFERRED_SLOT_CHOICES,
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select'}),
+        help_text=_('Preferred teaching time slots'),
+    )
 
     class Meta:
         model = Teacher
@@ -3052,27 +3283,24 @@ class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
                 'placeholder': _('Auto-calculated from schedule'),
             }),
             'preferred_academic_levels': forms.SelectMultiple(attrs={'class': 'form-select'}),
-            'qualified_subjects': forms.SelectMultiple(attrs={'class': 'form-select'}),
-            'available_days': forms.Textarea(attrs={
-                'class': 'form-control', 'rows': 2,
-                'placeholder': _('["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]'),
-            }),
-            'preferred_time_slots': forms.Textarea(attrs={
-                'class': 'form-control', 'rows': 2,
-                'placeholder': _('["08:00-10:00", "10:00-12:00", "14:00-16:00"]'),
-            }),
-            'is_class_teacher': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'assigned_classes': forms.SelectMultiple(attrs={'class': 'form-select'}),
-            'digital_literacy_level': forms.Select(attrs={'class': 'form-select'}),
-            'can_teach_online': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'qualified_subjects':        forms.SelectMultiple(attrs={'class': 'form-select'}),
+            'is_class_teacher':          forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'assigned_classes':          forms.SelectMultiple(attrs={'class': 'form-select'}),
+            'digital_literacy_level':    forms.Select(attrs={'class': 'form-select'}),
+            'can_teach_online':          forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_active':                 forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    # -------------------------------------------------------------------------
+    # INIT
+    # -------------------------------------------------------------------------
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['staff'].required = True
-        self.fields['max_hours_per_week'].required = True
-        self.fields['digital_literacy_level'].required = True
+
+        self.fields['staff'].required                  = True
+        self.fields['max_hours_per_week'].required      = True
+        self.fields['digital_literacy_level'].required  = True
 
         self.fields['is_active'].help_text = _(
             'Uncheck to deactivate this teacher profile. '
@@ -3080,12 +3308,20 @@ class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         )
 
         if self.instance.pk:
+            # Editing — lock the staff field
             self.fields['staff'].queryset = Staff.objects.filter(is_active=True)
             self.fields['staff'].disabled = True
             self.fields['staff'].help_text = _(
-                'Staff member cannot be changed after teacher profile is created'
+                'Staff member cannot be changed after teacher profile is created.'
             )
+
+            # Pre-populate MultipleChoiceFields from the stored JSON lists
+            if self.instance.available_days:
+                self.fields['available_days'].initial = self.instance.available_days
+            if self.instance.preferred_time_slots:
+                self.fields['preferred_time_slots'].initial = self.instance.preferred_time_slots
         else:
+            # Creating — exclude staff who already have an active teacher profile
             existing_ids = Teacher.objects.filter(
                 is_active=True
             ).values_list('staff_id', flat=True)
@@ -3093,34 +3329,38 @@ class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
                 is_active=True
             ).exclude(id__in=existing_ids)
             self.fields['staff'].help_text = _(
-                "Select a staff member who doesn't already have an active teacher profile"
+                "Select a staff member who doesn't already have an active teacher profile."
             )
+            self.fields['is_active'].initial = True
 
         try:
             self.fields['preferred_academic_levels'].queryset = AcademicLevel.objects.filter(
                 is_active=True
-            ).order_by('level_order')
+            ).order_by('order')                                          # ← was 'level_order'
             self.fields['qualified_subjects'].queryset = Subject.objects.filter(
                 is_active=True
             ).order_by('name')
             self.fields['assigned_classes'].queryset = Class.objects.filter(
                 is_active=True
-            ).select_related('academic_level').order_by('academic_level__level_order', 'name')
+            ).select_related('academic_level').order_by(
+                'academic_level__order', 'name'                          # ← was 'academic_level__level_order'
+            )
         except Exception as e:
-            logger.error(f"TeacherForm: error setting querysets: {e}")
+            logger.error(f'TeacherForm: error setting querysets: {e}')
 
         self.fields['preferred_academic_levels'].help_text = _(
-            'Select academic levels this teacher prefers to teach'
+            'Academic levels this teacher prefers to teach'
         )
         self.fields['qualified_subjects'].help_text = _(
-            'Select all subjects this teacher is qualified to teach'
+            'All subjects this teacher is qualified to teach'
         )
         self.fields['assigned_classes'].help_text = _(
-            'Select classes this teacher is responsible for as class teacher'
+            'Classes this teacher is responsible for'
         )
 
-        if not self.instance.pk:
-            self.fields['is_active'].initial = True
+    # -------------------------------------------------------------------------
+    # FIELD-LEVEL VALIDATION
+    # -------------------------------------------------------------------------
 
     def clean_staff(self):
         staff = self.cleaned_data.get('staff')
@@ -3153,46 +3393,43 @@ class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
 
     def clean_current_teaching_load(self):
         current_load = self.cleaned_data.get('current_teaching_load', 0)
-        max_hours = self.cleaned_data.get('max_hours_per_week', 40)
+        max_hours    = self.cleaned_data.get('max_hours_per_week', 40)
         if current_load and max_hours and current_load > max_hours:
             self.add_error(
                 'current_teaching_load',
                 _(
-                    f'Current teaching load ({current_load} hours) exceeds the maximum '
-                    f'allowed hours per week ({max_hours} hours). This may indicate overload.'
+                    f'Current teaching load ({current_load}h) exceeds the maximum '
+                    f'allowed hours per week ({max_hours}h). This may indicate overload.'
                 ),
             )
         return current_load
 
     def clean(self):
-        cleaned_data = super().clean()
+        # available_days and preferred_time_slots are MultipleChoiceField —
+        # Django validates selections against AVAILABLE_DAYS_CHOICES /
+        # PREFERRED_SLOT_CHOICES automatically. No JSON parsing needed.
+        return super().clean()
 
-        for json_field in ('available_days', 'preferred_time_slots'):
-            value = cleaned_data.get(json_field)
-            if value and isinstance(value, str):
-                import json
-                try:
-                    json.loads(value)
-                except json.JSONDecodeError:
-                    self.add_error(
-                        json_field,
-                        _('Invalid JSON format. Use format: ["Monday", "Tuesday", ...]'),
-                    )
-
-        return cleaned_data
+    # -------------------------------------------------------------------------
+    # SAVE
+    # -------------------------------------------------------------------------
 
     def save(self, commit=True):
         teacher = super().save(commit=False)
-        is_new = not teacher.pk
+        is_new  = not teacher.pk
+
+        # Persist the MultipleChoiceField selections as plain Python lists.
+        # super().save() won't do this automatically since they are not model
+        # fields from Django's perspective.
+        teacher.available_days       = self.cleaned_data.get('available_days') or []
+        teacher.preferred_time_slots = self.cleaned_data.get('preferred_time_slots') or []
 
         if not is_new:
             try:
                 old = Teacher.objects.get(pk=teacher.pk)
                 if old.is_active != teacher.is_active:
                     action = 'activated' if teacher.is_active else 'deactivated'
-                    logger.info(
-                        f"Teacher profile {action} for {teacher.staff.full_name()}"
-                    )
+                    logger.info(f'Teacher profile {action} for {teacher.staff.full_name()}')
             except Teacher.DoesNotExist:
                 pass
 
@@ -3201,8 +3438,10 @@ class TeacherForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             self.save_m2m()
             if is_new:
                 logger.info(
-                    f"New teacher profile created for {teacher.staff.full_name()} "
-                    f"(Specialization: {teacher.specialization})"
+                    f'New teacher profile created for {teacher.staff.full_name()} '
+                    f'(Specialization: {teacher.specialization})'
                 )
 
         return teacher
+        
+PayrollDeductionFormSet

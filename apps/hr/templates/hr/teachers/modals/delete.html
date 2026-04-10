@@ -1,0 +1,105 @@
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#fef2f2; border-bottom:1px solid #fecaca; padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700; font-size:16px; color:#7f1d1d;">
+                    <i class="fa fa-trash me-2" style="color:#dc2626;"></i>Delete Teacher Profile
+                </h5>
+                <div style="font-size:11.5px; color:#991b1b; margin-top:3px;">
+                    {{ teacher.staff.staff_id }} &middot; {{ teacher.staff.primary_department.name|default:"No Department" }}
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:22px;">
+
+            <!-- Teacher card -->
+            <div style="display:flex; align-items:center; gap:14px; padding:14px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:18px;">
+                {% if teacher.staff.photo %}
+                    <img src="{{ teacher.staff.photo.url }}"
+                         alt="{{ teacher.staff.full_name }}"
+                         style="width:44px; height:44px; border-radius:50%; object-fit:cover; border:2px solid #e2e8f0; flex-shrink:0;">
+                {% else %}
+                    <div style="width:44px; height:44px; border-radius:50%; background:#eef0ff; border:2px solid #c5cefb; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:1rem; font-weight:700; color:#4361ee;">
+                        {{ teacher.staff.first_name|first }}{{ teacher.staff.last_name|first }}
+                    </div>
+                {% endif %}
+                <div>
+                    <div style="font-weight:700; font-size:15px; color:#0f172a;">{{ teacher.staff.full_name }}</div>
+                    <div style="font-size:11.5px; color:#64748b; margin-top:1px;">
+                        {% if teacher.specialization %}{{ teacher.specialization }}{% else %}Teacher{% endif %}
+                    </div>
+                </div>
+                <div style="margin-left:auto; text-align:right; display:flex; flex-direction:column; gap:4px;">
+                    <span style="font-size:11.5px; font-weight:600; color:#64748b;">
+                        <i class="fa fa-chalkboard me-1"></i>{{ class_count }} class{{ class_count|pluralize:"es" }} assigned
+                    </span>
+                    <span style="font-size:11.5px; font-weight:600; color:#64748b;">
+                        <i class="fa fa-clock me-1"></i>{{ teacher.current_teaching_load }}h teaching load
+                    </span>
+                </div>
+            </div>
+
+            <!-- Blocked: assigned classes -->
+            {% if class_count > 0 %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #dc2626; border-radius:0 7px 7px 0; margin-bottom:12px;">
+                <i class="fa fa-ban" style="color:#dc2626; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#7f1d1d; line-height:1.6;">
+                    <strong>Cannot delete — {{ class_count }} class{{ class_count|pluralize:"es" }} assigned.</strong><br>
+                    Remove all class assignments from this teacher before deleting the profile.
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Warnings (e.g. active teaching load) -->
+            {% for warning in warnings %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fff7ed; border:1px solid #fed7aa; border-left:4px solid #f97316; border-radius:0 7px 7px 0; margin-bottom:12px;">
+                <i class="fa fa-exclamation-triangle" style="color:#f97316; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#9a3412; line-height:1.6;">{{ warning }}</div>
+            </div>
+            {% endfor %}
+
+            <!-- Safe to delete -->
+            {% if can_delete %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #f59e0b; border-radius:0 7px 7px 0; margin-bottom:18px;">
+                <i class="fa fa-exclamation-triangle" style="color:#b45309; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#92400e; line-height:1.6;">
+                    This will permanently delete the teacher profile. The staff record will not be deleted.
+                </div>
+            </div>
+            <div style="font-size:13.5px; color:#0f172a; line-height:1.7;">
+                Are you sure you want to delete <strong>{{ teacher.staff.full_name }}</strong>'s teacher profile?
+                <span style="display:block; margin-top:5px; font-size:12px; color:#64748b;">
+                    <i class="fa fa-exclamation-circle me-1"></i>This action cannot be undone.
+                </span>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:12px 22px; justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+            {% if can_delete %}
+            <form method="POST"
+                  hx-post="{% url 'hr:teacher_delete' teacher.pk %}"
+                  hx-target="body"
+                  hx-swap="none"
+                  style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm">
+                    <i class="fa fa-trash me-1"></i>Yes, Delete Profile
+                </button>
+            </form>
+            {% else %}
+            <button type="button" class="btn btn-danger btn-sm" disabled>
+                <i class="fa fa-ban me-1"></i>Cannot Delete
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

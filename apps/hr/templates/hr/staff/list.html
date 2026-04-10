@@ -89,6 +89,7 @@
     border-radius: 50%; object-fit: cover;
     border: 2px solid var(--border); flex-shrink: 0;
 }
+/* ↓ Added border: 2px solid #bfdbfe to match enrollment results */
 .staff-initials {
     width: 40px; height: 40px;
     border-radius: 50%;
@@ -96,6 +97,7 @@
     background: #eff6ff; color: var(--accent);
     font-size: 0.85rem; font-weight: 700;
     text-transform: uppercase; flex-shrink: 0;
+    border: 2px solid #bfdbfe;
 }
 .avatar-wrapper { position: relative; flex-shrink: 0; }
 .status-dot {
@@ -566,9 +568,6 @@
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// FIELD LABEL MAPS
-// ============================================================================
 const PRINT_LABELS = {
     staff_id: 'Staff ID', full_name: 'Full Name', first_name: 'First Name',
     last_name: 'Last Name', date_of_birth: 'DOB', gender: 'Gender',
@@ -590,9 +589,6 @@ const EXCEL_LABELS = {
     qualification: 'Qualification', is_active: 'Active',
 };
 
-// ============================================================================
-// DRAG-TO-REORDER
-// ============================================================================
 function initDragOrder(listId) {
     const list = document.getElementById(listId);
     let dragSrc = null;
@@ -647,18 +643,12 @@ function getOrderedFields(listId, checkboxClass) {
     return Array.from(document.querySelectorAll('.' + checkboxClass + ':checked')).map(cb => cb.value);
 }
 
-// ============================================================================
-// CONDITIONAL RADIO VISIBILITY
-// ============================================================================
 function updateConditionalOptions(prefix, checkboxClass) {
     const genderCb = document.getElementById(prefix === 'print' ? 'pf_gender' : 'xf_gender');
     const genderOpts = document.getElementById(prefix + '-gender-options');
     if (genderOpts) genderOpts.style.display = (genderCb && genderCb.checked) ? '' : 'none';
 }
 
-// ============================================================================
-// HTMX MODAL HANDLER
-// ============================================================================
 let currentModal = null;
 
 document.body.addEventListener('htmx:afterSwap', function(event) {
@@ -666,7 +656,6 @@ document.body.addEventListener('htmx:afterSwap', function(event) {
     const container = document.getElementById('modal-container');
     const dialog = container.querySelector('.modal-dialog');
     if (!dialog) return;
-
     let wrapper = document.getElementById('dynamicModalWrapper');
     if (wrapper) {
         const ex = bootstrap.Modal.getInstance(wrapper);
@@ -701,9 +690,7 @@ document.body.addEventListener('htmx:beforeSwap', function(event) {
                 title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
                 text: message,
                 confirmButtonText: 'OK',
-                confirmButtonColor: type === 'success' ? '#28a745' :
-                                    type === 'error'   ? '#dc3545' :
-                                    type === 'warning' ? '#ffc107' : '#17a2b8',
+                confirmButtonColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : type === 'warning' ? '#ffc107' : '#17a2b8',
                 timer: type === 'success' ? 3000 : null,
                 timerProgressBar: type === 'success'
             });
@@ -713,9 +700,6 @@ document.body.addEventListener('htmx:beforeSwap', function(event) {
     if (closeModal === 'true' && currentModal) currentModal.hide();
 });
 
-// ============================================================================
-// EXPORT EXCEL
-// ============================================================================
 function selectAllExcelFields()   { document.querySelectorAll('.excel-field-checkbox').forEach(cb => cb.checked = true);  syncOrderList('excel-field-checkbox', 'excel-order-list', EXCEL_LABELS); updateExcelFieldCount(); updateConditionalOptions('excel', 'excel-field-checkbox'); }
 function deselectAllExcelFields() { document.querySelectorAll('.excel-field-checkbox').forEach(cb => cb.checked = false); syncOrderList('excel-field-checkbox', 'excel-order-list', EXCEL_LABELS); updateExcelFieldCount(); updateConditionalOptions('excel', 'excel-field-checkbox'); }
 
@@ -731,8 +715,7 @@ function exportExcel() {
         return;
     }
     const genderDisplay = document.querySelector('input[name="excel_gender_display"]:checked')?.value || 'full';
-    const formData = new FormData(document.getElementById('searchForm'));
-    const params = new URLSearchParams(formData);
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
     orderedFields.forEach(f => params.append('fields', f));
     params.set('gender_display', genderDisplay);
     const modal = bootstrap.Modal.getInstance(document.getElementById('excelModal'));
@@ -740,9 +723,6 @@ function exportExcel() {
     window.location.href = "{% url 'hr:export_staff_excel' %}?" + params.toString();
 }
 
-// ============================================================================
-// PRINT
-// ============================================================================
 function selectAllFields()   { document.querySelectorAll('.field-checkbox').forEach(cb => cb.checked = true);  syncOrderList('field-checkbox', 'print-order-list', PRINT_LABELS); updateSelectedFieldCount(); updateConditionalOptions('print', 'field-checkbox'); }
 function deselectAllFields() { document.querySelectorAll('.field-checkbox').forEach(cb => cb.checked = false); syncOrderList('field-checkbox', 'print-order-list', PRINT_LABELS); updateSelectedFieldCount(); updateConditionalOptions('print', 'field-checkbox'); }
 
@@ -761,21 +741,17 @@ function generateAndPrint() {
     const originalText = printBtn.innerHTML;
     printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating...';
     printBtn.disabled = true;
-
     const includeStats  = document.getElementById('include_stats').checked;
     const landscape     = document.getElementById('landscape').checked;
     const shortHeaders  = document.getElementById('short_headers').checked;
     const genderDisplay = document.querySelector('input[name="print_gender_display"]:checked')?.value || 'full';
-
-    const formData = new FormData(document.getElementById('searchForm'));
-    const params = new URLSearchParams(formData);
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
     orderedFields.forEach(f => params.append('fields', f));
     if (includeStats)  params.append('include_stats', 'true');
     if (landscape)     params.append('landscape', 'true');
     if (shortHeaders)  params.append('short_headers', 'true');
     params.set('gender_display', genderDisplay);
     params.append('direct_print', 'true');
-
     fetch(`{% url 'hr:staff_print_view' %}?${params.toString()}`)
         .then(r => { if (!r.ok) throw new Error('Network error'); return r.text(); })
         .then(html => {
@@ -806,9 +782,6 @@ function generateAndPrint() {
         });
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
 function resetFilters() { window.location.href = "{% url 'hr:staff_list' %}"; }
 
 document.addEventListener('DOMContentLoaded', function() {

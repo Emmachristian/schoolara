@@ -1,0 +1,200 @@
+{% extends 'print_base.html' %}
+{% load currency_filters %}
+
+{% block page_title %}Report Card Eligibility — {{ class_instance.get_display_name }} — {{ session.name }}{% endblock %}
+{% block doc_title %}Report Card Eligibility{% endblock %}
+{% block print_orientation %}size: A4 landscape;{% endblock %}
+{% block record_count %}{{ eligible|length }} eligible · {{ ineligible|length }} ineligible{% endblock %}
+
+{% block stats_bar %}
+<style>
+.table-wrap { display: none !important; }
+
+.elig-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+.elig-stat {
+    flex: 1;
+    min-width: 140px;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    text-align: center;
+    border: 1px solid var(--ink-faint);
+}
+.elig-stat.green  { background: #dcfce7; border-color: #bbf7d0; }
+.elig-stat.red    { background: #fee2e2; border-color: #fecaca; }
+.elig-stat.blue   { background: var(--accent-bg); border-color: var(--accent); }
+.elig-stat-num  { font-size: 22pt; font-weight: 800; display: block; line-height: 1; margin-bottom: 3px; }
+.elig-stat.green .elig-stat-num { color: #15803d; }
+.elig-stat.red   .elig-stat-num { color: #b91c1c; }
+.elig-stat.blue  .elig-stat-num { color: var(--accent); }
+.elig-stat-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); }
+
+.section-head {
+    font-size: 8pt; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-soft);
+    display: flex; align-items: center; gap: 8px;
+    margin: 18px 0 8px;
+}
+.section-head::after { content: ''; flex: 1; height: 1px; background: var(--ink-faint); }
+
+.elig-table {
+    width: 100%; border-collapse: collapse; font-size: 10pt;
+    border: 1px solid var(--ink-faint); border-radius: var(--radius);
+    overflow: hidden; margin-bottom: 16px;
+}
+.elig-table thead tr { background: var(--accent); color: #fff; }
+.elig-table thead th {
+    padding: 6px 10px; font-size: 8pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .4px; text-align: left;
+    white-space: nowrap;
+}
+.elig-table thead th.num { text-align: right; }
+.elig-table thead th.ctr { text-align: center; }
+.elig-table tbody td {
+    padding: 6px 10px; border-bottom: 1px solid var(--ink-faint);
+    vertical-align: middle; color: var(--ink-mid);
+}
+.elig-table tbody tr:last-child td { border-bottom: none; }
+.elig-table tbody tr:nth-child(even) { background: var(--stripe); }
+.elig-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.elig-table td.ctr { text-align: center; }
+
+.pct-bar-wrap {
+    display: flex; align-items: center; gap: 8px;
+}
+.pct-bar {
+    flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;
+    min-width: 60px;
+}
+.pct-bar-fill { height: 100%; border-radius: 4px; }
+.pct-text { font-size: 8.5pt; font-weight: 700; white-space: nowrap; min-width: 38px; text-align: right; }
+
+.badge-eligible   { background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 3px; font-size: 8pt; font-weight: 700; }
+.badge-ineligible { background: #fee2e2; color: #b91c1c; padding: 2px 8px; border-radius: 3px; font-size: 8pt; font-weight: 700; }
+
+@media print { .no-print { display: none !important; } }
+</style>
+
+<!-- Context info -->
+<div style="background:var(--accent-bg);border:1px solid var(--ink-faint);border-radius:var(--radius);padding:10px 16px;margin-bottom:16px;font-size:10pt;color:var(--accent);">
+    <strong>{{ class_instance.get_display_name }}</strong>
+    &nbsp;·&nbsp; {{ session.name }}
+    {% if selected_category %}&nbsp;·&nbsp; {{ selected_category.name }}{% endif %}
+    &nbsp;·&nbsp; Minimum payment required: <strong>{{ required_pct }}%</strong>
+    {% if consider_all %}&nbsp;·&nbsp; <em>Considers all outstanding balances</em>{% endif %}
+</div>
+
+<!-- Summary stats -->
+<div class="elig-summary">
+    <div class="elig-stat blue">
+        <span class="elig-stat-num">{{ eligible|length|add:ineligible|length }}</span>
+        <div class="elig-stat-label">Total Students</div>
+    </div>
+    <div class="elig-stat green">
+        <span class="elig-stat-num">{{ eligible|length }}</span>
+        <div class="elig-stat-label">Eligible</div>
+    </div>
+    <div class="elig-stat red">
+        <span class="elig-stat-num">{{ ineligible|length }}</span>
+        <div class="elig-stat-label">Ineligible</div>
+    </div>
+</div>
+
+<!-- Eligible students -->
+{% if eligible %}
+<p class="section-head" style="color:#15803d;">
+    ✓ Eligible — {{ eligible|length }} student{{ eligible|length|pluralize }}
+</p>
+<table class="elig-table">
+    <thead>
+        <tr>
+            <th style="width:28px;">#</th>
+            <th>Student</th>
+            <th>Admission No.</th>
+            <th class="num">Total Fees</th>
+            <th class="num">Paid</th>
+            <th class="num">Balance</th>
+            <th style="min-width:160px;">Payment</th>
+            <th class="ctr">Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in eligible %}
+        <tr>
+            <td class="ctr" style="color:var(--ink-soft);font-size:9pt;font-weight:600;">{{ forloop.counter }}</td>
+            <td style="font-weight:600;color:var(--ink);">{{ entry.student.get_full_name }}</td>
+            <td style="font-family:monospace;font-size:9pt;color:var(--ink-soft);">{{ entry.student.admission_number }}</td>
+            <td class="num">{{ entry.total_amount|money }}</td>
+            <td class="num" style="color:#15803d;font-weight:700;">{{ entry.paid_amount|money }}</td>
+            <td class="num" style="color:{% if entry.balance > 0 %}var(--danger){% else %}var(--ink-soft){% endif %};">{{ entry.balance|money }}</td>
+            <td>
+                <div class="pct-bar-wrap">
+                    <div class="pct-bar">
+                        <div class="pct-bar-fill" style="width:{{ entry.pct_paid }}%;background:{% if entry.pct_paid >= 100 %}#16a34a{% elif entry.pct_paid >= 75 %}#65a30d{% elif entry.pct_paid >= 50 %}#d97706{% else %}#dc2626{% endif %};"></div>
+                    </div>
+                    <span class="pct-text" style="color:#15803d;">{{ entry.pct_paid|format_percentage:1 }}</span>
+                </div>
+            </td>
+            <td class="ctr"><span class="badge-eligible">Eligible</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<!-- Ineligible students -->
+{% if ineligible %}
+<p class="section-head" style="color:#b91c1c;">
+    ✗ Ineligible — {{ ineligible|length }} student{{ ineligible|length|pluralize }}
+    (below {{ required_pct }}% payment)
+</p>
+<table class="elig-table">
+    <thead>
+        <tr>
+            <th style="width:28px;">#</th>
+            <th>Student</th>
+            <th>Admission No.</th>
+            <th class="num">Total Fees</th>
+            <th class="num">Paid</th>
+            <th class="num">Balance</th>
+            <th style="min-width:160px;">Payment</th>
+            <th class="ctr">Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in ineligible %}
+        <tr>
+            <td class="ctr" style="color:var(--ink-soft);font-size:9pt;font-weight:600;">{{ forloop.counter }}</td>
+            <td style="font-weight:600;color:var(--ink);">{{ entry.student.get_full_name }}</td>
+            <td style="font-family:monospace;font-size:9pt;color:var(--ink-soft);">{{ entry.student.admission_number }}</td>
+            <td class="num">{{ entry.total_amount|money }}</td>
+            <td class="num" style="font-weight:700;">{{ entry.paid_amount|money }}</td>
+            <td class="num" style="color:var(--danger);font-weight:700;">{{ entry.balance|money }}</td>
+            <td>
+                <div class="pct-bar-wrap">
+                    <div class="pct-bar">
+                        <div class="pct-bar-fill" style="width:{{ entry.pct_paid }}%;background:#dc2626;"></div>
+                    </div>
+                    <span class="pct-text" style="color:#b91c1c;">{{ entry.pct_paid|format_percentage:1 }}</span>
+                </div>
+            </td>
+            <td class="ctr"><span class="badge-ineligible">Withheld</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if not eligible and not ineligible %}
+<div class="empty-state">
+    <p>No students found for this class and session.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block table_body %}{% endblock %}

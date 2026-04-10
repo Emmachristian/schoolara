@@ -1,528 +1,451 @@
-{% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
 
-<!-- Classrooms Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="50">#</th>
-                <th width="250">Classroom Details</th>
-                <th width="100">Location</th>
-                <th width="80" class="text-center">Capacity</th>
-                <th width="100">Type</th>
-                <th width="150">Facilities</th>
-                <th width="100" class="text-center">Assignments</th>
-                <th width="100">Status</th>
-                <th width="120">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% if classrooms_page %}
-                {% for classroom in classrooms_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:classrooms_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Classroom Details -->
-                    <td>
-                        <div class="d-flex align-items-start">
-                            <div class="flex-grow-1">
-                                <h6 class="mb-1">
-                                    <a href="{% url 'academics:classroom_detail' classroom.pk %}" class="text-primary fw-bold">
-                                        {{ classroom.name }}
-                                    </a>
-                                    {% if classroom.is_bookable %}
-                                        <span class="badge bg-info ms-2">
-                                            <i class="fa fa-calendar me-1"></i>Bookable
-                                        </span>
-                                    {% endif %}
-                                    {% if classroom.is_accessible %}
-                                        <span class="badge bg-success ms-1">
-                                            <i class="fa fa-wheelchair me-1"></i>Accessible
-                                        </span>
-                                    {% endif %}
-                                </h6>
-                                <div class="small text-muted">
-                                    <span><strong>Room:</strong> {{ classroom.room_number }}</span>
-                                </div>
-                                {% if classroom.specialized_equipment %}
-                                    <small class="text-info d-block mt-1">
-                                        <i class="fa fa-tools me-1"></i>{{ classroom.specialized_equipment|truncatewords:10 }}
-                                    </small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    
-                    <!-- Location -->
-                    <td>
-                        {% if classroom.building %}
-                            <div class="small">
-                                <i class="fa fa-building text-primary me-1"></i>
-                                <strong>{{ classroom.building }}</strong>
-                            </div>
-                        {% endif %}
-                        {% if classroom.floor %}
-                            <div class="small text-muted">
-                                <i class="fa fa-layer-group me-1"></i>Floor {{ classroom.floor }}
-                            </div>
-                        {% endif %}
-                        {% if not classroom.building and not classroom.floor %}
-                            <span class="text-muted small">Not specified</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Capacity -->
-                    <td class="text-center">
-                        <strong class="text-primary" style="font-size: 1.2em;">{{ classroom.capacity }}</strong>
-                        <br><small class="text-muted">students</small>
-                        {% if classroom.capacity <= 20 %}
-                            <br><span class="badge bg-secondary">Small</span>
-                        {% elif classroom.capacity <= 40 %}
-                            <br><span class="badge bg-info">Medium</span>
-                        {% elif classroom.capacity <= 100 %}
-                            <br><span class="badge bg-primary">Large</span>
-                        {% else %}
-                            <br><span class="badge bg-danger">Very Large</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Type -->
-                    <td>
-                        {% if classroom.room_type == 'REGULAR' %}
-                            <span class="badge badge-regular">Regular</span>
-                        {% elif classroom.room_type == 'LABORATORY' %}
-                            <span class="badge badge-lab">Laboratory</span>
-                        {% elif classroom.room_type == 'COMPUTER_LAB' %}
-                            <span class="badge badge-lab">Computer Lab</span>
-                        {% elif classroom.room_type == 'SCIENCE_LAB' %}
-                            <span class="badge badge-lab">Science Lab</span>
-                        {% elif classroom.room_type == 'LIBRARY' %}
-                            <span class="badge badge-library">Library</span>
-                        {% elif classroom.room_type == 'AUDITORIUM' %}
-                            <span class="badge badge-auditorium">Auditorium</span>
-                        {% elif classroom.room_type == 'GYMNASIUM' %}
-                            <span class="badge badge-sports">Gymnasium</span>
-                        {% elif classroom.room_type == 'MUSIC_ROOM' %}
-                            <span class="badge bg-warning text-dark">Music Room</span>
-                        {% elif classroom.room_type == 'ART_ROOM' %}
-                            <span class="badge bg-purple">Art Room</span>
-                        {% elif classroom.room_type == 'MULTIPURPOSE' %}
-                            <span class="badge bg-secondary">Multipurpose</span>
-                        {% else %}
-                            <span class="badge bg-light text-dark">{{ classroom.get_room_type_display }}</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Facilities -->
-                    <td>
-                        <div class="d-flex flex-wrap gap-1">
-                            <!-- Projector -->
-                            <span class="facility-icon {% if classroom.has_projector %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_projector %}Has Projector{% else %}No Projector{% endif %}">
-                                <i class="fa fa-video"></i>
-                            </span>
-                            
-                            <!-- Computer -->
-                            <span class="facility-icon {% if classroom.has_computer %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_computer %}Has Computer{% else %}No Computer{% endif %}">
-                                <i class="fa fa-desktop"></i>
-                            </span>
-                            
-                            <!-- Smart Board -->
-                            <span class="facility-icon {% if classroom.has_smart_board %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_smart_board %}Has Smart Board{% else %}No Smart Board{% endif %}">
-                                <i class="fa fa-chalkboard"></i>
-                            </span>
-                            
-                            <!-- Whiteboard -->
-                            <span class="facility-icon {% if classroom.has_whiteboard %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_whiteboard %}Has Whiteboard{% else %}No Whiteboard{% endif %}">
-                                <i class="fa fa-marker"></i>
-                            </span>
-                            
-                            <!-- AC -->
-                            <span class="facility-icon {% if classroom.has_air_conditioning %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_air_conditioning %}Air Conditioned{% else %}No AC{% endif %}">
-                                <i class="fa fa-snowflake"></i>
-                            </span>
-                            
-                            <!-- Internet -->
-                            <span class="facility-icon {% if classroom.has_internet %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_internet %}Has Internet{% else %}No Internet{% endif %}">
-                                <i class="fa fa-wifi"></i>
-                            </span>
-                            
-                            <!-- Sound System -->
-                            <span class="facility-icon {% if classroom.has_sound_system %}has-facility{% else %}no-facility{% endif %}"
-                                  data-bs-toggle="tooltip" 
-                                  title="{% if classroom.has_sound_system %}Has Sound System{% else %}No Sound System{% endif %}">
-                                <i class="fa fa-volume-up"></i>
-                            </span>
-                        </div>
-                    </td>
-                    
-                    <!-- Assignments -->
-                    <td class="text-center">
-                        {% with class_count=classroom.classes.count %}
-                            {% if class_count > 0 %}
-                                <strong class="text-success">{{ class_count }}</strong>
-                                <br><small class="text-muted">
-                                    {% if class_count == 1 %}class{% else %}classes{% endif %}
-                                </small>
-                                <br><a href="{% url 'academics:class_list' %}?classroom={{ classroom.id }}" 
-                                       class="btn btn-sm btn-outline-primary mt-1">
-                                    <i class="fa fa-eye"></i> View
-                                </a>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                                <br><small class="text-muted">Unassigned</small>
-                            {% endif %}
-                        {% endwith %}
-                    </td>
-                    
-                    <!-- Status -->
-                    <td class="text-center">
-                        {% if classroom.is_active %}
-                            <span class="badge bg-success status-badge">
-                                <i class="fa fa-check-circle me-1"></i>Active
-                            </span>
-                        {% else %}
-                            <span class="badge bg-danger status-badge">
-                                <i class="fa fa-times-circle me-1"></i>Inactive
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View -->
-                                <a class="dropdown-item text-success" href="{% url 'academics:classroom_detail' classroom.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
-                                </a>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'academics:classroom_edit' classroom.pk %}">
-                                    <i class="fa fa-edit me-2"></i> Edit
-                                </a>
-                                
-                                <!-- Print -->
-                                <a class="dropdown-item" href="{% url 'academics:classroom_print_detail' classroom.pk %}" target="_blank">
-                                    <i class="fa fa-print me-2"></i> Print Details
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
-                                
-                                <!-- Quick View Modal -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:classroom_quick_view_modal' classroom.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i> Quick View
-                                </button>
-                                
-                                <!-- View Classes -->
-                                <a class="dropdown-item" href="{% url 'academics:class_list' %}?classroom={{ classroom.id }}">
-                                    <i class="fa fa-chalkboard-teacher me-2"></i> View Classes
-                                </a>
-                                
-                                {% if classroom.is_bookable %}
-                                    <!-- View Bookings -->
-                                    <a class="dropdown-item" href="#">
-                                        <i class="fa fa-calendar-alt me-2"></i> View Bookings
-                                    </a>
-                                {% endif %}
-                                
-                                <!-- View Timetable -->
-                                <a class="dropdown-item" href="#">
-                                    <i class="fa fa-calendar me-2"></i> View Timetable
-                                </a>
-                                
-                                <!-- Toggle Active -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:classroom_toggle_active_modal' classroom.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-{% if classroom.is_active %}pause{% else %}play{% endif %} me-2"></i>
-                                    {% if classroom.is_active %}Deactivate{% else %}Activate{% endif %}
-                                </button>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'academics:classroom_delete_modal' classroom.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i> Delete
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="9" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-home empty-state-icon"></i>
-                            <h5 class="mt-3">No Classrooms Found</h5>
-                            <p class="text-muted">Try adjusting your filters or add a new classroom.</p>
-                            <a href="{% url 'academics:classroom_create' %}" class="btn btn-primary mt-3">
-                                <i class="fa fa-plus me-1"></i> Add Classroom
+<style>
+/* ── Table ── */
+.cls-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cls-tbl thead th {
+    background: #f8fafc; padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.cls-tbl tbody td {
+    padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle; color: #0f172a;
+}
+.cls-tbl tbody tr:last-child td { border-bottom: none; }
+.cls-tbl tbody tr:hover td { background: #eff6ff !important; }
+.cls-tbl tbody tr.row-muted td { color: #94a3b8; }
+.cls-tbl tbody tr.row-muted:hover td { background: #f8fafc !important; }
+
+/* ── Room name link ── */
+.room-name {
+    font-weight: 600; font-size: 13px; color: #0f172a;
+    text-decoration: none; display: block; line-height: 1.3;
+}
+.room-name:hover { color: #1d4ed8; }
+.room-number { font-family: 'Courier New', monospace; font-size: 11.5px; color: #64748b; margin-top: 2px; }
+
+/* ── Inline chips ── */
+.room-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 4px; font-size: 10.5px; font-weight: 700;
+    padding: 1px 6px; margin-top: 3px; white-space: nowrap;
+}
+.chip-bookable    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.chip-accessible  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.chip-type-reg    { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.chip-type-lab    { background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
+.chip-type-lib    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.chip-type-aud    { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.chip-type-sport  { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.chip-type-other  { background: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; }
+
+/* ── Capacity ── */
+.cap-count { font-weight: 700; font-size: 15px; color: #1d4ed8; }
+.cap-label { font-size: 11px; color: #64748b; }
+.cap-pill  { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; margin-top: 3px; }
+.cp-small  { background: #f1f5f9; color: #64748b; }
+.cp-medium { background: #eff6ff; color: #1d4ed8; }
+.cp-large  { background: #f0fdf4; color: #15803d; }
+.cp-xl     { background: #ede9fe; color: #6d28d9; }
+
+/* ── Facility icon grid ── */
+.fac-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.fac-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 5px;
+    font-size: 11px; transition: transform .15s;
+}
+.fac-icon:hover { transform: scale(1.2); }
+.fac-yes { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.fac-no  { background: #f8fafc; color: #cbd5e1; border: 1px solid #e2e8f0; }
+
+/* ── Status ── */
+.stat-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sp-active   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sp-inactive { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── Empty ── */
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ── Pagination bar ── */
+.pag-bar {
+    padding: 14px 20px; border-top: 1px solid #e2e8f0;
+    background: #f8fafc; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: #64748b;
+}
+
+/* ── Dropdown ── */
+.dropdown-menu { font-size: 0.85rem; min-width: 200px; border: 1px solid #e2e8f0; }
+.dropdown-item  { padding: 6px 14px; }
+.dropdown-header { font-size: 0.7rem; padding: 6px 14px 2px; }
+
+/* ── OOB stat cards ── */
+.stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:18px 22px; display:flex; align-items:center; gap:16px; margin-bottom:20px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:22px; font-weight:600; color:#0f172a; line-height:1; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="cls-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Room</th>
+            <th>Location</th>
+            <th class="text-center" style="width:90px;">Capacity</th>
+            <th class="text-center" style="width:160px;">Facilities</th>
+            <th class="text-center" style="width:90px;">Assigned</th>
+            <th class="text-center" style="width:90px;">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% if classrooms_page %}
+        {% for classroom in classrooms_page %}
+        <tr class="{% if not classroom.is_active %}row-muted{% endif %}">
+
+            <!-- # -->
+            <td style="color:#94a3b8; font-size:12px;">
+                {{ classrooms_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Room identity + chips -->
+            <td>
+                <a href="{% url 'academics:classroom_detail' classroom.pk %}" class="room-name">
+                    {{ classroom.name }}
+                </a>
+                <div class="room-number">
+                    <i class="fa fa-hashtag" style="font-size:9px;"></i> {{ classroom.room_number }}
+                </div>
+                <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                    {# Room type chip #}
+                    {% if classroom.room_type == 'REGULAR' %}
+                        <span class="room-chip chip-type-reg"><i class="fa fa-chalkboard" style="font-size:9px;"></i> Regular</span>
+                    {% elif classroom.room_type in 'LABORATORY,COMPUTER_LAB,SCIENCE_LAB,LANGUAGE_LAB' %}
+                        <span class="room-chip chip-type-lab"><i class="fa fa-flask" style="font-size:9px;"></i> {{ classroom.get_room_type_display }}</span>
+                    {% elif classroom.room_type == 'LIBRARY' %}
+                        <span class="room-chip chip-type-lib"><i class="fa fa-book" style="font-size:9px;"></i> Library</span>
+                    {% elif classroom.room_type == 'AUDITORIUM' %}
+                        <span class="room-chip chip-type-aud"><i class="fa fa-theater-masks" style="font-size:9px;"></i> Auditorium</span>
+                    {% elif classroom.room_type == 'GYMNASIUM' %}
+                        <span class="room-chip chip-type-sport"><i class="fa fa-running" style="font-size:9px;"></i> Gymnasium</span>
+                    {% else %}
+                        <span class="room-chip chip-type-other">{{ classroom.get_room_type_display }}</span>
+                    {% endif %}
+
+                    {# Bookable chip #}
+                    {% if classroom.is_bookable %}
+                    <span class="room-chip chip-bookable">
+                        <i class="fa fa-calendar-check" style="font-size:8px;"></i> Bookable
+                    </span>
+                    {% endif %}
+
+                    {# Accessible chip #}
+                    {% if classroom.is_accessible %}
+                    <span class="room-chip chip-accessible">
+                        <i class="fa fa-wheelchair" style="font-size:8px;"></i> Accessible
+                    </span>
+                    {% endif %}
+                </div>
+
+                {# Specialised equipment note #}
+                {% if classroom.specialized_equipment %}
+                <div class="mt-1" style="font-size:11px;color:#64748b;font-style:italic;">
+                    <i class="fa fa-tools me-1" style="font-size:9px;"></i>{{ classroom.specialized_equipment|truncatewords:8 }}
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Location -->
+            <td>
+                {% if classroom.building %}
+                <div style="font-size:12.5px; font-weight:600;">
+                    <i class="fa fa-building text-primary me-1" style="font-size:10px;"></i>
+                    {{ classroom.building }}
+                </div>
+                {% endif %}
+                {% if classroom.floor %}
+                <div style="font-size:11.5px; color:#64748b; margin-top:3px;">
+                    <i class="fa fa-layer-group me-1" style="font-size:10px;"></i>
+                    Floor {{ classroom.floor }}{% if classroom.wing %} · {{ classroom.wing }}{% endif %}
+                </div>
+                {% endif %}
+                {% if not classroom.building and not classroom.floor %}
+                <span style="color:#94a3b8; font-size:12px;">Not specified</span>
+                {% endif %}
+            </td>
+
+            <!-- Capacity -->
+            <td class="text-center">
+                <div class="cap-count">{{ classroom.capacity }}</div>
+                <div class="cap-label">students</div>
+                {% if classroom.capacity <= 20 %}
+                    <span class="cap-pill cp-small">Small</span>
+                {% elif classroom.capacity <= 40 %}
+                    <span class="cap-pill cp-medium">Medium</span>
+                {% elif classroom.capacity <= 100 %}
+                    <span class="cap-pill cp-large">Large</span>
+                {% else %}
+                    <span class="cap-pill cp-xl">Very Large</span>
+                {% endif %}
+            </td>
+
+            <!-- Facilities — icon grid with tooltips -->
+            <td>
+                <div class="fac-grid">
+                    <span class="fac-icon {% if classroom.has_projector %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_projector %}Has Projector{% else %}No Projector{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-video"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_computer %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_computer %}Has Computer{% else %}No Computer{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-desktop"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_smart_board %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_smart_board %}Has Smart Board{% else %}No Smart Board{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-chalkboard"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_whiteboard %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_whiteboard %}Has Whiteboard{% else %}No Whiteboard{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-marker"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_air_conditioning %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_air_conditioning %}Air Conditioned{% else %}No AC{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-snowflake"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_internet %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_internet %}Has Internet{% else %}No Internet{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-wifi"></i>
+                    </span>
+                    <span class="fac-icon {% if classroom.has_sound_system %}fac-yes{% else %}fac-no{% endif %}"
+                          title="{% if classroom.has_sound_system %}Has Sound System{% else %}No Sound System{% endif %}"
+                          data-bs-toggle="tooltip">
+                        <i class="fa fa-volume-up"></i>
+                    </span>
+                </div>
+            </td>
+
+            <!-- Assigned classes -->
+            <td class="text-center">
+                {% with cnt=classroom.assigned_class_count|default:0 %}
+                {% if cnt > 0 %}
+                    <a href="#"
+                       style="font-weight:700; font-size:15px; color:#15803d; text-decoration:none;">
+                        {{ cnt }}
+                    </a>
+                    <div style="font-size:11px; color:#64748b;">class{{ cnt|pluralize }}</div>
+                {% else %}
+                    <span style="color:#94a3b8; font-size:13px;">—</span>
+                    <div style="font-size:11px; color:#94a3b8;">Unassigned</div>
+                {% endif %}
+                {% endwith %}
+            </td>
+
+            <!-- Status -->
+            <td class="text-center">
+                {% if classroom.is_active %}
+                    <span class="stat-pill sp-active"><i class="fa fa-check-circle"></i> Active</span>
+                {% else %}
+                    <span class="stat-pill sp-inactive"><i class="fa fa-times-circle"></i> Inactive</span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:classroom_detail' classroom.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
                             </a>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:classroom_edit' classroom.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'academics:classroom_print_detail' classroom.pk %}" target="_blank">
+                                <i class="fa fa-print me-2"></i>Print Detail
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Quick Actions</h6></li>
+
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:classroom_quick_view_modal' classroom.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-info-circle me-2"></i>Quick View
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:classroom_toggle_bookable_modal' classroom.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-calendar{% if classroom.is_bookable %}-times{% else %}-check{% endif %} me-2"></i>
+                                {% if classroom.is_bookable %}Make Non-Bookable{% else %}Make Bookable{% endif %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:classroom_toggle_active_modal' classroom.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-{% if classroom.is_active %}pause{% else %}play{% endif %} me-2"></i>
+                                {% if classroom.is_active %}Deactivate{% else %}Activate{% endif %}
+                            </button>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'academics:classroom_delete_modal' classroom.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr>
+            <td colspan="8">
+                <div class="tbl-empty">
+                    <i class="pe-7s-home"></i>
+                    <p>
+                        {% if request.GET %}
+                            No classrooms match your current filters.
+                        {% else %}
+                            No classrooms have been added yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'academics:classroom_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>Add Classroom
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'academics:classroom_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+    </tbody>
+</table>
 </div>
 
-<!-- Pagination -->
 {% if classrooms_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ classrooms_page.start_index }} - {{ classrooms_page.end_index }} of {{ classrooms_page.paginator.count }} classrooms
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Classroom pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if classrooms_page.has_previous %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ classrooms_page.start_index }}</strong>–<strong>{{ classrooms_page.end_index }}</strong>
+        of <strong>{{ classrooms_page.paginator.count|intcomma }}</strong> classrooms
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if classrooms_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:classroom_list' %}"
+                        hx-target="#classroom-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ classrooms_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in classrooms_page.paginator.page_range %}
+                {% if p == classrooms_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > classrooms_page.number|add:"-3" and p < classrooms_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'academics:classroom_list' %}"
                                 hx-target="#classroom-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ classrooms_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in classrooms_page.paginator.page_range %}
-                    {% if page_num == classrooms_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > classrooms_page.number|add:"-3" and page_num < classrooms_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'academics:classroom_list' %}"
-                                    hx-target="#classroom-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if classrooms_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'academics:classroom_list' %}"
-                                hx-target="#classroom-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ classrooms_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if classrooms_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:classroom_list' %}"
+                        hx-target="#classroom-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ classrooms_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.badge-regular {
-    background-color: #007bff;
-    color: white;
-}
-
-.badge-lab {
-    background-color: #6f42c1;
-    color: white;
-}
-
-.badge-library {
-    background-color: #28a745;
-    color: white;
-}
-
-.badge-auditorium {
-    background-color: #dc3545;
-    color: white;
-}
-
-.badge-sports {
-    background-color: #fd7e14;
-    color: white;
-}
-
-.bg-purple {
-    background-color: #6f42c1 !important;
-    color: white !important;
-}
-
-.facility-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    margin-right: 4px;
-    font-size: 12px;
-    transition: transform 0.2s;
-}
-
-.facility-icon:hover {
-    transform: scale(1.2);
-}
-
-.facility-icon.has-facility {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-
-.facility-icon.no-facility {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-    opacity: 0.5;
-}
-
-.status-badge {
-    font-size: 11px;
-    padding: 4px 8px;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-home"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Classrooms</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-primary"><i class="pe-7s-home"></i></div><div><div class="stat-label">Total Classrooms</div><div class="stat-value">{{ stats.total|default:0 }}</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-success"><i class="pe-7s-check"></i></div><div><div class="stat-label">Active</div><div class="stat-value">{{ stats.active|default:0 }}</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-users"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Capacity</div>
-                <h3>{{ stats.total_capacity|default:0|intcomma }}</h3>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-info"><i class="pe-7s-users"></i></div><div><div class="stat-label">Total Capacity</div><div class="stat-value">{{ stats.total_capacity|default:0|intcomma }}</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-science"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Labs</div>
-                <h3>{{ stats.labs|default:0 }}</h3>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-warning"><i class="pe-7s-science"></i></div><div><div class="stat-label">Laboratories</div><div class="stat-value">{{ stats.labs|default:0 }}</div></div></div>
     </div>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>
+
+class_list

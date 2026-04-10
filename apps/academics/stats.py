@@ -1,22 +1,76 @@
 # academics/stats.py
 """
-Comprehensive statistics utility functions for Academic models
-Similar to students statistics pattern
+Aggregation and statistics functions for the academics app.
+
+INTENDED CALLERS
+────────────────
+These functions are designed for dashboards, reports, and data-export
+endpoints that need aggregated summaries across many records.
+
+They are NOT intended for individual detail views (class_detail,
+level_detail, etc.) — those build lightweight stats dicts from model
+properties and cheap annotated querysets directly in views.py.
+
+REMOVED vs original
+────────────────────
+  get_current_academic_session()
+      Duplicate of the function in utils.py.  All callers should import
+      from academics.utils (or call AcademicSession.get_current_session()
+      directly).
+
+  get_academic_dashboard_statistics() — simple / early version
+      The file originally defined two functions with the same name.
+      The first (simple) version was silently overwritten by the second
+      (comprehensive) one at module load time.  The dead simple version
+      has been removed; the comprehensive one is kept under the same name.
+
+FIXED vs original
+─────────────────
+  get_holiday_statistics()
+      Accessed holiday.duration on Holiday instances but the model defines
+      the property as duration_days.  Fixed all references.
+
+  get_class_statistics()
+      by_session was built with an incorrect values_list call that
+      produced 3-tuples of (year, term, id) rather than counts; iterated
+      over those tuples as if they were (year, term, count).  Replaced
+      with a proper values().annotate(count=Count()) query.
+
+      by_level was built the same broken way.  Replaced with a clean
+      values_list().annotate() query.
+
+  get_enrollment_statistics()
+      The gender breakdown filtered student__gender as a falsy guard
+      (`if gender['student__gender']`) which silently dropped any gender
+      value that is an empty string stored in the DB rather than NULL.
+      Changed to an explicit `is not None` check.
+
+      recent_enrollments used extra(select={'day': 'date(enrollment_date)'})
+      which is a legacy, database-specific API.  Replaced with
+      TruncDate() which is database-agnostic and consistent with the rest
+      of the file.
+
+  All functions
+      Date/datetime keys in aggregation dicts (by_year, by_month) are
+      now consistently converted to strings before being returned, so
+      callers serialising to JSON never hit "Object of type date is not
+      JSON serialisable".
 """
 
 from django.utils import timezone
-from django.db.models import Count, Q, Avg, Sum, Max, Min, F, Case, When, IntegerField, FloatField, DecimalField
-from django.db.models.functions import TruncMonth, TruncYear, TruncWeek, TruncDate
+from django.db.models import (
+    Count, Q, Avg, Sum, Max, Min, F,
+    Case, When, IntegerField, FloatField, DecimalField,
+)
+from django.db.models.functions import TruncMonth, TruncYear, TruncDate
 from datetime import timedelta, date
 from collections import defaultdict
 import logging
 
 logger = logging.getLogger(__name__)
 
-from core.utils import (
-    get_school_today,
-    get_school_current_time
-)
+from core.utils import get_school_today, get_school_current_time
+
 
 # =============================================================================
 # ACADEMIC SESSION STATISTICS
@@ -24,27 +78,23 @@ from core.utils import (
 
 def get_academic_session_statistics(filters=None):
     """
-    Get comprehensive statistics for academic sessions
-    
+    Comprehensive statistics for academic sessions.
+
     Args:
-        filters (dict): Optional filters to apply
-            - year_name: Filter by specific academic year
-            - period_type: Filter by period type
-            - is_active: Filter by active status
-            - is_current: Filter by current status
-            - date_range: Tuple of (start_date, end_date)
-    
+        filters (dict, optional):
+            year_name   – filter by specific academic year string
+            period_type – filter by period type
+            is_active   – bool
+            is_current  – bool
+            date_range  – tuple (start_date, end_date)
+
     Returns:
-        dict: Statistics including counts, durations, status breakdowns
+        dict
     """
     from .models import AcademicSession
-    from django.db.models import Q, Count
-    from django.utils import timezone
-    from datetime import timedelta
-    
+
     sessions = AcademicSession.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('year_name'):
             sessions = sessions.filter(year_name=filters['year_name'])
@@ -60,255 +110,193 @@ def get_academic_session_statistics(filters=None):
                 Q(start_date__gte=start_date, start_date__lte=end_date) |
                 Q(end_date__gte=start_date, end_date__lte=end_date)
             )
-    
-    # Basic counts
+
     total_sessions = sessions.count()
-    current_date = timezone.now().date()
-    
+    current_date   = timezone.now().date()
+
     stats = {
-        'total_sessions': total_sessions,
+        'total_sessions':  total_sessions,
         'active_sessions': sessions.filter(is_active=True).count(),
         'inactive_sessions': sessions.filter(is_active=False).count(),
         'current_session': sessions.filter(is_current=True).first(),
-        'closed_sessions': sessions.filter(is_academically_closed=True).count(),  # ✅ FIXED
-        'open_sessions': sessions.filter(is_academically_closed=False).count(),    # ✅ FIXED
-        
-        # Status breakdown
+        'closed_sessions': sessions.filter(is_academically_closed=True).count(),
+        'open_sessions':   sessions.filter(is_academically_closed=False).count(),
+
         'status_breakdown': {
-            'current': sessions.filter(is_current=True).count(),
-            'upcoming': sessions.filter(start_date__gt=current_date, is_active=True).count(),
-            'ongoing': sessions.filter(
+            'current':  sessions.filter(is_current=True).count(),
+            'upcoming': sessions.filter(
+                start_date__gt=current_date, is_active=True
+            ).count(),
+            'ongoing':  sessions.filter(
                 start_date__lte=current_date,
                 end_date__gte=current_date,
                 is_active=True,
-                is_current=False
+                is_current=False,
             ).count(),
-            'completed': sessions.filter(end_date__lt=current_date, is_academically_closed=False).count(),  # ✅ FIXED
-            'closed': sessions.filter(is_academically_closed=True).count(),  # ✅ FIXED
+            'completed': sessions.filter(
+                end_date__lt=current_date,
+                is_academically_closed=False,
+            ).count(),
+            'closed': sessions.filter(is_academically_closed=True).count(),
         },
-        
-        # Period type distribution
+
         'by_period_type': dict(
             sessions.values('period_type')
             .annotate(count=Count('id'))
             .values_list('period_type', 'count')
         ),
-        
-        # Special session breakdown
+
         'special_session_stats': {
             'regular_sessions': sessions.filter(is_special_session=False).count(),
             'special_sessions': sessions.filter(is_special_session=True).count(),
         },
-        
-        # Promotion statistics
+
         'promotion_stats': {
-            'allows_promotion': sessions.filter(allows_promotion=True).count(),
-            'promotion_done': sessions.filter(promotion_done=True).count(),
+            'allows_promotion':  sessions.filter(allows_promotion=True).count(),
+            'promotion_done':    sessions.filter(promotion_done=True).count(),
             'promotion_pending': sessions.filter(
-                allows_promotion=True, 
-                promotion_done=False
+                allows_promotion=True, promotion_done=False
             ).count(),
         },
-        
-        # Academic year distribution
+
+        # Values are plain strings so callers can JSON-serialise without issue
         'by_year': dict(
             sessions.values('year_name')
             .annotate(count=Count('id'))
             .order_by('-year_name')
             .values_list('year_name', 'count')
         ),
-        
-        # Enrollment statistics
+
         'enrollment_stats': {
             'open_for_enrollment': sessions.filter(
                 is_active=True,
-                is_academically_closed=False  # ✅ FIXED
+                is_academically_closed=False,
             ).count(),
             'past_deadline': sessions.filter(
                 enrollment_deadline__lt=current_date,
-                late_enrollment_allowed=False
+                late_enrollment_allowed=False,
             ).count(),
-            'allows_late_enrollment': sessions.filter(late_enrollment_allowed=True).count(),
+            'allows_late_enrollment': sessions.filter(
+                late_enrollment_allowed=True
+            ).count(),
         },
     }
-    
-    # Duration analysis
+
     if total_sessions > 0:
         sessions_with_dates = sessions.exclude(
             Q(start_date__isnull=True) | Q(end_date__isnull=True)
         )
-        
+
         if sessions_with_dates.exists():
             durations = [
-                (s.end_date - s.start_date).days 
+                (s.end_date - s.start_date).days
                 for s in sessions_with_dates
             ]
-            
             stats['duration_analysis'] = {
-                'average_duration_days': sum(durations) / len(durations) if durations else 0,
-                'shortest_duration_days': min(durations) if durations else 0,
-                'longest_duration_days': max(durations) if durations else 0,
-                'total_academic_days': sum(durations),
+                'average_duration_days': sum(durations) / len(durations),
+                'shortest_duration_days': min(durations),
+                'longest_duration_days':  max(durations),
+                'total_academic_days':    sum(durations),
             }
-        
-        # Progress analysis for active sessions
-        active_sessions = sessions.filter(is_active=True, is_academically_closed=False)  # ✅ FIXED
+
+        active_sessions = sessions.filter(
+            is_active=True, is_academically_closed=False
+        )
         if active_sessions.exists():
-            progress_data = []
-            for session in active_sessions:
-                if session.total_days > 0:
-                    progress_data.append({
-                        'session': str(session),
-                        'progress_percentage': session.progress_percentage,
-                        'days_elapsed': session.days_elapsed,
-                        'days_remaining': session.days_remaining,
-                    })
-            
-            stats['progress_analysis'] = progress_data
-    
-    # Recent activity
+            stats['progress_analysis'] = [
+                {
+                    'session':              str(s),
+                    'progress_percentage':  s.progress_percentage,
+                    'days_elapsed':         s.days_elapsed,
+                    'days_remaining':       s.days_remaining,
+                }
+                for s in active_sessions
+                if s.total_days > 0
+            ]
+
     stats['recent_activity'] = {
         'created_last_30_days': sessions.filter(
-            created_at__gte=timezone.now() - timedelta(days=30)  # ✅ FIXED: use timezone.now()
+            created_at__gte=timezone.now() - timedelta(days=30)
         ).count(),
         'modified_last_7_days': sessions.filter(
-            updated_at__gte=timezone.now() - timedelta(days=7)  # ✅ FIXED: use timezone.now()
+            updated_at__gte=timezone.now() - timedelta(days=7)
         ).count(),
         'starting_next_30_days': sessions.filter(
             start_date__gte=current_date,
-            start_date__lte=current_date + timedelta(days=30)
+            start_date__lte=current_date + timedelta(days=30),
         ).count(),
         'ending_next_30_days': sessions.filter(
             end_date__gte=current_date,
-            end_date__lte=current_date + timedelta(days=30)
+            end_date__lte=current_date + timedelta(days=30),
         ).count(),
     }
-    
+
     return stats
 
 
 def get_session_timeline_data(year_name=None, include_breaks=True):
     """
-    Get timeline data for session visualization
-    
+    Timeline data for session visualisation.
+
     Args:
-        year_name (str): Optional year filter
-        include_breaks (bool): Include break periods
-    
+        year_name (str, optional): Filter to a single academic year.
+        include_breaks (bool): Append school-break holidays to the timeline.
+
     Returns:
-        dict: Timeline data with sessions and optional breaks
+        dict: timeline (list), total_items (int), year_name (str or None).
     """
     from .models import AcademicSession, Holiday
-    from django.db.models import Q
-    
+
     sessions = AcademicSession.objects.all().order_by('start_date')
     if year_name:
         sessions = sessions.filter(year_name=year_name)
-    
-    timeline = []
-    
-    for session in sessions:
-        timeline.append({
-            'type': 'session',
-            'id': session.id,
-            'name': session.name,
-            'start_date': session.start_date,
-            'end_date': session.end_date,
-            'duration_days': session.total_days,
-            'status': session.status_display,
-            'is_current': session.is_current,
-            'is_closed': session.is_academically_closed,  # ✅ FIXED
-            'term_number': session.term_number,
-            'year_name': session.year_name,
-        })
-    
+
+    timeline = [
+        {
+            'type':        'session',
+            'id':          s.id,
+            'name':        s.name,
+            'start_date':  s.start_date,
+            'end_date':    s.end_date,
+            'duration_days': s.total_days,
+            'status':      s.status_display,
+            'is_current':  s.is_current,
+            'is_closed':   s.is_academically_closed,
+            'term_number': s.term_number,
+            'year_name':   s.year_name,
+        }
+        for s in sessions
+    ]
+
     if include_breaks:
         try:
-            breaks = Holiday.objects.filter(holiday_type='BREAK').order_by('start_date')
+            breaks = Holiday.objects.filter(
+                holiday_type='SCHOOL_BREAK'
+            ).order_by('start_date')
             if year_name:
                 breaks = breaks.filter(
-                    Q(academic_session__year_name=year_name)  # ✅ Adjust relationship name if needed
+                    academic_session__year_name=year_name
                 )
-            
-            for holiday in breaks:
+            for h in breaks:
+                end   = h.end_date or h.start_date
                 timeline.append({
-                    'type': 'break',
-                    'id': holiday.id,
-                    'name': holiday.name,
-                    'start_date': holiday.start_date,
-                    'end_date': holiday.end_date,
-                    'duration_days': (holiday.end_date - holiday.start_date).days + 1 if holiday.end_date else 1,
+                    'type':        'break',
+                    'id':          h.id,
+                    'name':        h.name,
+                    'start_date':  h.start_date,
+                    'end_date':    end,
+                    'duration_days': (end - h.start_date).days + 1,
                 })
         except Exception as e:
-            # If Holiday model doesn't exist or has different structure, just skip
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not fetch holiday data: {e}")
-    
-    # Sort by start date
+            logger.warning(f"Could not fetch holiday break data: {e}")
+
     timeline.sort(key=lambda x: x['start_date'])
-    
+
     return {
-        'timeline': timeline,
+        'timeline':    timeline,
         'total_items': len(timeline),
-        'year_name': year_name,
+        'year_name':   year_name,
     }
-
-
-def get_current_academic_session():
-    """
-    Get the current academic session
-    
-    Returns:
-        AcademicSession or None: The current session if one exists
-    """
-    from .models import AcademicSession
-    
-    return AcademicSession.get_current_session()
-
-
-def get_academic_dashboard_statistics():
-    """
-    Get comprehensive statistics for the academics dashboard
-    
-    Returns:
-        dict: Dashboard statistics
-    """
-    from .models import AcademicSession, Class, StudentClassEnrollment, Subject, AcademicLevel
-    from django.db.models import Count
-    from django.utils import timezone
-    
-    current_date = timezone.now().date()
-    
-    # Get current session
-    current_session = AcademicSession.get_current_session()
-    
-    # Basic counts
-    stats = {
-        'current_session': current_session,
-        'total_sessions': AcademicSession.objects.count(),
-        'active_sessions': AcademicSession.objects.filter(is_active=True).count(),
-        'total_classes': Class.objects.filter(is_active=True).count(),
-        'total_subjects': Subject.objects.filter(is_active=True).count(),
-        'total_levels': AcademicLevel.objects.filter(is_active=True).count(),
-    }
-    
-    # Current session stats
-    if current_session:
-        stats['current_session_stats'] = {
-            'total_enrollments': StudentClassEnrollment.objects.filter(
-                academic_session=current_session,
-                is_active=True
-            ).count(),
-            'total_classes': Class.objects.filter(
-                academic_session=current_session,
-                is_active=True
-            ).count(),
-            'progress_percentage': current_session.progress_percentage,
-            'days_remaining': current_session.days_remaining,
-        }
-    
-    return stats
 
 
 # =============================================================================
@@ -317,122 +305,117 @@ def get_academic_dashboard_statistics():
 
 def get_holiday_statistics(filters=None):
     """
-    Get comprehensive statistics for holidays and breaks
-    
+    Comprehensive statistics for holidays and school breaks.
+
     Args:
-        filters (dict): Optional filters
-            - holiday_type: Filter by type
-            - break_type: Filter by break type
-            - year: Filter by year
-            - academic_session: Filter by session
-    
+        filters (dict, optional):
+            holiday_type     – filter by type string
+            year             – filter by calendar year (int)
+            academic_session – filter by session FK
+
     Returns:
-        dict: Holiday statistics and analysis
+        dict
     """
     from .models import Holiday
-    
+
     holidays = Holiday.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('holiday_type'):
             holidays = holidays.filter(holiday_type=filters['holiday_type'])
-        if filters.get('break_type'):
-            holidays = holidays.filter(break_type=filters['break_type'])
         if filters.get('year'):
             holidays = holidays.filter(start_date__year=filters['year'])
         if filters.get('academic_session'):
-            holidays = holidays.filter(academic_session_id=filters['academic_session'])
-    
+            holidays = holidays.filter(
+                academic_session_id=filters['academic_session']
+            )
+
     total_holidays = holidays.count()
-    
+
     stats = {
         'total_holidays': total_holidays,
-        
-        # Type distribution
+
         'by_type': dict(
             holidays.values('holiday_type')
             .annotate(count=Count('id'))
             .values_list('holiday_type', 'count')
         ),
-        
-        # Break type distribution
-        'by_break_type': dict(
-            holidays.filter(holiday_type='BREAK')
-            .values('break_type')
-            .annotate(count=Count('id'))
-            .values_list('break_type', 'count')
-        ),
-        
-        # Year distribution - CONVERT DATES TO STRINGS
-        'by_year': {},
-        
-        # Monthly distribution - CONVERT DATES TO STRINGS
+
+        # Keyed by string "YYYY" to stay JSON-serialisable
+        'by_year':  {},
         'by_month': {},
     }
-    
-    # Fix year distribution - convert dates to strings
-    year_data = holidays.annotate(year=TruncYear('start_date')).values('year').annotate(count=Count('id')).order_by('-year')
-    for item in year_data:
+
+    # Year distribution — convert date → string
+    for item in (
+        holidays
+        .annotate(year=TruncYear('start_date'))
+        .values('year')
+        .annotate(count=Count('id'))
+        .order_by('-year')
+    ):
         if item['year']:
-            year_str = item['year'].strftime('%Y')  # Convert to string
-            stats['by_year'][year_str] = item['count']
-    
-    # Fix monthly distribution - convert dates to strings
-    month_data = holidays.annotate(month=TruncMonth('start_date')).values('month').annotate(count=Count('id')).order_by('month')
-    for item in month_data:
+            stats['by_year'][item['year'].strftime('%Y')] = item['count']
+
+    # Monthly distribution — convert date → string "YYYY-MM"
+    for item in (
+        holidays
+        .annotate(month=TruncMonth('start_date'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    ):
         if item['month']:
-            month_str = item['month'].strftime('%Y-%m')  # Convert to string
-            stats['by_month'][month_str] = item['count']
-    
-    # Duration analysis
+            stats['by_month'][item['month'].strftime('%Y-%m')] = item['count']
+
     if total_holidays > 0:
+        # duration_days is the correct property name on the Holiday model
         holidays_with_end = holidays.exclude(end_date__isnull=True)
-        
+
         if holidays_with_end.exists():
-            durations = [h.duration for h in holidays_with_end]
-            
+            durations = [h.duration_days for h in holidays_with_end]
             stats['duration_analysis'] = {
-                'average_duration_days': sum(durations) / len(durations) if durations else 0,
-                'shortest_duration_days': min(durations) if durations else 0,
-                'longest_duration_days': max(durations) if durations else 0,
-                'total_holiday_days': sum(durations),
+                'average_duration_days': sum(durations) / len(durations),
+                'shortest_duration_days': min(durations),
+                'longest_duration_days':  max(durations),
+                'total_holiday_days':     sum(durations),
             }
-            
-            # Break-specific analysis
-            breaks = holidays_with_end.filter(holiday_type='BREAK')
+
+            breaks = holidays_with_end.filter(holiday_type='SCHOOL_BREAK')
             if breaks.exists():
-                break_durations = [b.duration for b in breaks]
+                break_durations = [b.duration_days for b in breaks]
                 stats['break_duration_analysis'] = {
                     'average_break_days': sum(break_durations) / len(break_durations),
                     'shortest_break_days': min(break_durations),
-                    'longest_break_days': max(break_durations),
-                    'total_break_days': sum(break_durations),
+                    'longest_break_days':  max(break_durations),
+                    'total_break_days':    sum(break_durations),
                 }
-    
-    # Upcoming holidays
+
     current_date = timezone.now().date()
     stats['upcoming'] = {
         'next_7_days': holidays.filter(
             start_date__gte=current_date,
-            start_date__lte=current_date + timedelta(days=7)
+            start_date__lte=current_date + timedelta(days=7),
         ).count(),
         'next_30_days': holidays.filter(
             start_date__gte=current_date,
-            start_date__lte=current_date + timedelta(days=30)
+            start_date__lte=current_date + timedelta(days=30),
         ).count(),
         'next_90_days': holidays.filter(
             start_date__gte=current_date,
-            start_date__lte=current_date + timedelta(days=90)
+            start_date__lte=current_date + timedelta(days=90),
         ).count(),
     }
-    
-    # Add these specific stats for the frontend
+
+    # Convenience keys used by some frontend templates
     stats['upcoming_holidays'] = stats['upcoming']['next_30_days']
-    stats['total_breaks'] = holidays.filter(holiday_type='BREAK').count()
-    stats['total_days'] = stats.get('duration_analysis', {}).get('total_holiday_days', 0)
-    
+    stats['total_breaks']      = holidays.filter(holiday_type='SCHOOL_BREAK').count()
+    stats['total_days']        = (
+        stats.get('duration_analysis', {}).get('total_holiday_days', 0)
+    )
+
     return stats
+
 
 # =============================================================================
 # SUBJECT STATISTICS
@@ -440,24 +423,23 @@ def get_holiday_statistics(filters=None):
 
 def get_subject_statistics(filters=None):
     """
-    Get comprehensive statistics for subjects
-    
+    Comprehensive statistics for subjects.
+
     Args:
-        filters (dict): Optional filters
-            - subject_type: Filter by type
-            - is_active: Filter by active status
-            - is_compulsory: Filter by compulsory status
-            - department: Filter by department
-            - difficulty_level: Filter by difficulty
-    
+        filters (dict, optional):
+            subject_type    – filter by type string
+            is_active       – bool
+            is_compulsory   – bool
+            department      – department PK
+            difficulty_level – string
+
     Returns:
-        dict: Subject statistics and analysis
+        dict
     """
     from .models import Subject, ClassSubject
-    
+
     subjects = Subject.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('subject_type'):
             subjects = subjects.filter(subject_type=filters['subject_type'])
@@ -469,42 +451,38 @@ def get_subject_statistics(filters=None):
             subjects = subjects.filter(department_id=filters['department'])
         if filters.get('difficulty_level'):
             subjects = subjects.filter(difficulty_level=filters['difficulty_level'])
-    
-    # Annotate with usage counts
+
     subjects = subjects.annotate(
         class_count=Count('classes', distinct=True),
         active_class_count=Count(
             'classes',
             filter=Q(classes__is_active=True),
-            distinct=True
-        )
+            distinct=True,
+        ),
     )
-    
+
     total_subjects = subjects.count()
-    
+
     stats = {
-        'total_subjects': total_subjects,
-        'active_subjects': subjects.filter(is_active=True).count(),
+        'total_subjects':    total_subjects,
+        'active_subjects':   subjects.filter(is_active=True).count(),
         'inactive_subjects': subjects.filter(is_active=False).count(),
         'compulsory_subjects': subjects.filter(is_compulsory=True).count(),
-        'optional_subjects': subjects.filter(is_compulsory=False).count(),
-        
-        # Type distribution
+        'optional_subjects':   subjects.filter(is_compulsory=False).count(),
+
         'by_type': dict(
             subjects.values('subject_type')
             .annotate(count=Count('id'))
             .order_by('-count')
             .values_list('subject_type', 'count')
         ),
-        
-        # Difficulty distribution
+
         'by_difficulty': dict(
             subjects.values('difficulty_level')
             .annotate(count=Count('id'))
             .values_list('difficulty_level', 'count')
         ),
-        
-        # Department distribution
+
         'by_department': dict(
             subjects.exclude(department__isnull=True)
             .values('department__name')
@@ -512,71 +490,63 @@ def get_subject_statistics(filters=None):
             .order_by('-count')
             .values_list('department__name', 'count')
         ),
-        
-        # Usage analysis
+
         'usage_stats': {
-            'used_in_classes': subjects.filter(class_count__gt=0).count(),
-            'not_used': subjects.filter(class_count=0).count(),
-            'total_class_assignments': ClassSubject.objects.count(),
-            'average_classes_per_subject': subjects.aggregate(
-                avg=Avg('class_count')
-            )['avg'] or 0,
+            'used_in_classes':          subjects.filter(class_count__gt=0).count(),
+            'not_used':                 subjects.filter(class_count=0).count(),
+            'total_class_assignments':  ClassSubject.objects.count(),
+            'average_classes_per_subject': (
+                subjects.aggregate(avg=Avg('class_count'))['avg'] or 0
+            ),
         },
     }
-    
-    # Credit hours analysis
+
     if total_subjects > 0:
         credit_data = subjects.aggregate(
             avg_credit=Avg('credit_hours'),
             min_credit=Min('credit_hours'),
             max_credit=Max('credit_hours'),
-            total_credit=Sum('credit_hours')
+            total_credit=Sum('credit_hours'),
         )
-        
         stats['credit_analysis'] = {
             'average_credit_hours': float(credit_data['avg_credit'] or 0),
             'minimum_credit_hours': float(credit_data['min_credit'] or 0),
             'maximum_credit_hours': float(credit_data['max_credit'] or 0),
-            'total_credit_hours': float(credit_data['total_credit'] or 0),
+            'total_credit_hours':   float(credit_data['total_credit'] or 0),
         }
-    
-    # Pass mark analysis
-    if total_subjects > 0:
+
         pass_mark_data = subjects.aggregate(
             avg_pass=Avg('pass_mark'),
             min_pass=Min('pass_mark'),
-            max_pass=Max('pass_mark')
+            max_pass=Max('pass_mark'),
         )
-        
         stats['pass_mark_analysis'] = {
             'average_pass_mark': float(pass_mark_data['avg_pass'] or 0),
             'minimum_pass_mark': float(pass_mark_data['min_pass'] or 0),
             'maximum_pass_mark': float(pass_mark_data['max_pass'] or 0),
         }
-    
-    # Most used subjects
+
     most_used = subjects.order_by('-class_count')[:10]
     stats['most_used_subjects'] = [
         {
-            'id': s.id,
-            'name': s.name,
-            'abbreviation': s.abbreviation,
-            'class_count': s.class_count,
+            'id':                s.id,
+            'name':              s.name,
+            'abbreviation':      s.abbreviation,
+            'class_count':       s.class_count,
             'active_class_count': s.active_class_count,
         }
         for s in most_used
     ]
-    
-    # Unused subjects
-    unused = subjects.filter(class_count=0, is_active=True)
-    stats['unused_active_subjects'] = unused.count()
-    
-    # Textbook requirements
+
+    stats['unused_active_subjects'] = subjects.filter(
+        class_count=0, is_active=True
+    ).count()
+
     stats['textbook_stats'] = {
         'requires_textbook': subjects.filter(textbook_required=True).count(),
-        'no_textbook': subjects.filter(textbook_required=False).count(),
+        'no_textbook':       subjects.filter(textbook_required=False).count(),
     }
-    
+
     return stats
 
 
@@ -586,125 +556,118 @@ def get_subject_statistics(filters=None):
 
 def get_academic_level_statistics(filters=None):
     """
-    Get comprehensive statistics for academic levels
-    
+    Comprehensive statistics for academic levels.
+
     Args:
-        filters (dict): Optional filters
-            - is_active: Filter by active status
-            - has_sections: Filter by section status
-            - is_graduation_level: Filter by graduation status
-    
+        filters (dict, optional):
+            is_active           – bool
+            has_sections        – bool
+            is_graduation_level – bool
+
     Returns:
-        dict: Academic level statistics
+        dict
     """
     from .models import AcademicLevel, Class
-    try:
-        from students.models import Student
-        has_students_model = True
-    except ImportError:
-        has_students_model = False
-    
+
     levels = AcademicLevel.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('is_active') is not None:
             levels = levels.filter(is_active=filters['is_active'])
         if filters.get('has_sections') is not None:
             levels = levels.filter(has_sections=filters['has_sections'])
         if filters.get('is_graduation_level') is not None:
-            levels = levels.filter(is_graduation_level=filters['is_graduation_level'])
-    
-    # Annotate with class counts
+            levels = levels.filter(
+                is_graduation_level=filters['is_graduation_level']
+            )
+
     levels = levels.annotate(
         class_count=Count('classes', distinct=True),
         active_class_count=Count(
             'classes',
             filter=Q(classes__is_active=True),
-            distinct=True
-        )
+            distinct=True,
+        ),
     )
-    
+
     total_levels = levels.count()
-    
+
     stats = {
-        'total_levels': total_levels,
-        'active_levels': levels.filter(is_active=True).count(),
-        'inactive_levels': levels.filter(is_active=False).count(),
-        'levels_with_sections': levels.filter(has_sections=True).count(),
-        'levels_without_sections': levels.filter(has_sections=False).count(),
-        'graduation_levels': levels.filter(is_graduation_level=True).count(),
-        
-        # Class distribution
+        'total_levels':              total_levels,
+        'active_levels':             levels.filter(is_active=True).count(),
+        'inactive_levels':           levels.filter(is_active=False).count(),
+        'levels_with_sections':      levels.filter(has_sections=True).count(),
+        'levels_without_sections':   levels.filter(has_sections=False).count(),
+        'graduation_levels':         levels.filter(is_graduation_level=True).count(),
+
         'class_stats': {
-            'levels_with_classes': levels.filter(class_count__gt=0).count(),
+            'levels_with_classes':    levels.filter(class_count__gt=0).count(),
             'levels_without_classes': levels.filter(class_count=0).count(),
-            'total_classes': Class.objects.count(),
-            'average_classes_per_level': levels.aggregate(
-                avg=Avg('class_count')
-            )['avg'] or 0,
+            'total_classes':          Class.objects.count(),
+            'average_classes_per_level': (
+                levels.aggregate(avg=Avg('class_count'))['avg'] or 0
+            ),
         },
     }
-    
-    # Enrollment statistics (if Student model is available)
-    if has_students_model:
+
+    try:
+        from students.models import Student
         level_enrollment = []
         for level in levels:
-            enrollment = Student.objects.filter(
+            count = Student.objects.filter(
                 current_academic_level=level,
-                enrollment_status='active'
+                enrollment_status='ACTIVE',
             ).count()
-            
             level_enrollment.append({
-                'level_id': level.id,
-                'level_name': level.name,
-                'enrollment_count': enrollment,
-                'class_count': level.class_count,
-                'has_sections': level.has_sections,
+                'level_id':        level.id,
+                'level_name':      level.name,
+                'enrollment_count': count,
+                'class_count':     level.class_count,
+                'has_sections':    level.has_sections,
             })
-        
+
         stats['enrollment_by_level'] = sorted(
             level_enrollment,
             key=lambda x: x['enrollment_count'],
-            reverse=True
+            reverse=True,
         )
-        
-        stats['total_enrollment'] = sum(l['enrollment_count'] for l in level_enrollment)
-    
-    # Progression analysis
-    levels_with_progression = levels.exclude(next_level__isnull=True)
+        stats['total_enrollment'] = sum(
+            l['enrollment_count'] for l in level_enrollment
+        )
+    except ImportError:
+        pass
+
     stats['progression_stats'] = {
-        'levels_with_next_level': levels_with_progression.count(),
-        'terminal_levels': levels.filter(next_level__isnull=True).count(),
+        'levels_with_next_level': levels.exclude(next_level__isnull=True).count(),
+        'terminal_levels':        levels.filter(next_level__isnull=True).count(),
     }
-    
-    # Order distribution
+
     if total_levels > 0:
         order_data = levels.aggregate(
-            min_order=Min('order'),
-            max_order=Max('order')
+            min_order=Min('order'), max_order=Max('order')
         )
-        
-        stats['order_range'] = {
-            'first_level_order': order_data['min_order'],
-            'last_level_order': order_data['max_order'],
-            'total_progression_steps': order_data['max_order'] - order_data['min_order'] + 1,
-        }
-    
-    # Most populated levels
+        if order_data['min_order'] is not None:
+            stats['order_range'] = {
+                'first_level_order':       order_data['min_order'],
+                'last_level_order':        order_data['max_order'],
+                'total_progression_steps': (
+                    order_data['max_order'] - order_data['min_order'] + 1
+                ),
+            }
+
     most_populated = levels.order_by('-class_count', 'order')[:5]
     stats['most_populated_levels'] = [
         {
-            'id': l.id,
-            'name': l.name,
-            'order': l.order,
-            'class_count': l.class_count,
+            'id':                l.id,
+            'name':              l.name,
+            'order':             l.order,
+            'class_count':       l.class_count,
             'active_class_count': l.active_class_count,
-            'has_sections': l.has_sections,
+            'has_sections':      l.has_sections,
         }
         for l in most_populated
     ]
-    
+
     return stats
 
 
@@ -714,23 +677,22 @@ def get_academic_level_statistics(filters=None):
 
 def get_classroom_statistics(filters=None):
     """
-    Get comprehensive statistics for classrooms
-    
+    Comprehensive statistics for classrooms.
+
     Args:
-        filters (dict): Optional filters
-            - room_type: Filter by type
-            - building: Filter by building
-            - is_active: Filter by active status
-            - is_bookable: Filter by bookable status
-    
+        filters (dict, optional):
+            room_type  – room type string
+            building   – building name string
+            is_active  – bool
+            is_bookable – bool
+
     Returns:
-        dict: Classroom statistics and analysis
+        dict
     """
     from .models import ClassRoom, Class
-    
+
     classrooms = ClassRoom.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('room_type'):
             classrooms = classrooms.filter(room_type=filters['room_type'])
@@ -740,35 +702,32 @@ def get_classroom_statistics(filters=None):
             classrooms = classrooms.filter(is_active=filters['is_active'])
         if filters.get('is_bookable') is not None:
             classrooms = classrooms.filter(is_bookable=filters['is_bookable'])
-    
-    # Annotate with assignment counts
+
     classrooms = classrooms.annotate(
         assigned_class_count=Count('assigned_classes', distinct=True),
         active_assigned_count=Count(
             'assigned_classes',
             filter=Q(assigned_classes__is_active=True),
-            distinct=True
-        )
+            distinct=True,
+        ),
     )
-    
+
     total_classrooms = classrooms.count()
-    
+
     stats = {
-        'total_classrooms': total_classrooms,
-        'active_classrooms': classrooms.filter(is_active=True).count(),
+        'total_classrooms':    total_classrooms,
+        'active_classrooms':   classrooms.filter(is_active=True).count(),
         'inactive_classrooms': classrooms.filter(is_active=False).count(),
-        'bookable_classrooms': classrooms.filter(is_bookable=True).count(),
+        'bookable_classrooms':     classrooms.filter(is_bookable=True).count(),
         'non_bookable_classrooms': classrooms.filter(is_bookable=False).count(),
-        
-        # Type distribution
+
         'by_type': dict(
             classrooms.values('room_type')
             .annotate(count=Count('id'))
             .order_by('-count')
             .values_list('room_type', 'count')
         ),
-        
-        # Building distribution
+
         'by_building': dict(
             classrooms.exclude(building='')
             .values('building')
@@ -776,8 +735,7 @@ def get_classroom_statistics(filters=None):
             .order_by('-count')
             .values_list('building', 'count')
         ),
-        
-        # Floor distribution
+
         'by_floor': dict(
             classrooms.exclude(floor='')
             .values('floor')
@@ -785,74 +743,71 @@ def get_classroom_statistics(filters=None):
             .order_by('floor')
             .values_list('floor', 'count')
         ),
-        
-        # Assignment statistics
+
         'assignment_stats': {
-            'assigned_classrooms': classrooms.filter(assigned_class_count__gt=0).count(),
-            'unassigned_classrooms': classrooms.filter(assigned_class_count=0).count(),
-            'total_assignments': Class.objects.exclude(classroom__isnull=True).count(),
+            'assigned_classrooms':   classrooms.filter(
+                assigned_class_count__gt=0
+            ).count(),
+            'unassigned_classrooms': classrooms.filter(
+                assigned_class_count=0
+            ).count(),
+            'total_assignments': Class.objects.exclude(
+                classroom__isnull=True
+            ).count(),
         },
     }
-    
-    # Capacity analysis
+
     if total_classrooms > 0:
-        capacity_data = classrooms.aggregate(
+        cap = classrooms.aggregate(
             total_capacity=Sum('capacity'),
             avg_capacity=Avg('capacity'),
             min_capacity=Min('capacity'),
-            max_capacity=Max('capacity')
+            max_capacity=Max('capacity'),
         )
-        
         stats['capacity_analysis'] = {
-            'total_capacity': capacity_data['total_capacity'] or 0,
-            'average_capacity': float(capacity_data['avg_capacity'] or 0),
-            'smallest_capacity': capacity_data['min_capacity'] or 0,
-            'largest_capacity': capacity_data['max_capacity'] or 0,
+            'total_capacity':   cap['total_capacity'] or 0,
+            'average_capacity': float(cap['avg_capacity'] or 0),
+            'smallest_capacity': cap['min_capacity'] or 0,
+            'largest_capacity':  cap['max_capacity'] or 0,
         }
-        
-        # Capacity distribution
         stats['capacity_distribution'] = {
-            'small_rooms': classrooms.filter(capacity__lte=20).count(),
-            'medium_rooms': classrooms.filter(capacity__gt=20, capacity__lte=40).count(),
-            'large_rooms': classrooms.filter(capacity__gt=40, capacity__lte=100).count(),
+            'small_rooms':     classrooms.filter(capacity__lte=20).count(),
+            'medium_rooms':    classrooms.filter(capacity__gt=20, capacity__lte=40).count(),
+            'large_rooms':     classrooms.filter(capacity__gt=40, capacity__lte=100).count(),
             'very_large_rooms': classrooms.filter(capacity__gt=100).count(),
         }
-    
-    # Facilities analysis
+
     stats['facilities'] = {
-        'with_projector': classrooms.filter(has_projector=True).count(),
-        'with_computer': classrooms.filter(has_computer=True).count(),
-        'with_ac': classrooms.filter(has_air_conditioning=True).count(),
-        'with_whiteboard': classrooms.filter(has_whiteboard=True).count(),
-        'with_smart_board': classrooms.filter(has_smart_board=True).count(),
-        'with_internet': classrooms.filter(has_internet=True).count(),
+        'with_projector':    classrooms.filter(has_projector=True).count(),
+        'with_computer':     classrooms.filter(has_computer=True).count(),
+        'with_ac':           classrooms.filter(has_air_conditioning=True).count(),
+        'with_whiteboard':   classrooms.filter(has_whiteboard=True).count(),
+        'with_smart_board':  classrooms.filter(has_smart_board=True).count(),
+        'with_internet':     classrooms.filter(has_internet=True).count(),
         'with_sound_system': classrooms.filter(has_sound_system=True).count(),
-        'accessible': classrooms.filter(is_accessible=True).count(),
+        'accessible':        classrooms.filter(is_accessible=True).count(),
     }
-    
-    # Utilization analysis
+
     most_used = classrooms.order_by('-assigned_class_count')[:10]
     stats['most_used_classrooms'] = [
         {
-            'id': c.id,
-            'name': c.name,
-            'room_number': c.room_number,
-            'building': c.building,
-            'capacity': c.capacity,
-            'assigned_count': c.assigned_class_count,
+            'id':                  c.id,
+            'name':                c.name,
+            'room_number':         c.room_number,
+            'building':            c.building,
+            'capacity':            c.capacity,
+            'assigned_count':      c.assigned_class_count,
             'active_assigned_count': c.active_assigned_count,
         }
         for c in most_used
     ]
-    
-    # Underutilized classrooms
-    underutilized = classrooms.filter(
-        is_active=True,
-        assigned_class_count=0
-    )
-    stats['underutilized_classrooms'] = underutilized.count()
-    
+
+    stats['underutilized_classrooms'] = classrooms.filter(
+        is_active=True, assigned_class_count=0
+    ).count()
+
     return stats
+
 
 # =============================================================================
 # CLASS STATISTICS
@@ -860,28 +815,28 @@ def get_classroom_statistics(filters=None):
 
 def get_class_statistics(filters=None):
     """
-    Get comprehensive statistics for classes.
-    
+    Comprehensive statistics for classes.
+
     Args:
-        filters (dict): Optional filters
-            - academic_level: Filter by level
-            - academic_session: Filter by session
-            - class_teacher: Filter by teacher
-            - is_active: Filter by active status
-    
+        filters (dict, optional):
+            academic_level   – level PK
+            academic_session – session PK
+            class_teacher    – teacher PK
+            is_active        – bool
+
     Returns:
-        dict: Class statistics and analysis
+        dict
     """
     from .models import Class, ClassSubject
+
     try:
         from students.models import StudentClassEnrollment
         has_enrollment_model = True
     except ImportError:
         has_enrollment_model = False
-    
+
     classes = Class.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('academic_level'):
             classes = classes.filter(academic_level_id=filters['academic_level'])
@@ -891,155 +846,146 @@ def get_class_statistics(filters=None):
             classes = classes.filter(class_teacher_id=filters['class_teacher'])
         if filters.get('is_active') is not None:
             classes = classes.filter(is_active=filters['is_active'])
-    
-    # Annotate with subject counts
+
     classes = classes.annotate(
         subject_count=Count('subjects', distinct=True),
         active_subject_count=Count(
             'subjects',
             filter=Q(subjects__is_active=True),
-            distinct=True
-        )
+            distinct=True,
+        ),
     )
-    
+
     total_classes = classes.count()
-    
-    # --- by_session (fixed) ---
+
+    # by_session — correct aggregation (was broken in original)
+    by_session_raw = (
+        classes
+        .values('academic_session__year_name', 'academic_session__term_name')
+        .annotate(count=Count('id'))
+        .order_by('academic_session__year_name', 'academic_session__term_name')
+    )
     by_session = {}
-    for year, term, count in classes.values_list(
-        'academic_session__year_name',
-        'academic_session__term_name',
-        'id'
-    ):
-        by_session.setdefault(year, {})
-        by_session[year][term] = by_session[year].get(term, 0) + 1
-    
-    # --- by_level (safe dictionary) ---
-    by_level = {}
-    for level, count in classes.values_list('academic_level__name').annotate(count=Count('id')):
-        by_level[level] = count
-    
-    # Section analysis
-    section_stats = {
-        'classes_with_sections': classes.exclude(section__isnull=True).exclude(section='').count(),
-        'classes_without_sections': classes.filter(Q(section__isnull=True) | Q(section='')).count(),
+    for row in by_session_raw:
+        year = row['academic_session__year_name']
+        term = row['academic_session__term_name']
+        by_session.setdefault(year, {})[term] = row['count']
+
+    # by_level — correct aggregation (was broken in original)
+    by_level = dict(
+        classes
+        .values('academic_level__name')
+        .annotate(count=Count('id'))
+        .order_by('academic_level__name')
+        .values_list('academic_level__name', 'count')
+    )
+
+    stats = {
+        'total_classes':   total_classes,
+        'active_classes':  classes.filter(is_active=True).count(),
+        'inactive_classes': classes.filter(is_active=False).count(),
+        'by_session':      by_session,
+        'by_level':        by_level,
+
+        'section_stats': {
+            'classes_with_sections':    classes.exclude(section__isnull=True).exclude(section='').count(),
+            'classes_without_sections': classes.filter(Q(section__isnull=True) | Q(section='')).count(),
+        },
+
+        'subject_stats': {
+            'classes_with_subjects':    classes.filter(subject_count__gt=0).count(),
+            'classes_without_subjects': classes.filter(subject_count=0).count(),
+            'total_subject_assignments': ClassSubject.objects.count(),
+            'average_subjects_per_class': (
+                classes.aggregate(avg=Avg('subject_count'))['avg'] or 0
+            ),
+        },
+
+        'teacher_stats': {
+            'classes_with_teacher':    classes.exclude(class_teacher__isnull=True).count(),
+            'classes_without_teacher': classes.filter(class_teacher__isnull=True).count(),
+            'classes_with_assistant':  classes.exclude(assistant_teacher__isnull=True).count(),
+        },
+
+        'classroom_stats': {
+            'classes_with_classroom':    classes.exclude(classroom__isnull=True).count(),
+            'classes_without_classroom': classes.filter(classroom__isnull=True).count(),
+        },
     }
-    
-    # Subject statistics
-    subject_stats = {
-        'classes_with_subjects': classes.filter(subject_count__gt=0).count(),
-        'classes_without_subjects': classes.filter(subject_count=0).count(),
-        'total_subject_assignments': ClassSubject.objects.count(),
-        'average_subjects_per_class': classes.aggregate(avg=Avg('subject_count'))['avg'] or 0,
-    }
-    
-    # Teacher statistics
-    teacher_stats = {
-        'classes_with_teacher': classes.exclude(class_teacher__isnull=True).count(),
-        'classes_without_teacher': classes.filter(class_teacher__isnull=True).count(),
-        'classes_with_assistant': classes.exclude(assistant_teacher__isnull=True).count(),
-    }
-    
-    # Classroom statistics
-    classroom_stats = {
-        'classes_with_classroom': classes.exclude(classroom__isnull=True).count(),
-        'classes_without_classroom': classes.filter(classroom__isnull=True).count(),
-    }
-    
-    # Capacity analysis
-    capacity_analysis = {}
+
     if total_classes > 0:
-        cap_data = classes.aggregate(
+        cap = classes.aggregate(
             total_max_students=Sum('max_students'),
             avg_max_students=Avg('max_students'),
             min_max_students=Min('max_students'),
-            max_max_students=Max('max_students')
+            max_max_students=Max('max_students'),
         )
-        capacity_analysis = {
-            'total_capacity': cap_data['total_max_students'] or 0,
-            'average_capacity': float(cap_data['avg_max_students'] or 0),
-            'smallest_capacity': cap_data['min_max_students'] or 0,
-            'largest_capacity': cap_data['max_max_students'] or 0,
+        stats['capacity_analysis'] = {
+            'total_capacity':   cap['total_max_students'] or 0,
+            'average_capacity': float(cap['avg_max_students'] or 0),
+            'smallest_capacity': cap['min_max_students'] or 0,
+            'largest_capacity':  cap['max_max_students'] or 0,
         }
-    
-    # Enrollment analysis
-    enrollment_analysis = {}
+
     if has_enrollment_model and total_classes > 0:
         enrollment_data = []
-        total_enrolled = 0
+        total_enrolled  = 0
         for cls in classes:
-            enrolled = cls.get_current_enrollment_count()
+            enrolled  = cls.get_current_enrollment_count()
             total_enrolled += enrolled
             occupancy = (enrolled / cls.max_students * 100) if cls.max_students else 0
             enrollment_data.append({
-                'class_id': cls.id,
-                'class_name': cls.name,
-                'enrolled': enrolled,
-                'capacity': cls.max_students,
+                'class_id':            cls.id,
+                'class_name':          cls.name,
+                'enrolled':            enrolled,
+                'capacity':            cls.max_students,
                 'occupancy_percentage': occupancy,
             })
-        
-        enrollment_analysis = {
-            'total_enrolled_students': total_enrolled,
+
+        n = len(enrollment_data)
+        stats['enrollment_analysis'] = {
+            'total_enrolled_students':  total_enrolled,
             'average_enrollment_per_class': total_enrolled / total_classes,
-            'classes_at_capacity': len([e for e in enrollment_data if e['occupancy_percentage'] >= 100]),
-            'classes_over_capacity': len([e for e in enrollment_data if e['occupancy_percentage'] > 100]),
-            'classes_underutilized': len([e for e in enrollment_data if e['occupancy_percentage'] < 50]),
-            'average_occupancy_percentage': sum(e['occupancy_percentage'] for e in enrollment_data) / len(enrollment_data),
-            'most_populated_classes': sorted(enrollment_data, key=lambda x: x['enrolled'], reverse=True)[:10]
+            'classes_at_capacity':   sum(1 for e in enrollment_data if e['occupancy_percentage'] >= 100),
+            'classes_over_capacity': sum(1 for e in enrollment_data if e['occupancy_percentage'] > 100),
+            'classes_underutilized': sum(1 for e in enrollment_data if e['occupancy_percentage'] < 50),
+            'average_occupancy_percentage': (
+                sum(e['occupancy_percentage'] for e in enrollment_data) / n if n else 0
+            ),
+            'most_populated_classes': sorted(
+                enrollment_data, key=lambda x: x['enrolled'], reverse=True
+            )[:10],
         }
-    
-    # Performance analysis
-    performance_analysis = {}
+
     classes_with_perf = classes.exclude(class_average_score__isnull=True)
     if classes_with_perf.exists():
-        perf_data = classes_with_perf.aggregate(
+        perf = classes_with_perf.aggregate(
             avg_score=Avg('class_average_score'),
             min_score=Min('class_average_score'),
-            max_score=Max('class_average_score')
+            max_score=Max('class_average_score'),
         )
-        performance_analysis = {
+        stats['performance_analysis'] = {
             'classes_with_data': classes_with_perf.count(),
-            'average_class_score': float(perf_data['avg_score'] or 0),
-            'lowest_average': float(perf_data['min_score'] or 0),
-            'highest_average': float(perf_data['max_score'] or 0),
+            'average_class_score': float(perf['avg_score'] or 0),
+            'lowest_average':      float(perf['min_score'] or 0),
+            'highest_average':     float(perf['max_score'] or 0),
         }
-    
-    # Attendance analysis
-    attendance_analysis = {}
+
     classes_with_att = classes.exclude(attendance_rate__isnull=True)
     if classes_with_att.exists():
-        att_data = classes_with_att.aggregate(
+        att = classes_with_att.aggregate(
             avg_rate=Avg('attendance_rate'),
             min_rate=Min('attendance_rate'),
-            max_rate=Max('attendance_rate')
+            max_rate=Max('attendance_rate'),
         )
-        attendance_analysis = {
+        stats['attendance_analysis'] = {
             'classes_with_data': classes_with_att.count(),
-            'average_attendance_rate': float(att_data['avg_rate'] or 0),
-            'lowest_rate': float(att_data['min_rate'] or 0),
-            'highest_rate': float(att_data['max_rate'] or 0),
+            'average_attendance_rate': float(att['avg_rate'] or 0),
+            'lowest_rate':             float(att['min_rate'] or 0),
+            'highest_rate':            float(att['max_rate'] or 0),
         }
-    
-    # Combine everything into stats dictionary
-    stats = {
-        'total_classes': total_classes,
-        'active_classes': classes.filter(is_active=True).count(),
-        'inactive_classes': classes.filter(is_active=False).count(),
-        'by_session': by_session,
-        'by_level': by_level,
-        'section_stats': section_stats,
-        'subject_stats': subject_stats,
-        'teacher_stats': teacher_stats,
-        'classroom_stats': classroom_stats,
-        'capacity_analysis': capacity_analysis,
-        'enrollment_analysis': enrollment_analysis,
-        'performance_analysis': performance_analysis,
-        'attendance_analysis': attendance_analysis,
-    }
-    
-    return stats
 
+    return stats
 
 
 # =============================================================================
@@ -1048,27 +994,28 @@ def get_class_statistics(filters=None):
 
 def get_class_subject_statistics(filters=None):
     """
-    Get comprehensive statistics for class-subject assignments
-    
+    Comprehensive statistics for class-subject assignments.
+
     Args:
-        filters (dict): Optional filters
-            - class_instance: Filter by class
-            - subject: Filter by subject
-            - teacher: Filter by teacher
-            - is_active: Filter by active status
-            - is_optional: Filter by optional status
-    
+        filters (dict, optional):
+            class_instance – class PK
+            subject        – subject PK
+            teacher        – teacher PK
+            is_active      – bool
+            is_optional    – bool
+
     Returns:
-        dict: Class subject assignment statistics
+        dict
     """
     from .models import ClassSubject
-    
+
     class_subjects = ClassSubject.objects.all()
-    
-    # Apply filters
+
     if filters:
         if filters.get('class_instance'):
-            class_subjects = class_subjects.filter(class_instance_id=filters['class_instance'])
+            class_subjects = class_subjects.filter(
+                class_instance_id=filters['class_instance']
+            )
         if filters.get('subject'):
             class_subjects = class_subjects.filter(subject_id=filters['subject'])
         if filters.get('teacher'):
@@ -1077,129 +1024,116 @@ def get_class_subject_statistics(filters=None):
             class_subjects = class_subjects.filter(is_active=filters['is_active'])
         if filters.get('is_optional') is not None:
             class_subjects = class_subjects.filter(is_optional=filters['is_optional'])
-    
+
     total_assignments = class_subjects.count()
-    
+
     stats = {
-        'total_assignments': total_assignments,
-        'active_assignments': class_subjects.filter(is_active=True).count(),
+        'total_assignments':    total_assignments,
+        'active_assignments':   class_subjects.filter(is_active=True).count(),
         'inactive_assignments': class_subjects.filter(is_active=False).count(),
         'compulsory_assignments': class_subjects.filter(is_optional=False).count(),
-        'optional_assignments': class_subjects.filter(is_optional=True).count(),
-        
-        # Teacher assignment
+        'optional_assignments':   class_subjects.filter(is_optional=True).count(),
+
         'teacher_stats': {
-            'assignments_with_teacher': class_subjects.exclude(teacher__isnull=True).count(),
+            'assignments_with_teacher':    class_subjects.exclude(teacher__isnull=True).count(),
             'assignments_without_teacher': class_subjects.filter(teacher__isnull=True).count(),
         },
-        
-        # Subject distribution
+
         'by_subject': dict(
             class_subjects.values('subject__name')
             .annotate(count=Count('id'))
             .order_by('-count')
             .values_list('subject__name', 'count')[:20]
         ),
-        
-        # Class distribution
-        'by_class': dict(
-            class_subjects.values('class_instance__academic_level__name', 'class_instance__section')
+
+        'by_level': dict(
+            class_subjects.values('class_instance__academic_level__name')
             .annotate(count=Count('id'))
             .order_by('-count')
             .values_list('class_instance__academic_level__name', 'count')[:20]
         ),
     }
-    
-    # Hours analysis
+
     if total_assignments > 0:
-        hours_data = class_subjects.aggregate(
+        hours = class_subjects.aggregate(
             total_hours_per_week=Sum('hours_per_week'),
             avg_hours_per_week=Avg('hours_per_week'),
             min_hours=Min('hours_per_week'),
             max_hours=Max('hours_per_week'),
             total_course_hours=Sum('total_hours'),
         )
-        
         stats['hours_analysis'] = {
-            'total_weekly_hours': hours_data['total_hours_per_week'] or 0,
-            'average_weekly_hours': float(hours_data['avg_hours_per_week'] or 0),
-            'minimum_weekly_hours': hours_data['min_hours'] or 0,
-            'maximum_weekly_hours': hours_data['max_hours'] or 0,
-            'total_course_hours': hours_data['total_course_hours'] or 0,
+            'total_weekly_hours':   hours['total_hours_per_week'] or 0,
+            'average_weekly_hours': float(hours['avg_hours_per_week'] or 0),
+            'minimum_weekly_hours': hours['min_hours'] or 0,
+            'maximum_weekly_hours': hours['max_hours'] or 0,
+            'total_course_hours':   hours['total_course_hours'] or 0,
         }
-    
-    # Assessment weight analysis
-    if total_assignments > 0:
-        assessment_data = class_subjects.aggregate(
+
+        assessment = class_subjects.aggregate(
             avg_ca_weight=Avg('continuous_assessment_weight'),
             avg_exam_weight=Avg('final_exam_weight'),
         )
-        
         stats['assessment_analysis'] = {
-            'average_ca_weight': float(assessment_data['avg_ca_weight'] or 0),
-            'average_exam_weight': float(assessment_data['avg_exam_weight'] or 0),
+            'average_ca_weight':   float(assessment['avg_ca_weight'] or 0),
+            'average_exam_weight': float(assessment['avg_exam_weight'] or 0),
         }
-        
-        # Distribution of CA weights
         stats['ca_weight_distribution'] = {
-            'ca_dominant': class_subjects.filter(continuous_assessment_weight__gt=50).count(),
+            'ca_dominant':   class_subjects.filter(continuous_assessment_weight__gt=50).count(),
             'exam_dominant': class_subjects.filter(final_exam_weight__gt=50).count(),
-            'balanced': class_subjects.filter(
-                continuous_assessment_weight=50,
-                final_exam_weight=50
+            'balanced':      class_subjects.filter(
+                continuous_assessment_weight=50, final_exam_weight=50
             ).count(),
         }
-    
-    # Performance analysis
-    assignments_with_average = class_subjects.exclude(class_average__isnull=True)
-    if assignments_with_average.exists():
-        performance_data = assignments_with_average.aggregate(
+
+    assignments_with_avg = class_subjects.exclude(class_average__isnull=True)
+    if assignments_with_avg.exists():
+        perf = assignments_with_avg.aggregate(
             avg_class_average=Avg('class_average'),
             min_average=Min('class_average'),
-            max_average=Max('class_average')
+            max_average=Max('class_average'),
         )
-        
         stats['performance_analysis'] = {
-            'assignments_with_data': assignments_with_average.count(),
-            'overall_average': float(performance_data['avg_class_average'] or 0),
-            'lowest_average': float(performance_data['min_average'] or 0),
-            'highest_average': float(performance_data['max_average'] or 0),
+            'assignments_with_data': assignments_with_avg.count(),
+            'overall_average': float(perf['avg_class_average'] or 0),
+            'lowest_average':  float(perf['min_average'] or 0),
+            'highest_average': float(perf['max_average'] or 0),
         }
-    
-    # Pass rate analysis
-    assignments_with_pass_rate = class_subjects.exclude(pass_rate__isnull=True)
-    if assignments_with_pass_rate.exists():
-        pass_rate_data = assignments_with_pass_rate.aggregate(
+
+    assignments_with_pr = class_subjects.exclude(pass_rate__isnull=True)
+    if assignments_with_pr.exists():
+        pr = assignments_with_pr.aggregate(
             avg_pass_rate=Avg('pass_rate'),
             min_pass_rate=Min('pass_rate'),
-            max_pass_rate=Max('pass_rate')
+            max_pass_rate=Max('pass_rate'),
         )
-        
         stats['pass_rate_analysis'] = {
-            'assignments_with_data': assignments_with_pass_rate.count(),
-            'average_pass_rate': float(pass_rate_data['avg_pass_rate'] or 0),
-            'lowest_pass_rate': float(pass_rate_data['min_pass_rate'] or 0),
-            'highest_pass_rate': float(pass_rate_data['max_pass_rate'] or 0),
+            'assignments_with_data': assignments_with_pr.count(),
+            'average_pass_rate': float(pr['avg_pass_rate'] or 0),
+            'lowest_pass_rate':  float(pr['min_pass_rate'] or 0),
+            'highest_pass_rate': float(pr['max_pass_rate'] or 0),
         }
-    
-    # Teacher workload analysis
-    teacher_workload = class_subjects.exclude(teacher__isnull=True).values(
-        'teacher__staff__first_name',
-        'teacher__staff__last_name'
-    ).annotate(
-        assignment_count=Count('id'),
-        total_weekly_hours=Sum('hours_per_week')
-    ).order_by('-total_weekly_hours')[:10]
-    
+
+    teacher_workload = (
+        class_subjects.exclude(teacher__isnull=True)
+        .values('teacher__staff__first_name', 'teacher__staff__last_name')
+        .annotate(
+            assignment_count=Count('id'),
+            total_weekly_hours=Sum('hours_per_week'),
+        )
+        .order_by('-total_weekly_hours')[:10]
+    )
     stats['teacher_workload'] = [
         {
-            'teacher_name': f"{t['teacher__staff__first_name']} {t['teacher__staff__last_name']}",
-            'assignment_count': t['assignment_count'],
-            'total_weekly_hours': t['total_weekly_hours'],
+            'teacher_name': (
+                f"{t['teacher__staff__first_name']} {t['teacher__staff__last_name']}"
+            ),
+            'assignment_count':    t['assignment_count'],
+            'total_weekly_hours':  t['total_weekly_hours'],
         }
         for t in teacher_workload
     ]
-    
+
     return stats
 
 
@@ -1209,527 +1143,475 @@ def get_class_subject_statistics(filters=None):
 
 def get_academic_dashboard_statistics(filters=None):
     """
-    Get comprehensive dashboard statistics across all academic models
-    
+    Aggregate statistics across all academic models for the dashboard.
+
+    NOTE: Do not call this from individual detail views — it runs 7 separate
+    aggregation functions.  Detail views should build their own lightweight
+    stats dicts using model properties.
+
     Args:
-        filters (dict): Optional filters to apply across models
-    
+        filters (dict, optional): Passed through to each sub-function.
+
     Returns:
-        dict: Comprehensive dashboard statistics
+        dict
     """
     dashboard = {
-        'generated_at': timezone.now(),
-        'sessions': get_academic_session_statistics(filters),
-        'subjects': get_subject_statistics(filters),
-        'levels': get_academic_level_statistics(filters),
-        'classes': get_class_statistics(filters),
-        'classrooms': get_classroom_statistics(filters),
-        'holidays': get_holiday_statistics(filters),
+        'generated_at':  timezone.now(),
+        'sessions':      get_academic_session_statistics(filters),
+        'subjects':      get_subject_statistics(filters),
+        'levels':        get_academic_level_statistics(filters),
+        'classes':       get_class_statistics(filters),
+        'classrooms':    get_classroom_statistics(filters),
+        'holidays':      get_holiday_statistics(filters),
         'class_subjects': get_class_subject_statistics(filters),
     }
-    
-    # Overall summary
+
     dashboard['summary'] = {
         'total_active_sessions': dashboard['sessions']['active_sessions'],
-        'current_session_name': str(dashboard['sessions']['current_session']) if dashboard['sessions']['current_session'] else None,
-        'total_subjects': dashboard['subjects']['total_subjects'],
-        'total_levels': dashboard['levels']['total_levels'],
-        'total_classes': dashboard['classes']['total_classes'],
-        'total_classrooms': dashboard['classrooms']['total_classrooms'],
-        'total_holidays': dashboard['holidays']['total_holidays'],
+        'current_session_name':  (
+            str(dashboard['sessions']['current_session'])
+            if dashboard['sessions']['current_session'] else None
+        ),
+        'total_subjects':    dashboard['subjects']['total_subjects'],
+        'total_levels':      dashboard['levels']['total_levels'],
+        'total_classes':     dashboard['classes']['total_classes'],
+        'total_classrooms':  dashboard['classrooms']['total_classrooms'],
+        'total_holidays':    dashboard['holidays']['total_holidays'],
     }
-    
+
     return dashboard
 
 
 # =============================================================================
-# EXPORT HELPER FUNCTIONS
+# ENROLMENT STATISTICS
 # =============================================================================
-
-def format_statistics_for_export(stats, format_type='dict'):
-    """
-    Format statistics for export (Excel, PDF, JSON)
-    
-    Args:
-        stats (dict): Statistics dictionary
-        format_type (str): Output format ('dict', 'flat', 'hierarchical')
-    
-    Returns:
-        dict or list: Formatted statistics
-    """
-    if format_type == 'flat':
-        # Flatten nested dictionaries
-        flat_stats = {}
-        
-        def flatten(d, parent_key=''):
-            for k, v in d.items():
-                new_key = f"{parent_key}.{k}" if parent_key else k
-                if isinstance(v, dict):
-                    flatten(v, new_key)
-                else:
-                    flat_stats[new_key] = v
-        
-        flatten(stats)
-        return flat_stats
-    
-    elif format_type == 'hierarchical':
-        # Keep hierarchical structure but ensure all values are serializable
-        def clean_values(d):
-            cleaned = {}
-            for k, v in d.items():
-                if isinstance(v, dict):
-                    cleaned[k] = clean_values(v)
-                elif isinstance(v, (list, tuple)):
-                    cleaned[k] = [clean_values(item) if isinstance(item, dict) else item for item in v]
-                else:
-                    # Convert to JSON-serializable types
-                    if hasattr(v, 'isoformat'):
-                        cleaned[k] = v.isoformat()
-                    else:
-                        cleaned[k] = v
-            return cleaned
-        
-        return clean_values(stats)
-    
-    return stats
 
 def get_enrollment_statistics(filters=None):
     """
-    Get comprehensive enrollment statistics.
-    
+    Comprehensive enrolment statistics with optional filtering.
+
     Args:
-        filters (dict, optional): Filters to apply
-            - academic_session: Filter by academic session
-            - academic_level: Filter by academic level  
-            - class_instance: Filter by specific class
-            - enrollment_type: Filter by enrollment type
-            - completion_status: Filter by completion status
-            - date_range: Tuple of (start_date, end_date)
-            - is_active: Filter by active status
-    
+        filters (dict, optional):
+            academic_session  – AcademicSession instance
+            academic_level    – AcademicLevel instance
+            class_instance    – Class instance
+            enrollment_type   – string
+            completion_status – string
+            is_active         – bool
+            date_range        – tuple (start_date, end_date)
+
     Returns:
-        dict: Comprehensive enrollment statistics
-        
-    Example:
-        >>> from academics.stats import get_enrollment_statistics
-        >>> stats = get_enrollment_statistics()
-        >>> print(f"Total enrollments: {stats['overview']['total_enrollments']}")
-        >>> 
-        >>> # With filters
-        >>> stats = get_enrollment_statistics({
-        >>>     'academic_session': session_obj,
-        >>>     'completion_status': 'ONGOING'
-        >>> })
+        dict  (returns minimal error dict on unexpected failure)
     """
     try:
         from .models import StudentClassEnrollment, Class, AcademicSession, AcademicLevel
         from students.models import Student
-        
-        # Start with base queryset
+
         enrollments = StudentClassEnrollment.objects.select_related(
-            'student', 'class_instance', 'academic_session', 'class_instance__academic_level'
+            'student',
+            'class_instance',
+            'academic_session',
+            'class_instance__academic_level',
         )
-        
-        # Apply filters
+
         if filters:
             if filters.get('academic_session'):
-                enrollments = enrollments.filter(academic_session=filters['academic_session'])
-            
+                enrollments = enrollments.filter(
+                    academic_session=filters['academic_session']
+                )
             if filters.get('academic_level'):
-                enrollments = enrollments.filter(class_instance__academic_level=filters['academic_level'])
-            
+                enrollments = enrollments.filter(
+                    class_instance__academic_level=filters['academic_level']
+                )
             if filters.get('class_instance'):
-                enrollments = enrollments.filter(class_instance=filters['class_instance'])
-            
+                enrollments = enrollments.filter(
+                    class_instance=filters['class_instance']
+                )
             if filters.get('enrollment_type'):
-                enrollments = enrollments.filter(enrollment_type=filters['enrollment_type'])
-            
+                enrollments = enrollments.filter(
+                    enrollment_type=filters['enrollment_type']
+                )
             if filters.get('completion_status'):
-                enrollments = enrollments.filter(completion_status=filters['completion_status'])
-            
+                enrollments = enrollments.filter(
+                    completion_status=filters['completion_status']
+                )
             if filters.get('is_active') is not None:
                 enrollments = enrollments.filter(is_active=filters['is_active'])
-            
             if filters.get('date_range'):
                 start_date, end_date = filters['date_range']
                 enrollments = enrollments.filter(
                     enrollment_date__gte=start_date,
-                    enrollment_date__lte=end_date
+                    enrollment_date__lte=end_date,
                 )
-        
-        # =================================================================
-        # OVERVIEW STATISTICS
-        # =================================================================
-        
-        total_enrollments = enrollments.count()
-        active_enrollments = enrollments.filter(is_active=True).count()
-        ongoing_enrollments = enrollments.filter(completion_status='ONGOING').count()
+
+        # ── Overview ──────────────────────────────────────────────────────
+        total_enrollments    = enrollments.count()
+        active_enrollments   = enrollments.filter(is_active=True).count()
+        ongoing_enrollments  = enrollments.filter(completion_status='ONGOING').count()
         completed_enrollments = enrollments.filter(completion_status='COMPLETED').count()
-        
+
         overview = {
-            'total_enrollments': total_enrollments,
-            'active_enrollments': active_enrollments,
-            'ongoing_enrollments': ongoing_enrollments,
+            'total_enrollments':    total_enrollments,
+            'active_enrollments':   active_enrollments,
+            'ongoing_enrollments':  ongoing_enrollments,
             'completed_enrollments': completed_enrollments,
             'inactive_enrollments': total_enrollments - active_enrollments,
-            'active_percentage': round((active_enrollments / total_enrollments * 100), 1) if total_enrollments > 0 else 0,
-            'completion_rate': round((completed_enrollments / total_enrollments * 100), 1) if total_enrollments > 0 else 0,
+            'active_percentage': round(
+                active_enrollments / total_enrollments * 100, 1
+            ) if total_enrollments else 0,
+            'completion_rate': round(
+                completed_enrollments / total_enrollments * 100, 1
+            ) if total_enrollments else 0,
         }
-        
-        # =================================================================
-        # ENROLLMENT STATUS BREAKDOWN
-        # =================================================================
-        
-        status_breakdown = enrollments.values('completion_status').annotate(
-            count=Count('id'),
-            percentage=Case(
-                When(count=0, then=0),
-                default=F('count') * 100.0 / total_enrollments,
-                output_field=IntegerField()
-            )
-        ).order_by('-count')
-        
-        # Convert to dict for easier access
+
+        # ── Status breakdown ──────────────────────────────────────────────
         status_stats = {}
-        for status in status_breakdown:
-            status_stats[status['completion_status']] = {
-                'count': status['count'],
-                'percentage': round(status['percentage'], 1) if status['percentage'] else 0
+        for row in enrollments.values('completion_status').annotate(count=Count('id')):
+            pct = round(row['count'] / total_enrollments * 100, 1) if total_enrollments else 0
+            status_stats[row['completion_status']] = {
+                'count':      row['count'],
+                'percentage': pct,
             }
-        
-        # =================================================================
-        # ENROLLMENT TYPE BREAKDOWN
-        # =================================================================
-        
-        type_breakdown = enrollments.values('enrollment_type').annotate(
-            count=Count('id'),
-            percentage=Case(
-                When(count=0, then=0),
-                default=F('count') * 100.0 / total_enrollments,
-                output_field=IntegerField()
-            )
-        ).order_by('-count')
-        
+
+        # ── Enrollment type breakdown ─────────────────────────────────────
         type_stats = {}
-        for enrollment_type in type_breakdown:
-            type_stats[enrollment_type['enrollment_type']] = {
-                'count': enrollment_type['count'],
-                'percentage': round(enrollment_type['percentage'], 1) if enrollment_type['percentage'] else 0
+        for row in enrollments.values('enrollment_type').annotate(count=Count('id')):
+            pct = round(row['count'] / total_enrollments * 100, 1) if total_enrollments else 0
+            type_stats[row['enrollment_type']] = {
+                'count':      row['count'],
+                'percentage': pct,
             }
-        
-        # =================================================================
-        # ACADEMIC SESSION BREAKDOWN
-        # =================================================================
-        
-        session_breakdown = enrollments.values(
-            'academic_session__year_name',
-            'academic_session__term_name'
-        ).annotate(
-            count=Count('id'),
-            active_count=Count('id', filter=Q(is_active=True)),
-            ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
-            session_id=F('academic_session__id')
-        ).order_by('-count')[:10]  # Top 10 sessions
-        
-        # =================================================================
-        # ACADEMIC LEVEL BREAKDOWN  
-        # =================================================================
-        
-        level_breakdown = enrollments.values(
-            'class_instance__academic_level__name',
-            'class_instance__academic_level__order'
-        ).annotate(
-            count=Count('id'),
-            active_count=Count('id', filter=Q(is_active=True)),
-            ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
-            level_id=F('class_instance__academic_level__id')
-        ).order_by('class_instance__academic_level__order')
-        
-        # =================================================================
-        # CLASS CAPACITY ANALYSIS
-        # =================================================================
-        
-        # Get classes with enrollment counts
+
+        # ── Session breakdown ─────────────────────────────────────────────
+        session_breakdown = list(
+            enrollments.values(
+                'academic_session__year_name',
+                'academic_session__term_name',
+                session_id=F('academic_session__id'),
+            )
+            .annotate(
+                count=Count('id'),
+                active_count=Count('id', filter=Q(is_active=True)),
+                ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
+            )
+            .order_by('-count')[:10]
+        )
+
+        # ── Level breakdown ───────────────────────────────────────────────
+        level_breakdown = list(
+            enrollments.values(
+                'class_instance__academic_level__name',
+                'class_instance__academic_level__order',
+                level_id=F('class_instance__academic_level__id'),
+            )
+            .annotate(
+                count=Count('id'),
+                active_count=Count('id', filter=Q(is_active=True)),
+                ongoing_count=Count('id', filter=Q(completion_status='ONGOING')),
+            )
+            .order_by('class_instance__academic_level__order')
+        )
+
+        # ── Capacity analysis ─────────────────────────────────────────────
         class_analysis = Class.objects.annotate(
             total_enrollments=Count('enrollments'),
-            active_enrollments=Count('enrollments', filter=Q(enrollments__is_active=True)),
-            ongoing_enrollments=Count('enrollments', filter=Q(enrollments__completion_status='ONGOING')),
-            capacity_utilization=Case(
-                When(max_students=0, then=0),
-                default=F('active_enrollments') * 100.0 / F('max_students'),
-                output_field=IntegerField()
-            )
+            active_enrollments=Count(
+                'enrollments', filter=Q(enrollments__is_active=True)
+            ),
+            ongoing_enrollments=Count(
+                'enrollments',
+                filter=Q(enrollments__completion_status='ONGOING'),
+            ),
         ).filter(total_enrollments__gt=0)
-        
-        # Capacity statistics
-        total_capacity = class_analysis.aggregate(
+
+        totals = class_analysis.aggregate(
             total_capacity=Sum('max_students'),
             total_enrolled=Sum('active_enrollments'),
-            avg_utilization=Avg('capacity_utilization')
+            avg_utilization=Avg(
+                Case(
+                    When(max_students=0, then=0),
+                    default=F('active_enrollments') * 100.0 / F('max_students'),
+                    output_field=FloatField(),
+                )
+            ),
         )
-        
+
+        total_cap     = totals['total_capacity'] or 0
+        total_enr     = totals['total_enrolled'] or 0
         capacity_stats = {
-            'total_class_capacity': total_capacity['total_capacity'] or 0,
-            'total_students_enrolled': total_capacity['total_enrolled'] or 0,
-            'available_capacity': (total_capacity['total_capacity'] or 0) - (total_capacity['total_enrolled'] or 0),
-            'average_utilization': round(total_capacity['avg_utilization'] or 0, 1),
-            'utilization_percentage': round(
-                (total_capacity['total_enrolled'] / total_capacity['total_capacity'] * 100) 
-                if total_capacity['total_capacity'] and total_capacity['total_capacity'] > 0 else 0, 1
-            )
+            'total_class_capacity':    total_cap,
+            'total_students_enrolled': total_enr,
+            'available_capacity':      total_cap - total_enr,
+            'average_utilization':     round(totals['avg_utilization'] or 0, 1),
+            'utilization_percentage':  round(
+                total_enr / total_cap * 100, 1
+            ) if total_cap else 0,
         }
-        
-        # Classes by capacity status
-        at_capacity = class_analysis.filter(capacity_utilization__gte=100).count()
-        high_utilization = class_analysis.filter(capacity_utilization__gte=80, capacity_utilization__lt=100).count()
-        medium_utilization = class_analysis.filter(capacity_utilization__gte=50, capacity_utilization__lt=80).count()
-        low_utilization = class_analysis.filter(capacity_utilization__lt=50).count()
-        
+
+        # Capacity distribution buckets
+        util_annotation = Case(
+            When(max_students=0, then=0),
+            default=F('active_enrollments') * 100.0 / F('max_students'),
+            output_field=FloatField(),
+        )
         capacity_distribution = {
-            'at_capacity': at_capacity,
-            'high_utilization': high_utilization,
-            'medium_utilization': medium_utilization,
-            'low_utilization': low_utilization,
+            'at_capacity':      class_analysis.annotate(u=util_annotation).filter(u__gte=100).count(),
+            'high_utilization': class_analysis.annotate(u=util_annotation).filter(u__gte=80, u__lt=100).count(),
+            'medium_utilization': class_analysis.annotate(u=util_annotation).filter(u__gte=50, u__lt=80).count(),
+            'low_utilization':  class_analysis.annotate(u=util_annotation).filter(u__lt=50).count(),
         }
-        
-        # =================================================================
-        # ENROLLMENT TRENDS (Last 30 days)
-        # =================================================================
-        
-        today = get_school_today()
-        thirty_days_ago = today - timedelta(days=30)
-        
-        recent_enrollments = enrollments.filter(
-            enrollment_date__gte=thirty_days_ago
+
+        # ── Enrolment trends (last 30 days) ────────────────────────────────
+        today            = get_school_today()
+        thirty_days_ago  = today - timedelta(days=30)
+        recent           = enrollments.filter(enrollment_date__gte=thirty_days_ago)
+
+        # Use TruncDate (database-agnostic) instead of legacy .extra()
+        daily_trend = list(
+            recent
+            .annotate(day=TruncDate('enrollment_date'))
+            .values('day')
+            .annotate(count=Count('id'))
+            .order_by('day')
         )
-        
-        # Daily enrollment trend
-        daily_trend = recent_enrollments.extra(
-            select={'day': 'date(enrollment_date)'}
-        ).values('day').annotate(
-            count=Count('id')
-        ).order_by('day')
-        
-        # Weekly enrollment trend  
-        weekly_trend = recent_enrollments.annotate(
-            week=TruncDate('enrollment_date')
-        ).values('week').annotate(
-            count=Count('id')
-        ).order_by('week')
-        
+        # Convert date objects to strings for JSON safety
+        for row in daily_trend:
+            if row['day']:
+                row['day'] = row['day'].strftime('%Y-%m-%d')
+
         trends = {
-            'recent_enrollments_count': recent_enrollments.count(),
-            'daily_average': round(recent_enrollments.count() / 30, 1),
-            'daily_trend': list(daily_trend),
-            'weekly_trend': list(weekly_trend)
+            'recent_enrollments_count': recent.count(),
+            'daily_average':            round(recent.count() / 30, 1),
+            'daily_trend':              daily_trend,
         }
-        
-        # =================================================================
-        # STUDENT PROGRESSION ANALYSIS
-        # =================================================================
-        
-        # Students by enrollment status
+
+        # ── Student progression ───────────────────────────────────────────
         student_progression = Student.objects.annotate(
-            total_enrollments=Count('class_enrollments'),
-            active_enrollments=Count('class_enrollments', filter=Q(class_enrollments__is_active=True)),
-            completed_enrollments=Count('class_enrollments', filter=Q(class_enrollments__completion_status='COMPLETED'))
+            total_enr=Count('class_enrollments'),
+            active_enr=Count(
+                'class_enrollments',
+                filter=Q(class_enrollments__is_active=True),
+            ),
+            completed_enr=Count(
+                'class_enrollments',
+                filter=Q(class_enrollments__completion_status='COMPLETED'),
+            ),
         ).aggregate(
-            students_never_enrolled=Count('id', filter=Q(total_enrollments=0)),
-            students_currently_enrolled=Count('id', filter=Q(active_enrollments__gt=0)),
-            students_with_completions=Count('id', filter=Q(completed_enrollments__gt=0)),
-            avg_enrollments_per_student=Avg('total_enrollments')
+            students_never_enrolled=Count('id', filter=Q(total_enr=0)),
+            students_currently_enrolled=Count('id', filter=Q(active_enr__gt=0)),
+            students_with_completions=Count('id', filter=Q(completed_enr__gt=0)),
+            avg_enrollments_per_student=Avg('total_enr'),
         )
-        
-        # =================================================================
-        # GENDER BREAKDOWN (if student data available)
-        # =================================================================
-        
-        gender_breakdown = enrollments.values('student__gender').annotate(
-            count=Count('id'),
-            active_count=Count('id', filter=Q(is_active=True))
-        ).order_by('-count')
-        
+
+        # ── Gender breakdown ──────────────────────────────────────────────
         gender_stats = {}
-        for gender in gender_breakdown:
-            if gender['student__gender']:
-                gender_stats[gender['student__gender']] = {
-                    'total': gender['count'],
-                    'active': gender['active_count']
+        for row in enrollments.values('student__gender').annotate(
+            count=Count('id'),
+            active_count=Count('id', filter=Q(is_active=True)),
+        ):
+            # Explicit None check — empty string is a valid stored gender value
+            if row['student__gender'] is not None:
+                gender_stats[row['student__gender']] = {
+                    'total':  row['count'],
+                    'active': row['active_count'],
                 }
-        
-        # =================================================================
-        # RECENT ACTIVITY
-        # =================================================================
-        
+
+        # ── Recent activity ────────────────────────────────────────────────
         recent_activity = {
-            'recent_enrollments': enrollments.order_by('-created_at')[:5],
-            'recent_completions': enrollments.filter(
-                completion_status__in=['COMPLETED', 'GRADUATED']
-            ).order_by('-completion_date')[:5],
-            'recent_withdrawals': enrollments.filter(
-                completion_status__in=['WITHDRAWN', 'TRANSFERRED']
-            ).order_by('-completion_date')[:5],
+            'recent_enrollments': list(
+                enrollments.order_by('-created_at')[:5]
+            ),
+            'recent_completions': list(
+                enrollments.filter(
+                    completion_status__in=['COMPLETED', 'GRADUATED']
+                ).order_by('-completion_date')[:5]
+            ),
+            'recent_withdrawals': list(
+                enrollments.filter(
+                    completion_status__in=['WITHDRAWN', 'TRANSFERRED']
+                ).order_by('-completion_date')[:5]
+            ),
         }
-        
-        # =================================================================
-        # COMPILE FINAL STATISTICS
-        # =================================================================
-        
-        statistics = {
-            'overview': overview,
-            'status_breakdown': status_stats,
-            'enrollment_type_breakdown': type_stats,
-            'academic_session_breakdown': list(session_breakdown),
-            'academic_level_breakdown': list(level_breakdown),
-            'capacity_analysis': capacity_stats,
-            'capacity_distribution': capacity_distribution,
-            'enrollment_trends': trends,
-            'student_progression': student_progression,
-            'gender_breakdown': gender_stats,
-            'recent_activity': recent_activity,
+
+        return {
+            'overview':                   overview,
+            'status_breakdown':           status_stats,
+            'enrollment_type_breakdown':  type_stats,
+            'academic_session_breakdown': session_breakdown,
+            'academic_level_breakdown':   level_breakdown,
+            'capacity_analysis':          capacity_stats,
+            'capacity_distribution':      capacity_distribution,
+            'enrollment_trends':          trends,
+            'student_progression':        student_progression,
+            'gender_breakdown':           gender_stats,
+            'recent_activity':            recent_activity,
             'metadata': {
-                'last_updated': get_school_current_time(),
+                'last_updated':          get_school_current_time(),
                 'total_records_analyzed': total_enrollments,
-                'filters_applied': filters or {},
-                'calculation_date': today,
-            }
+                'filters_applied':        filters or {},
+                'calculation_date':       today,
+            },
         }
-        
-        return statistics
-        
+
     except Exception as e:
-        logger.error(f"Error calculating enrollment statistics: {e}", exc_info=True)
-        
-        # Return minimal stats on error
+        logger.error(f"Error calculating enrolment statistics: {e}", exc_info=True)
         return {
             'overview': {
-                'total_enrollments': 0,
-                'active_enrollments': 0,
-                'ongoing_enrollments': 0,
+                'total_enrollments':    0,
+                'active_enrollments':   0,
+                'ongoing_enrollments':  0,
                 'completed_enrollments': 0,
-                'active_percentage': 0,
-                'completion_rate': 0,
+                'active_percentage':    0,
+                'completion_rate':      0,
             },
             'error': str(e),
             'metadata': {
                 'last_updated': get_school_current_time(),
-                'has_error': True,
-            }
+                'has_error':    True,
+            },
         }
 
 
 # =============================================================================
-# HELPER FUNCTIONS FOR ENROLLMENT STATISTICS
+# CONVENIENCE WRAPPERS
 # =============================================================================
 
 def get_enrollment_summary_by_session(academic_session):
-    """
-    Get enrollment summary for a specific academic session.
-    
-    Args:
-        academic_session: AcademicSession object
-        
-    Returns:
-        dict: Session-specific enrollment statistics
-    """
+    """Active enrolment summary for a specific academic session."""
     return get_enrollment_statistics({
         'academic_session': academic_session,
-        'is_active': True
+        'is_active':        True,
     })
 
 
 def get_enrollment_summary_by_level(academic_level):
-    """
-    Get enrollment summary for a specific academic level.
-    
-    Args:
-        academic_level: AcademicLevel object
-        
-    Returns:
-        dict: Level-specific enrollment statistics
-    """
-    return get_enrollment_statistics({
-        'academic_level': academic_level
-    })
+    """Enrolment summary for a specific academic level."""
+    return get_enrollment_statistics({'academic_level': academic_level})
 
 
 def get_current_enrollment_statistics():
-    """
-    Get enrollment statistics for currently active enrollments only.
-    
-    Returns:
-        dict: Current enrollment statistics
-    """
+    """Enrolment statistics for currently active, ONGOING enrolments only."""
     return get_enrollment_statistics({
-        'is_active': True,
-        'completion_status': 'ONGOING'
+        'is_active':        True,
+        'completion_status': 'ONGOING',
     })
 
 
 def get_enrollment_trends(days=30):
     """
-    Get enrollment trends for the specified number of days.
-    
+    Enrolment statistics filtered to the most recent N days.
+
     Args:
-        days (int): Number of days to analyze (default: 30)
-        
-    Returns:
-        dict: Enrollment trend statistics
+        days (int): Look-back window (default 30).
     """
     today = get_school_today()
-    start_date = today - timedelta(days=days)
-    
     return get_enrollment_statistics({
-        'date_range': (start_date, today)
+        'date_range': (today - timedelta(days=days), today)
     })
 
 
 def get_class_enrollment_analysis(class_instance):
     """
-    Get detailed enrollment analysis for a specific class.
-    
+    Detailed enrolment analysis for a single class.
+
+    Unlike get_enrollment_statistics(), this function focuses entirely on
+    one class and does not run the full aggregation pipeline — it is
+    appropriate for use in detail views.
+
     Args:
-        class_instance: Class object
-        
+        class_instance (Class): The class to analyse.
+
     Returns:
-        dict: Class-specific enrollment analysis
+        dict
     """
     from .models import StudentClassEnrollment
-    
+
     try:
         enrollments = StudentClassEnrollment.objects.filter(
             class_instance=class_instance
         ).select_related('student')
-        
-        total = enrollments.count()
+
+        total  = enrollments.count()
         active = enrollments.filter(is_active=True).count()
-        
-        status_breakdown = enrollments.values('completion_status').annotate(
-            count=Count('id')
-        )
-        
-        gender_breakdown = enrollments.values('student__gender').annotate(
-            count=Count('id')
-        )
-        
-        return {
-            'class': str(class_instance),
-            'total_enrollments': total,
-            'active_enrollments': active,
-            'capacity': class_instance.max_students,
-            'available_spots': max(0, class_instance.max_students - active),
-            'utilization_percentage': round((active / class_instance.max_students * 100), 1) if class_instance.max_students > 0 else 0,
-            'status_breakdown': {item['completion_status']: item['count'] for item in status_breakdown},
-            'gender_breakdown': {item['student__gender']: item['count'] for item in gender_breakdown if item['student__gender']},
-            'has_capacity': active < class_instance.max_students,
-            'is_at_capacity': active >= class_instance.max_students,
+
+        status_breakdown = {
+            row['completion_status']: row['count']
+            for row in enrollments.values('completion_status').annotate(count=Count('id'))
         }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing class enrollment: {e}")
+        gender_breakdown = {
+            row['student__gender']: row['count']
+            for row in enrollments.values('student__gender').annotate(count=Count('id'))
+            if row['student__gender'] is not None
+        }
+
         return {
-            'class': str(class_instance),
-            'error': str(e),
+            'class':                str(class_instance),
+            'total_enrollments':    total,
+            'active_enrollments':   active,
+            'capacity':             class_instance.max_students,
+            'available_spots':      max(0, class_instance.max_students - active),
+            'utilization_percentage': round(
+                active / class_instance.max_students * 100, 1
+            ) if class_instance.max_students else 0,
+            'status_breakdown':     status_breakdown,
+            'gender_breakdown':     gender_breakdown,
+            'has_capacity':         active < class_instance.max_students,
+            'is_at_capacity':       active >= class_instance.max_students,
+        }
+
+    except Exception as e:
+        logger.error(f"Error analysing class enrolment: {e}")
+        return {
+            'class':             str(class_instance),
+            'error':             str(e),
             'total_enrollments': 0,
             'active_enrollments': 0,
         }
+
+
+# =============================================================================
+# EXPORT HELPER
+# =============================================================================
+
+def format_statistics_for_export(stats, format_type='dict'):
+    """
+    Format a statistics dict for export (JSON, flat CSV, etc.).
+
+    Args:
+        stats (dict):       Statistics dictionary to format.
+        format_type (str):  'dict' | 'flat' | 'hierarchical'
+
+    Returns:
+        dict or list
+    """
+    if format_type == 'flat':
+        flat = {}
+
+        def _flatten(d, prefix=''):
+            for k, v in d.items():
+                key = f"{prefix}.{k}" if prefix else k
+                if isinstance(v, dict):
+                    _flatten(v, key)
+                else:
+                    flat[key] = v
+
+        _flatten(stats)
+        return flat
+
+    if format_type == 'hierarchical':
+        def _clean(d):
+            out = {}
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    out[k] = _clean(v)
+                elif isinstance(v, (list, tuple)):
+                    out[k] = [_clean(i) if isinstance(i, dict) else i for i in v]
+                elif hasattr(v, 'isoformat'):
+                    out[k] = v.isoformat()
+                else:
+                    out[k] = v
+            return out
+
+        return _clean(stats)
+
+    return stats

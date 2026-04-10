@@ -156,6 +156,48 @@ def generate_expense_number():
         formatted_number = f"{new_number:05d}"
         
         return f"{prefix}{formatted_number}"
+    
+def generate_payment_reference_number():
+    """
+    Generate unique payment reference number.
+    Format: PAY-YYYY-NNNNN
+
+    Called by payment_pre_save signal when the user does not supply a
+    reference number (e.g. cash payments where the field is hidden).
+
+    Uses select_for_update() + Max() — same pattern as generate_expense_number()
+    — to prevent duplicate numbers under concurrent requests.
+
+    Returns:
+        str: Unique payment reference number e.g. 'PAY-2026-00001'
+
+    Example:
+        >>> ref = generate_payment_reference_number()
+        >>> print(ref)
+        PAY-2026-00001
+    """
+    from finance.models import ExpensePayment
+
+    current_year = get_school_today().year
+    prefix = f"PAY-{current_year}-"
+
+    with transaction.atomic():
+        queryset = ExpensePayment.objects.filter(
+            reference_number__startswith=prefix
+        ).select_for_update()
+
+        result = queryset.aggregate(max_ref=Max('reference_number'))
+
+        if result['max_ref']:
+            try:
+                last_number = int(result['max_ref'].split('-')[-1])
+                new_number  = last_number + 1
+            except (ValueError, IndexError):
+                new_number = queryset.count() + 1
+        else:
+            new_number = 1
+
+        return f"{prefix}{new_number:05d}"
 
 
 def generate_budget_code(fiscal_year, department=None):
@@ -438,61 +480,44 @@ def update_account_balance(account):
 
 @transaction.atomic
 def update_journal_entry_accounts(journal_entry):
-    """
-    Update balances for all accounts affected by a journal entry.
-    
-    This should be called when a journal entry is posted.
-    
-    Args:
-        journal_entry: JournalEntry model instance
-    
-    Returns:
-        dict: Updated accounts and their balance changes
-    
-    Raises:
-        ValueError: If journal entry has no transactions
-        Account.DoesNotExist: If referenced account doesn't exist
-    """
     from finance.models import Account
-    
-    # Get all unique accounts in this entry
-    account_ids = journal_entry.transactions.values_list(
-        'account_id', flat=True
-    ).distinct()
-    
+
+    # Evaluate to a concrete list immediately — avoids lazy queryset length bugs
+    account_ids = list(
+        journal_entry.transactions.values_list('account_id', flat=True).distinct()
+    )
+
     if not account_ids:
         raise ValueError(
             f"Journal entry {journal_entry.entry_number} has no transactions"
         )
-    
-    # Fetch all accounts (will fail if any missing - good!)
+
     accounts = Account.objects.filter(id__in=account_ids)
-    
-    # Verify all accounts exist
-    if accounts.count() != len(account_ids):
-        found_ids = set(accounts.values_list('id', flat=True))
-        missing_ids = set(account_ids) - found_ids
+    found_ids = set(accounts.values_list('id', flat=True))
+    missing_ids = set(account_ids) - found_ids
+
+    if missing_ids:  # only raise if accounts are genuinely missing
         raise Account.DoesNotExist(
             f"Accounts not found: {missing_ids}"
         )
-    
+
     results = {}
-    
+
     for account in accounts:
         old_balance, new_balance = update_account_balance(account)
         results[account.account_number] = {
-            'account': account,
+            'account':     account,
             'old_balance': old_balance,
             'new_balance': new_balance,
-            'change': new_balance - old_balance
+            'change':      new_balance - old_balance,
         }
-    
+
     logger.info(
         f"Updated {len(results)} accounts for journal entry "
         f"{journal_entry.entry_number}: "
-        f"{', '.join(f'{k}={format_money(v['change'])}' for k, v in results.items())}"
+        f"{', '.join(f'{k}={format_money(v[chr(99)+chr(104)+chr(97)+chr(110)+chr(103)+chr(101)])}'for k,v in results.items())}"
     )
-    
+
     return results
 
 

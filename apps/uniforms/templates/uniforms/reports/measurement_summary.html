@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff; --accent-bd:#bfdbfe;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; display:flex; align-items:center; gap:14px; }
+.stat-icon { width:44px; height:44px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); margin-bottom:3px; }
+.stat-value { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.stat-sub   { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+
+.rep-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:22px; }
+.rep-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.rep-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+.filter-bar { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; margin-bottom:20px; }
+.filter-bar .form-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); margin-bottom:4px; }
+
+.rep-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.rep-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.rep-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.rep-tbl tbody tr:last-child td { border-bottom:none; }
+.rep-tbl tbody tr:hover td { background:var(--surface-2); }
+
+.cov-bar { height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; margin-top:4px; }
+.cov-fill { height:100%; border-radius:4px; }
+
+.ver-ring { display:inline-flex; align-items:center; gap:6px; }
+.ver-pct  { font-size:13px; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-ruler icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Measurement Summary
+                <div class="page-title-subheading">Student measurement coverage and verification rates</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:export_measurements_excel' %}" class="btn btn-sm btn-outline-success me-1">
+                <i class="fa fa-file-excel me-1"></i> Export
+            </a>
+            <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Filter ── #}
+<form method="get" class="filter-bar">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label">Academic Session</label>
+            <select name="academic_session" class="form-select form-select-sm">
+                <option value="">All Sessions</option>
+                {# Sessions passed from view if needed; use GET value to re-select #}
+            </select>
+        </div>
+        <div class="col-md-auto">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa fa-filter me-1"></i> Apply
+            </button>
+            <a href="{% url 'uniforms:measurement_summary_report' %}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+        </div>
+    </div>
+</form>
+
+{# ── Overview stat cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Students Measured</div>
+                <div class="stat-value">{{ summary.students_measured|default:0 }}</div>
+                <div class="stat-sub">with ≥1 current measurement</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-note2"></i></div>
+            <div>
+                <div class="stat-label">Total Records</div>
+                <div class="stat-value">{{ summary.total_measurements|default:0 }}</div>
+                <div class="stat-sub">{{ summary.current_measurements|default:0 }} current</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Verified</div>
+                <div class="stat-value">{{ summary.verified|default:0 }}</div>
+                <div class="stat-sub">{{ summary.verification_rate_pct|default:0 }}% verification rate</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Unverified</div>
+                <div class="stat-value amber">{{ summary.unverified|default:0 }}</div>
+                <div class="stat-sub">pending verification</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Coverage by measurement type ── #}
+{% if stats %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-ruler" style="color:var(--accent);"></i> Coverage by Measurement Type</h6>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Code</th>
+                    <th>Unit</th>
+                    <th class="text-center">Records</th>
+                    <th class="text-center">Avg Value</th>
+                    <th class="text-center">Min</th>
+                    <th class="text-center">Max</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stats %}
+                <tr>
+                    <td style="font-weight:600;">{{ row.type_name }}</td>
+                    <td>
+                        <span style="font-family:'Courier New',monospace;font-size:11px;background:var(--surface-3);padding:2px 7px;border-radius:4px;color:var(--ink-muted);">
+                            {{ row.type_code }}
+                        </span>
+                    </td>
+                    <td style="color:var(--ink-muted);">{{ row.unit }}</td>
+                    <td class="text-center" style="font-weight:700;">{{ row.count }}</td>
+                    <td class="text-center">
+                        {% if row.avg_value %}
+                        <span style="font-weight:700;">{{ row.avg_value|floatformat:1 }}</span>
+                        <span style="color:var(--ink-faint);font-size:11px;"> {{ row.unit }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center" style="color:var(--ink-muted);">
+                        {% if row.min_value %}{{ row.min_value|floatformat:1 }} {{ row.unit }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-center" style="color:var(--ink-muted);">
+                        {% if row.max_value %}{{ row.max_value|floatformat:1 }} {{ row.unit }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" style="text-align:center;padding:28px;color:var(--ink-faint);">No measurement data found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# ── Context breakdown ── #}
+{% if summary.context_breakdown %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-chart-bar" style="color:var(--ink-muted);"></i> Measurements by Context</h6>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-wrap:wrap;gap:12px;">
+        {% for ctx in summary.context_breakdown %}
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px;text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--accent);">{{ ctx.count }}</div>
+            <div style="font-size:11.5px;font-weight:600;color:var(--ink);margin-top:3px;">{{ ctx.display }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── Coverage by class ── #}
+{% if class_coverage %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-school" style="color:var(--green);"></i> Coverage by Class</h6>
+        <span style="font-size:12px;color:var(--ink-muted);">Least covered first</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Class</th>
+                    <th class="text-center">Enrolled</th>
+                    <th class="text-center">Measured</th>
+                    <th class="text-center">Not Yet</th>
+                    <th style="width:220px;">Coverage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cls in class_coverage %}
+                <tr>
+                    <td style="font-weight:600;">{{ cls.class_name }}</td>
+                    <td class="text-center">{{ cls.enrolled_students }}</td>
+                    <td class="text-center" style="color:var(--green);font-weight:700;">{{ cls.students_measured }}</td>
+                    <td class="text-center" style="color:{% if cls.enrolled_students > cls.students_measured %}var(--amber){% else %}var(--ink-faint){% endif %};">
+                        {{ cls.enrolled_students|add:"-"|add:cls.students_measured }}
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div class="cov-bar" style="flex:1;">
+                                <div class="cov-fill"
+                                     style="width:{{ cls.coverage_pct|floatformat:0 }}%;
+                                            background:{% if cls.coverage_pct >= 80 %}var(--green){% elif cls.coverage_pct >= 50 %}var(--amber){% else %}var(--red){% endif %};"></div>
+                            </div>
+                            <span style="font-size:12px;font-weight:700;min-width:40px;
+                                color:{% if cls.coverage_pct >= 80 %}var(--green){% elif cls.coverage_pct >= 50 %}var(--amber){% else %}var(--red){% endif %};">
+                                {{ cls.coverage_pct }}%
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif filters_applied %}
+<div class="rep-card">
+    <div style="text-align:center;padding:28px;color:var(--ink-faint);">
+        <i class="fa fa-school" style="font-size:2rem;opacity:.3;display:block;margin-bottom:8px;"></i>
+        <p style="font-size:13px;">Select an academic session to see class-level coverage.</p>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

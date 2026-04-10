@@ -1,0 +1,634 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --border-2:  #cbd5e1;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.cls-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.hero-name { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
+.hero-top  { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
+.hero-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.hero-meta-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-faint); }
+.hero-meta-value { font-size: 13px; font-weight: 600; color: var(--ink); }
+.hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.enrol-label { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-muted); font-weight: 600; }
+.enrol-value { font-size: 34px; font-weight: 900; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* ── Pills ── */
+.st-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+.sp-active   { background: var(--green-lt); color: var(--green); border: 1px solid #bbf7d0; }
+.sp-inactive { background: var(--red-lt);   color: var(--red);   border: 1px solid #fecaca; }
+.sp-current  { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.sp-full     { background: var(--red-lt); color: var(--red); border: 1px solid #fecaca; }
+.sp-near     { background: var(--amber-lt); color: var(--amber); border: 1px solid #fde68a; }
+
+/* ── Cards ── */
+.det-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.det-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.det-card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0 22px; }
+.info-cell { padding: 11px 0; border-bottom: 1px solid var(--border); }
+.info-cell:nth-child(odd)  { padding-right: 24px; }
+.info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.info-cell:last-child, .info-cell:nth-last-child(2) { border-bottom: none; }
+.info-cell.full { grid-column: span 2; padding-right: 0; border-left: none; }
+.info-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.info-val { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.info-val small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-muted); margin-top: 1px; }
+
+/* ── Tables ── */
+.data-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-tbl thead th {
+    background: var(--surface-2); padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--ink-muted);
+    border-bottom: 2px solid var(--border); white-space: nowrap;
+}
+.data-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--ink); }
+.data-tbl tbody tr:last-child td { border-bottom: none; }
+.data-tbl tbody tr:hover td { background: #fafbff; }
+
+.subj-name { font-weight: 600; font-size: 13px; color: var(--ink); }
+.subj-code { font-family: 'Courier New', monospace; font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+.stu-name  { font-weight: 600; font-size: 13px; color: var(--ink); text-decoration: none; display: block; }
+.stu-name:hover { color: var(--accent); }
+.stu-adm   { font-family: 'Courier New', monospace; font-size: 11px; color: var(--ink-muted); margin-top: 1px; }
+.roll-chip { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-lt); border: 1px solid #bfdbfe; border-radius: 4px; padding: 2px 7px; display: inline-block; }
+
+/* ── Enrollment progress ── */
+.enrol-track { height: 6px; background: var(--surface-3); border-radius: 6px; overflow: hidden; margin-top: 5px; width: 120px; }
+.enrol-fill  { height: 100%; border-radius: 6px; }
+
+/* ── Sidebar ── */
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.side-card-head { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 7px; }
+.side-card-body { padding: 14px 18px; }
+.side-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.side-row:last-child { border-bottom: none; }
+.s-label { color: var(--ink-muted); font-size: 12.5px; }
+.s-value { font-weight: 700; color: var(--ink); }
+.s-value.green  { color: var(--green); }
+.s-value.red    { color: var(--red); }
+.s-value.accent { color: var(--accent); }
+.s-value.muted  { color: var(--ink-muted); font-weight: 500; }
+
+/* ── Empty state ── */
+.tbl-empty { text-align: center; padding: 40px 20px; color: var(--ink-faint); }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 14px; }
+
+/* ── Stat cards ── */
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 3px; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1; }
+
+/* ── Tabs ── */
+.tab-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px;
+    font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--border-2);
+    background: var(--surface); color: var(--ink-muted);
+    cursor: pointer; transition: all .15s;
+    white-space: nowrap;
+}
+.tab-btn:hover { background: var(--surface-3); color: var(--ink); }
+.tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 18px; padding: 0 5px;
+    border-radius: 10px; font-size: 10.5px; font-weight: 700;
+    background: rgba(255,255,255,.25); color: inherit;
+}
+.tab-btn:not(.active) .tab-count {
+    background: var(--surface-3); color: var(--ink-muted);
+}
+
+/* ── Filter bar ── */
+.class-filter-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+}
+.class-filter-bar .form-control,
+.class-filter-bar .form-select {
+    border-radius: 7px; border-color: var(--border-2); font-size: 13px;
+}
+.class-filter-bar .form-control:focus,
+.class-filter-bar .form-select:focus {
+    border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1);
+}
+
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid var(--border); }
+.dropdown-item  { padding: 6px 13px; }
+
+@media (max-width: 768px) {
+    .cls-hero { grid-template-columns: 1fr; }
+    .hero-right { align-items: flex-start; }
+    .info-grid { grid-template-columns: 1fr; }
+    .info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+    .info-cell.full { grid-column: span 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-study icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Class Detail
+                <div class="page-title-subheading">{{ class.get_display_name }} &mdash; {{ class.academic_session.name }}</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:level_detail' class.academic_level.pk %}"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+            <button class="btn btn-sm btn-warning me-1"
+                    hx-get="{% url 'academics:class_edit_modal' class.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-edit me-1"></i>Edit
+            </button>
+            <button class="btn btn-sm btn-outline-secondary me-1"
+                    hx-get="{% url 'academics:class_toggle_active_modal' class.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                {% if class.is_active %}
+                    <i class="fa fa-pause-circle me-1"></i>Deactivate
+                {% else %}
+                    <i class="fa fa-check-circle me-1"></i>Activate
+                {% endif %}
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+                    hx-get="{% url 'academics:class_delete_modal' class.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i>Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-graduation-cap me-1"></i>Academics
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_list' %}" style="color:#64748b;text-decoration:none;">Levels</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_detail' class.academic_level.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ class.academic_level.name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page" style="color:#0f172a;font-weight:600;">
+            {{ class.get_display_name }}
+        </li>
+    </ol>
+</nav>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+{# ── Hero ── #}
+<div class="cls-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-name">{{ class.get_display_name }}</span>
+            {% if class.section %}
+                <span style="background:var(--accent-lt);color:var(--accent);border:1px solid #bfdbfe;border-radius:4px;font-size:12px;font-weight:700;padding:3px 10px;">{{ class.section }}</span>
+            {% endif %}
+            {% if class.is_active %}
+                <span class="st-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+            {% else %}
+                <span class="st-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
+            {% endif %}
+            {% if class.academic_session.is_current %}
+                <span class="st-pill sp-current"><i class="fa fa-star"></i>Current Session</span>
+            {% endif %}
+            {% if stats.total_students >= class.max_students %}
+                <span class="st-pill sp-full"><i class="fa fa-exclamation-circle"></i>Full</span>
+            {% elif stats.total_students >= class.max_students|add:"-5" %}
+                <span class="st-pill sp-near"><i class="fa fa-users"></i>Near Full</span>
+            {% endif %}
+        </div>
+        {% if class.class_motto %}
+        <p style="margin:4px 0 0;font-size:13px;color:var(--ink-muted);font-style:italic;">
+            <i class="fa fa-quote-left me-1" style="font-size:10px;opacity:.6;"></i>{{ class.class_motto }}
+        </p>
+        {% endif %}
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Academic Level</span>
+                <span class="hero-meta-value">
+                    <a href="{% url 'academics:level_detail' class.academic_level.pk %}"
+                       style="color:inherit;text-decoration:none;">{{ class.academic_level.name }}</a>
+                </span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Session</span>
+                <span class="hero-meta-value">{{ class.academic_session.name }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Class Teacher</span>
+                <span class="hero-meta-value">
+                    {% if class.class_teacher %}{{ class.class_teacher.staff.full_name }}
+                    {% else %}<span style="color:var(--ink-faint);font-weight:500;">Unassigned</span>{% endif %}
+                </span>
+            </div>
+            {% if class.assistant_teacher %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Assistant Teacher</span>
+                <span class="hero-meta-value">{{ class.assistant_teacher.staff.get_full_name }}</span>
+            </div>
+            {% endif %}
+            {% if class.classroom %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Classroom</span>
+                <span class="hero-meta-value">{{ class.classroom.room_number }}</span>
+            </div>
+            {% endif %}
+            {% if class.start_time %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Hours</span>
+                <span class="hero-meta-value">{{ class.start_time|time:"H:i" }}{% if class.end_time %} – {{ class.end_time|time:"H:i" }}{% endif %}</span>
+            </div>
+            {% endif %}
+            {% if class.class_colors %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Colors</span>
+                <span class="hero-meta-value">{{ class.class_colors }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="hero-right">
+        <div style="text-align:right;">
+            <div class="enrol-label">Enrolled</div>
+            <div>
+                <span class="enrol-value">{{ stats.total_students }}</span>
+                <span style="font-size:15px;font-weight:500;color:var(--ink-muted);">/ {{ class.max_students }}</span>
+            </div>
+        </div>
+        <div>
+            <div class="enrol-track">
+                {% if class.max_students > 0 %}
+                <div class="enrol-fill"
+                     style="width:{% widthratio stats.total_students class.max_students 100 %}%;
+                            background:{% if stats.total_students >= class.max_students %}#dc2626{% elif stats.total_students > 0 %}#15803d{% else %}#e2e8f0{% endif %};"></div>
+                {% endif %}
+            </div>
+            <div style="text-align:right;font-size:11px;color:var(--ink-muted);margin-top:3px;">
+                {% widthratio stats.total_students class.max_students 100 %}% capacity
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Stat cards strip ── #}
+<div class="row mb-4" id="class-stat-cards">
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#1d4ed8;"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Enrolled</div>
+                <div class="stat-value">{{ stats.total_students }} <span style="font-size:14px;font-weight:500;color:#94a3b8;">/ {{ class.max_students }}</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:{% if stats.available_spots <= 0 %}#dc2626{% elif stats.available_spots <= 5 %}#b45309{% else %}#15803d{% endif %};"><i class="pe-7s-add-user"></i></div>
+            <div>
+                <div class="stat-label">Available Spots</div>
+                <div class="stat-value" style="color:{% if stats.available_spots <= 0 %}#dc2626{% elif stats.available_spots <= 5 %}#b45309{% else %}#15803d{% endif %};">
+                    {% if stats.available_spots <= 0 %}Full{% else %}{{ stats.available_spots }}{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0369a1;"><i class="pe-7s-note2"></i></div>
+            <div>
+                <div class="stat-label">Subjects</div>
+                <div class="stat-value">{{ stats.total_subjects }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:{% if stats.subjects_without_teacher > 0 %}#dc2626{% else %}#15803d{% endif %};"><i class="pe-7s-study"></i></div>
+            <div>
+                <div class="stat-label">Teachers Assigned</div>
+                <div class="stat-value" style="color:{% if stats.subjects_without_teacher > 0 %}#dc2626{% else %}#15803d{% endif %};">
+                    {{ stats.subjects_with_teacher }}<span style="font-size:14px;font-weight:500;color:#94a3b8;"> / {{ stats.total_subjects }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── TABBED: Subjects + Enrollments ── #}
+<div class="det-card">
+    <div class="det-card-head" style="flex-wrap:wrap;gap:10px;">
+        <div class="d-flex gap-1" id="class-tabs">
+            <button id="tab-subjects"
+                    class="tab-btn active"
+                    onclick="switchTab('subjects')"
+                    hx-get="{% url 'academics:class_subjects_partial' class.pk %}"
+                    hx-target="#tab-content"
+                    hx-swap="innerHTML">
+                <i class="fa fa-book me-1"></i>Assigned Subjects
+                <span class="tab-count">{{ stats.total_subjects }}</span>
+            </button>
+            <button id="tab-enrollments"
+                    class="tab-btn"
+                    onclick="switchTab('enrollments')"
+                    hx-get="{% url 'academics:class_enrollments_partial' class.pk %}"
+                    hx-target="#tab-content"
+                    hx-swap="innerHTML">
+                <i class="fa fa-users me-1"></i>Class Enrollments
+                <span class="tab-count">{{ stats.total_students }}</span>
+            </button>
+        </div>
+    </div>
+
+    {# ── Subjects filter bar ── #}
+    <div id="tab-filter-subjects" style="padding:16px 22px;border-bottom:1px solid #e2e8f0;background:linear-gradient(135deg,#f8f9fa 0%,#f1f3f5 100%);">
+        <form id="subjectFilterForm"
+              hx-get="{% url 'academics:class_subjects_partial' class.pk %}"
+              hx-trigger="change, keyup changed delay:400ms from:#subjectFilterForm input[name='q']"
+              hx-target="#tab-content"
+              hx-swap="innerHTML">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Search</label>
+                    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search by name or code…">
+                </div>
+                <div class="col-md-2">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Type</label>
+                    <select name="is_optional" class="form-select form-select-sm">
+                        <option value="">All Types</option>
+                        <option value="false">Compulsory</option>
+                        <option value="true">Optional</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Teacher</label>
+                    <select name="has_teacher" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option value="true">Has Teacher</option>
+                        <option value="false">No Teacher</option>
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSubjectFilters()">
+                        <i class="fa fa-times me-1"></i>Clear
+                    </button>
+                </div>
+                <div class="col-md d-flex justify-content-end">
+                    <button class="btn btn-sm btn-outline-success"
+                            hx-get="{% url 'academics:class_subject_create' %}?class_pk={{ class.pk }}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-plus me-1"></i>Add Subject
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {# ── Enrollments filter bar ── #}
+    <div id="tab-filter-enrollments" style="padding:16px 22px;border-bottom:1px solid #e2e8f0;background:linear-gradient(135deg,#f8f9fa 0%,#f1f3f5 100%);display:none;">
+        <form id="enrollmentFilterForm"
+              hx-get="{% url 'academics:class_enrollments_partial' class.pk %}"
+              hx-trigger="change, keyup changed delay:400ms from:#enrollmentFilterForm input[name='q']"
+              hx-target="#tab-content"
+              hx-swap="innerHTML">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Search</label>
+                    <input type="text" name="q" class="form-control form-control-sm" placeholder="Name, admission no. or roll no.…">
+                </div>
+                <div class="col-md-2">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Gender</label>
+                    <select name="gender" class="form-select form-select-sm">
+                        <option value="">All Genders</option>
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Status</label>
+                    <select name="completion_status" class="form-select form-select-sm">
+                        <option value="">All Statuses</option>
+                        <option value="ONGOING">Ongoing</option>
+                        <option value="COMPLETED">Completed</option>
+                        <option value="DROPPED">Dropped</option>
+                        <option value="TRANSFERRED">Transferred</option>
+                        <option value="SUSPENDED">Suspended</option>
+                        <option value="WITHDRAWN">Withdrawn</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">Invoice</label>
+                    <select name="has_invoice" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option value="true">Has Invoice</option>
+                        <option value="false">No Invoice</option>
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearEnrollmentFilters()">
+                        <i class="fa fa-times me-1"></i>Clear
+                    </button>
+                </div>
+                {# ── Action buttons ── #}
+                <div class="col-md d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-outline-secondary"
+                            hx-get="{% url 'academics:class_fee_structure_modal' class.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-list-alt me-1"></i>Fee Structure
+                    </button>
+                    <button class="btn btn-sm btn-outline-success"
+                            hx-get="{% url 'academics:enrollment_create_modal' %}?class_pk={{ class.pk }}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-user-plus me-1"></i>Enroll
+                    </button>
+                    <a href="{% url 'academics:bulk_enrollment_step1' %}?class_id={{ class.pk }}"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-users me-1"></i>Bulk Enroll
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {# ── Content area — HTMX swaps here ── #}
+    <div id="tab-content"
+         style="padding:0;"
+         hx-get="{% url 'academics:class_subjects_partial' class.pk %}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div style="padding:40px;text-align:center;color:#94a3b8;">
+            <i class="fa fa-spinner fa-spin fa-2x"></i>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('tab-filter-subjects').style.display    = tab === 'subjects'    ? '' : 'none';
+    document.getElementById('tab-filter-enrollments').style.display = tab === 'enrollments' ? '' : 'none';
+    const inactiveForm = tab === 'subjects' ? 'enrollmentFilterForm' : 'subjectFilterForm';
+    const form = document.getElementById(inactiveForm);
+    if (form) {
+        form.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+        form.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+    }
+}
+
+function clearSubjectFilters() {
+    const form = document.getElementById('subjectFilterForm');
+    form.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+    form.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+    htmx.trigger(form, 'change');
+}
+
+function clearEnrollmentFilters() {
+    const form = document.getElementById('enrollmentFilterForm');
+    form.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+    form.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+    htmx.trigger(form, 'change');
+}
+
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true, focus: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+});
+</script>
+{% endblock %}

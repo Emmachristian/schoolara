@@ -1,0 +1,525 @@
+{# academics/templates/academics/class_subjects/detail.html #}
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --border-2:  #cbd5e1;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.cs-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.hero-name  { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
+.hero-top   { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.hero-meta  { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
+.hero-meta-item  { display: flex; flex-direction: column; gap: 2px; }
+.hero-meta-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-faint); }
+.hero-meta-value { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* ── Pills ── */
+.st-pill     { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+.sp-active   { background: var(--green-lt); color: var(--green); border: 1px solid #bbf7d0; }
+.sp-inactive { background: var(--red-lt);   color: var(--red);   border: 1px solid #fecaca; }
+.sp-optional { background: var(--amber-lt); color: var(--amber); border: 1px solid #fde68a; }
+.sp-comp     { background: var(--accent-lt); color: var(--accent); border: 1px solid #bfdbfe; }
+
+/* ── Cards ── */
+.det-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.det-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.det-card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0 22px; }
+.info-cell { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.info-cell:nth-child(odd)  { padding-right: 24px; }
+.info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.info-cell:last-child, .info-cell:nth-last-child(2) { border-bottom: none; }
+.info-cell.full { grid-column: span 2; padding-right: 0; border-left: none; }
+.info-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.info-val { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.info-val a { color: var(--accent); text-decoration: none; }
+.info-val a:hover { text-decoration: underline; }
+.info-val small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-muted); margin-top: 2px; }
+
+/* ── Weight bar ── */
+.weight-section { padding: 18px 22px; }
+.weight-label-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; font-weight: 700; }
+.weight-track { height: 10px; background: var(--surface-3); border-radius: 10px; overflow: hidden; display: flex; }
+.weight-ca   { height: 100%; background: var(--accent); }
+.weight-exam { height: 100%; background: var(--green); }
+.weight-legend { display: flex; gap: 16px; margin-top: 8px; }
+.wl-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+.wl-dot  { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* ── Sidebar ── */
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.side-card-head { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 7px; }
+.side-card-body { padding: 14px 18px; }
+.side-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.side-row:last-child { border-bottom: none; }
+.s-label { color: var(--ink-muted); font-size: 12.5px; }
+.s-value { font-weight: 700; color: var(--ink); font-size: 12.5px; }
+.s-value.green  { color: var(--green); }
+.s-value.accent { color: var(--accent); }
+.s-value.muted  { color: var(--ink-muted); font-weight: 500; }
+
+/* ── Teacher card ── */
+.teacher-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px;
+}
+.teacher-avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--accent-lt); color: var(--accent);
+    border: 2px solid #bfdbfe;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800; flex-shrink: 0;
+}
+.teacher-name { font-weight: 700; font-size: 14px; color: var(--ink); }
+.teacher-id   { font-family: 'Courier New', monospace; font-size: 11.5px; color: var(--ink-muted); margin-top: 2px; }
+
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid var(--border); }
+.dropdown-item  { padding: 6px 13px; }
+
+@media (max-width: 768px) {
+    .cs-hero { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; }
+    .info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+    .info-cell.full { grid-column: span 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-note2 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Subject Assignment
+                <div class="page-title-subheading">{{ class_subject.subject.name }} — {{ class_instance }}</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:class_detail' class_instance.pk %}"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back to Class
+            </a>
+            <button class="btn btn-sm btn-warning me-1"
+                    hx-get="{% url 'academics:class_subject_edit' class_subject.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-edit me-1"></i>Edit
+            </button>
+            <button class="btn btn-sm btn-outline-{% if class_subject.is_active %}secondary{% else %}success{% endif %} me-1"
+                    hx-get="{% url 'academics:class_subject_toggle_active_modal' class_subject.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                {% if class_subject.is_active %}
+                    <i class="fa fa-pause-circle me-1"></i>Deactivate
+                {% else %}
+                    <i class="fa fa-check-circle me-1"></i>Activate
+                {% endif %}
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+                    hx-get="{% url 'academics:class_subject_delete_modal' class_subject.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i>Remove
+            </button>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-graduation-cap me-1"></i>Academics
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_detail' class_instance.academic_level.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ class_instance.academic_level.name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:class_detail' class_instance.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ class_instance.get_display_name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page" style="color:#0f172a;font-weight:600;">
+            {{ class_subject.subject.name }}
+        </li>
+    </ol>
+</nav>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+{# ── Hero ── #}
+<div class="cs-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-name">{{ class_subject.subject.name }}</span>
+            <span style="font-family:monospace;font-size:13px;font-weight:700;background:var(--surface-3);color:var(--ink-muted);border:1px solid var(--border-2);border-radius:5px;padding:3px 10px;">{{ class_subject.subject.code }}</span>
+            {% if class_subject.is_active %}
+                <span class="st-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+            {% else %}
+                <span class="st-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
+            {% endif %}
+            {% if class_subject.is_optional %}
+                <span class="st-pill sp-optional"><i class="fa fa-circle"></i>Optional</span>
+            {% else %}
+                <span class="st-pill sp-comp"><i class="fa fa-star"></i>Compulsory</span>
+            {% endif %}
+        </div>
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Class</span>
+                <span class="hero-meta-value">
+                    <a href="{% url 'academics:class_detail' class_instance.pk %}"
+                       style="color:inherit;text-decoration:none;">{{ class_instance.get_display_name }}</a>
+                </span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Academic Level</span>
+                <span class="hero-meta-value">{{ class_instance.academic_level.name }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Session</span>
+                <span class="hero-meta-value">{{ class_instance.academic_session.name }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Subject Type</span>
+                <span class="hero-meta-value">{{ class_subject.subject.get_subject_type_display }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Hrs / Week</span>
+                <span class="hero-meta-value">{{ class_subject.hours_per_week }}</span>
+            </div>
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700;margin-bottom:4px;">Students</div>
+        <div style="font-size:36px;font-weight:900;color:var(--ink);line-height:1;font-variant-numeric:tabular-nums;">{{ stats.enrolled_students }}</div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:3px;">enrolled</div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        {# ── TEACHER ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-user-tie text-primary"></i>Subject Teacher</span>
+            </div>
+            {% if class_subject.teacher %}
+            <div class="teacher-card">
+                <div class="teacher-avatar">
+                    {{ class_subject.teacher.staff.first_name|first }}{{ class_subject.teacher.staff.last_name|first }}
+                </div>
+                <div>
+                    <div class="teacher-name">{{ class_subject.teacher.staff.get_full_name }}</div>
+                    <div class="teacher-id">{{ class_subject.teacher.staff.staff_id }}</div>
+                </div>
+            </div>
+            {% else %}
+            <div style="padding:22px;display:flex;align-items:center;gap:12px;">
+                <div style="width:48px;height:48px;border-radius:50%;background:var(--red-lt);border:2px solid #fecaca;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-exclamation-circle" style="color:var(--red);font-size:18px;"></i>
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:13.5px;color:var(--ink);">No teacher assigned</div>
+                    <div style="font-size:12px;color:var(--ink-muted);margin-top:2px;">Assign a teacher to this subject assignment</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── ASSESSMENT WEIGHTING ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-percent text-warning"></i>Assessment Weighting</span>
+            </div>
+            <div class="weight-section">
+                <div class="weight-label-row">
+                    <span style="color:var(--accent);">CA {{ stats.ca_weight }}%</span>
+                    <span style="color:var(--green);">Exam {{ stats.exam_weight }}%</span>
+                </div>
+                <div class="weight-track">
+                    <div class="weight-ca"   style="width:{{ stats.ca_weight }}%;"></div>
+                    <div class="weight-exam" style="width:{{ stats.exam_weight }}%;"></div>
+                </div>
+                <div class="weight-legend">
+                    <div class="wl-item">
+                        <div class="wl-dot" style="background:var(--accent);"></div>
+                        Continuous Assessment — <strong>{{ stats.ca_weight }}%</strong>
+                    </div>
+                    <div class="wl-item">
+                        <div class="wl-dot" style="background:var(--green);"></div>
+                        Final Exam — <strong>{{ stats.exam_weight }}%</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ── CONFIGURATION ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-sliders-h text-secondary"></i>Configuration</span>
+            </div>
+            <div class="info-grid">
+                <div class="info-cell">
+                    <div class="info-lbl">Hours Per Week</div>
+                    <div class="info-val">{{ class_subject.hours_per_week }}
+                        <small>teaching hours per week</small>
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Total Hours</div>
+                    <div class="info-val">
+                        {% if class_subject.total_hours %}{{ class_subject.total_hours }}{% else %}<span style="color:var(--ink-faint);font-weight:400;">Not set</span>{% endif %}
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Subject</div>
+                    <div class="info-val">
+                        <a href="{% url 'academics:subject_detail' class_subject.subject.pk %}">{{ class_subject.subject.name }}</a>
+                        <small>{{ class_subject.subject.get_subject_type_display }}</small>
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Pass Mark</div>
+                    <div class="info-val">{{ class_subject.subject.pass_mark }}%</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Type</div>
+                    <div class="info-val">{% if class_subject.is_optional %}Optional{% else %}Compulsory{% endif %}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Status</div>
+                    <div class="info-val">
+                        {% if class_subject.is_active %}
+                            <span class="st-pill sp-active" style="font-size:10.5px;padding:3px 10px;"><i class="fa fa-check-circle"></i>Active</span>
+                        {% else %}
+                            <span class="st-pill sp-inactive" style="font-size:10.5px;padding:3px 10px;"><i class="fa fa-times-circle"></i>Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if class_subject.textbook %}
+                <div class="info-cell full">
+                    <div class="info-lbl">Textbook</div>
+                    <div class="info-val" style="font-weight:500;">{{ class_subject.textbook }}</div>
+                </div>
+                {% endif %}
+                {% if class_subject.syllabus %}
+                <div class="info-cell full" style="border-bottom:none;">
+                    <div class="info-lbl">Syllabus</div>
+                    <div class="info-val" style="font-weight:400;font-size:13px;line-height:1.7;white-space:pre-line;">{{ class_subject.syllabus }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{# /col-lg-8 #}
+
+    {# ── SIDEBAR ── #}
+    <div class="col-lg-4" style="align-self:flex-start;">
+    <div style="position:sticky;top:80px;max-height:calc(100vh - 100px);overflow-y:auto;">
+
+        {# QUICK ACTIONS #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-bolt text-warning"></i>Quick Actions</div>
+            <div class="side-card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-outline-warning"
+                            hx-get="{% url 'academics:class_subject_edit' class_subject.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-edit me-1"></i>Edit Assignment
+                    </button>
+                    <button class="btn btn-sm btn-outline-{% if class_subject.is_active %}secondary{% else %}success{% endif %}"
+                            hx-get="{% url 'academics:class_subject_toggle_active_modal' class_subject.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        {% if class_subject.is_active %}
+                            <i class="fa fa-pause-circle me-1"></i>Deactivate
+                        {% else %}
+                            <i class="fa fa-check-circle me-1"></i>Activate
+                        {% endif %}
+                    </button>
+                    <a href="{% url 'academics:class_detail' class_instance.pk %}"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-chalkboard me-1"></i>View Class
+                    </a>
+                    <a href="{% url 'academics:subject_detail' class_subject.subject.pk %}"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-book me-1"></i>View Subject
+                    </a>
+                    <a href="{% url 'academics:class_subject_print_detail' class_subject.pk %}"
+                       target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-print me-1"></i>Print
+                    </a>
+                    <button class="btn btn-sm btn-outline-danger"
+                            hx-get="{% url 'academics:class_subject_delete_modal' class_subject.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-trash me-1"></i>Remove Assignment
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {# SUMMARY #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-info-circle text-primary"></i>Summary</div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Enrolled Students</span>
+                    <span class="s-value accent">{{ stats.enrolled_students }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Hours / Week</span>
+                    <span class="s-value">{{ stats.hours_per_week }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Total Hours</span>
+                    <span class="s-value muted">{% if stats.total_hours %}{{ stats.total_hours }}{% else %}—{% endif %}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">CA Weight</span>
+                    <span class="s-value" style="color:var(--accent);">{{ stats.ca_weight }}%</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Exam Weight</span>
+                    <span class="s-value green">{{ stats.exam_weight }}%</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Pass Mark</span>
+                    <span class="s-value muted">{{ class_subject.subject.pass_mark }}%</span>
+                </div>
+            </div>
+        </div>
+
+        {# RECORD INFO #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-clock text-secondary"></i>Record Info</div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value muted" style="font-size:11.5px;">{{ class_subject.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value muted" style="font-size:11.5px;">{{ class_subject.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>{# /sticky #}
+    </div>{# /col-lg-4 #}
+
+</div>{# /row #}
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true, focus: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+});
+</script>
+{% endblock %}

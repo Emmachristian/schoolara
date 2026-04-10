@@ -1,433 +1,387 @@
-{% load static %}
-{% load widget_tweaks %}
+{# fees/templates/fees/structures/partials/_structure_results.html #}
 {% load currency_filters %}
 
-<!-- Fee Structures Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="50">#</th>
-                <th width="220">Structure Name</th>
-                <th width="120">Academic Year</th>
-                <th width="100">Type</th>
-                <th width="130">Academic Levels</th>
-                <th width="100">Sessions</th>
-                <th width="80">Items</th>
-                <th width="110">Total Amount</th>
-                <th width="80">Priority</th>
-                <th width="80">Status</th>
-                <th width="100">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="structureTableBody">
-            {% if structures_page %}
-                {% for structure in structures_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:structures_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Structure Name -->
-                    <td>
-                        <div>
-                            <h6 class="mb-1">
-                                <a href="{% url 'fees:structure_detail' structure.pk %}" class="text-dark text-decoration-none">
-                                    {{ structure.name }}
-                                </a>
-                            </h6>
-                            {% if structure.description %}
-                                <small class="text-muted">{{ structure.description|truncatewords:6 }}</small>
-                            {% endif %}
-                            <div class="mt-1">
-                                {% if structure.effective_date %}
-                                    <small class="text-muted">
-                                        <i class="fa fa-calendar me-1"></i>{{ structure.effective_date|date:"M d, Y" }}
-                                    </small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    
-                    <!-- Academic Year -->
-                    <td>
-                        {% if structure.academic_year %}
-                            <span class="badge bg-info" style="font-size: 0.8rem;">
-                                <i class="fa fa-calendar-alt me-1"></i>
-                                {{ structure.academic_year.name }}
-                            </span>
-                            <div class="mt-1">
-                                <small class="text-muted" style="font-size: 0.7rem;">
-                                    {{ structure.get_billing_frequency_display }}
-                                </small>
-                            </div>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Structure Type -->
-                    <td>
-                        {% if structure.structure_type == 'STANDARD' %}
-                            <span class="badge bg-primary badge-structure-type">
-                                <i class="fa fa-star me-1"></i>{{ structure.get_structure_type_display }}
-                            </span>
-                        {% elif structure.structure_type == 'BOARDER' %}
-                            <span class="badge bg-info badge-structure-type">
-                                <i class="fa fa-home me-1"></i>{{ structure.get_structure_type_display }}
-                            </span>
-                        {% elif structure.structure_type == 'DAY_SCHOLAR' %}
-                            <span class="badge bg-success badge-structure-type">
-                                <i class="fa fa-sun me-1"></i>{{ structure.get_structure_type_display }}
-                            </span>
-                        {% elif structure.structure_type == 'SCHOLARSHIP' %}
-                            <span class="badge bg-warning text-dark badge-structure-type">
-                                <i class="fa fa-graduation-cap me-1"></i>{{ structure.get_structure_type_display }}
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary badge-structure-type">
-                                {{ structure.get_structure_type_display }}
-                            </span>
-                        {% endif %}
-                        {% if structure.charges_late_fee %}
-                            <div class="mt-1">
-                                <span class="badge bg-danger" style="font-size: 0.65rem;">
-                                    <i class="fa fa-clock me-1"></i>Late Fee
-                                </span>
-                            </div>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Academic Levels -->
-                    <td>
-                        {% if structure.academic_levels.count > 0 %}
-                            <div class="d-flex flex-wrap gap-1">
-                                {% for level in structure.academic_levels.all|slice:":2" %}
-                                    <span class="badge bg-light text-dark" style="font-size: 0.7rem;">
-                                        {{ level.short_name|default:level.name }}
-                                    </span>
-                                {% endfor %}
-                                {% if structure.academic_levels.count > 2 %}
-                                    <span class="badge bg-secondary" style="font-size: 0.7rem;">
-                                        +{{ structure.academic_levels.count|add:"-2" }}
-                                    </span>
-                                {% endif %}
-                            </div>
-                        {% else %}
-                            <span class="text-muted">All</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Sessions -->
-                    <td>
-                        {% if structure.applicable_sessions.count > 0 %}
-                            {% with first_session=structure.applicable_sessions.first %}
-                                <div>
-                                    <span class="badge bg-info" style="font-size: 0.7rem;">
-                                        {{ first_session.short_name }}
-                                    </span>
-                                </div>
-                                {% if structure.applicable_sessions.count > 1 %}
-                                    <small class="text-muted" style="font-size: 0.7rem;">
-                                        +{{ structure.applicable_sessions.count|add:"-1" }}
-                                    </small>
-                                {% endif %}
-                            {% endwith %}
-                        {% else %}
-                            <span class="text-muted">All</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Items Count -->
-                    <td class="text-center">
-                        {% with item_count=structure.items.count %}
-                            {% if item_count > 0 %}
-                                <span class="badge bg-primary">
-                                    {{ item_count }}
-                                </span>
-                            {% else %}
-                                <span class="text-muted">0</span>
-                            {% endif %}
-                        {% endwith %}
-                    </td>
-                    
-                    <!-- Total Amount -->
-                    <td class="text-end">
-                        {% if structure.total_amount %}
-                            <strong class="text-primary">
-                                {{ structure.total_amount|money }}
-                            </strong>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Priority -->
-                    <td class="text-center">
-                        <span class="badge bg-secondary">
-                            {{ structure.priority }}
-                        </span>
-                    </td>
-                    
-                    <!-- Status Badge -->
-                    <td class="text-center">
-                        {% if structure.is_active %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-check-circle me-1"></i>Active
-                            </span>
-                        {% else %}
-                            <span class="badge bg-danger">
-                                <i class="fa fa-times-circle me-1"></i>Inactive
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'fees:structure_detail' structure.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
-                                </a>
-                                
-                                <!-- Quick View Modal -->
-                                <button type="button" class="dropdown-item text-info"
-                                        hx-get="{% url 'fees:structure_quick_view_modal' structure.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-search me-2"></i> Quick View
-                                </button>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'fees:structure_edit' structure.pk %}">
-                                    <i class="fa fa-edit me-2"></i> Edit
-                                </a>
-                                
-                                <!-- Clone -->
-                                <button type="button" class="dropdown-item text-primary"
-                                        hx-get="{% url 'fees:structure_clone_modal' structure.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-copy me-2"></i> Clone
-                                </button>
-                                
-                                <!-- Activate/Deactivate -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% if structure.is_active %}{% url 'fees:structure_deactivate_modal' structure.pk %}{% else %}{% url 'fees:structure_activate_modal' structure.pk %}{% endif %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-power-off me-2"></i>
-                                    {{ structure.is_active|yesno:"Deactivate,Activate" }}
-                                </button>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Links -->
-                                <h6 class="dropdown-header">Quick Links</h6>
-                                
-                                <a class="dropdown-item" href="{% url 'fees:structure_print' structure.pk %}" target="_blank">
-                                    <i class="fa fa-print me-2"></i> Print Structure
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'fees:structure_delete_modal' structure.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i> Delete
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="11" class="text-center">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <h5 class="mt-3">No Fee Structures Found</h5>
-                            <p class="text-muted">Try adjusting your filters or create a new fee structure.</p>
-                            <a href="{% url 'fees:structure_create' %}" class="btn btn-primary mt-3">
-                                <i class="fa fa-plus me-1"></i> Create Fee Structure
+<style>
+.str-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.str-tbl thead th {
+    background: #f8fafc; padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.str-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.str-tbl tbody tr:last-child td { border-bottom: none; }
+.str-tbl tbody tr:hover td { background: #fafbff !important; }
+.str-tbl tbody tr.row-inactive td { color: #94a3b8; }
+.str-tbl tbody tr.row-inactive:hover td { background: #f8fafc !important; }
+
+.str-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; }
+.str-name:hover { color: #1d4ed8; }
+
+.type-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 6px;
+    font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.tp-standard { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.tp-boarder  { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.tp-day      { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.tp-scholar  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.tp-other    { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
+
+.level-chip {
+    display: inline-block; padding: 1px 7px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 600;
+    background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+    margin: 1px;
+}
+.str-session-chip {
+    display: inline-block; padding: 1px 7px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 600;
+    background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;
+    margin: 1px;
+}
+
+.late-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
+    background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; margin-top: 3px;
+}
+
+.s-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 11px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.sp-active   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sp-inactive { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+.pag-bar {
+    padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; font-size: 12.5px; color: #64748b;
+}
+.pag-bar .page-link { color: #1d4ed8; border-color: #e2e8f0; font-size: 12.5px; padding: 4px 10px; }
+.pag-bar .page-link:hover { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
+
+.dropdown-menu   { font-size: .84rem; min-width: 192px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: .68rem; padding: 6px 14px 2px; }
+
+.stat-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 18px 22px; display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px; transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon   { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; }
+.stat-label  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 3px; }
+.stat-value  { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="str-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Structure</th>
+            <th>Type</th>
+            <th>Levels / Sessions</th>
+            <th class="text-end">Total</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if structures_page %}
+        {% for structure in structures_page %}
+        <tr class="{% if not structure.is_active %}row-inactive{% endif %}">
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ structures_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- ── Structure name + dates ── -->
+            <td>
+                <a href="{% url 'fees:structure_detail' structure.pk %}" class="str-name">
+                    {{ structure.name }}
+                </a>
+                {% if structure.charges_late_fee %}
+                    <span class="late-badge">
+                        <i class="fa fa-clock" style="font-size:8px;"></i>Late Fee
+                    </span>
+                {% endif %}
+                {% if structure.effective_date %}
+                <div style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:11px;color:#94a3b8;">
+                    <span style="background:#f1f5f9;border-radius:3px;padding:1px 6px;font-family:'Courier New',monospace;color:#64748b;">
+                        {{ structure.effective_date|date:"d M Y" }}
+                    </span>
+                    <span style="color:#cbd5e1;">→</span>
+                    <span style="background:#f1f5f9;border-radius:3px;padding:1px 6px;font-family:'Courier New',monospace;color:#64748b;">
+                        {% if structure.expiry_date %}{{ structure.expiry_date|date:"d M Y" }}{% else %}∞{% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Type — explicit equality checks instead of substring 'in' ── -->
+            <td>
+                {% if structure.structure_type == 'STANDARD' %}
+                    <span class="type-pill tp-standard"><i class="fa fa-star" style="font-size:8px;"></i>Standard</span>
+                {% elif structure.structure_type == 'BOARDER' or structure.structure_type == 'FULL_BOARDER' or structure.structure_type == 'WEEKLY_BOARDER' or structure.structure_type == 'FLEXI_BOARDER' %}
+                    <span class="type-pill tp-boarder"><i class="fa fa-home" style="font-size:8px;"></i>{{ structure.get_structure_type_display }}</span>
+                {% elif structure.structure_type == 'DAY_SCHOLAR' %}
+                    <span class="type-pill tp-day"><i class="fa fa-sun" style="font-size:8px;"></i>Day Scholar</span>
+                {% elif structure.structure_type == 'SCHOLARSHIP' %}
+                    <span class="type-pill tp-scholar"><i class="fa fa-graduation-cap" style="font-size:8px;"></i>Scholarship</span>
+                {% else %}
+                    <span class="type-pill tp-other">{{ structure.get_structure_type_display }}</span>
+                {% endif %}
+            </td>
+
+            <!-- ── Levels / Sessions ── -->
+            <td>
+                <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">
+                    {% with c=structure.academic_levels.count %}
+                    {% if c > 0 %}
+                        <span class="level-chip">{{ structure.academic_levels.first.short_name|default:structure.academic_levels.first.name }}</span>
+                        {% if c > 1 %}<span class="level-chip">+{{ c|add:"-1" }} more</span>{% endif %}
+                    {% else %}
+                        <span style="font-size:11.5px;color:#94a3b8;">All levels</span>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:3px;">
+                    {% with c=structure.applicable_sessions.count %}
+                    {% if c > 0 %}
+                        <span class="str-session-chip">{{ structure.applicable_sessions.first.short_name|default:structure.applicable_sessions.first.name }}</span>
+                        {% if c > 1 %}<span class="str-session-chip" style="background:#e2e8f0;color:#64748b;">+{{ c|add:"-1" }}</span>{% endif %}
+                    {% else %}
+                        <span style="font-size:11.5px;color:#94a3b8;">All sessions</span>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </td>
+
+            <!-- ── Total — already in school currency from annotation ── -->
+            <td class="text-end">
+                {% if structure.total_amount %}
+                    <span style="font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;">{{ structure.total_amount|money }}</span>
+                {% else %}
+                    <span style="color:#94a3b8;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- ── Status ── -->
+            <td class="text-center">
+                {% if structure.is_active %}
+                    <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i>Active</span>
+                {% else %}
+                    <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i>Inactive</span>
+                {% endif %}
+            </td>
+
+            <!-- ── Actions ── -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:structure_detail' structure.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
                             </a>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:structure_quick_view_modal' structure.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-search me-2 text-secondary"></i>Quick View
+                            </button>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:structure_edit' structure.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:structure_clone_modal' structure.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-copy me-2 text-info"></i>Clone
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% if structure.is_active %}{% url 'fees:structure_deactivate_modal' structure.pk %}{% else %}{% url 'fees:structure_activate_modal' structure.pk %}{% endif %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-power-off me-2 text-secondary"></i>
+                                {{ structure.is_active|yesno:"Deactivate,Activate" }}
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Print</h6></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:structure_print' structure.pk %}" target="_blank">
+                                <i class="fa fa-print me-2"></i>Print Structure
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'fees:structure_delete_modal' structure.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="7">
+                <div class="tbl-empty">
+                    <i class="pe-7s-note2"></i>
+                    <p>
+                        {% if request.GET %}
+                            No fee structures match your current filters.
+                        {% else %}
+                            No fee structures have been created yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'fees:structure_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:600;border-radius:6px;
+                                  background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>Create Structure
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'fees:structure_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:500;border-radius:6px;background:#fff;
+                                  color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
 </div>
 
-<!-- Pagination -->
+<!-- ── Pagination ── -->
 {% if structures_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ structures_page.start_index }} - {{ structures_page.end_index }} of {{ structures_page.paginator.count }} structure{{ structures_page.paginator.count|pluralize }}
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Fee structure pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if structures_page.has_previous %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ structures_page.start_index }}</strong>–<strong>{{ structures_page.end_index }}</strong>
+        of <strong>{{ structures_page.paginator.count|format_number }}</strong>
+        structure{{ structures_page.paginator.count|pluralize }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if structures_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:structure_list' %}"
+                        hx-target="#structure-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ structures_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in structures_page.paginator.page_range %}
+                {% if p == structures_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > structures_page.number|add:"-3" and p < structures_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'fees:structure_list' %}"
                                 hx-target="#structure-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ structures_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in structures_page.paginator.page_range %}
-                    {% if page_num == structures_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > structures_page.number|add:"-3" and page_num < structures_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'fees:structure_list' %}"
-                                    hx-target="#structure-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if structures_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:structure_list' %}"
-                                hx-target="#structure-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ structures_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if structures_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:structure_list' %}"
+                        hx-target="#structure-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ structures_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- ── OOB stats refresh (HTMX only) ── -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-note2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Structures</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-note2"></i></div>
+            <div><div class="stat-label">Total Structures</div><div class="stat-value">{{ stats.total|default:0|format_number }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Structures</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div><div class="stat-label">Active</div><div class="stat-value">{{ stats.active|default:0|format_number }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-users"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Standard Structures</div>
-                <h3>{{ stats.standard|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-users"></i></div>
+            <div><div class="stat-label">Standard</div><div class="stat-value">{{ stats.standard|default:0|format_number }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-clock"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">With Late Fees</div>
-                <h3>{{ stats.with_late_fees|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-clock"></i></div>
+            <div><div class="stat-label">With Late Fees</div><div class="stat-value">{{ stats.with_late_fees|default:0|format_number }}</div></div>
         </div>
     </div>
 </div>
 {% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

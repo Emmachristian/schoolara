@@ -1,0 +1,93 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Fee Discounts{% endblock %}
+{% block doc_title %}Fee Discounts{% endblock %}
+{% block record_count %}{{ discounts|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.auto_apply|default:0 }}</span>
+        <span class="stat-label">Auto-Apply</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_budget|money_short }}</span>
+        <span class="stat-label">Total Budget</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_used|money_short }}</span>
+        <span class="stat-label">Budget Used</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if discounts %}
+    {% for discount in discounts %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "budget_limit,budget_used" %} class="num"{% elif field in "discount_value,priority,max_usage,current_usage" %} class="ctr"{% endif %}>
+            {% if field == 'code' %}
+                <span class="chip-code">{{ discount.code }}</span>
+            {% elif field == 'name' %}
+                <strong>{{ discount.name }}</strong>
+            {% elif field == 'discount_type' %}
+                {{ discount.get_discount_type_display }}
+            {% elif field == 'discount_value' %}
+                {% if discount.discount_type == 'PERCENTAGE' %}
+                    {{ discount.discount_value|percentage }}
+                {% else %}
+                    {{ discount.discount_value|amount }}
+                {% endif %}
+            {% elif field == 'eligibility' %}
+                {{ discount.get_eligibility_criteria_display }}
+            {% elif field == 'academic_session' %}
+                {{ discount.academic_session.name|default:"—" }}
+            {% elif field == 'start_date' %}
+                {% if discount.start_date %}{{ discount.start_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'end_date' %}
+                {% if discount.end_date %}{{ discount.end_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'budget_limit' %}
+                {% if discount.budget_limit %}{{ discount.budget_limit|amount }}{% else %}<span class="text-muted">No limit</span>{% endif %}
+            {% elif field == 'budget_used' %}
+                {% if discount.current_budget_used %}{{ discount.current_budget_used|amount }}{% else %}—{% endif %}
+            {% elif field == 'max_usage' %}
+                {% if discount.max_usage_count %}{{ discount.max_usage_count }}{% else %}<span class="text-muted">Unlimited</span>{% endif %}
+            {% elif field == 'current_usage' %}
+                {{ discount.current_usage_count|default:0 }}
+            {% elif field == 'priority' %}
+                {{ discount.priority }}
+            {% elif field == 'auto_apply' %}
+                {% if discount.auto_apply %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'requires_approval' %}
+                {% if discount.requires_approval %}<span class="text-warn">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'can_combine' %}
+                {% if discount.can_combine_with_other_discounts %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'is_active' %}
+                {% if discount.is_active %}<span class="badge s-active">Active</span>{% else %}<span class="badge s-void">Inactive</span>{% endif %}
+            {% elif field == 'description' %}
+                {{ discount.description|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No discounts found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

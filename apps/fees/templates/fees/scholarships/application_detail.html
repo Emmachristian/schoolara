@@ -1,0 +1,783 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --border-2:  #cbd5e1;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --purple-bd: #ddd6fe;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.app-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--purple);
+    border-radius: var(--radius);
+    padding: 28px 32px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.app-hero-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.app-number { font-family: 'Courier New', monospace; font-size: 20px; font-weight: 800; color: var(--ink); }
+.app-hero-meta { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 14px; }
+.app-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.app-meta-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-faint); }
+.app-meta-value { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* Amount block */
+.app-amount-block { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.app-total-label { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-muted); font-weight: 600; }
+.app-total-value { font-size: 28px; font-weight: 900; color: var(--ink); line-height: 1.15; font-variant-numeric: tabular-nums; }
+
+/* ── Status pills ── */
+.st-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+.st-draft      { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border-2); }
+.st-submitted  { background: var(--accent-lt); color: var(--accent); border: 1px solid var(--accent-bd); }
+.st-review     { background: var(--amber-lt);  color: var(--amber);  border: 1px solid #fde68a; }
+.st-approved   { background: var(--green-lt);  color: var(--green);  border: 1px solid #bbf7d0; }
+.st-rejected   { background: var(--red-lt);    color: var(--red);    border: 1px solid #fecaca; }
+.st-waitlisted { background: var(--purple-lt); color: var(--purple); border: 1px solid var(--purple-bd); }
+.st-withdrawn  { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border-2); }
+
+/* ── Cards ── */
+.app-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.app-card-head { background: var(--surface-2); padding: 13px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.app-card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+.app-card-body { padding: 20px 22px; }
+
+/* ── Info grid ── */
+.app-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.app-info-cell { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.app-info-cell:nth-child(odd)  { padding-right: 24px; }
+.app-info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.app-info-cell:last-child,
+.app-info-cell:nth-last-child(2) { border-bottom: none; }
+.app-info-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.app-info-val { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.app-info-val.mono { font-family: 'Courier New', monospace; font-size: 12.5px; }
+.app-info-val small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-muted); margin-top: 1px; }
+
+/* ── Metric chips (GPA, attendance) ── */
+.metric-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 8px;
+    font-size: 14px; font-weight: 800;
+}
+.metric-chip-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; opacity: .75; }
+.chip-gpa  { background: var(--accent-lt); color: var(--accent); border: 1px solid var(--accent-bd); }
+.chip-att  { background: var(--green-lt);  color: var(--green);  border: 1px solid #bbf7d0; }
+.chip-inc  { background: var(--amber-lt);  color: var(--amber);  border: 1px solid #fde68a; }
+.chip-deps { background: var(--purple-lt); color: var(--purple); border: 1px solid var(--purple-bd); }
+
+/* ── Essay / long text ── */
+.essay-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 13.5px;
+    line-height: 1.8;
+    color: var(--ink);
+    white-space: pre-wrap;
+}
+.essay-empty { color: var(--ink-faint); font-style: italic; font-size: 13px; }
+
+/* ── Decision box ── */
+.decision-box {
+    border-radius: 8px; padding: 16px 18px;
+    font-size: 13px; line-height: 1.6;
+}
+.decision-approved { background: var(--green-lt); border: 1px solid #bbf7d0; color: #14532d; }
+.decision-rejected { background: var(--red-lt);   border: 1px solid #fecaca; color: #7f1d1d; }
+.decision-waitlist { background: var(--purple-lt); border: 1px solid var(--purple-bd); color: #4c1d95; }
+
+/* ── Sidebar ── */
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.side-card-head { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 7px; }
+.side-card-body { padding: 14px 18px; }
+.side-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.side-row:last-child { border-bottom: none; }
+.side-row .s-label { color: var(--ink-muted); font-size: 12.5px; }
+.side-row .s-value { font-weight: 700; color: var(--ink); }
+.side-row .s-value.green  { color: var(--green); }
+.side-row .s-value.red    { color: var(--red); }
+.side-row .s-value.purple { color: var(--purple); }
+.side-row .s-value.muted  { color: var(--ink-muted); font-weight: 400; }
+.side-row.divider-row { border-top: 2px solid var(--border-2); padding-top: 11px; margin-top: 4px; }
+.side-row.divider-row .s-label { font-weight: 700; color: var(--ink); font-size: 13px; }
+.side-row.divider-row .s-value { font-size: 15px; font-weight: 900; }
+
+/* ── Program info box ── */
+.pgm-box { border: 1px solid var(--accent-bd); background: var(--accent-lt); border-radius: 8px; padding: 14px 16px; }
+.pgm-box-title { font-size: 12.5px; font-weight: 700; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.pgm-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--accent-bd); font-size: 12.5px; }
+.pgm-row:last-child { border-bottom: none; }
+.pgm-row-label { color: var(--ink-muted); }
+.pgm-row-val   { font-weight: 700; color: var(--ink); }
+
+/* ── Banners ── */
+.info-banner  { background: var(--accent-lt); border: 1px solid #bfdbfe; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 11px 16px; font-size: 13px; color: #1e3a5f; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.warn-banner  { background: var(--amber-lt);  border: 1px solid #fde68a; border-left: 4px solid #d97706;    border-radius: 0 8px 8px 0; padding: 11px 16px; font-size: 13px; color: #78350f; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.success-banner { background: var(--green-lt); border: 1px solid #bbf7d0; border-left: 4px solid var(--green); border-radius: 0 8px 8px 0; padding: 11px 16px; font-size: 13px; color: #14532d; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.danger-banner  { background: var(--red-lt);   border: 1px solid #fecaca; border-left: 4px solid var(--red);   border-radius: 0 8px 8px 0; padding: 11px 16px; font-size: 13px; color: #7f1d1d; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+
+/* ── Bool badge ── */
+.bool-yes { background: var(--green-lt); color: var(--green); border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.bool-no  { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+
+/* ── Progress bar (attendance) ── */
+.att-track { height: 6px; background: var(--surface-3); border-radius: 6px; overflow: hidden; margin-top: 5px; }
+.att-fill  { height: 100%; background: linear-gradient(90deg, var(--green), #22c55e); border-radius: 6px; }
+
+@media (max-width: 768px) {
+    .app-hero { grid-template-columns: 1fr; }
+    .app-amount-block { align-items: flex-start; }
+    .app-info-grid { grid-template-columns: 1fr; }
+    .app-info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Page title ── -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-news-paper icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Scholarship Application
+                <div class="page-title-subheading">
+                    {{ application.application_number }} &mdash; {{ application.student.get_full_name }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'fees:scholarship_application_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+            <button class="btn btn-sm btn-outline-secondary me-1"
+                    hx-get="{% url 'fees:scholarship_application_history_modal' application.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-history me-1"></i>History
+            </button>
+            {% if application.status in 'SUBMITTED,UNDER_REVIEW' %}
+            <button class="btn btn-sm btn-success me-1"
+                    hx-get="{% url 'fees:scholarship_application_approve_modal' application.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-1"></i>Approve
+            </button>
+            <button class="btn btn-sm btn-danger me-1"
+                    hx-get="{% url 'fees:scholarship_application_reject_modal' application.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-times me-1"></i>Reject
+            </button>
+            {% endif %}
+            {% if application.status == 'APPROVED' and not application.awarded_scholarship %}
+            <a href="{% url 'fees:student_scholarship_create' %}?application={{ application.pk }}"
+               class="btn btn-sm btn-primary me-1">
+                <i class="fa fa-award me-1"></i>Award Scholarship
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ── Status banners ── -->
+{% if application.status == 'APPROVED' %}
+    {% if application.awarded_scholarship %}
+    <div class="success-banner">
+        <i class="fa fa-check-circle fa-lg"></i>
+        <div>
+            <strong>Scholarship Awarded</strong> — this application led to an active scholarship.
+            <a href="{% url 'fees:student_scholarship_detail' application.awarded_scholarship.pk %}"
+               class="ms-2" style="color:var(--green);font-weight:700;">
+                View Scholarship &rarr;
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="info-banner">
+        <i class="fa fa-check-circle fa-lg"></i>
+        <div>
+            <strong>Application Approved</strong> — no scholarship has been awarded yet.
+            <a href="{% url 'fees:student_scholarship_create' %}?application={{ application.pk }}"
+               class="ms-2" style="color:var(--accent);font-weight:700;">
+                Award Scholarship &rarr;
+            </a>
+        </div>
+    </div>
+    {% endif %}
+{% elif application.status == 'REJECTED' %}
+<div class="danger-banner">
+    <i class="fa fa-times-circle fa-lg"></i>
+    <div><strong>Application Rejected</strong>{% if application.decision_reason %} — {{ application.decision_reason }}{% endif %}</div>
+</div>
+{% elif application.status == 'UNDER_REVIEW' %}
+<div class="warn-banner">
+    <i class="fa fa-search fa-lg"></i>
+    <div><strong>Under Review</strong> — this application is currently being reviewed by the committee.</div>
+</div>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════
+     HERO
+═══════════════════════════════════════════ -->
+<div class="app-hero">
+    <div>
+        <div class="app-hero-top">
+            <span class="app-number">{{ application.application_number }}</span>
+
+            {% if application.status == 'DRAFT' %}
+                <span class="st-pill st-draft"><i class="fa fa-pencil-alt"></i>Draft</span>
+            {% elif application.status == 'SUBMITTED' %}
+                <span class="st-pill st-submitted"><i class="fa fa-paper-plane"></i>Submitted</span>
+            {% elif application.status == 'UNDER_REVIEW' %}
+                <span class="st-pill st-review"><i class="fa fa-search"></i>Under Review</span>
+            {% elif application.status == 'APPROVED' %}
+                <span class="st-pill st-approved"><i class="fa fa-check-circle"></i>Approved</span>
+            {% elif application.status == 'REJECTED' %}
+                <span class="st-pill st-rejected"><i class="fa fa-times-circle"></i>Rejected</span>
+            {% elif application.status == 'WAITLISTED' %}
+                <span class="st-pill st-waitlisted"><i class="fa fa-clock"></i>Waitlisted</span>
+            {% elif application.status == 'WITHDRAWN' %}
+                <span class="st-pill st-withdrawn"><i class="fa fa-undo"></i>Withdrawn</span>
+            {% endif %}
+        </div>
+
+        <div class="app-hero-meta">
+            <div class="app-meta-item">
+                <span class="app-meta-label">Applicant</span>
+                <span class="app-meta-value">
+                    <a href="{% url 'students:student_profile' application.student.pk %}" style="color:inherit;text-decoration:none;">
+                        {{ application.student.get_full_name }}
+                    </a>
+                </span>
+            </div>
+            <div class="app-meta-item">
+                <span class="app-meta-label">Program</span>
+                <span class="app-meta-value">
+                    <a href="{% url 'fees:scholarship_program_detail' application.scholarship_program.pk %}" style="color:inherit;text-decoration:none;">
+                        {{ application.scholarship_program.name }}
+                    </a>
+                </span>
+            </div>
+            <div class="app-meta-item">
+                <span class="app-meta-label">Academic Session</span>
+                <span class="app-meta-value">{{ application.academic_session }}</span>
+            </div>
+            <div class="app-meta-item">
+                <span class="app-meta-label">Date Applied</span>
+                <span class="app-meta-value">{{ application.application_date|date:"d M Y" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-amount-block">
+        {% if application.requested_amount %}
+        <div>
+            <div class="app-total-label">Requested</div>
+            <div class="app-total-value">{{ application.requested_amount|money }}</div>
+        </div>
+        {% endif %}
+        {% if application.approved_amount %}
+        <div>
+            <div class="app-total-label" style="color:var(--green);">Approved</div>
+            <div style="font-size:18px;font-weight:800;color:var(--green);">{{ application.approved_amount|money }}</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════ -->
+<div class="row">
+
+<!-- ── LEFT COLUMN ── -->
+<div class="col-lg-8">
+
+    <!-- Application Details -->
+    <div class="app-card">
+        <div class="app-card-head">
+            <span class="app-card-title"><i class="fa fa-file-alt" style="color:var(--purple);"></i>Application Details</span>
+        </div>
+        <div class="app-card-body" style="padding:0 22px;">
+            <div class="app-info-grid">
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Application Number</div>
+                    <div class="app-info-val mono">{{ application.application_number }}</div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Applicant</div>
+                    <div class="app-info-val">
+                        <a href="{% url 'students:student_profile' application.student.pk %}" class="text-primary">
+                            {{ application.student.get_full_name }}
+                        </a>
+                        <small>{{ application.student.admission_number }}</small>
+                    </div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Scholarship Program</div>
+                    <div class="app-info-val">
+                        <a href="{% url 'fees:scholarship_program_detail' application.scholarship_program.pk %}" class="text-primary">
+                            {{ application.scholarship_program.name }}
+                        </a>
+                        <small style="font-family:'Courier New',monospace;">{{ application.scholarship_program.code }}</small>
+                    </div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Academic Session</div>
+                    <div class="app-info-val">{{ application.academic_session }}</div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Application Date</div>
+                    <div class="app-info-val">{{ application.application_date|date:"d M Y" }}</div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Status</div>
+                    <div class="app-info-val">{{ application.get_status_display }}</div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Requested Amount</div>
+                    <div class="app-info-val">{{ application.requested_amount|money|default:"—" }}</div>
+                </div>
+                <div class="app-info-cell">
+                    <div class="app-info-lbl">Approved Amount</div>
+                    <div class="app-info-val" style="color:{% if application.approved_amount %}var(--green){% else %}var(--ink-faint){% endif %};">
+                        {{ application.approved_amount|money|default:"—" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Academic Performance -->
+    <div class="app-card">
+        <div class="app-card-head">
+            <span class="app-card-title"><i class="pe-7s-graph1" style="color:var(--amber);"></i>Academic Performance</span>
+        </div>
+        <div class="app-card-body">
+            <div class="d-flex flex-wrap gap-3 mb-3">
+                {% if application.current_gpa %}
+                <div class="metric-chip chip-gpa">
+                    <div>
+                        <div class="metric-chip-label">GPA</div>
+                        <div>{{ application.current_gpa }} / 4.0</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if application.attendance_percentage %}
+                <div class="metric-chip chip-att">
+                    <div>
+                        <div class="metric-chip-label">Attendance</div>
+                        <div>{{ application.attendance_percentage }}%</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:160px;align-self:center;">
+                    <div class="att-track">
+                        <div class="att-fill" style="width:{{ application.attendance_percentage }}%;"></div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if application.family_income %}
+                <div class="metric-chip chip-inc">
+                    <div>
+                        <div class="metric-chip-label">Family Income</div>
+                        <div>{{ application.family_income|money }}</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if application.number_of_dependents is not None %}
+                <div class="metric-chip chip-deps">
+                    <div>
+                        <div class="metric-chip-label">Dependents</div>
+                        <div>{{ application.number_of_dependents }}</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Eligibility check against program criteria -->
+            {% if application.scholarship_program.minimum_gpa or application.scholarship_program.minimum_attendance_percentage or application.scholarship_program.family_income_threshold %}
+            <div style="margin-top:10px;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);font-size:12.5px;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:8px;">
+                    Program Eligibility Criteria
+                </div>
+                <div class="d-flex flex-wrap gap-3">
+                    {% if application.scholarship_program.minimum_gpa %}
+                    <div>
+                        <span style="color:var(--ink-muted);">Min GPA:</span>
+                        <strong>{{ application.scholarship_program.minimum_gpa }}</strong>
+                        {% if application.current_gpa %}
+                            {% if application.current_gpa >= application.scholarship_program.minimum_gpa %}
+                                <span class="bool-yes ms-1">✓ Met</span>
+                            {% else %}
+                                <span class="bool-no ms-1">✗ Not met</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if application.scholarship_program.minimum_attendance_percentage %}
+                    <div>
+                        <span style="color:var(--ink-muted);">Min Attendance:</span>
+                        <strong>{{ application.scholarship_program.minimum_attendance_percentage }}%</strong>
+                        {% if application.attendance_percentage %}
+                            {% if application.attendance_percentage >= application.scholarship_program.minimum_attendance_percentage %}
+                                <span class="bool-yes ms-1">✓ Met</span>
+                            {% else %}
+                                <span class="bool-no ms-1">✗ Not met</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if application.scholarship_program.family_income_threshold %}
+                    <div>
+                        <span style="color:var(--ink-muted);">Income Threshold:</span>
+                        <strong>≤ {{ application.scholarship_program.family_income_threshold|money }}</strong>
+                        {% if application.family_income %}
+                            {% if application.family_income <= application.scholarship_program.family_income_threshold %}
+                                <span class="bool-yes ms-1">✓ Met</span>
+                            {% else %}
+                                <span class="bool-no ms-1">✗ Not met</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Personal Essay -->
+    <div class="app-card">
+        <div class="app-card-head">
+            <span class="app-card-title"><i class="pe-7s-pen" style="color:var(--purple);"></i>Personal Essay</span>
+        </div>
+        <div class="app-card-body">
+            {% if application.essay %}
+                <div class="essay-box">{{ application.essay }}</div>
+            {% else %}
+                <div class="essay-empty">No essay submitted.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Special Circumstances -->
+    {% if application.special_circumstances %}
+    <div class="app-card">
+        <div class="app-card-head">
+            <span class="app-card-title"><i class="pe-7s-comment" style="color:var(--amber);"></i>Special Circumstances</span>
+        </div>
+        <div class="app-card-body">
+            <div class="essay-box">{{ application.special_circumstances }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Review & Decision -->
+    {% if application.status not in 'DRAFT,SUBMITTED' %}
+    <div class="app-card">
+        <div class="app-card-head">
+            <span class="app-card-title"><i class="fa fa-gavel" style="color:var(--ink-muted);"></i>Review &amp; Decision</span>
+        </div>
+        <div class="app-card-body">
+
+            {% if application.review_date or application.review_notes %}
+            <div style="margin-bottom:18px;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:6px;">Review Notes</div>
+                <div class="essay-box" style="font-size:13px;">{{ application.review_notes|default:"No review notes." }}</div>
+                {% if application.review_date %}
+                <div style="margin-top:6px;font-size:11.5px;color:var(--ink-muted);">Reviewed: {{ application.review_date|date:"d M Y, H:i" }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if application.status == 'APPROVED' %}
+            <div class="decision-box decision-approved">
+                <div style="font-weight:700;margin-bottom:4px;"><i class="fa fa-check-circle me-1"></i>Application Approved</div>
+                {% if application.approved_amount %}
+                <div>Approved Amount: <strong>{{ application.approved_amount|money }}</strong></div>
+                {% endif %}
+                {% if application.decision_reason %}
+                <div style="margin-top:6px;">{{ application.decision_reason }}</div>
+                {% endif %}
+            </div>
+            {% elif application.status == 'REJECTED' %}
+            <div class="decision-box decision-rejected">
+                <div style="font-weight:700;margin-bottom:4px;"><i class="fa fa-times-circle me-1"></i>Application Rejected</div>
+                {% if application.decision_reason %}
+                <div>{{ application.decision_reason }}</div>
+                {% endif %}
+            </div>
+            {% elif application.status == 'WAITLISTED' %}
+            <div class="decision-box decision-waitlist">
+                <div style="font-weight:700;margin-bottom:4px;"><i class="fa fa-clock me-1"></i>Added to Waitlist</div>
+                {% if application.decision_reason %}
+                <div>{{ application.decision_reason }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+    {% endif %}
+
+</div>{# /col-lg-8 #}
+
+<!-- ── RIGHT / SIDEBAR ── -->
+<div class="col-lg-4">
+
+    <!-- Quick actions -->
+    <div class="side-card">
+        <div class="side-card-head"><i class="fa fa-bolt text-warning"></i>Quick Actions</div>
+        <div class="side-card-body">
+            <div class="d-grid gap-2">
+                {% if application.status in 'SUBMITTED,UNDER_REVIEW' %}
+                <button class="btn btn-success btn-sm"
+                        hx-get="{% url 'fees:scholarship_application_approve_modal' application.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-check me-1"></i>Approve Application
+                </button>
+                <button class="btn btn-outline-danger btn-sm"
+                        hx-get="{% url 'fees:scholarship_application_reject_modal' application.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-times me-1"></i>Reject Application
+                </button>
+                {% endif %}
+                {% if application.status == 'APPROVED' and not application.awarded_scholarship %}
+                <a href="{% url 'fees:student_scholarship_create' %}?application={{ application.pk }}"
+                   class="btn btn-primary btn-sm">
+                    <i class="fa fa-award me-1"></i>Award Scholarship
+                </a>
+                {% endif %}
+                {% if application.awarded_scholarship %}
+                <a href="{% url 'fees:student_scholarship_detail' application.awarded_scholarship.pk %}"
+                   class="btn btn-outline-primary btn-sm">
+                    <i class="fa fa-medal me-1"></i>View Scholarship
+                </a>
+                {% endif %}
+                <a href="{% url 'students:student_profile' application.student.pk %}"
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-user me-1"></i>Student Profile
+                </a>
+                <a href="{% url 'fees:scholarship_program_detail' application.scholarship_program.pk %}"
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-award me-1"></i>View Program
+                </a>
+                <button class="btn btn-outline-secondary btn-sm"
+                        hx-get="{% url 'fees:scholarship_application_history_modal' application.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-history me-1"></i>View History
+                </button>
+                {% if application.status not in 'APPROVED,WITHDRAWN' %}
+                <button class="btn btn-outline-danger btn-sm"
+                        hx-get="{% url 'fees:scholarship_application_delete_modal' application.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-trash me-1"></i>Delete Application
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Application summary -->
+    <div class="side-card">
+        <div class="side-card-head"><i class="fa fa-chart-pie" style="color:var(--purple);"></i>Application Summary</div>
+        <div class="side-card-body">
+            <div class="side-row">
+                <span class="s-label">Status</span>
+                <span class="s-value">{{ application.get_status_display }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Applied</span>
+                <span class="s-value" style="font-size:12px;">{{ application.application_date|date:"d M Y" }}</span>
+            </div>
+            {% if application.requested_amount %}
+            <div class="side-row">
+                <span class="s-label">Requested</span>
+                <span class="s-value">{{ application.requested_amount|money }}</span>
+            </div>
+            {% endif %}
+            {% if application.approved_amount %}
+            <div class="side-row divider-row">
+                <span class="s-label">Approved</span>
+                <span class="s-value green">{{ application.approved_amount|money }}</span>
+            </div>
+            {% endif %}
+            <div class="side-row">
+                <span class="s-label">Scholarship Awarded</span>
+                <span class="s-value">
+                    {% if application.awarded_scholarship %}
+                        <span class="bool-yes">Yes</span>
+                    {% else %}
+                        <span class="bool-no">No</span>
+                    {% endif %}
+                </span>
+            </div>
+            {% if application.current_gpa %}
+            <div class="side-row">
+                <span class="s-label">GPA</span>
+                <span class="s-value">{{ application.current_gpa }} / 4.0</span>
+            </div>
+            {% endif %}
+            {% if application.attendance_percentage %}
+            <div class="side-row">
+                <span class="s-label">Attendance</span>
+                <span class="s-value">{{ application.attendance_percentage }}%</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Program info -->
+    <div class="side-card">
+        <div class="side-card-head"><i class="fa fa-award" style="color:var(--purple);"></i>Program Info</div>
+        <div class="side-card-body">
+            <div class="pgm-box">
+                <div class="pgm-box-title"><i class="fa fa-award"></i>{{ application.scholarship_program.name }}</div>
+                <div class="pgm-row"><span class="pgm-row-label">Code</span><span class="pgm-row-val" style="font-family:'Courier New',monospace;font-size:12px;">{{ application.scholarship_program.code }}</span></div>
+                <div class="pgm-row"><span class="pgm-row-label">Type</span><span class="pgm-row-val">{{ application.scholarship_program.get_scholarship_type_display }}</span></div>
+                <div class="pgm-row"><span class="pgm-row-label">Discount</span><span class="pgm-row-val">{{ application.scholarship_program.get_discount_type_display }}</span></div>
+                <div class="pgm-row"><span class="pgm-row-label">Accepting</span>
+                    <span class="pgm-row-val">
+                        {% if application.scholarship_program.is_accepting_applications %}
+                            <span class="bool-yes">Yes</span>
+                        {% else %}
+                            <span class="bool-no">Closed</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% if application.scholarship_program.maximum_recipients %}
+                <div class="pgm-row"><span class="pgm-row-label">Max Recipients</span><span class="pgm-row-val">{{ application.scholarship_program.maximum_recipients }}</span></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Record info -->
+    <div class="side-card">
+        <div class="side-card-head"><i class="fa fa-clock text-secondary"></i>Record Info</div>
+        <div class="side-card-body">
+            <div class="side-row">
+                <span class="s-label">Created</span>
+                <span class="s-value" style="font-size:12px;">{{ application.created_at|date:"d M Y, H:i" }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Last Updated</span>
+                <span class="s-value" style="font-size:12px;">{{ application.updated_at|date:"d M Y, H:i" }}</span>
+            </div>
+            {% if application.review_date %}
+            <div class="side-row">
+                <span class="s-label">Reviewed</span>
+                <span class="s-value" style="font-size:12px;">{{ application.review_date|date:"d M Y" }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>{# /col-lg-4 #}
+
+</div>{# /row #}
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (def) {
+                return Object.assign({}, def, { strategy: 'fixed' });
+            }
+        });
+    });
+});
+
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const container = document.getElementById('modal-container');
+    const dialog    = container.querySelector('.modal-dialog');
+    if (!dialog) return;
+
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) { const ex = bootstrap.Modal.getInstance(wrapper); if (ex) ex.dispose(); wrapper.remove(); }
+
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        container.innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+
+    if (close === 'true' && currentModal) currentModal.hide();
+
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(function () {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(function () {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+</script>
+{% endblock %}

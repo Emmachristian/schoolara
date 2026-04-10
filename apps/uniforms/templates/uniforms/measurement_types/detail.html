@@ -1,0 +1,440 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0; --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+
+.mt-hero { background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:var(--radius); padding:26px 30px 22px; margin-bottom:24px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; }
+.hero-name  { font-size:22px; font-weight:800; color:var(--ink); }
+.hero-top   { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.hero-meta  { display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; }
+.hero-meta-item  { display:flex; flex-direction:column; gap:2px; }
+.hero-meta-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value { font-size:13px; font-weight:600; color:var(--ink); }
+
+.cat-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.s-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+.sp-active   { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.sp-inactive { background:var(--red-lt); color:var(--red); border:1px solid #fecaca; }
+.sp-required { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+
+.stat-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:16px; margin-bottom:24px; }
+.strip-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; }
+.strip-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); margin-bottom:4px; }
+.strip-value { font-size:22px; font-weight:700; color:var(--ink); line-height:1; }
+.strip-sub   { font-size:11px; color:var(--ink-faint); margin-top:3px; }
+
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
+
+.meas-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.meas-tbl thead th { background:var(--surface-2); padding:10px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid var(--border); white-space:nowrap; }
+.meas-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.meas-tbl tbody tr:last-child td { border-bottom:none; }
+.meas-tbl tbody tr:hover td { background:#fafbff; }
+
+.stu-name { font-weight:600; font-size:13px; color:var(--ink); text-decoration:none; display:block; }
+.stu-name:hover { color:var(--accent); }
+.stu-adm  { font-family:'Courier New',monospace; font-size:11px; color:var(--ink-muted); margin-top:1px; }
+
+.value-cell { font-size:15px; font-weight:700; color:var(--ink); }
+.value-unit { font-size:11px; color:var(--ink-faint); margin-left:3px; }
+
+.verified-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:4px; font-size:10.5px; font-weight:700; }
+.vb-yes { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.vb-no  { background:var(--surface-3); color:var(--ink-faint); border:1px solid var(--border); }
+
+.sidebar-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+.sidebar-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.sidebar-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.s-label { color:var(--ink-muted); font-size:12.5px; }
+.s-value { font-weight:700; color:var(--ink); }
+.s-value.green  { color:var(--green); }
+.s-value.accent { color:var(--accent); }
+
+.tbl-empty { text-align:center; padding:40px 20px; color:var(--ink-faint); }
+.tbl-empty i { font-size:2.4rem; display:block; margin-bottom:10px; opacity:.35; }
+
+@media (max-width:768px) { .mt-hero { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-tools icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ measurement_type.name }}
+                <div class="page-title-subheading">
+                    {{ measurement_type.get_category_display }} &mdash; {{ measurement_type.code }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:measurement_type_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+            <a href="{% url 'uniforms:measurement_type_edit' measurement_type.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"><i class="fa fa-ellipsis-v"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <button class="dropdown-item"
+                                hx-get="{% url 'uniforms:measurement_type_toggle_active_modal' measurement_type.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-{% if measurement_type.is_active %}pause{% else %}play{% endif %} me-2 text-warning"></i>
+                            {% if measurement_type.is_active %}Deactivate{% else %}Activate{% endif %}
+                        </button>
+                    </li>
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'uniforms:measurement_type_print_detail' measurement_type.pk %}"
+                           target="_blank">
+                            <i class="fa fa-print me-2"></i>Print
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:measurement_type_delete_modal' measurement_type.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Delete
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:measurement_type_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-ruler me-1"></i>Measurement Types
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">
+            {{ measurement_type.name }}
+        </li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="mt-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-name">{{ measurement_type.name }}</span>
+            <span class="cat-chip">
+                <i class="fa fa-tag" style="font-size:10px;"></i>
+                {{ measurement_type.get_category_display }}
+            </span>
+            {% if measurement_type.is_active %}
+                <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+            {% else %}
+                <span class="s-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
+            {% endif %}
+            {% if measurement_type.is_required %}
+                <span class="s-pill sp-required"><i class="fa fa-star"></i>Required</span>
+            {% endif %}
+        </div>
+        {% if measurement_type.description %}
+        <p style="margin:4px 0 0;font-size:13px;color:var(--ink-muted);">{{ measurement_type.description }}</p>
+        {% endif %}
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Code</span>
+                <span class="hero-meta-value" style="font-family:'Courier New',monospace;">{{ measurement_type.code }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Unit</span>
+                <span class="hero-meta-value">
+                    {% if measurement_type.unit %}
+                        {{ measurement_type.unit.abbreviation }}
+                        <span style="font-weight:400;color:var(--ink-muted);">({{ measurement_type.unit.name }})</span>
+                    {% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Valid Range</span>
+                <span class="hero-meta-value">
+                    {% if measurement_type.min_value is not None or measurement_type.max_value is not None %}
+                        {{ measurement_type.min_value|default:"—" }} – {{ measurement_type.max_value|default:"∞" }}
+                        {% if measurement_type.unit %}
+                        <span style="font-weight:400;color:var(--ink-muted);">{{ measurement_type.unit.abbreviation }}</span>
+                        {% endif %}
+                    {% else %}
+                        No limits
+                    {% endif %}
+                </span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Display Order</span>
+                <span class="hero-meta-value">{{ measurement_type.display_order }}</span>
+            </div>
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">Total Records</div>
+        <div style="font-size:42px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink);">
+            {{ measurement_count|format_number }}
+        </div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">
+            {{ verified_count|format_number }} verified
+        </div>
+    </div>
+</div>
+
+{# ── Stat strip ── #}
+<div class="stat-strip">
+    <div class="strip-card">
+        <div class="strip-label">Total Measurements</div>
+        <div class="strip-value">{{ measurement_count|format_number }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Verified</div>
+        <div class="strip-value" style="color:var(--green);">{{ verified_count|format_number }}</div>
+        {% if measurement_count > 0 %}
+        <div class="strip-sub">{% widthratio verified_count measurement_count 100 %}% of total</div>
+        {% endif %}
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Average Value</div>
+        <div class="strip-value" style="font-size:18px;">
+            {% if avg_value %}
+                {{ avg_value|floatformat:1 }}
+                {% if measurement_type.unit %}
+                <span style="font-size:13px;font-weight:500;color:var(--ink-muted);">{{ measurement_type.unit.abbreviation }}</span>
+                {% endif %}
+            {% else %}—{% endif %}
+        </div>
+        <div class="strip-sub">current measurements only</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Category</div>
+        <div class="strip-value" style="font-size:14px;">{{ measurement_type.get_category_display }}</div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        {# ── Recent measurements ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <h6 class="det-card-title">
+                    <i class="fa fa-history"></i>Recent Measurements
+                    <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">last 20</span>
+                </h6>
+                <a href="{% url 'uniforms:student_measurement_list' %}?measurement_type={{ measurement_type.pk }}"
+                   style="font-size:12px;color:var(--accent);text-decoration:none;">
+                    View all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+                </a>
+            </div>
+
+            {% if recent_measurements %}
+            <div style="overflow-x:auto;">
+                <table class="meas-tbl">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th class="text-center">Value</th>
+                            <th>Session</th>
+                            <th class="text-center">Date</th>
+                            <th class="text-center">Verified</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in recent_measurements %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'students:student_profile' m.student.pk %}" class="stu-name">
+                                    {{ m.student.get_full_name }}
+                                </a>
+                                <div class="stu-adm">{{ m.student.admission_number }}</div>
+                            </td>
+                            <td class="text-center">
+                                <span class="value-cell">{{ m.value|floatformat:1 }}</span>
+                                {% if measurement_type.unit %}
+                                <span class="value-unit">{{ measurement_type.unit.abbreviation }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size:12.5px;color:var(--ink-muted);">
+                                {{ m.academic_session.name|default:"—" }}
+                            </td>
+                            <td class="text-center" style="font-size:12px;color:var(--ink-muted);">
+                                {{ m.measurement_date|date:"d M Y" }}
+                            </td>
+                            <td class="text-center">
+                                {% if m.is_verified %}
+                                    <span class="verified-badge vb-yes">
+                                        <i class="fa fa-check" style="font-size:8px;"></i>Yes
+                                    </span>
+                                {% else %}
+                                    <span class="verified-badge vb-no">No</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="tbl-empty">
+                <i class="fa fa-ruler"></i>
+                <p>No measurements recorded for this type yet.</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div class="col-lg-4">
+
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-info-circle"></i>Configuration</div>
+            <div class="sidebar-body">
+                <div class="side-row">
+                    <span class="s-label">Code</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">{{ measurement_type.code }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Category</span>
+                    <span class="s-value">{{ measurement_type.get_category_display }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Unit</span>
+                    <span class="s-value">
+                        {% if measurement_type.unit %}{{ measurement_type.unit.name }}{% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Min Value</span>
+                    <span class="s-value">
+                        {% if measurement_type.min_value is not None %}{{ measurement_type.min_value }}{% else %}None{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Max Value</span>
+                    <span class="s-value">
+                        {% if measurement_type.max_value is not None %}{{ measurement_type.max_value }}{% else %}None{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Display Order</span>
+                    <span class="s-value">{{ measurement_type.display_order }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Required</span>
+                    <span class="s-value {% if measurement_type.is_required %}accent{% endif %}">
+                        {{ measurement_type.is_required|yesno:"Yes,No" }}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Status</span>
+                    <span class="s-value {% if measurement_type.is_active %}green{% endif %}">
+                        {{ measurement_type.is_active|yesno:"Active,Inactive" }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+            <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+                <a href="{% url 'uniforms:measurement_type_edit' measurement_type.pk %}"
+                   class="btn btn-sm btn-outline-warning w-100 text-start">
+                    <i class="fa fa-edit me-2"></i>Edit Configuration
+                </a>
+                <a href="{% url 'uniforms:student_measurement_create' %}?measurement_type={{ measurement_type.pk }}"
+                   class="btn btn-sm btn-outline-primary w-100 text-start">
+                    <i class="fa fa-plus me-2"></i>Record Measurement
+                </a>
+                <a href="{% url 'uniforms:student_measurement_list' %}?measurement_type={{ measurement_type.pk }}"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-list me-2"></i>All Measurements
+                </a>
+                <a href="{% url 'uniforms:measurement_type_print_detail' measurement_type.pk %}"
+                   target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-print me-2"></i>Print Detail
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: type.charAt(0).toUpperCase() + type.slice(1),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, { popperConfig: d => Object.assign({}, d, { strategy: 'fixed' }) });
+    });
+});
+</script>
+{% endblock %}

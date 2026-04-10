@@ -1,385 +1,69 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 {% load widget_tweaks %}
 
 {% block extra_css %}
 <style>
-/* ============================================================================
-   DORMITORY STATUS BADGE STYLING
-   ============================================================================ */
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid;
-    display: inline-block;
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --radius:    10px;
 }
 
-.status-badge.active {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
+.stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px; transition: box-shadow .2s;
 }
-
-.status-badge.inactive {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
 }
-
-/* ============================================================================
-   DORMITORY TYPE BADGES
-   ============================================================================ */
-
-.dormitory-type-badge {
-    padding: 4px 12px;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    display: inline-block;
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 3px;
 }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
+.stat-sub   { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
 
-.dormitory-type-badge.boys {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
+.list-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.list-card-head {
+    padding: 14px 22px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between;
 }
+.list-card-title { font-size: 13px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
 
-.dormitory-type-badge.girls {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+.filter-bar {
+    padding: 20px 22px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
 }
-
-.dormitory-type-badge.mixed {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
+.filter-bar .form-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px;
 }
-
-/* ============================================================================
-   MAINTENANCE STATUS BADGES
-   ============================================================================ */
-
-.maintenance-badge {
-    padding: 3px 10px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    display: inline-block;
+.filter-bar .form-control,
+.filter-bar .form-select {
+    border-radius: 8px; border-color: #dee2e6; font-size: 13px;
 }
-
-.maintenance-badge.good {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+    border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1);
 }
-
-.maintenance-badge.scheduled {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-}
-
-.maintenance-badge.in-progress {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
-}
-
-.maintenance-badge.needs-repair {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
-
-/* ============================================================================
-   OCCUPANCY INDICATORS
-   ============================================================================ */
-
-.occupancy-meter {
-    width: 100%;
-    height: 8px;
-    background-color: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 5px;
-}
-
-.occupancy-fill {
-    height: 100%;
-    transition: width 0.3s ease;
-}
-
-.occupancy-fill.low {
-    background: linear-gradient(90deg, #28a745, #20c997);
-}
-
-.occupancy-fill.medium {
-    background: linear-gradient(90deg, #ffc107, #fd7e14);
-}
-
-.occupancy-fill.high {
-    background: linear-gradient(90deg, #dc3545, #c82333);
-}
-
-.occupancy-fill.full {
-    background: linear-gradient(90deg, #6c757d, #495057);
-}
-
-/* ============================================================================
-   FILTERS & SEARCH SECTION
-   ============================================================================ */
-
-.dormitory-filters {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 25px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.filter-header {
-    margin-bottom: 20px;
-}
-
-.filter-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.card-animate {
-    animation: fadeInUp 0.5s ease-out;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* ============================================================================
-   STATISTICS SUMMARY
-   ============================================================================ */
-
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    transition: transform 0.2s;
-}
-
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.stats-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 28px;
-    color: white;
-}
-
-.stats-content h3 {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
-}
-
-.stats-label {
-    font-size: 12px;
-    color: #6c757d;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-}
-
-/* ============================================================================
-   TABLE STYLING
-   ============================================================================ */
-
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.table thead th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    color: #495057;
-    padding: 15px 12px;
-}
-
-.table tbody td {
-    vertical-align: middle;
-    padding: 12px;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* ============================================================================
-   DORMITORY SPECIFIC STYLING
-   ============================================================================ */
-
-.dormitory-code {
-    font-family: 'Courier New', monospace;
-    background-color: #f8f9fa;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    border: 1px solid #dee2e6;
-    font-weight: 600;
-}
-
-.capacity-badge {
-    background-color: #e9ecef;
-    color: #495057;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
-.facility-icon {
-    display: inline-block;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background-color: #28a745;
-    color: white;
-    text-align: center;
-    line-height: 24px;
-    font-size: 0.75rem;
-    margin: 0 2px;
-}
-
-.facility-icon.inactive {
-    background-color: #dc3545;
-}
-
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
-
-.empty-state {
-    text-align: center;
-    padding: 80px 30px;
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 15px;
-    margin: 30px 0;
-    border: 2px dashed #dee2e6;
-}
-
-.empty-state-icon {
-    font-size: 5rem;
-    color: #dee2e6;
-    margin-bottom: 25px;
-    animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-}
-
-/* ============================================================================
-   PAGINATION
-   ============================================================================ */
-
-.pagination {
-    margin: 20px 0;
-}
-
-.page-link {
-    color: #667eea;
-    border: 1px solid #dee2e6;
-    padding: 0.5rem 0.75rem;
-}
-
-.page-link:hover {
-    background-color: #667eea;
-    color: white;
-    border-color: #667eea;
-}
-
-.page-item.active .page-link {
-    background-color: #667eea;
-    border-color: #667eea;
-}
-
-/* ============================================================================
-   PRINT MODAL STYLING
-   ============================================================================ */
-
-.print-field-checkbox:checked + .form-check-label {
-    font-weight: 500;
-    color: #0d6efd;
-}
-
-.form-check-label {
-    cursor: pointer;
-    user-select: none;
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
-@media (max-width: 768px) {
-    .dormitory-filters {
-        padding: 15px;
-    }
-    
-    .stats-card {
-        padding: 15px;
-    }
-    
-    .stats-icon {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
-    }
-}
-
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
@@ -388,373 +72,309 @@
             </div>
             <div>
                 Dormitories
-                <div class="page-title-subheading">
-                    Manage dormitories, capacity, facilities, and maintenance schedules
-                </div>
+                <div class="page-title-subheading">Manage residential facilities, capacity, and boarding assignments</div>
             </div>
         </div>
         <div class="page-title-actions">
-            <div class="btn-group" role="group">
-                <a href="{% url 'boarding:dormitory_create' %}" class="btn btn-primary">
-                    <i class="fa fa-plus me-1"></i>Create Dormitory
-                </a>
-                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#printModal">
-                    <i class="fa fa-print me-1"></i>Print
+            <a href="{% url 'boarding:dormitory_create' %}" class="btn btn-primary me-1">
+                <i class="fa fa-plus me-1"></i> Add Dormitory
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fa fa-download me-1"></i> Export
                 </button>
-                <a href="{% url 'boarding:dormitory_export_excel' %}" class="btn btn-outline-success">
-                    <i class="fa fa-file-excel me-1"></i>Export Excel
-                </a>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#printModal">
+                        <i class="fa fa-print me-2"></i>Print
+                    </button>
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#excelModal">
+                        <i class="fa fa-file-excel me-2 text-success"></i>Export Excel
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Statistics Cards -->
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- ── Stat Cards ── -->
 <div class="row mb-2" id="stats-cards">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-home"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Dormitories</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Dormitories</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-users"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Capacity</div>
-                <h3>{{ stats.total_capacity|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-graph2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Available Beds</div>
-                <h3>{{ stats.available_beds|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Main Content Section -->
-<section class="section">
-    <div class="row">
-        <div class="col-lg-12">
-            <!-- Results Card -->
-            <div class="main-card mb-3 card card-animate">
-                <div class="card-body">
-                    
-                    <!-- Filter Header -->
-                    <div class="filter-header">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                            <h5 class="card-title mb-0">
-                                <i class="pe-7s-home me-2 text-primary"></i>
-                                Dormitories Directory
-                            </h5>
-                            <div class="filter-actions">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
-                                    <i class="fa fa-times me-1"></i>Reset Filters
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
-                                    <i class="fa fa-refresh me-1"></i>Refresh
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Search & Filters with HTMX -->
-                    <div class="dormitory-filters">
-                        <form id="searchForm" 
-                              class="row g-3"
-                              hx-get="{% url 'boarding:dormitory_list' %}"
-                              hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
-                              hx-target="#dormitory-results"
-                              hx-swap="innerHTML">
-                            
-                            <!-- Search Input -->
-                            <div class="col-md-4">
-                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.q.label }}
-                                </label>
-                                {{ filter_form.q|add_class:"form-control" }}
-                            </div>
-                            
-                            <!-- Dormitory Type Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.dormitory_type.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.dormitory_type.label }}
-                                </label>
-                                {{ filter_form.dormitory_type|add_class:"form-select" }}
-                            </div>
-
-                            <!-- Active Status Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.is_active.label }}
-                                </label>
-                                {{ filter_form.is_active|add_class:"form-select" }}
-                            </div>
-                            
-                            <!-- Available for Admissions -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.is_available_for_new_admissions.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.is_available_for_new_admissions.label }}
-                                </label>
-                                {{ filter_form.is_available_for_new_admissions|add_class:"form-select" }}
-                            </div>
-
-                            <!-- Maintenance Status -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.maintenance_status.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.maintenance_status.label }}
-                                </label>
-                                {{ filter_form.maintenance_status|add_class:"form-select" }}
-                            </div>
-
-                            <!-- Occupancy Level -->
-                            <div class="col-md-3">
-                                <label for="{{ filter_form.occupancy_level.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.occupancy_level.label }}
-                                </label>
-                                {{ filter_form.occupancy_level|add_class:"form-select" }}
-                            </div>
-
-                            <!-- Dormitory Master -->
-                            <div class="col-md-3">
-                                <label for="{{ filter_form.dormitory_master.id_for_label }}" class="form-label small text-muted mb-1">
-                                    {{ filter_form.dormitory_master.label }}
-                                </label>
-                                {{ filter_form.dormitory_master|add_class:"form-select" }}
-                            </div>
-
-                            <!-- Reset Button -->
-                            <div class="col-md-3 d-flex align-items-end">
-                                <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
-                                    <i class="fa fa-times me-1"></i>Reset
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Results Container -->
-                    <div id="dormitory-results">
-                        {% include 'boarding/dormitories/partials/_dormitory_results.html' %}
-                    </div>
-
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-home"></i></div>
+            <div>
+                <div class="stat-label">Total Dormitories</div>
+                <div class="stat-value">{{ stats.total|default:0 }}</div>
+                <div class="stat-sub">
+                    {{ stats.boys|default:0 }} boys · {{ stats.girls|default:0 }} girls · {{ stats.mixed|default:0 }} mixed
                 </div>
             </div>
         </div>
     </div>
-</section>
-
-<!-- ========================================== -->
-<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
-<!-- ========================================== -->
-<div id="modal-container" style="display: none;">
-    <!-- Modal content loaded here via HTMX -->
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value">{{ stats.active|default:0 }}</div>
+                <div class="stat-sub">{{ stats.full_dormitories|default:0 }} at capacity</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Total Capacity</div>
+                <div class="stat-value">{{ stats.total_capacity|default:0|intcomma }}</div>
+                <div class="stat-sub">{{ stats.total_occupancy|default:0|intcomma }} occupied</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-door-lock"></i></div>
+            <div>
+                <div class="stat-label">Available Beds</div>
+                <div class="stat-value">{{ stats.available_beds|default:0|intcomma }}</div>
+                <div class="stat-sub">{{ stats.avg_occupancy|default:0 }}% avg occupancy</div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- ========================================== -->
-<!-- STATIC PRINT MODAL -->
-<!-- ========================================== -->
-<div class="modal fade" id="printModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<!-- ── Main Card ── -->
+<div class="list-card">
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-building text-primary"></i> Dormitory Directory
+        </span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                <i class="fa fa-times me-1"></i> Reset
+            </button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    hx-get="{% url 'boarding:dormitory_list' %}"
+                    hx-target="#dormitory-list"
+                    hx-include="#searchForm">
+                <i class="fa fa-refresh me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+        <form id="searchForm"
+              hx-get="{% url 'boarding:dormitory_list' %}"
+              hx-target="#dormitory-list"
+              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">{{ filter_form.q.label }}</label>
+                    {{ filter_form.q|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.dormitory_type.label }}</label>
+                    {{ filter_form.dormitory_type|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">{{ filter_form.is_active.label }}</label>
+                    {{ filter_form.is_active|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Available</label>
+                    {{ filter_form.is_available_for_new_admissions|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.maintenance_status.label }}</label>
+                    {{ filter_form.maintenance_status|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">{{ filter_form.occupancy_level.label }}</label>
+                    {{ filter_form.occupancy_level|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">{{ filter_form.dormitory_master.label }}</label>
+                    {{ filter_form.dormitory_master|add_class:"form-select form-select-sm" }}
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results — loaded by HTMX on page load, updated on every filter change -->
+    <div id="dormitory-list"
+         hx-get="{% url 'boarding:dormitory_list' %}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <p class="text-muted mb-0">Loading dormitories…</p>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<!-- ================================================================
+     PRINT MODAL
+================================================================ -->
+<div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fa fa-print me-2"></i>Print Dormitories
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="printModalLabel">
+                        <i class="fa fa-print text-primary me-2"></i>Print Options
+                    </h5>
+                    <p class="text-muted small mb-0 mt-1">
+                        Current filters will be applied. <span id="print_field_count">6</span> field(s) selected.
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="fa fa-info-circle me-2"></i>
-                    <strong>Tip:</strong> Select the fields you want to include. Current filters will be applied automatically.
-                </div>
-
-                <!-- Field Selection -->
-                <h6 class="mb-3">
-                    <i class="fa fa-list me-2"></i>Select Fields to Print
-                </h6>
-                
-                <div class="row g-2 mb-4">
-                    <!-- Select All -->
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="select_all_fields" onchange="toggleAllPrintFields(this)">
-                            <label class="form-check-label fw-bold" for="select_all_fields">
-                                Select All
-                            </label>
-                        </div>
-                        <hr class="my-2">
-                    </div>
-
-                    <!-- Basic Info -->
-                    <div class="col-12"><h6 class="text-primary mb-2"><small><i class="fa fa-info-circle me-1"></i>Basic Information</small></h6></div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="code" id="print_code" checked>
-                            <label class="form-check-label" for="print_code">Dormitory Code</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="name" id="print_name" checked>
-                            <label class="form-check-label" for="print_name">Dormitory Name</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="dormitory_type" id="print_type" checked>
-                            <label class="form-check-label" for="print_type">Dormitory Type</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="building" id="print_building">
-                            <label class="form-check-label" for="print_building">Building/Location</label>
-                        </div>
-                    </div>
-
-                    <!-- Capacity Info -->
-                    <div class="col-12 mt-3"><h6 class="text-primary mb-2"><small><i class="fa fa-users me-1"></i>Capacity & Occupancy</small></h6></div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="total_capacity" id="print_capacity" checked>
-                            <label class="form-check-label" for="print_capacity">Total Capacity</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="current_occupancy" id="print_occupancy" checked>
-                            <label class="form-check-label" for="print_occupancy">Current Occupancy</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="room_count" id="print_rooms">
-                            <label class="form-check-label" for="print_rooms">Room Count</label>
-                        </div>
-                    </div>
-
-                    <!-- Status & Management -->
-                    <div class="col-12 mt-3"><h6 class="text-primary mb-2"><small><i class="fa fa-toggle-on me-1"></i>Status & Management</small></h6></div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="is_active" id="print_active" checked>
-                            <label class="form-check-label" for="print_active">Active Status</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="dormitory_master" id="print_master">
-                            <label class="form-check-label" for="print_master">Dormitory Master</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="maintenance_status" id="print_maintenance">
-                            <label class="form-check-label" for="print_maintenance">Maintenance Status</label>
-                        </div>
-                    </div>
-
-                    <!-- Facilities -->
-                    <div class="col-12 mt-3"><h6 class="text-primary mb-2"><small><i class="fa fa-cogs me-1"></i>Facilities</small></h6></div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="has_bathroom" id="print_bathroom">
-                            <label class="form-check-label" for="print_bathroom">Bathroom</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="has_wifi" id="print_wifi">
-                            <label class="form-check-label" for="print_wifi">WiFi</label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input print-field-checkbox" type="checkbox" value="has_security" id="print_security">
-                            <label class="form-check-label" for="print_security">Security</label>
-                        </div>
+            <div class="modal-body px-4 py-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-semibold text-dark">Select fields to include</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary"   onclick="selectAllPrint()">Select all</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllPrint()">Clear all</button>
                     </div>
                 </div>
 
-                <!-- Print Options -->
-                <h6 class="mb-3">
-                    <i class="fa fa-cog me-2"></i>Print Options
-                </h6>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="print_include_stats" checked>
-                            <label class="form-check-label" for="print_include_stats">
-                                Include Statistics Summary
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-6">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="print_landscape">
-                            <label class="form-check-label" for="print_landscape">
-                                Landscape Orientation
-                            </label>
-                        </div>
-                    </div>
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-info-circle me-1"></i>Identity
                 </div>
-                
-                <div class="alert alert-secondary mt-3 mb-0">
-                    <i class="fa fa-info-circle me-2"></i>
-                    <strong>Preview:</strong> <span id="selected_field_count">6</span> field(s) selected
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="code"            id="pf_code"     checked><label class="form-check-label small" for="pf_code">Code</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="name"            id="pf_name"     checked><label class="form-check-label small" for="pf_name">Name</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="dormitory_type"  id="pf_type"     checked><label class="form-check-label small" for="pf_type">Type</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="building"        id="pf_building"       ><label class="form-check-label small" for="pf_building">Building</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="floor"           id="pf_floor"          ><label class="form-check-label small" for="pf_floor">Floor</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="wing"            id="pf_wing"           ><label class="form-check-label small" for="pf_wing">Wing</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-bed me-1"></i>Capacity
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="total_capacity"    id="pf_cap"      checked><label class="form-check-label small" for="pf_cap">Total Capacity</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="current_occupancy"  id="pf_occ"      checked><label class="form-check-label small" for="pf_occ">Current Occupancy</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="dormitory_master"   id="pf_master"         ><label class="form-check-label small" for="pf_master">Dormitory Master</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-tag me-1"></i>Status
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="is_active"                       id="pf_active"     checked><label class="form-check-label small" for="pf_active">Active</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="is_available_for_new_admissions" id="pf_avail"            ><label class="form-check-label small" for="pf_avail">Available</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="maintenance_status"               id="pf_maint"            ><label class="form-check-label small" for="pf_maint">Maintenance</label></div></div>
+                </div>
+
+                <hr class="my-3">
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-sort me-1"></i>Column Order <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0;"> — drag to reorder</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2 p-3 rounded mb-1" style="background:#f8f9fa;min-height:48px;" id="print-order-list"></div>
+                <p class="text-muted small mb-3">Drag chips to set column order.</p>
+
+                <hr class="my-3">
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;"><i class="fa fa-cog me-1"></i>Options</div>
+                <div class="row g-0">
+                    <div class="col-md-4"><div class="form-check py-1 px-3"><input class="form-check-input" type="checkbox" id="print_include_stats" checked><label class="form-check-label small" for="print_include_stats">Include summary stats</label></div></div>
+                    <div class="col-md-4"><div class="form-check py-1 px-3"><input class="form-check-input" type="checkbox" id="print_landscape" checked><label class="form-check-label small" for="print_landscape">Landscape orientation</label></div></div>
                 </div>
             </div>
-            
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fa fa-times me-1"></i>Cancel
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="print-btn" onclick="generateAndPrint()">
+                    <i class="fa fa-print me-1"></i>Print
                 </button>
-                <button type="button" class="btn btn-primary" onclick="generateDormitoryPrint()">
-                    <i class="fa fa-print me-1"></i>Generate & Print
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     EXCEL MODAL
+================================================================ -->
+<div class="modal fade" id="excelModal" tabindex="-1" aria-labelledby="excelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="excelModalLabel">
+                        <i class="fa fa-file-excel text-success me-2"></i>Export to Excel
+                    </h5>
+                    <p class="text-muted small mb-0 mt-1">
+                        Current filters will be applied. <span id="excel_field_count">6</span> column(s) selected.
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4 py-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-semibold text-dark">Select columns to include</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success"   onclick="selectAllExcel()">Select all</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllExcel()">Clear all</button>
+                    </div>
+                </div>
+
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;"><i class="fa fa-info-circle me-1"></i>Identity</div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="code"           id="xf_code"     checked><label class="form-check-label small" for="xf_code">Code</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="name"           id="xf_name"     checked><label class="form-check-label small" for="xf_name">Name</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="dormitory_type" id="xf_type"     checked><label class="form-check-label small" for="xf_type">Type</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="building"       id="xf_building"       ><label class="form-check-label small" for="xf_building">Building</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="floor"          id="xf_floor"          ><label class="form-check-label small" for="xf_floor">Floor</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="wing"           id="xf_wing"           ><label class="form-check-label small" for="xf_wing">Wing</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;"><i class="fa fa-bed me-1"></i>Capacity</div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="total_capacity"   id="xf_cap"    checked><label class="form-check-label small" for="xf_cap">Capacity</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="current_occupancy" id="xf_occ"    checked><label class="form-check-label small" for="xf_occ">Occupancy</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="dormitory_master"  id="xf_master"        ><label class="form-check-label small" for="xf_master">Dormitory Master</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;"><i class="fa fa-tag me-1"></i>Status</div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="is_active"          id="xf_active"  checked><label class="form-check-label small" for="xf_active">Active</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="maintenance_status"  id="xf_maint"          ><label class="form-check-label small" for="xf_maint">Maintenance</label></div></div>
+                </div>
+
+                <hr class="my-3">
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;"><i class="fa fa-sort me-1"></i>Column Order <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0;"> — drag to reorder</span></div>
+                <div class="d-flex flex-wrap gap-2 p-3 rounded mb-1" style="background:#f8f9fa;min-height:48px;" id="excel-order-list"></div>
+                <p class="text-muted small mb-0">Drag chips to set column order.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="exportExcel()">
+                    <i class="fa fa-file-excel me-1"></i>Download Excel
                 </button>
             </div>
         </div>
@@ -765,250 +385,179 @@
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// PAGE-SPECIFIC HTMX MODAL HANDLER
-// ============================================================================
+const FIELD_LABELS = {
+    code: 'Code', name: 'Name', dormitory_type: 'Type',
+    building: 'Building', floor: 'Floor', wing: 'Wing',
+    total_capacity: 'Capacity', current_occupancy: 'Occupancy',
+    dormitory_master: 'Dorm Master',
+    is_active: 'Active', is_available_for_new_admissions: 'Available',
+    maintenance_status: 'Maintenance',
+};
 
+/* ── Drag-to-reorder chip list ── */
+function initDragOrder(listId) {
+    const list = document.getElementById(listId);
+    let dragSrc = null;
+    list.addEventListener('dragstart', function(e) {
+        dragSrc = e.target.closest('.order-chip');
+        if (!dragSrc) return;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => { if (dragSrc) dragSrc.style.opacity = '0.4'; }, 0);
+    });
+    list.addEventListener('dragend', function(e) {
+        const chip = e.target.closest('.order-chip');
+        if (chip) chip.style.opacity = '1';
+        dragSrc = null;
+    });
+    list.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.order-chip');
+        if (target && dragSrc && target !== dragSrc) {
+            const mid = target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2;
+            list.insertBefore(dragSrc, e.clientX < mid ? target : target.nextSibling);
+        }
+    });
+}
+
+function syncOrderList(checkboxClass, listId) {
+    const list    = document.getElementById(listId);
+    const checked = new Set(Array.from(document.querySelectorAll('.' + checkboxClass + ':checked')).map(cb => cb.value));
+    list.querySelectorAll('.order-chip').forEach(chip => { if (!checked.has(chip.dataset.field)) chip.remove(); });
+    const existing = new Set(Array.from(list.querySelectorAll('.order-chip')).map(c => c.dataset.field));
+    checked.forEach(val => {
+        if (existing.has(val)) return;
+        const chip = document.createElement('div');
+        chip.className = 'order-chip badge d-inline-flex align-items-center gap-1 user-select-none';
+        chip.draggable = true;
+        chip.dataset.field = val;
+        chip.style.cssText = 'cursor:grab;padding:5px 10px;font-size:.78rem;font-weight:400;background:#1e3a5f;color:#fff;border-radius:4px;';
+        chip.innerHTML = `<i class="fa fa-grip-horizontal" style="opacity:.5;font-size:.7rem;"></i> ${FIELD_LABELS[val] || val}`;
+        list.appendChild(chip);
+    });
+}
+
+function getOrderedFields(listId, checkboxClass) {
+    const chips = document.querySelectorAll('#' + listId + ' .order-chip');
+    if (chips.length) return Array.from(chips).map(c => c.dataset.field);
+    return Array.from(document.querySelectorAll('.' + checkboxClass + ':checked')).map(cb => cb.value);
+}
+
+function updateCount(checkboxClass, countId) {
+    const el = document.getElementById(countId);
+    if (el) el.textContent = document.querySelectorAll('.' + checkboxClass + ':checked').length;
+}
+
+/* ── Print ── */
+function selectAllPrint()   { document.querySelectorAll('.print-field').forEach(cb => cb.checked = true);  syncOrderList('print-field','print-order-list'); updateCount('print-field','print_field_count'); }
+function deselectAllPrint() { document.querySelectorAll('.print-field').forEach(cb => cb.checked = false); syncOrderList('print-field','print-order-list'); updateCount('print-field','print_field_count'); }
+
+function generateAndPrint() {
+    const fields = getOrderedFields('print-order-list', 'print-field');
+    if (!fields.length) { Swal.fire({ icon:'warning', title:'No Fields Selected', text:'Please select at least one field.', confirmButtonColor:'#ffc107' }); return; }
+    const btn = document.getElementById('print-btn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating…';
+    btn.disabled  = true;
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
+    fields.forEach(f => params.append('fields', f));
+    if (document.getElementById('print_include_stats').checked) params.set('include_stats', 'true');
+    if (document.getElementById('print_landscape').checked)     params.set('landscape', 'true');
+    fetch(`{% url 'boarding:dormitory_print' %}?${params.toString()}`)
+        .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+        .then(html => {
+            let frame = document.getElementById('print-frame');
+            if (!frame) { frame = document.createElement('iframe'); frame.id = 'print-frame'; frame.style.display = 'none'; document.body.appendChild(frame); }
+            const doc = frame.contentWindow.document;
+            doc.open(); doc.write(html); doc.close();
+            frame.onload = function() {
+                setTimeout(() => {
+                    frame.contentWindow.focus();
+                    frame.contentWindow.print();
+                    bootstrap.Modal.getInstance(document.getElementById('printModal'))?.hide();
+                    btn.innerHTML = orig; btn.disabled = false;
+                }, 500);
+            };
+        })
+        .catch(() => {
+            Swal.fire({ icon:'error', title:'Print Error', text:'Could not generate print view.', confirmButtonColor:'#dc3545' });
+            btn.innerHTML = orig; btn.disabled = false;
+        });
+}
+
+/* ── Excel ── */
+function selectAllExcel()   { document.querySelectorAll('.excel-field').forEach(cb => cb.checked = true);  syncOrderList('excel-field','excel-order-list'); updateCount('excel-field','excel_field_count'); }
+function deselectAllExcel() { document.querySelectorAll('.excel-field').forEach(cb => cb.checked = false); syncOrderList('excel-field','excel-order-list'); updateCount('excel-field','excel_field_count'); }
+
+function exportExcel() {
+    const fields = getOrderedFields('excel-order-list', 'excel-field');
+    if (!fields.length) { Swal.fire({ icon:'warning', title:'No Columns Selected', text:'Please select at least one column.', confirmButtonColor:'#ffc107' }); return; }
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
+    fields.forEach(f => params.append('fields', f));
+    bootstrap.Modal.getInstance(document.getElementById('excelModal'))?.hide();
+    window.location.href = "{% url 'boarding:dormitory_export_excel' %}?" + params.toString();
+}
+
+/* ── HTMX modal handling ── */
 let currentModal = null;
 
-// Show modal after HTMX loads content into #modal-container
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'modal-container') {
-        const modalContainer = document.getElementById('modal-container');
-        const modalDialog = modalContainer.querySelector('.modal-dialog');
-        
-        if (modalDialog) {
-            // Create a proper Bootstrap modal structure
-            let modalWrapper = document.getElementById('dynamicModalWrapper');
-            
-            // Remove existing modal wrapper if it exists
-            if (modalWrapper) {
-                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
-                if (existingModal) {
-                    existingModal.dispose();
-                }
-                modalWrapper.remove();
-            }
-            
-            // Create new modal wrapper
-            modalWrapper = document.createElement('div');
-            modalWrapper.className = 'modal fade';
-            modalWrapper.id = 'dynamicModalWrapper';
-            modalWrapper.setAttribute('tabindex', '-1');
-            modalWrapper.setAttribute('aria-hidden', 'true');
-            
-            // Move the modal-dialog into the wrapper
-            modalWrapper.appendChild(modalDialog);
-            
-            // Append to body (outside app-container)
-            document.body.appendChild(modalWrapper);
-            
-            // Initialize and show modal
-            currentModal = new bootstrap.Modal(modalWrapper, {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
-            
-            currentModal.show();
-            
-            // Clean up when hidden
-            modalWrapper.addEventListener('hidden.bs.modal', function() {
-                modalWrapper.remove();
-                modalContainer.innerHTML = '';
-                currentModal = null;
-            });
-        }
-    }
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function() {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
 });
 
-// Handle alerts from response headers
-document.body.addEventListener('htmx:beforeSwap', function(event) {
-    const xhr = event.detail.xhr;
-    const message = xhr.getResponseHeader('HX-Alert-Message');
-    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
-    const title = xhr.getResponseHeader('HX-Alert-Title');
-    
+document.body.addEventListener('htmx:beforeSwap', function(e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
     if (message && typeof Swal !== 'undefined') {
         setTimeout(() => {
             Swal.fire({
                 icon: type,
                 title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
                 text: message,
-                confirmButtonText: 'OK',
-                confirmButtonColor: type === 'success' ? '#28a745' : 
-                                   type === 'error' ? '#dc3545' : 
-                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
                 timer: type === 'success' ? 3000 : null,
-                timerProgressBar: type === 'success'
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') htmx.trigger(document.getElementById('searchForm'), 'change');
             });
         }, 300);
     }
-    
-    // Close modal if instructed
-    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
-    if (closeModal === 'true') {
-        if (currentModal) {
-            currentModal.hide();
-        }
-    }
 });
 
-// ============================================================================
-// PRINT FUNCTIONALITY
-// ============================================================================
+function resetFilters() { window.location.href = "{% url 'boarding:dormitory_list' %}"; }
 
-/**
- * Toggle all print field checkboxes
- */
-function toggleAllPrintFields(checkbox) {
-    const checkboxes = document.querySelectorAll('.print-field-checkbox');
-    checkboxes.forEach(cb => cb.checked = checkbox.checked);
-    updateSelectedFieldCount();
-}
-
-/**
- * Update the selected field count display
- */
-function updateSelectedFieldCount() {
-    const count = document.querySelectorAll('.print-field-checkbox:checked').length;
-    const countSpan = document.getElementById('selected_field_count');
-    if (countSpan) {
-        countSpan.textContent = count;
-    }
-    
-    // Update "Select All" checkbox state
-    const selectAll = document.getElementById('select_all_fields');
-    const allCheckboxes = document.querySelectorAll('.print-field-checkbox');
-    const checkedCheckboxes = document.querySelectorAll('.print-field-checkbox:checked');
-    
-    if (selectAll) {
-        selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && checkedCheckboxes.length > 0;
-        selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
-    }
-}
-
-/**
- * Generate and print dormitory list
- */
-function generateDormitoryPrint() {
-    // Validate field selection
-    const checkedFields = document.querySelectorAll('.print-field-checkbox:checked');
-    if (checkedFields.length === 0) {
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                icon: 'warning',
-                title: 'No Fields Selected',
-                text: 'Please select at least one field to print.',
-                confirmButtonColor: '#ffc107'
-            });
-        } else {
-            alert('Please select at least one field to print.');
-        }
-        return;
-    }
-    
-    // Show loading state
-    const printBtn = event.target;
-    const originalHTML = printBtn.innerHTML;
-    printBtn.disabled = true;
-    printBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating...';
-    
-    // Build parameters
-    const selectedFields = Array.from(checkedFields).map(cb => cb.value);
-    const includeStats = document.getElementById('print_include_stats').checked;
-    const landscape = document.getElementById('print_landscape').checked;
-    
-    // Get current filter parameters from the filter form
-    const filterForm = document.getElementById('searchForm');
-    const formData = new FormData(filterForm);
-    const params = new URLSearchParams(formData);
-    
-    // Add print-specific parameters
-    selectedFields.forEach(field => params.append('fields', field));
-    if (includeStats) params.append('include_stats', 'true');
-    if (landscape) params.append('landscape', 'true');
-    
-    // Fetch print HTML
-    fetch(`{% url 'boarding:dormitory_print' %}?${params.toString()}`)
-        .then(response => {
-            if (!response.ok) throw new Error('Network response was not ok');
-            return response.text();
-        })
-        .then(html => {
-            // Create or get print iframe
-            let printFrame = document.getElementById('dormitory-print-frame');
-            if (!printFrame) {
-                printFrame = document.createElement('iframe');
-                printFrame.id = 'dormitory-print-frame';
-                printFrame.style.display = 'none';
-                document.body.appendChild(printFrame);
-            }
-            
-            // Write HTML to iframe
-            const frameDoc = printFrame.contentWindow.document;
-            frameDoc.open();
-            frameDoc.write(html);
-            frameDoc.close();
-            
-            // Print when loaded
-            printFrame.onload = function() {
-                setTimeout(() => {
-                    printFrame.contentWindow.focus();
-                    printFrame.contentWindow.print();
-                    
-                    // Close modal and restore button
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
-                    if (modal) modal.hide();
-                    
-                    printBtn.disabled = false;
-                    printBtn.innerHTML = originalHTML;
-                }, 500);
-            };
-        })
-        .catch(error => {
-            console.error('Print error:', error);
-            
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Print Error',
-                    text: 'Error generating print view. Please try again.',
-                    confirmButtonColor: '#dc3545'
-                });
-            } else {
-                alert('Error generating print view. Please try again.');
-            }
-            
-            printBtn.disabled = false;
-            printBtn.innerHTML = originalHTML;
-        });
-}
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-function resetFilters() {
-    window.location.href = "{% url 'boarding:dormitory_list' %}";
-}
-
-// Initialize Bootstrap tooltips and print modal listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-    
-    // Add change listeners to print field checkboxes
-    const printCheckboxes = document.querySelectorAll('.print-field-checkbox');
-    printCheckboxes.forEach(cb => {
-        cb.addEventListener('change', updateSelectedFieldCount);
-    });
-    
-    // Set initial count
-    updateSelectedFieldCount();
+    initDragOrder('print-order-list');
+    initDragOrder('excel-order-list');
+    syncOrderList('print-field', 'print-order-list');
+    syncOrderList('excel-field', 'excel-order-list');
+    document.querySelectorAll('.print-field').forEach(cb => cb.addEventListener('change', function() { syncOrderList('print-field','print-order-list'); updateCount('print-field','print_field_count'); }));
+    document.querySelectorAll('.excel-field').forEach(cb => cb.addEventListener('change', function() { syncOrderList('excel-field','excel-order-list'); updateCount('excel-field','excel_field_count'); }));
+    updateCount('print-field', 'print_field_count');
+    updateCount('excel-field', 'excel_field_count');
 });
 </script>
 {% endblock %}

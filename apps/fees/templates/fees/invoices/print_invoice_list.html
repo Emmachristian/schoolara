@@ -1,0 +1,109 @@
+{% extends "print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Invoice List{% endblock %}
+{% block doc_title %}Invoice List{% endblock %}
+{% block record_count %}{{ invoices|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.pending|default:0 }}</span>
+        <span class="stat-label">Pending</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.paid|default:0 }}</span>
+        <span class="stat-label">Paid</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.overdue|default:0 }}</span>
+        <span class="stat-label">Overdue</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_amount|money_short }}</span>
+        <span class="stat-label">Total Billed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_paid|money_short }}</span>
+        <span class="stat-label">Collected</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_balance|money_short }}</span>
+        <span class="stat-label">Outstanding</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if invoices %}
+    {% for invoice in invoices %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "subtotal_amount,discount_amount,scholarship_amount,tax_amount,total_amount,paid_amount,balance,late_fee_amount" %} class="num"{% endif %}>
+            {% if field == 'invoice_number' %}
+                <span class="chip-code">{{ invoice.invoice_number }}</span>
+            {% elif field == 'student_id' %}
+                <span class="chip-adm">{{ invoice.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ invoice.student.get_full_name }}
+            {% elif field == 'student_class' %}
+                {% with cls=invoice.get_student_class %}{% if cls %}{{ cls.name }}{% else %}—{% endif %}{% endwith %}
+            {% elif field == 'academic_session' %}
+                {{ invoice.academic_session.name|default:"—" }}
+            {% elif field == 'fiscal_period' %}
+                {{ invoice.fiscal_period.name|default:"—" }}
+            {% elif field == 'fee_structure' %}
+                {{ invoice.fee_structure.name|default:"—" }}
+            {% elif field == 'issue_date' %}
+                {% if invoice.issue_date %}{{ invoice.issue_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'due_date' %}
+                {% if invoice.due_date %}{{ invoice.due_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'subtotal_amount' %}
+                {{ invoice.subtotal_amount|amount }}
+            {% elif field == 'discount_amount' %}
+                {% if invoice.discount_amount %}{{ invoice.discount_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'scholarship_amount' %}
+                {% if invoice.scholarship_discount_amount %}{{ invoice.scholarship_discount_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'tax_amount' %}
+                {% if invoice.tax_amount %}{{ invoice.tax_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'total_amount' %}
+                <strong>{{ invoice.total_amount|amount }}</strong>
+            {% elif field == 'paid_amount' %}
+                <span class="text-success">{{ invoice.paid_amount|amount }}</span>
+            {% elif field == 'balance' %}
+                {% if invoice.balance %}
+                    <span class="{% if invoice.balance > 0 %}text-danger{% else %}text-muted{% endif %}">{{ invoice.balance|amount }}</span>
+                {% else %}<span class="text-success">—</span>{% endif %}
+            {% elif field == 'late_fee_amount' %}
+                {% if invoice.late_fee_amount %}{{ invoice.late_fee_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'status' %}
+                {% with s=invoice.status|lower %}
+                    <span class="badge s-{{ s }}">{{ invoice.get_status_display }}</span>
+                {% endwith %}
+            {% elif field == 'has_scholarships' %}
+                {% if invoice.has_scholarships_applied %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'has_discounts' %}
+                {% if invoice.has_discounts_applied %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'payment_terms' %}
+                {{ invoice.payment_terms|default:"—"|truncatechars:40 }}
+            {% elif field == 'notes' %}
+                {{ invoice.notes|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No invoices found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

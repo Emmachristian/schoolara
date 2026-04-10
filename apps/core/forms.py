@@ -13,18 +13,18 @@ Includes forms for:
 - PaymentMethod (payment configurations)
 - TaxRate (tax configurations)
 - UnitOfMeasure (measurement units)
+- ExchangeRate (manual rate entry)
 """
 
 from django import forms
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 from decimal import Decimal, InvalidOperation
-from datetime import date, timedelta
+from datetime import date
 import logging
 import json
 import re
 
-# Import base form utilities with timezone support ⭐
+# Import base form utilities with timezone support
 from utils.forms import (
     BootstrapFormMixin,
     HTMXFormMixin,
@@ -40,8 +40,8 @@ from utils.forms import (
     MoneyInput,
     PercentageField,
     PercentageInput,
-    validate_future_date,  # ⭐ Uses school timezone
-    validate_past_date,  # ⭐ Uses school timezone
+    validate_future_date,
+    validate_past_date,
     validate_percentage,
     validate_positive_amount,
 )
@@ -59,13 +59,56 @@ from .models import (
     PaymentMethod,
     TaxRate,
     UnitOfMeasure,
+    ExchangeRate,
 )
 
 logger = logging.getLogger(__name__)
 
+
 # =============================================================================
-# SCHOOL CONFIGURATION FORM
+# WARNINGS MIXIN
 # =============================================================================
+
+class WarningsMixin:
+    """
+    Mixin that adds non-blocking warning messages to forms.
+
+    Unlike validation errors, warnings do not prevent saving.
+    They are collected in self._warnings and can be displayed
+    in templates alongside the form.
+
+    Usage:
+        class MyForm(WarningsMixin, BootstrapFormMixin, forms.ModelForm):
+            ...
+            def clean(self):
+                cleaned_data = super().clean()
+                if some_condition:
+                    self.add_warning('field_name', 'This looks unusual.')
+                return cleaned_data
+
+    In the template:
+        {% if form._warnings %}
+            {% for field, messages in form._warnings.items %}
+                {% for message in messages %}
+                    <div class="alert alert-warning">{{ message }}</div>
+                {% endfor %}
+            {% endfor %}
+        {% endif %}
+    """
+
+    def add_warning(self, field_name, message):
+        """
+        Add a non-blocking warning message for a field.
+
+        Args:
+            field_name: Field name the warning relates to (use None for
+                        form-level warnings not tied to a specific field).
+            message:    Warning message string.
+        """
+        if not hasattr(self, '_warnings'):
+            self._warnings = {}
+        self._warnings.setdefault(field_name, []).append(message)
+
 
 # =============================================================================
 # SCHOOL CONFIGURATION FORM
@@ -75,7 +118,7 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
     """
     Form for school-wide configuration settings.
     Handles term system, timezone, and naming conventions.
-    
+
     Features:
     - Dynamic timezone choices with popular options first
     - Auto-calculated fields based on term system
@@ -83,204 +126,184 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
     - Comprehensive validation with detailed error messages
     - Pure JavaScript interactions (no HTMX conflicts)
     """
-    
+
     class Meta:
-        model = SchoolConfiguration
+        model  = SchoolConfiguration
         fields = [
-            # Term System Configuration
             'term_system',
             'periods_per_year',
-            
-            # Period Naming
             'period_naming_convention',
             'custom_period_names',
-            
-            # Academic Year Configuration
             'academic_year_type',
             'academic_year_start_month',
             'academic_year_start_day',
-            
-            # Timezone Configuration ⭐
             'operational_timezone',
-            
-            # Regional Seasons
             'regional_season_type',
             'custom_season_names',
-            
-            # Academic Period Settings
             'default_period_duration_weeks',
-            
-            # Communication
             'enable_automatic_reminders',
             'enable_sms',
             'enable_email_notifications',
         ]
-        
+
         widgets = {
-            # ================================================================
-            # TERM SYSTEM - NO HTMX (JavaScript handles updates)
-            # ================================================================
             'term_system': forms.Select(attrs={
                 'class': 'form-select',
-                'id': 'id_term_system'
+                'id':    'id_term_system',
             }),
             'periods_per_year': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '20',
+                'min':   '1',
+                'max':   '20',
                 'class': 'form-control',
-                'id': 'id_periods_per_year'
+                'id':    'id_periods_per_year',
             }),
-            
-            # ================================================================
-            # PERIOD NAMING - NO HTMX (JavaScript handles updates)
-            # ================================================================
             'period_naming_convention': forms.Select(attrs={
                 'class': 'form-select',
-                'id': 'id_period_naming_convention'
+                'id':    'id_period_naming_convention',
             }),
             'custom_period_names': forms.Textarea(attrs={
-                'rows': 6,
-                'class': 'form-control font-monospace',
-                'id': 'id_custom_period_names',
-                'placeholder': '{\n  "1": "First Term",\n  "2": "Second Term",\n  "3": "Third Term"\n}'
+                'rows':        6,
+                'class':       'form-control font-monospace',
+                'id':          'id_custom_period_names',
+                'placeholder': '{\n  "1": "First Term",\n  "2": "Second Term",\n  "3": "Third Term"\n}',
             }),
-            
-            # ================================================================
-            # ACADEMIC YEAR
-            # ================================================================
             'academic_year_type': forms.Select(attrs={
                 'class': 'form-select',
-                'id': 'id_academic_year_type'
+                'id':    'id_academic_year_type',
             }),
             'academic_year_start_month': forms.Select(attrs={
                 'class': 'form-select',
-                'id': 'id_academic_year_start_month'
+                'id':    'id_academic_year_start_month',
             }),
             'academic_year_start_day': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '31',
+                'min':   '1',
+                'max':   '31',
                 'class': 'form-control',
-                'id': 'id_academic_year_start_day'
+                'id':    'id_academic_year_start_day',
             }),
-            
-            # ================================================================
-            # TIMEZONE ⭐ Enhanced
-            # ================================================================
             'operational_timezone': forms.Select(attrs={
-                'class': 'form-select select2',
-                'id': 'id_operational_timezone',
-                'data-placeholder': 'Select timezone...'
+                'class':            'form-select select2',
+                'id':               'id_operational_timezone',
+                'data-placeholder': 'Select timezone...',
             }),
-            
-            # ================================================================
-            # REGIONAL SEASONS
-            # ================================================================
             'regional_season_type': forms.Select(attrs={
                 'class': 'form-select',
-                'id': 'id_regional_season_type'
+                'id':    'id_regional_season_type',
             }),
             'custom_season_names': forms.Textarea(attrs={
-                'rows': 4,
-                'class': 'form-control font-monospace',
-                'id': 'id_custom_season_names',
-                'placeholder': '{\n  "1": "Rainy Season",\n  "2": "Dry Season"\n}'
+                'rows':        4,
+                'class':       'form-control font-monospace',
+                'id':          'id_custom_season_names',
+                'placeholder': '{\n  "1": "Rainy Season",\n  "2": "Dry Season"\n}',
             }),
-            
-            # ================================================================
-            # ACADEMIC PERIOD SETTINGS
-            # ================================================================
             'default_period_duration_weeks': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '52',
+                'min':   '1',
+                'max':   '52',
                 'class': 'form-control',
-                'id': 'id_default_period_duration_weeks'
+                'id':    'id_default_period_duration_weeks',
             }),
-            
-            # ================================================================
-            # COMMUNICATION SETTINGS
-            # ================================================================
             'enable_automatic_reminders': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
-                'id': 'id_enable_automatic_reminders'
+                'id':    'id_enable_automatic_reminders',
             }),
             'enable_sms': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
-                'id': 'id_enable_sms'
+                'id':    'id_enable_sms',
             }),
             'enable_email_notifications': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
-                'id': 'id_enable_email_notifications'
+                'id':    'id_enable_email_notifications',
             }),
         }
-        
-        # ⭐ ENHANCED: More detailed, context-specific help text
+
         help_texts = {
-            'term_system': 'Choose the academic period system used by your school. This affects how terms/semesters are named and counted.',
-            'periods_per_year': 'Will be auto-set based on term system (editable for custom systems)',
-            'period_naming_convention': 'How academic periods should be named throughout the system',
-            'custom_period_names': 'JSON format: {"1": "Name 1", "2": "Name 2", ...}. Required only when using custom naming convention.',
-            'academic_year_type': 'When your academic year typically runs (affects default period scheduling)',
-            'academic_year_start_month': 'Month when academic year typically starts',
-            'academic_year_start_day': 'Day of month when academic year typically starts',
-            'operational_timezone': 'Critical for: fee due dates, exam schedules, attendance marking, report generation, and all date-based business logic. Usually set to your school\'s location.',
-            'regional_season_type': 'Climate-based season naming for your region (affects seasonal naming conventions)',
-            'custom_season_names': 'JSON format: {"1": "Season 1", "2": "Season 2", ...}. Used when regional season type is "Custom".',
-            'default_period_duration_weeks': 'Typical duration of each academic period in weeks (used as suggestion when creating sessions)',
-            'enable_automatic_reminders': 'Send automatic payment and deadline reminders to parents and students',
-            'enable_sms': 'Enable SMS notifications for important updates (requires SMS gateway configuration)',
-            'enable_email_notifications': 'Send email notifications for academic and financial events',
+            'term_system': (
+                'Choose the academic period system used by your school. '
+                'This affects how terms/semesters are named and counted.'
+            ),
+            'periods_per_year': (
+                'Auto-set based on term system (editable for custom systems only).'
+            ),
+            'period_naming_convention': (
+                'How academic periods should be named throughout the system.'
+            ),
+            'custom_period_names': (
+                'JSON format: {"1": "Name 1", "2": "Name 2", ...}. '
+                'Required only when using custom naming convention.'
+            ),
+            'academic_year_type': (
+                'When your academic year typically runs '
+                '(affects default period scheduling).'
+            ),
+            'academic_year_start_month': 'Month when academic year typically starts.',
+            'academic_year_start_day':   'Day of month when academic year typically starts.',
+            'operational_timezone': (
+                'School timezone for fee due dates, fiscal periods, report generation, '
+                'and all date-based business logic in the finance layer. '
+                'Usually set to your school\'s physical location. '
+                'Example: Africa/Kampala for Uganda, Africa/Nairobi for Kenya.'
+            ),
+            'regional_season_type': (
+                'Climate-based season naming for your region '
+                '(affects seasonal naming conventions).'
+            ),
+            'custom_season_names': (
+                'JSON format: {"1": "Season 1", "2": "Season 2", ...}. '
+                'Used when regional season type is "Custom".'
+            ),
+            'default_period_duration_weeks': (
+                'Typical duration of each academic period in weeks '
+                '(used as suggestion when creating sessions).'
+            ),
+            'enable_automatic_reminders': (
+                'Send automatic payment and deadline reminders to parents and students.'
+            ),
+            'enable_sms': (
+                'Enable SMS notifications for important updates '
+                '(requires SMS gateway configuration).'
+            ),
+            'enable_email_notifications': (
+                'Send email notifications for academic and financial events.'
+            ),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # ⭐ ENHANCED: Popular timezones first for better UX
+
+        # Popular East African timezones at the top for better UX
         from zoneinfo import available_timezones
-        
-        # Popular East African timezones at the top
         popular_timezones = [
-            ('Africa/Kampala', 'Africa/Kampala (Uganda - EAT)'),
-            ('Africa/Nairobi', 'Africa/Nairobi (Kenya - EAT)'),
-            ('Africa/Dar_es_Salaam', 'Africa/Dar_es_Salaam (Tanzania - EAT)'),
-            ('Africa/Kigali', 'Africa/Kigali (Rwanda - CAT)'),
-            ('Africa/Addis_Ababa', 'Africa/Addis_Ababa (Ethiopia - EAT)'),
-            ('Africa/Juba', 'Africa/Juba (South Sudan - CAT)'),
-            ('---', '--- All Timezones ---'),
+            ('Africa/Kampala',       'Africa/Kampala (Uganda — EAT)'),
+            ('Africa/Nairobi',       'Africa/Nairobi (Kenya — EAT)'),
+            ('Africa/Dar_es_Salaam', 'Africa/Dar_es_Salaam (Tanzania — EAT)'),
+            ('Africa/Kigali',        'Africa/Kigali (Rwanda — CAT)'),
+            ('Africa/Addis_Ababa',   'Africa/Addis_Ababa (Ethiopia — EAT)'),
+            ('Africa/Juba',          'Africa/Juba (South Sudan — CAT)'),
+            ('---',                  '--- All Timezones ---'),
         ]
-        
-        # Get all available timezones
         all_timezones = [(tz, tz) for tz in sorted(available_timezones())]
-        
-        # Combine popular with all timezones
         self.fields['operational_timezone'].widget.choices = (
             popular_timezones + all_timezones
         )
-        
-        # ⭐ ENHANCED: Dynamic placeholder generation based on actual config
+
+        # Dynamic placeholder and read-only logic for existing instances
         if self.instance and self.instance.pk:
-            # Generate period names example
             periods_count = self.instance.get_period_count()
-            period_type = self.instance.get_period_type_name()
-            
-            period_example = {}
-            for i in range(1, min(periods_count + 1, 4)):
-                period_example[str(i)] = f"{self._get_ordinal_number(i)} {period_type}"
-            
+            period_type   = self.instance.get_period_type_name()
+
+            period_example = {
+                str(i): f"{self._get_ordinal_number(i)} {period_type}"
+                for i in range(1, min(periods_count + 1, 4))
+            }
             self.fields['custom_period_names'].widget.attrs['placeholder'] = json.dumps(
                 period_example, indent=2
             )
-            
-            # Generate season names example
+
             if self.instance.regional_season_type == 'custom_regional':
-                season_example = {
-                    "1": "First Season",
-                    "2": "Second Season"
-                }
                 self.fields['custom_season_names'].widget.attrs['placeholder'] = json.dumps(
-                    season_example, indent=2
+                    {"1": "First Season", "2": "Second Season"}, indent=2
                 )
-            
-            # ⭐ ENHANCED: Make auto-calculated fields read-only with clear explanation
+
             if self.instance.term_system != 'custom':
                 self.fields['periods_per_year'].widget.attrs['readonly'] = True
                 self.fields['periods_per_year'].widget.attrs['class'] += ' bg-light'
@@ -288,70 +311,54 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
                     f'Auto-calculated based on {self.instance.get_term_system_display()}. '
                     'Change term system to "Custom" to edit manually.'
                 )
-        
-        # Make custom fields not required initially
+
         self.fields['custom_period_names'].required = False
         self.fields['custom_season_names'].required = False
-    
+
+    # -------------------------------------------------------------------------
+    # HELPERS
+    # -------------------------------------------------------------------------
+
     def _get_ordinal_number(self, n):
-        """Helper to get ordinal suffix (1st, 2nd, 3rd, etc.)"""
         ordinals = {
             1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th',
             6: '6th', 7: '7th', 8: '8th', 9: '9th', 10: '10th',
-            11: '11th', 12: '12th'
+            11: '11th', 12: '12th',
         }
         return ordinals.get(n, f'{n}th')
-    
-    # =========================================================================
-    # FIELD-SPECIFIC VALIDATION
-    # =========================================================================
-    
+
+    # -------------------------------------------------------------------------
+    # FIELD-LEVEL VALIDATION
+    # -------------------------------------------------------------------------
+
     def clean_periods_per_year(self):
-        """
-        Validate and auto-set periods_per_year based on term_system.
-        ⭐ ENHANCED: Better auto-calculation logic
-        """
         periods_per_year = self.cleaned_data.get('periods_per_year')
-        term_system = self.cleaned_data.get('term_system')
-        
-        # Auto-set for non-custom systems
+        term_system      = self.cleaned_data.get('term_system')
+
         if term_system and term_system != 'custom':
             system_periods = {
-                'term': 3,
-                'semester': 2,
-                'quarter': 4,
-                'trimester': 3,
-                'module': 6,
-                'block': 4,
-                'yearlong': 1,
-                'intensive': 10,
+                'term': 3, 'semester': 2, 'quarter': 4, 'trimester': 3,
+                'module': 6, 'block': 4, 'yearlong': 1, 'intensive': 10,
             }
             return system_periods.get(term_system, 3)
-        
-        # For custom systems, validate range
+
         if not periods_per_year:
             raise ValidationError('Periods per year is required for custom term systems.')
-        
+
         if not (1 <= periods_per_year <= 20):
             raise ValidationError('Periods per year must be between 1 and 20.')
-        
+
         return periods_per_year
-    
+
     def clean_operational_timezone(self):
-        """
-        Validate timezone string.
-        ⭐ ENHANCED: Better validation and error messages
-        """
         tz_str = self.cleaned_data.get('operational_timezone')
-        
+
         if not tz_str:
-            return 'Africa/Kampala'  # Default for East African schools
-        
-        # Skip validation for separator
+            return 'Africa/Kampala'
+
         if tz_str == '---':
             raise ValidationError('Please select a valid timezone from the list.')
-        
-        # Validate that it's a valid IANA timezone
+
         try:
             from zoneinfo import ZoneInfo
             ZoneInfo(tz_str)
@@ -361,69 +368,53 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
                 f"'{tz_str}' is not a valid timezone identifier. "
                 "Please select a timezone from the dropdown list."
             )
-    
+
     def clean_custom_period_names(self):
-        """
-        Validate and parse custom period names JSON.
-        ⭐ ENHANCED: Better validation with specific error messages
-        """
-        data = self.cleaned_data.get('custom_period_names')
-        naming_convention = self.cleaned_data.get('period_naming_convention')
-        
-        # Only required if using custom naming convention
+        data               = self.cleaned_data.get('custom_period_names')
+        naming_convention  = self.cleaned_data.get('period_naming_convention')
+
         if naming_convention != 'custom':
             return {} if data is None else data
-        
-        # Custom naming requires data
+
         if not data or (isinstance(data, str) and not data.strip()):
             raise ValidationError(
                 'Custom period names are required when using custom naming convention. '
                 'Provide a JSON dictionary mapping period numbers to names.'
             )
-        
+
         try:
-            # Parse JSON if string
-            if isinstance(data, str):
-                names = json.loads(data)
-            else:
-                names = data
-            
-            # Validate structure
+            names = json.loads(data) if isinstance(data, str) else data
+
             if not isinstance(names, dict):
                 raise ValidationError(
                     'Custom period names must be a JSON object/dictionary. '
                     'Example: {"1": "First Term", "2": "Second Term", "3": "Third Term"}'
                 )
-            
-            # Get expected number of periods
+
             term_system = self.cleaned_data.get('term_system')
             if term_system == 'custom':
                 periods_per_year = self.cleaned_data.get('periods_per_year')
             else:
                 periods_per_year = self.instance.get_period_count() if self.instance else 3
-            
+
             if not periods_per_year:
-                raise ValidationError('Cannot validate custom names without knowing periods per year.')
-            
-            # ⭐ ENHANCED: Detailed validation like SACCO
-            missing_periods = []
-            empty_names = []
-            invalid_keys = []
-            
-            # Check for all required periods
-            for i in range(1, periods_per_year + 1):
-                key = str(i)
-                if key not in names:
-                    missing_periods.append(key)
-                elif not names[key] or not str(names[key]).strip():
-                    empty_names.append(key)
-            
-            # Check for invalid keys
-            for key in names.keys():
-                if not key.isdigit() or not (1 <= int(key) <= periods_per_year):
-                    invalid_keys.append(key)
-            
-            # Collect all errors
+                raise ValidationError(
+                    'Cannot validate custom names without knowing periods per year.'
+                )
+
+            missing_periods = [
+                str(i) for i in range(1, periods_per_year + 1)
+                if str(i) not in names
+            ]
+            empty_names = [
+                str(i) for i in range(1, periods_per_year + 1)
+                if str(i) in names and not str(names[str(i)]).strip()
+            ]
+            invalid_keys = [
+                k for k in names.keys()
+                if not k.isdigit() or not (1 <= int(k) <= periods_per_year)
+            ]
+
             errors = []
             if missing_periods:
                 errors.append(f'Missing names for period(s): {", ".join(missing_periods)}')
@@ -431,184 +422,153 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
                 errors.append(f'Empty names for period(s): {", ".join(empty_names)}')
             if invalid_keys:
                 errors.append(f'Invalid period number(s): {", ".join(invalid_keys)}')
-            
+
             if errors:
                 raise ValidationError(' | '.join(errors))
-            
-            # Clean up and return
-            cleaned_names = {}
-            for key, value in names.items():
-                if key.isdigit() and 1 <= int(key) <= periods_per_year:
-                    cleaned_names[key] = str(value).strip()
-            
-            return cleaned_names
-            
+
+            return {
+                k: str(v).strip()
+                for k, v in names.items()
+                if k.isdigit() and 1 <= int(k) <= periods_per_year
+            }
+
         except json.JSONDecodeError as e:
             raise ValidationError(
                 f'Invalid JSON format: {str(e)}. '
                 'Expected format: {"1": "Name 1", "2": "Name 2", "3": "Name 3"}'
             )
-    
+
     def clean_custom_season_names(self):
-        """
-        Validate and parse custom season names JSON.
-        ⭐ ENHANCED: Similar validation to custom_period_names
-        """
-        data = self.cleaned_data.get('custom_season_names')
+        data        = self.cleaned_data.get('custom_season_names')
         season_type = self.cleaned_data.get('regional_season_type')
-        
-        # Only required if using custom regional seasons
+
         if season_type != 'custom_regional':
             return {} if data is None else data
-        
-        # Custom seasons require data
+
         if not data or (isinstance(data, str) and not data.strip()):
             raise ValidationError(
                 'Custom season names are required when using custom regional season type. '
                 'Provide a JSON dictionary mapping season numbers to names.'
             )
-        
+
         try:
-            # Parse JSON if string
-            if isinstance(data, str):
-                names = json.loads(data)
-            else:
-                names = data
-            
-            # Validate structure
+            names = json.loads(data) if isinstance(data, str) else data
+
             if not isinstance(names, dict):
                 raise ValidationError(
                     'Custom season names must be a JSON object/dictionary. '
                     'Example: {"1": "Wet Season", "2": "Dry Season"}'
                 )
-            
-            # Basic validation - at least one season name
+
             if not names:
                 raise ValidationError('At least one season name is required.')
-            
-            # Clean up and return
-            cleaned_names = {}
-            for key, value in names.items():
-                if key.isdigit() and value and str(value).strip():
-                    cleaned_names[key] = str(value).strip()
-            
+
+            cleaned_names = {
+                k: str(v).strip()
+                for k, v in names.items()
+                if k.isdigit() and v and str(v).strip()
+            }
+
             if not cleaned_names:
                 raise ValidationError('No valid season names provided.')
-            
+
             return cleaned_names
-            
+
         except json.JSONDecodeError as e:
             raise ValidationError(
                 f'Invalid JSON format: {str(e)}. '
                 'Expected format: {"1": "Season 1", "2": "Season 2"}'
             )
-    
+
     def clean_academic_year_start_day(self):
-        """
-        Validate start day is valid for the start month.
-        ⭐ ENHANCED: Better error messages
-        """
-        day = self.cleaned_data.get('academic_year_start_day')
+        day   = self.cleaned_data.get('academic_year_start_day')
         month = self.cleaned_data.get('academic_year_start_month')
-        
+
         if not day:
             return 1
-        
+
         if not (1 <= day <= 31):
             raise ValidationError('Day must be between 1 and 31.')
-        
+
         if month:
             try:
-                # Test if date is valid for this month
-                from datetime import date
-                test_date = date(2024, month, day)  # Use leap year for February
+                date(2024, month, day)
             except ValueError:
                 month_names = {
-                    1: 'January', 2: 'February', 3: 'March', 4: 'April',
-                    5: 'May', 6: 'June', 7: 'July', 8: 'August',
-                    9: 'September', 10: 'October', 11: 'November', 12: 'December'
+                    1: 'January',  2: 'February',  3: 'March',
+                    4: 'April',    5: 'May',        6: 'June',
+                    7: 'July',     8: 'August',     9: 'September',
+                    10: 'October', 11: 'November',  12: 'December',
                 }
                 raise ValidationError(
-                    f'Day {day} is not valid for {month_names.get(month, "month")}. '
-                    f'Please select a valid day for this month.'
+                    f'Day {day} is not valid for {month_names.get(month, "this month")}. '
+                    'Please select a valid day.'
                 )
-        
+
         return day
-    
-    # =========================================================================
+
+    # -------------------------------------------------------------------------
     # CROSS-FIELD VALIDATION
-    # =========================================================================
-    
+    # -------------------------------------------------------------------------
+
     def clean(self):
-        """
-        Cross-field validation.
-        ⭐ ENHANCED: More comprehensive validation
-        """
         cleaned_data = super().clean()
-        
-        # Validate academic year start date
+
         start_month = cleaned_data.get('academic_year_start_month')
-        start_day = cleaned_data.get('academic_year_start_day')
-        
+        start_day   = cleaned_data.get('academic_year_start_day')
         if start_month and start_day:
             try:
-                from datetime import date
-                # Test date validity
                 date(2024, start_month, start_day)
             except ValueError:
                 self.add_error(
                     'academic_year_start_day',
-                    f'Invalid date: Month {start_month} does not have {start_day} days.'
+                    f'Invalid date: Month {start_month} does not have {start_day} days.',
                 )
-        
-        # Validate custom period names count matches periods_per_year
+
         if cleaned_data.get('period_naming_convention') == 'custom':
-            custom_names = cleaned_data.get('custom_period_names', {})
+            custom_names     = cleaned_data.get('custom_period_names', {})
             periods_per_year = cleaned_data.get('periods_per_year')
-            
             if custom_names and periods_per_year:
                 provided_count = len([k for k in custom_names.keys() if k.isdigit()])
                 if provided_count != periods_per_year:
                     self.add_error(
                         'custom_period_names',
-                        f'Expected {periods_per_year} period names, but got {provided_count}. '
-                        f'Please provide names for all {periods_per_year} periods.'
+                        f'Expected {periods_per_year} period names, '
+                        f'but got {provided_count}. '
+                        f'Please provide names for all {periods_per_year} periods.',
                     )
-        
-        # Validate period duration is reasonable
+
         duration_weeks = cleaned_data.get('default_period_duration_weeks')
         if duration_weeks:
-            periods = cleaned_data.get('periods_per_year', 1)
+            periods     = cleaned_data.get('periods_per_year', 1)
             total_weeks = duration_weeks * periods
-            
             if total_weeks > 52:
                 self.add_error(
                     'default_period_duration_weeks',
-                    f'Period duration of {duration_weeks} weeks × {periods} periods = {total_weeks} weeks, '
-                    f'which exceeds 52 weeks in a year. Please adjust the duration.'
+                    f'Period duration of {duration_weeks} weeks × {periods} periods = '
+                    f'{total_weeks} weeks, which exceeds 52 weeks in a year. '
+                    'Please adjust the duration.',
                 )
-        
+
         return cleaned_data
-    
-    # =========================================================================
-    # SAVE METHOD
-    # =========================================================================
-    
+
+    # -------------------------------------------------------------------------
+    # SAVE
+    # -------------------------------------------------------------------------
+
     def save(self, commit=True):
         """
         Save with singleton pattern enforcement.
-        ⭐ ENHANCED: Explicit singleton enforcement
+
+        The model's own save() locks self.pk to _SCHOOL_CONFIGURATION_UUID
+        and invalidates the class-level cache. No pk override needed here.
         """
         instance = super().save(commit=False)
-        
-        # Enforce singleton pattern
-        instance.pk = 1
-        
         if commit:
             instance.save()
-            logger.info(f"School configuration updated")
-        
+            logger.info("School configuration updated")
         return instance
+
 
 # =============================================================================
 # FINANCIAL SETTINGS FORM
@@ -617,19 +577,19 @@ class SchoolConfigurationForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Mod
 class FinancialSettingsForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     """
     Comprehensive form for financial settings.
-    Handles currency, payment terms, fees, and workflows.
+    Handles currency, payment terms, fees, workflows, and exchange rate config.
     """
-    
+
     class Meta:
-        model = FinancialSettings
+        model  = FinancialSettings
         fields = [
-            # Currency Configuration
             'school_currency',
             'currency_position',
             'decimal_places',
             'use_thousand_separator',
-            
-            # Numbering Configuration
+            'auto_update_exchange_rates',
+            'exchange_rate_update_frequency',
+            'tracked_currencies',
             'invoice_prefix',
             'include_year_in_invoice_number',
             'payment_prefix',
@@ -637,16 +597,12 @@ class FinancialSettingsForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Model
             'receipt_prefix',
             'expense_prefix',
             'include_year_in_expense_number',
-            
-            # Payment Settings
             'default_payment_terms_days',
             'late_fee_enabled',
             'late_fee_percentage',
             'grace_period_days',
             'minimum_payment_amount',
             'allow_partial_payments',
-            
-            # Scholarship & Discount Settings
             'auto_apply_scholarships',
             'scholarship_approval_required',
             'auto_apply_discounts',
@@ -655,174 +611,207 @@ class FinancialSettingsForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Model
             'early_payment_discount_enabled',
             'early_payment_discount_percentage',
             'early_payment_discount_days',
-            
-            # Workflow Settings
             'expense_approval_required',
             'expense_approval_limit',
             'require_payment_confirmation',
             'require_expense_receipts',
             'require_purchase_orders',
-            
-            # Communication Settings
             'send_invoice_emails',
             'send_payment_confirmations',
             'send_overdue_reminders',
             'overdue_reminder_days',
             'send_sms_notifications',
-            
-            # Tax & Accounting
             'include_tax_in_prices',
             'default_tax_rate',
             'multi_currency_enabled',
             'auto_generate_recurring_invoices',
-            
-            # Aging & Collections
             'bad_debt_write_off_threshold',
             'auto_write_off_days',
         ]
         widgets = {
-            'school_currency': forms.Select(attrs={'class': 'form-select select2'}),
+            'school_currency':  forms.Select(attrs={'class': 'form-select select2'}),
             'currency_position': forms.Select(attrs={'class': 'form-select'}),
-            'decimal_places': forms.NumberInput(attrs={
-                'min': '0',
-                'max': '4',
-                'class': 'form-control'
+            'decimal_places':   forms.NumberInput(attrs={'min': '0', 'max': '4', 'class': 'form-control'}),
+            'exchange_rate_update_frequency': forms.NumberInput(attrs={
+                'min': '1', 'max': '168', 'class': 'form-control', 'placeholder': '6',
             }),
-            'invoice_prefix': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'INV'
-            }),
-            'payment_prefix': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'PMT'
-            }),
-            'receipt_prefix': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'RCPT'
-            }),
-            'expense_prefix': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'EXP'
-            }),
-            'default_payment_terms_days': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '365',
-                'class': 'form-control'
-            }),
-            'late_fee_percentage': PercentageInput(),
-            'grace_period_days': forms.NumberInput(attrs={
-                'min': '0',
-                'max': '90',
-                'class': 'form-control'
-            }),
-            'minimum_payment_amount': MoneyInput(),
-            'discount_approval_threshold': MoneyInput(),
+            'invoice_prefix': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'INV'}),
+            'payment_prefix': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'PMT'}),
+            'receipt_prefix': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'RCPT'}),
+            'expense_prefix': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'EXP'}),
+            'default_payment_terms_days': forms.NumberInput(attrs={'min': '1', 'max': '365', 'class': 'form-control'}),
+            'late_fee_percentage':              PercentageInput(),
+            'grace_period_days':               forms.NumberInput(attrs={'min': '0', 'max': '90', 'class': 'form-control'}),
+            'minimum_payment_amount':          MoneyInput(),
+            'discount_approval_threshold':     MoneyInput(),
             'early_payment_discount_percentage': PercentageInput(),
-            'early_payment_discount_days': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '90',
-                'class': 'form-control'
-            }),
-            'expense_approval_limit': MoneyInput(),
-            'overdue_reminder_days': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '30',
-                'class': 'form-control'
-            }),
-            'default_tax_rate': PercentageInput(),
-            'bad_debt_write_off_threshold': MoneyInput(),
-            'auto_write_off_days': forms.NumberInput(attrs={
-                'min': '90',
-                'class': 'form-control'
-            }),
+            'early_payment_discount_days':     forms.NumberInput(attrs={'min': '1', 'max': '90', 'class': 'form-control'}),
+            'expense_approval_limit':          MoneyInput(),
+            'overdue_reminder_days':           forms.NumberInput(attrs={'min': '1', 'max': '30', 'class': 'form-control'}),
+            'default_tax_rate':                PercentageInput(),
+            'bad_debt_write_off_threshold':    MoneyInput(),
+            'auto_write_off_days':             forms.NumberInput(attrs={'min': '90', 'class': 'form-control'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set currency choices
+
+        # ── Currency choices ────────────────────────────────────────────
         try:
             currency_choices = FinancialSettings.get_currency_choices()
             self.fields['school_currency'].widget.choices = currency_choices
         except Exception as e:
             logger.error(f"Error loading currency choices: {e}")
-        
-        # Group fields for better organization
+            currency_choices = []
+
+        # ── tracked_currencies ──────────────────────────────────────────
+        # IMPORTANT: Replace the auto-generated JSONFormField with a
+        # MultipleChoiceField. Leaving it as JSONFormField but swapping
+        # the widget to SelectMultiple causes TypeError during re-render
+        # after validation failure because JSONFormField.to_python() calls
+        # json.loads() on the list that SelectMultiple.value_from_datadict()
+        # returns, raising "must be str, bytes or bytearray, not list".
+        try:
+            initial_tracked = []
+            if self.instance and self.instance.pk:
+                raw = self.instance.tracked_currencies
+                if isinstance(raw, list):
+                    initial_tracked = raw
+                elif isinstance(raw, str) and raw.strip():
+                    import json as _json
+                    try:
+                        initial_tracked = _json.loads(raw)
+                    except Exception:
+                        initial_tracked = []
+
+            self.fields['tracked_currencies'] = forms.MultipleChoiceField(
+                choices=currency_choices,
+                required=False,
+                label='Tracked Currencies',
+                widget=forms.SelectMultiple(attrs={
+                    'class':            'form-select select2',
+                    'data-placeholder': 'Select currencies to track (e.g. USD, EUR)',
+                    'style':            'min-height: 100px;',
+                    'data-group':       'exchange_rates',
+                }),
+            )
+            self.initial['tracked_currencies'] = initial_tracked
+
+        except Exception as e:
+            logger.error(f"Error configuring tracked_currencies widget: {e}")
+
+        self.fields['exchange_rate_update_frequency'].help_text = (
+            "Only used when Auto-Update Exchange Rates is enabled. "
+            "Minimum 1 hour, maximum 168 hours (1 week)."
+        )
+
         self._add_field_groups()
-    
+
     def _add_field_groups(self):
-        """Add CSS classes to group related fields visually"""
-        currency_fields = [
-            'school_currency', 'currency_position',
-            'decimal_places', 'use_thousand_separator'
-        ]
-        for field in currency_fields:
-            if field in self.fields:
-                self.fields[field].widget.attrs['data-group'] = 'currency'
-    
+        """Add data-group attributes for tabbed template rendering."""
+        groups = {
+            'currency': [
+                'school_currency', 'currency_position',
+                'decimal_places', 'use_thousand_separator',
+            ],
+            'exchange_rates': [
+                'auto_update_exchange_rates',
+                'exchange_rate_update_frequency',
+                'tracked_currencies',
+            ],
+        }
+        for group, fields in groups.items():
+            for field in fields:
+                if field in self.fields:
+                    self.fields[field].widget.attrs['data-group'] = group
+
+    # -------------------------------------------------------------------------
+    # FIELD-LEVEL VALIDATION
+    # -------------------------------------------------------------------------
+
     def clean_late_fee_percentage(self):
-        """Validate late fee percentage"""
         percentage = self.cleaned_data.get('late_fee_percentage')
         if percentage is not None:
             validate_percentage(percentage)
         return percentage
-    
+
     def clean_early_payment_discount_percentage(self):
-        """Validate early payment discount percentage"""
         percentage = self.cleaned_data.get('early_payment_discount_percentage')
         if percentage is not None:
             validate_percentage(percentage)
         return percentage
-    
+
     def clean_default_tax_rate(self):
-        """Validate tax rate percentage"""
         percentage = self.cleaned_data.get('default_tax_rate')
         if percentage is not None:
             validate_percentage(percentage)
         return percentage
-    
+
+    def clean_tracked_currencies(self):
+        """
+        Coerce SelectMultiple output (list of strings) back to the JSON list
+        that the model field expects, and validate each code.
+        """
+        raw = self.cleaned_data.get('tracked_currencies')
+
+        if not raw:
+            return []
+
+        if isinstance(raw, str):
+            codes = [c.strip().upper() for c in raw.split(',') if c.strip()]
+        else:
+            codes = [str(c).strip().upper() for c in raw if str(c).strip()]
+
+        invalid = [c for c in codes if len(c) != 3]
+        if invalid:
+            raise forms.ValidationError(
+                f"Invalid currency codes (must be 3-character ISO 4217): "
+                f"{', '.join(invalid)}"
+            )
+
+        # Deduplicate while preserving order
+        seen, deduped = set(), []
+        for code in codes:
+            if code not in seen:
+                seen.add(code)
+                deduped.append(code)
+
+        return deduped
+
+    def clean_exchange_rate_update_frequency(self):
+        freq = self.cleaned_data.get('exchange_rate_update_frequency')
+        if freq is not None and not (1 <= freq <= 168):
+            raise forms.ValidationError(
+                "Update frequency must be between 1 and 168 hours."
+            )
+        return freq
+
+    # -------------------------------------------------------------------------
+    # CROSS-FIELD VALIDATION
+    # -------------------------------------------------------------------------
+
     def clean(self):
-        """Cross-field validation"""
         cleaned_data = super().clean()
-        
-        # Validate minimum payment amount is positive
-        min_payment = cleaned_data.get('minimum_payment_amount')
-        if min_payment is not None:
-            validate_positive_amount(min_payment)
-        
-        # Validate approval threshold is positive
-        discount_threshold = cleaned_data.get('discount_approval_threshold')
-        if discount_threshold is not None:
-            validate_positive_amount(discount_threshold)
-        
-        # Validate expense limit is positive
-        expense_limit = cleaned_data.get('expense_approval_limit')
-        if expense_limit is not None:
-            validate_positive_amount(expense_limit)
-        
+
+        for field in ('minimum_payment_amount', 'discount_approval_threshold', 'expense_approval_limit'):
+            value = cleaned_data.get(field)
+            if value is not None:
+                validate_positive_amount(value)
+
+        auto_update    = cleaned_data.get('auto_update_exchange_rates', False)
+        tracked        = cleaned_data.get('tracked_currencies', [])
+        school_currency= cleaned_data.get('school_currency', '')
+
+        if auto_update:
+            foreign = [c for c in tracked if c != school_currency]
+            if not foreign:
+                self.add_error(
+                    'tracked_currencies',
+                    "Add at least one foreign currency to track when auto-update is enabled. "
+                    "The school currency itself does not need a rate.",
+                )
+
         return cleaned_data
-
-
-class FinancialSettingsQuickForm(BootstrapFormMixin, forms.ModelForm):
-    """Quick form for essential financial settings only"""
-    
-    class Meta:
-        model = FinancialSettings
-        fields = [
-            'school_currency',
-            'default_payment_terms_days',
-            'late_fee_enabled',
-            'late_fee_percentage',
-            'allow_partial_payments',
-        ]
-        widgets = {
-            'school_currency': forms.Select(attrs={'class': 'form-select select2'}),
-            'default_payment_terms_days': forms.NumberInput(attrs={
-                'min': '1',
-                'class': 'form-control'
-            }),
-            'late_fee_percentage': PercentageInput(),
-        }
 
 
 # =============================================================================
@@ -830,12 +819,11 @@ class FinancialSettingsQuickForm(BootstrapFormMixin, forms.ModelForm):
 # =============================================================================
 
 class CoreAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for core account mappings"""
-    
+    """Form for core account mappings."""
+
     class Meta:
-        model = CoreAccountMappings
+        model  = CoreAccountMappings
         fields = [
-            # Required fields (The Big 7+)
             'default_bank_account',
             'default_cash_account',
             'student_receivables_account',
@@ -844,7 +832,6 @@ class CoreAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
             'default_revenue_account',
             'default_expense_account',
             'scholarship_discount_account',
-            # Optional specialized accounts
             'petty_cash_account',
             'mobile_money_account',
             'boarding_revenue_account',
@@ -854,270 +841,261 @@ class CoreAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
             'boarding_expense_account',
         ]
         widgets = {
-            # Required ASSET accounts
             'default_bank_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Primary Bank Account',
-                'required': True
+                'required': True,
             }),
             'default_cash_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Cash on Hand Account',
-                'required': True
+                'required': True,
             }),
             'student_receivables_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Student Receivables Account',
-                'required': True
+                'required': True,
             }),
-            # Required LIABILITY account
             'default_payable_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Accounts Payable Account',
-                'required': True
+                'required': True,
             }),
-            # Required EQUITY account
             'default_equity_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Capital/Equity Account',
-                'required': True
+                'required': True,
             }),
-            # Required REVENUE account
             'default_revenue_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Default Revenue Account',
-                'required': True
+                'required': True,
             }),
-            # Required EXPENSE accounts
             'default_expense_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Default Expense Account',
-                'required': True
+                'required': True,
             }),
             'scholarship_discount_account': forms.Select(attrs={
                 'class': 'form-select select2',
                 'data-placeholder': 'Select Scholarship/Discount Account',
-                'required': True
+                'required': True,
             }),
-            # Optional fields
             'petty_cash_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Petty Cash Account (Optional)'
+                'data-placeholder': 'Select Petty Cash Account (Optional)',
             }),
             'mobile_money_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Mobile Money Account (Optional)'
+                'data-placeholder': 'Select Mobile Money Account (Optional)',
             }),
             'boarding_revenue_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Boarding Revenue Account (Optional)'
+                'data-placeholder': 'Select Boarding Revenue Account (Optional)',
             }),
             'uniform_and_book_sales_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Uniform & Book Sales Account (Optional)'
+                'data-placeholder': 'Select Uniform & Book Sales Account (Optional)',
             }),
             'salaries_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Salaries Account (Optional)'
+                'data-placeholder': 'Select Salaries Account (Optional)',
             }),
             'utilities_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Utilities Account (Optional)'
+                'data-placeholder': 'Select Utilities Account (Optional)',
             }),
             'boarding_expense_account': forms.Select(attrs={
                 'class': 'form-select select2',
-                'data-placeholder': 'Select Boarding Expense Account (Optional)'
+                'data-placeholder': 'Select Boarding Expense Account (Optional)',
             }),
         }
         help_texts = {
-            'default_bank_account': 'Primary bank account for school operations (Required - ASSET)',
-            'default_cash_account': 'Cash on hand account for physical cash (Required - ASSET)',
-            'student_receivables_account': 'Accounts Receivable - Students control account (Required - ASSET)',
-            'default_payable_account': 'Accounts Payable for vendors and suppliers (Required - LIABILITY)',
-            'default_equity_account': 'Capital or Retained Earnings account (Required - EQUITY)',
-            'default_revenue_account': 'Default account for all school fees revenue (Required - REVENUE)',
-            'default_expense_account': 'Default account for general expenses (Required - EXPENSE)',
-            'scholarship_discount_account': 'Account for scholarships and discounts (Required - EXPENSE)',
-            'petty_cash_account': 'Separate petty cash account - falls back to default cash if not set',
-            'mobile_money_account': 'Mobile money clearing account - falls back to default bank if not set',
-            'boarding_revenue_account': 'Separate boarding revenue account - falls back to default revenue if not set',
-            'uniform_and_book_sales_account': 'Uniform and book sales revenue - falls back to default revenue if not set',
-            'salaries_account': 'Staff salaries expense - falls back to default expense if not set',
-            'utilities_account': 'Utilities expenses - falls back to default expense if not set',
-            'boarding_expense_account': 'Boarding operational expenses - falls back to default expense if not set',
+            'default_bank_account':           'Primary bank account for school operations (Required — ASSET)',
+            'default_cash_account':           'Cash on hand account for physical cash (Required — ASSET)',
+            'student_receivables_account':    'Accounts Receivable — Students control account (Required — ASSET)',
+            'default_payable_account':        'Accounts Payable for vendors and suppliers (Required — LIABILITY)',
+            'default_equity_account':         'Capital or Retained Earnings account (Required — EQUITY)',
+            'default_revenue_account':        'Default account for all school fees revenue (Required — REVENUE)',
+            'default_expense_account':        'Default account for general expenses (Required — EXPENSE)',
+            'scholarship_discount_account':   'Account for scholarships and discounts (Required — EXPENSE)',
+            'petty_cash_account': (
+                'Separate petty cash account — falls back to default cash if not set.'
+            ),
+            'mobile_money_account': (
+                'Mobile money clearing account — falls back to default bank if not set.'
+            ),
+            'boarding_revenue_account': (
+                'Boarding/meals revenue for category-level routing. '
+                'Distinct from RevenueAccountMappings.boarding_revenue_account '
+                '(which handles invoice-type routing). '
+                'Falls back to default revenue if not set.'
+            ),
+            'uniform_and_book_sales_account': (
+                'Uniform and book sales revenue. Used as fallback when '
+                'RevenueAccountMappings.uniform_sales_revenue_account is not set. '
+                'Falls back to default revenue if not set.'
+            ),
+            'salaries_account': (
+                'Staff salaries expense — falls back to default expense if not set.'
+            ),
+            'utilities_account': (
+                'Utilities expenses — falls back to default expense if not set.'
+            ),
+            'boarding_expense_account': (
+                'Boarding operational expenses — falls back to default expense if not set.'
+            ),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets for account fields
+
         try:
             from finance.models import Account
-            
-            # ✅ FIXED: Changed 'number' to 'account_number'
-            # Get accounts by type
-            asset_accounts = Account.objects.filter(
-                account_type__account_type='ASSET',
-                is_active=True
-            ).order_by('account_number')  # ✅ Changed from 'number'
-            
-            liability_accounts = Account.objects.filter(
-                account_type__account_type='LIABILITY',
-                is_active=True
-            ).order_by('account_number')  # ✅ Changed from 'number'
-            
-            equity_accounts = Account.objects.filter(
-                account_type__account_type='EQUITY',
-                is_active=True
-            ).order_by('account_number')  # ✅ Changed from 'number'
-            
-            revenue_accounts = Account.objects.filter(
-                account_type__account_type='REVENUE',
-                is_active=True
-            ).order_by('account_number')  # ✅ Changed from 'number'
-            
-            expense_accounts = Account.objects.filter(
-                account_type__account_type='EXPENSE',
-                is_active=True
-            ).order_by('account_number')  # ✅ Changed from 'number'
-            
-            # Set querysets for REQUIRED ASSET fields
-            self.fields['default_bank_account'].queryset = asset_accounts.filter(
-                is_bank_account=True
-            ) if asset_accounts.filter(is_bank_account=True).exists() else asset_accounts
+
+            # Helper: active, non-header accounts by account type category
+            def qs(account_type_code):
+                return Account.objects.filter(
+                    account_type__account_type=account_type_code,
+                    is_active=True,
+                    is_header=False,
+                ).order_by('account_number')
+
+            asset_qs     = qs('ASSET')
+            liability_qs = qs('LIABILITY')
+            equity_qs    = qs('EQUITY')
+            revenue_qs   = qs('REVENUE')
+            expense_qs   = qs('EXPENSE')
+
+            # Required fields
+            bank_qs = asset_qs.filter(is_bank_account=True)
+            self.fields['default_bank_account'].queryset = (
+                bank_qs if bank_qs.exists() else asset_qs
+            )
             self.fields['default_bank_account'].label = 'Primary Bank Account *'
-            
-            self.fields['default_cash_account'].queryset = asset_accounts.filter(
-                is_cash_account=True
-            ) if asset_accounts.filter(is_cash_account=True).exists() else asset_accounts
+
+            cash_qs = asset_qs.filter(is_cash_account=True)
+            self.fields['default_cash_account'].queryset = (
+                cash_qs if cash_qs.exists() else asset_qs
+            )
             self.fields['default_cash_account'].label = 'Cash on Hand Account *'
-            
-            self.fields['student_receivables_account'].queryset = asset_accounts.filter(
-                is_receivable_account=True
-            ) if asset_accounts.filter(is_receivable_account=True).exists() else asset_accounts
+
+            recv_qs = asset_qs.filter(is_receivable_account=True)
+            self.fields['student_receivables_account'].queryset = (
+                recv_qs if recv_qs.exists() else asset_qs
+            )
             self.fields['student_receivables_account'].label = 'Student Receivables Account *'
-            
-            # Set querysets for REQUIRED LIABILITY field
-            self.fields['default_payable_account'].queryset = liability_accounts
-            self.fields['default_payable_account'].label = 'Accounts Payable Account *'
-            
-            # Set querysets for REQUIRED EQUITY field
-            self.fields['default_equity_account'].queryset = equity_accounts
-            self.fields['default_equity_account'].label = 'Capital/Equity Account *'
-            
-            # Set querysets for REQUIRED REVENUE field
-            self.fields['default_revenue_account'].queryset = revenue_accounts
-            self.fields['default_revenue_account'].label = 'Default Revenue Account *'
-            
-            # Set querysets for REQUIRED EXPENSE fields
-            self.fields['default_expense_account'].queryset = expense_accounts
-            self.fields['default_expense_account'].label = 'Default Expense Account *'
-            
-            self.fields['scholarship_discount_account'].queryset = expense_accounts
-            self.fields['scholarship_discount_account'].label = 'Scholarship/Discount Account *'
-            
-            # Set querysets for OPTIONAL fields
-            self.fields['petty_cash_account'].queryset = asset_accounts.filter(
-                is_cash_account=True
-            ) if asset_accounts.filter(is_cash_account=True).exists() else asset_accounts
-            self.fields['petty_cash_account'].required = False
-            self.fields['petty_cash_account'].label = 'Petty Cash Account (Optional)'
-            
-            self.fields['mobile_money_account'].queryset = asset_accounts
+
+            self.fields['default_payable_account'].queryset = liability_qs
+            self.fields['default_payable_account'].label    = 'Accounts Payable Account *'
+
+            self.fields['default_equity_account'].queryset = equity_qs
+            self.fields['default_equity_account'].label    = 'Capital/Equity Account *'
+
+            self.fields['default_revenue_account'].queryset = revenue_qs
+            self.fields['default_revenue_account'].label    = 'Default Revenue Account *'
+
+            self.fields['default_expense_account'].queryset = expense_qs
+            self.fields['default_expense_account'].label    = 'Default Expense Account *'
+
+            self.fields['scholarship_discount_account'].queryset = expense_qs
+            self.fields['scholarship_discount_account'].label    = 'Scholarship/Discount Account *'
+
+            # Optional fields
+            self.fields['petty_cash_account'].queryset  = (
+                cash_qs if cash_qs.exists() else asset_qs
+            )
+            self.fields['petty_cash_account'].required  = False
+            self.fields['petty_cash_account'].label     = 'Petty Cash Account (Optional)'
+
+            self.fields['mobile_money_account'].queryset = asset_qs
             self.fields['mobile_money_account'].required = False
-            self.fields['mobile_money_account'].label = 'Mobile Money Account (Optional)'
-            
-            self.fields['boarding_revenue_account'].queryset = revenue_accounts
+            self.fields['mobile_money_account'].label    = 'Mobile Money Account (Optional)'
+
+            self.fields['boarding_revenue_account'].queryset = revenue_qs
             self.fields['boarding_revenue_account'].required = False
-            self.fields['boarding_revenue_account'].label = 'Boarding Revenue Account (Optional)'
-            
-            self.fields['uniform_and_book_sales_account'].queryset = revenue_accounts
+            self.fields['boarding_revenue_account'].label    = 'Boarding Revenue Account (Optional)'
+
+            self.fields['uniform_and_book_sales_account'].queryset = revenue_qs
             self.fields['uniform_and_book_sales_account'].required = False
-            self.fields['uniform_and_book_sales_account'].label = 'Uniform & Book Sales Account (Optional)'
-            
-            self.fields['salaries_account'].queryset = expense_accounts
+            self.fields['uniform_and_book_sales_account'].label    = 'Uniform & Book Sales Account (Optional)'
+
+            self.fields['salaries_account'].queryset = expense_qs
             self.fields['salaries_account'].required = False
-            self.fields['salaries_account'].label = 'Salaries Account (Optional)'
-            
-            self.fields['utilities_account'].queryset = expense_accounts
+            self.fields['salaries_account'].label    = 'Salaries Account (Optional)'
+
+            self.fields['utilities_account'].queryset = expense_qs
             self.fields['utilities_account'].required = False
-            self.fields['utilities_account'].label = 'Utilities Account (Optional)'
-            
-            self.fields['boarding_expense_account'].queryset = expense_accounts
+            self.fields['utilities_account'].label    = 'Utilities Account (Optional)'
+
+            self.fields['boarding_expense_account'].queryset = expense_qs
             self.fields['boarding_expense_account'].required = False
-            self.fields['boarding_expense_account'].label = 'Boarding Expense Account (Optional)'
-            
+            self.fields['boarding_expense_account'].label    = 'Boarding Expense Account (Optional)'
+
         except ImportError:
-            logger.warning("Finance app not available - account mappings disabled")
+            logger.warning("Finance app not available — account mappings disabled")
         except Exception as e:
             logger.error(f"Error setting up account mappings form: {e}")
-    
+
     def clean(self):
-        """Additional validation"""
         cleaned_data = super().clean()
-        
-        # Validate that all required fields are set
+
         required_fields = [
-            'default_bank_account',
-            'default_cash_account',
-            'student_receivables_account',
-            'default_payable_account',
-            'default_equity_account',
-            'default_revenue_account',
-            'default_expense_account',
-            'scholarship_discount_account'
+            'default_bank_account', 'default_cash_account',
+            'student_receivables_account', 'default_payable_account',
+            'default_equity_account', 'default_revenue_account',
+            'default_expense_account', 'scholarship_discount_account',
         ]
-        
         for field in required_fields:
             if not cleaned_data.get(field):
-                self.add_error(field, f'This field is required.')
-        
-        # Validate that bank and cash accounts are different
+                self.add_error(field, 'This field is required.')
+
         bank_account = cleaned_data.get('default_bank_account')
         cash_account = cleaned_data.get('default_cash_account')
-        
         if bank_account and cash_account and bank_account == cash_account:
-            self.add_error('default_cash_account', 
-                'Cash account must be different from bank account. Use separate accounts for cash and bank.')
-        
-        # Validate account types (defensive check)
-        if bank_account and bank_account.account_type.account_type != 'ASSET':
-            self.add_error('default_bank_account', 'Must be an ASSET account.')
-        
-        if cash_account and cash_account.account_type.account_type != 'ASSET':
-            self.add_error('default_cash_account', 'Must be an ASSET account.')
-        
-        receivables = cleaned_data.get('student_receivables_account')
-        if receivables and receivables.account_type.account_type != 'ASSET':
-            self.add_error('student_receivables_account', 'Must be an ASSET account.')
-        
-        payable = cleaned_data.get('default_payable_account')
-        if payable and payable.account_type.account_type != 'LIABILITY':
-            self.add_error('default_payable_account', 'Must be a LIABILITY account.')
-        
-        equity = cleaned_data.get('default_equity_account')
-        if equity and equity.account_type.account_type != 'EQUITY':
-            self.add_error('default_equity_account', 'Must be an EQUITY account.')
-        
-        revenue = cleaned_data.get('default_revenue_account')
-        if revenue and revenue.account_type.account_type != 'REVENUE':
-            self.add_error('default_revenue_account', 'Must be a REVENUE account.')
-        
-        expense = cleaned_data.get('default_expense_account')
-        if expense and expense.account_type.account_type != 'EXPENSE':
-            self.add_error('default_expense_account', 'Must be an EXPENSE account.')
-        
-        scholarship = cleaned_data.get('scholarship_discount_account')
-        if scholarship and scholarship.account_type.account_type != 'EXPENSE':
-            self.add_error('scholarship_discount_account', 'Must be an EXPENSE account.')
-        
+            self.add_error(
+                'default_cash_account',
+                'Cash account must be different from bank account. '
+                'Use separate accounts for cash on hand and bank.',
+            )
+
+        # Account type validation (defensive — model clean() also checks these)
+        type_checks = [
+            ('default_bank_account',         'ASSET'),
+            ('default_cash_account',         'ASSET'),
+            ('student_receivables_account',  'ASSET'),
+            ('default_payable_account',      'LIABILITY'),
+            ('default_equity_account',       'EQUITY'),
+            ('default_revenue_account',      'REVENUE'),
+            ('default_expense_account',      'EXPENSE'),
+            ('scholarship_discount_account', 'EXPENSE'),
+        ]
+        for field_name, expected_type in type_checks:
+            account = cleaned_data.get(field_name)
+            if account and account.account_type.account_type != expected_type:
+                self.add_error(field_name, f'Must be a {expected_type} account.')
+
+        # Header account validation
+        all_mapped_fields = required_fields + [
+            'petty_cash_account', 'mobile_money_account',
+            'boarding_revenue_account', 'uniform_and_book_sales_account',
+            'salaries_account', 'utilities_account', 'boarding_expense_account',
+        ]
+        for field_name in all_mapped_fields:
+            account = cleaned_data.get(field_name)
+            if account and account.is_header:
+                self.add_error(
+                    field_name,
+                    f"'{account.name}' is a header account and cannot receive "
+                    "postings. Select a posting account.",
+                )
+
         return cleaned_data
 
+
 class RevenueAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for revenue account mappings"""
-    
     class Meta:
-        model = RevenueAccountMappings
+        model  = RevenueAccountMappings
         fields = [
             'uniform_sales_revenue_account',
             'textbook_sales_revenue_account',
@@ -1132,10 +1110,8 @@ class RevenueAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class PayrollAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for payroll account mappings"""
-    
     class Meta:
-        model = PayrollAccountMappings
+        model  = PayrollAccountMappings
         fields = [
             'salaries_expense_account',
             'wages_payable_account',
@@ -1156,10 +1132,8 @@ class PayrollAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class ExpenseAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for expense account mappings"""
-    
     class Meta:
-        model = ExpenseAccountMappings
+        model  = ExpenseAccountMappings
         fields = [
             'default_inventory_account',
             'default_cogs_account',
@@ -1173,10 +1147,15 @@ class ExpenseAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class SpecialAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for special account mappings"""
-    
+    """
+    Form for special account mappings.
+
+    Note: petty_cash_account is intentionally excluded — it belongs on
+    CoreAccountMappings, not SpecialAccountMappings.
+    """
+
     class Meta:
-        model = SpecialAccountMappings
+        model  = SpecialAccountMappings
         fields = [
             'default_student_deposit_account',
             'student_credit_balance_account',
@@ -1190,7 +1169,6 @@ class SpecialAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
             'default_currency_gain_account',
             'default_currency_loss_account',
             'withholding_tax_payable_account',
-            'petty_cash_account',
             'suspense_account',
             'bank_reconciliation_account',
             'staff_loan_receivable_account',
@@ -1209,145 +1187,115 @@ class SpecialAccountMappingsForm(BootstrapFormMixin, forms.ModelForm):
 class FiscalYearForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     """
     Form for creating/editing fiscal years.
-    Uses school timezone for date validations. ⭐
+    Uses school timezone for date validations.
     """
-    
+
     class Meta:
-        model = FiscalYear
+        model  = FiscalYear
         fields = [
             'name',
             'code',
             'start_date',
             'end_date',
-            'is_active',  # Remove 'status' - it's auto-calculated
+            'is_active',
             'description',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., 2024 or Academic Year 2024-2025'
+                'class':       'form-control',
+                'placeholder': 'e.g., 2024 or Academic Year 2024-2025',
             }),
             'code': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., FY2024 or AY2024-25'
+                'class':       'form-control',
+                'placeholder': 'e.g., FY2024 or AY2024-25',
             }),
-            'start_date': DatePickerInput(),
-            'end_date': DatePickerInput(),
+            'start_date':  DatePickerInput(),
+            'end_date':    DatePickerInput(),
             'description': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'form-control',
-                'placeholder': 'Optional description'
+                'rows':        3,
+                'class':       'form-control',
+                'placeholder': 'Optional description',
             }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Help text
         self.fields['is_active'].help_text = (
             'Only one fiscal year can be active at a time. '
             'Setting this will deactivate other fiscal years.'
         )
-    
+
     def clean_start_date(self):
-        """Validate start date using school timezone ⭐"""
         start_date = self.cleaned_data.get('start_date')
         if start_date:
             from core.utils import get_school_today
             from datetime import timedelta
-            
-            today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Allow fiscal years to be created up to 3 years in advance
-            max_future = today + timedelta(days=3*365)
+            today      = get_school_today()
+            max_future = today + timedelta(days=3 * 365)
             if start_date > max_future:
                 raise ValidationError(
                     "Start date cannot be more than 3 years in the future."
                 )
-        
         return start_date
-    
+
     def clean(self):
-        """Validate date range using school timezone ⭐"""
         cleaned_data = super().clean()
-        start_date = cleaned_data.get('start_date')
-        end_date = cleaned_data.get('end_date')
-        
+        start_date   = cleaned_data.get('start_date')
+        end_date     = cleaned_data.get('end_date')
+
         if start_date and end_date:
             if start_date >= end_date:
-                raise ValidationError({
-                    'end_date': 'End date must be after start date.'
-                })
-            
-            # Check duration is reasonable (at least 90 days, at most 400 days)
+                raise ValidationError({'end_date': 'End date must be after start date.'})
+
             duration = (end_date - start_date).days
             if duration < 90:
                 raise ValidationError(
-                    'Fiscal year duration seems too short (less than 90 days). Please verify dates.'
+                    'Fiscal year duration seems too short (less than 90 days). '
+                    'Please verify dates.'
                 )
             if duration > 400:
                 raise ValidationError(
-                    'Fiscal year duration seems too long (more than 400 days). Please verify dates.'
+                    'Fiscal year duration seems too long (more than 400 days). '
+                    'Please verify dates.'
                 )
-        
+
         return cleaned_data
 
 
 class FiscalYearFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered fiscal year filter form.
-    Uses school timezone for date validations. ⭐
-    """
-    
-    htmx_get = 'core:fiscal_year_search'
+    """HTMX-powered fiscal year filter form."""
+
+    htmx_get    = 'core:fiscal_year_search'
     htmx_target = '#fiscal-year-list'
     search_delay = 300
-    
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'}),
     )
-    
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + FiscalYear.STATUS_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Statuses")
+        widget=SelectWithDefault(default_label="All Statuses"),
     )
-    
     is_active = forms.NullBooleanField(
-        label='Active',
-        required=False,
+        label='Active', required=False,
         widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+            ('', 'All'), ('true', 'Active'), ('false', 'Inactive'),
+        ], attrs={'class': 'form-select'}),
     )
-    
     is_closed = forms.NullBooleanField(
-        label='Closed',
-        required=False,
+        label='Closed', required=False,
         widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Closed'),
-            ('false', 'Open')
-        ], attrs={'class': 'form-select'})
+            ('', 'All'), ('true', 'Closed'), ('false', 'Open'),
+        ], attrs={'class': 'form-select'}),
     )
-    
     start_date_from = forms.DateField(
-        label='Start Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Start Date From', required=False, widget=DatePickerInput(),
     )
-    
     start_date_to = forms.DateField(
-        label='Start Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Start Date To', required=False, widget=DatePickerInput(),
     )
 
 
@@ -1358,14 +1306,14 @@ class FiscalYearFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFor
 class FiscalPeriodForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     """
     Form for creating/editing fiscal periods.
-    Uses school timezone for date validations. ⭐
-    
-    Note: status, is_active, is_closed, is_locked are auto-calculated by the model
-    and should not be included in the form.
+    Uses school timezone for date validations.
+
+    Note: status, is_active, is_closed, is_locked are auto-calculated
+    by the model save() method and are not included in this form.
     """
-    
+
     class Meta:
-        model = FiscalPeriod
+        model  = FiscalPeriod
         fields = [
             'fiscal_year',
             'name',
@@ -1386,184 +1334,158 @@ class FiscalPeriodForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm)
             'notes',
         ]
         widgets = {
-            'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
+            'fiscal_year':  forms.Select(attrs={'class': 'form-select'}),
             'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., Term 1 2024 Fiscal Period'
+                'class':       'form-control',
+                'placeholder': 'e.g., Term 1 2024 Fiscal Period',
             }),
             'code': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., FP_2024_T1'
+                'class':       'form-control',
+                'placeholder': 'e.g., FP_2024_T1',
             }),
             'period_number': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.1',
-                'min': '0.1'
+                'class': 'form-control', 'step': '0.1', 'min': '0.1',
             }),
-            'period_type': forms.Select(attrs={'class': 'form-select'}),
-            'related_academic_session': forms.Select(attrs={
-                'class': 'form-select',
-            }),
-            'start_date': DatePickerInput(),
-            'end_date': DatePickerInput(),
+            'period_type':  forms.Select(attrs={'class': 'form-select'}),
+            'related_academic_session': forms.Select(attrs={'class': 'form-select'}),
+            'start_date':      DatePickerInput(),
+            'end_date':        DatePickerInput(),
             'auto_close_date': DatePickerInput(),
-            'grace_period_days': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '0'
-            }),
-            'description': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'form-control'
-            }),
+            'grace_period_days': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+            'description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
             'notes': forms.Textarea(attrs={
-                'rows': 2,
-                'class': 'form-control',
-                'placeholder': 'Internal notes for accounting team'
+                'rows':        2,
+                'class':       'form-control',
+                'placeholder': 'Internal notes for accounting team',
             }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # ⭐ DEBUG: Log instance state
-        logger.info(f"FiscalPeriodForm.__init__ - instance.pk = {self.instance.pk if self.instance else 'No instance'}")
-        logger.info(f"FiscalPeriodForm.__init__ - instance._state.adding = {self.instance._state.adding if self.instance else 'No instance'}")
-        
-        # Set academic session queryset
+
+        logger.info(
+            f"FiscalPeriodForm.__init__ — instance.pk = "
+            f"{self.instance.pk if self.instance else 'No instance'}, "
+            f"_state.adding = "
+            f"{self.instance._state.adding if self.instance else 'No instance'}"
+        )
+
         try:
             from academics.models import AcademicSession
-            self.fields['related_academic_session'].queryset = AcademicSession.objects.all().order_by('-start_date')
-            self.fields['related_academic_session'].required = False
-            self.fields['related_academic_session'].empty_label = "Select Academic Session (Optional)"
+            self.fields['related_academic_session'].queryset = (
+                AcademicSession.objects.all().order_by('-start_date')
+            )
+            self.fields['related_academic_session'].required    = False
+            self.fields['related_academic_session'].empty_label = (
+                "Select Academic Session (Optional)"
+            )
         except Exception as e:
             logger.error(f"Error setting academic session queryset: {e}")
-            self.fields['related_academic_session'].widget = forms.HiddenInput()
+            self.fields['related_academic_session'].widget   = forms.HiddenInput()
             self.fields['related_academic_session'].required = False
-        
-        # Help text
+
         self.fields['period_number'].help_text = (
-            'Sequential number within fiscal year. Use decimals (e.g., 1.5) '
-            'for break periods between regular periods.'
+            'Sequential number within fiscal year. '
+            'Use decimals (e.g., 1.5) for break periods between regular periods.'
         )
         self.fields['grace_period_days'].help_text = (
-            'Days beyond end_date when transactions are still accepted'
+            'Days beyond end_date when transactions are still accepted.'
         )
-        
-        # ⭐ FIX: Check if instance is saved to database, not just if it has a pk
-        # For UUID fields, pk is auto-generated even for unsaved instances
-        is_editing = self.instance and self.instance.pk and not self.instance._state.adding
-        
-        logger.info(f"FiscalPeriodForm.__init__ - is_editing = {is_editing}")
-        
-        if is_editing:  # Editing existing period
-            self.fields['fiscal_year'].disabled = True
+
+        # An instance is being edited only if it is saved to the database
+        is_editing = (
+            self.instance
+            and self.instance.pk
+            and not self.instance._state.adding
+        )
+
+        logger.info(f"FiscalPeriodForm.__init__ — is_editing = {is_editing}")
+
+        if is_editing:
+            self.fields['fiscal_year'].disabled  = True
             self.fields['fiscal_year'].help_text = (
-                'Cannot change fiscal year for existing period. '
-                'Create a new period if needed in a different fiscal year.'
+                'Cannot change fiscal year for an existing period. '
+                'Create a new period if a different fiscal year is needed.'
             )
-            logger.info("Fiscal year field set to DISABLED (editing)")
-        else:  # Creating new period
-            self.fields['fiscal_year'].disabled = False
-            self.fields['fiscal_year'].required = True
+        else:
+            self.fields['fiscal_year'].disabled  = False
+            self.fields['fiscal_year'].required  = True
             self.fields['fiscal_year'].help_text = (
                 'Select the fiscal year for this period.'
             )
-            logger.info("Fiscal year field set to ENABLED (creating)")
-            
-            # ⭐ If we have an initial fiscal_year value, log it
             if self.initial.get('fiscal_year'):
-                logger.info(f"Form initialized with fiscal_year: {self.initial['fiscal_year']}")
-    
+                logger.info(
+                    f"Form initialized with fiscal_year: {self.initial['fiscal_year']}"
+                )
+
     def clean_start_date(self):
-        """Validate start date using school timezone ⭐"""
         start_date = self.cleaned_data.get('start_date')
         if start_date:
             from core.utils import get_school_today
             from datetime import timedelta
-            
-            today = get_school_today()
-            
-            # Allow periods to be created up to 2 years in advance
-            max_future = today + timedelta(days=2*365)
+            today      = get_school_today()
+            max_future = today + timedelta(days=2 * 365)
             if start_date > max_future:
                 raise ValidationError(
                     "Start date cannot be more than 2 years in the future."
                 )
-        
         return start_date
-    
+
     def clean_period_number(self):
-        """Validate period number is unique within fiscal year"""
         period_number = self.cleaned_data.get('period_number')
-        fiscal_year = self.cleaned_data.get('fiscal_year')
-        
+        fiscal_year   = self.cleaned_data.get('fiscal_year')
+
         if period_number and fiscal_year:
             existing = FiscalPeriod.objects.filter(
                 fiscal_year=fiscal_year,
-                period_number=period_number
+                period_number=period_number,
             )
-            
             if self.instance.pk:
                 existing = existing.exclude(pk=self.instance.pk)
-            
             if existing.exists():
                 raise ValidationError(
-                    f'Period number {period_number} already exists in {fiscal_year.name}. '
-                    f'Use a different number or decimal (e.g., {float(period_number) + 0.5}).'
+                    f'Period number {period_number} already exists in '
+                    f'{fiscal_year.name}. Use a different number or decimal '
+                    f'(e.g., {float(period_number) + 0.5}).'
                 )
-        
+
         return period_number
-    
+
     def clean_code(self):
-        """Validate code is unique"""
         code = self.cleaned_data.get('code')
-        
         if code:
             existing = FiscalPeriod.objects.filter(code=code)
-            
             if self.instance.pk:
                 existing = existing.exclude(pk=self.instance.pk)
-            
             if existing.exists():
                 raise ValidationError(
                     f'Period code "{code}" already exists. Please use a unique code.'
                 )
-        
         return code
-    
+
     def clean(self):
-        """Validate fiscal period configuration using school timezone ⭐"""
-        cleaned_data = super().clean()
-        start_date = cleaned_data.get('start_date')
-        end_date = cleaned_data.get('end_date')
-        auto_close_date = cleaned_data.get('auto_close_date')
-        fiscal_year = cleaned_data.get('fiscal_year')
-        period_type = cleaned_data.get('period_type')
-        
-        # ⭐ FIX: If editing and fiscal_year is disabled, get it from instance
-        if not fiscal_year and self.instance.pk:
+        cleaned_data   = super().clean()
+        start_date     = cleaned_data.get('start_date')
+        end_date       = cleaned_data.get('end_date')
+        auto_close_date= cleaned_data.get('auto_close_date')
+        fiscal_year    = cleaned_data.get('fiscal_year')
+
+        # When editing, fiscal_year field is disabled so Django excludes it from
+        # cleaned_data. Restore it from the instance.
+        if not fiscal_year and self.instance and self.instance.pk:
             try:
-                # Use fiscal_year_id to avoid RelatedObjectDoesNotExist
                 if self.instance.fiscal_year_id:
                     fiscal_year = FiscalYear.objects.get(pk=self.instance.fiscal_year_id)
                     cleaned_data['fiscal_year'] = fiscal_year
             except (FiscalYear.DoesNotExist, AttributeError):
                 pass
-        
-        # Validate date range
+
         if start_date and end_date:
             if start_date >= end_date:
-                raise ValidationError({
-                    'end_date': 'End date must be after start date.'
-                })
-            
-            duration = (end_date - start_date).days
-            if duration < 1:
-                raise ValidationError(
-                    'Period must be at least 1 day long.'
-                )
-        
-        # Validate fiscal year dates
+                raise ValidationError({'end_date': 'End date must be after start date.'})
+            if (end_date - start_date).days < 1:
+                raise ValidationError('Period must be at least 1 day long.')
+
         if fiscal_year and start_date and end_date:
             if start_date < fiscal_year.start_date:
                 raise ValidationError({
@@ -1579,130 +1501,95 @@ class FiscalPeriodForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm)
                         f'({fiscal_year.end_date.strftime("%b %d, %Y")})'
                     )
                 })
-            
-            # Check for overlapping periods
-            if start_date and end_date:
-                overlapping = FiscalPeriod.objects.filter(
-                    fiscal_year=fiscal_year,
-                    start_date__lt=end_date,
-                    end_date__gt=start_date
-                )
-                
-                if self.instance.pk:
-                    overlapping = overlapping.exclude(pk=self.instance.pk)
-                
-                if overlapping.exists():
-                    overlapping_names = ', '.join([p.name for p in overlapping[:3]])
-                    if overlapping.count() > 3:
-                        overlapping_names += f' and {overlapping.count() - 3} more'
-                    
-                    raise ValidationError({
-                        'start_date': (
-                            f'This period overlaps with existing period(s): {overlapping_names}. '
-                            f'Please adjust the dates.'
-                        )
-                    })
-        
-        # Validate auto close date
-        if auto_close_date:
-            if start_date and auto_close_date < start_date:
+
+            overlapping = FiscalPeriod.objects.filter(
+                fiscal_year=fiscal_year,
+                start_date__lt=end_date,
+                end_date__gt=start_date,
+            )
+            if self.instance.pk:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            if overlapping.exists():
+                overlap_names = ', '.join([p.name for p in overlapping[:3]])
+                if overlapping.count() > 3:
+                    overlap_names += f' and {overlapping.count() - 3} more'
                 raise ValidationError({
-                    'auto_close_date': 'Auto close date cannot be before start date.'
+                    'start_date': (
+                        f'This period overlaps with existing period(s): '
+                        f'{overlap_names}. Please adjust the dates.'
+                    )
                 })
-        
+
+        if auto_close_date and start_date and auto_close_date < start_date:
+            raise ValidationError({
+                'auto_close_date': 'Auto close date cannot be before start date.'
+            })
+
         return cleaned_data
-    
+
     def save(self, commit=True):
-        """Save the fiscal period."""
         instance = super().save(commit=False)
-        
-        # ⭐ FIX: Ensure fiscal_year is set from cleaned_data
         if 'fiscal_year' in self.cleaned_data:
             instance.fiscal_year = self.cleaned_data['fiscal_year']
-        
         if commit:
             instance.save()
-        
         return instance
 
 
-class FiscalPeriodFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    HTMX-powered fiscal period filter form.
-    Uses school timezone for date validations. ⭐
-    """
-    
-    htmx_get = 'core:fiscal_period_search'
+class FiscalPeriodFilterForm(
+    HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form
+):
+    """HTMX-powered fiscal period filter form."""
+
+    htmx_get    = 'core:fiscal_period_search'
     htmx_target = '#fiscal-period-list'
     search_delay = 300
-    
+
     q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code...'
-        })
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'}),
     )
-    
     fiscal_year = forms.ModelChoiceField(
-        label='Fiscal Year',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Fiscal Years")
+        label='Fiscal Year', queryset=None, required=False,
+        widget=SelectWithDefault(default_label="All Fiscal Years"),
     )
-    
     period_type = forms.ChoiceField(
         label='Period Type',
         choices=[('', 'All Types')] + FiscalPeriod.PERIOD_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=SelectWithDefault(default_label="All Types"),
     )
-    
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + FiscalPeriod.STATUS_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Statuses")
+        widget=SelectWithDefault(default_label="All Statuses"),
     )
-    
     is_active = forms.NullBooleanField(
-        label='Active',
-        required=False,
+        label='Active', required=False,
         widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+            ('', 'All'), ('true', 'Active'), ('false', 'Inactive'),
+        ], attrs={'class': 'form-select'}),
     )
-    
     is_closed = forms.NullBooleanField(
-        label='Closed',
-        required=False,
+        label='Closed', required=False,
         widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Closed'),
-            ('false', 'Open')
-        ], attrs={'class': 'form-select'})
+            ('', 'All'), ('true', 'Closed'), ('false', 'Open'),
+        ], attrs={'class': 'form-select'}),
     )
-    
     start_date_from = forms.DateField(
-        label='Start Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Start Date From', required=False, widget=DatePickerInput(),
     )
-    
     start_date_to = forms.DateField(
-        label='Start Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Start Date To', required=False, widget=DatePickerInput(),
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set fiscal year queryset
         try:
-            self.fields['fiscal_year'].queryset = FiscalYear.objects.all().order_by('-start_date')
+            self.fields['fiscal_year'].queryset = (
+                FiscalYear.objects.all().order_by('-start_date')
+            )
         except Exception as e:
             logger.error(f"Error setting fiscal year queryset: {e}")
 
@@ -1712,169 +1599,135 @@ class FiscalPeriodFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapF
 # =============================================================================
 
 class PaymentMethodForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing payment methods"""
-    
+    """Form for creating/editing payment methods."""
+
     class Meta:
-        model = PaymentMethod
+        model  = PaymentMethod
         fields = [
-            'name',
-            'code',
-            'method_type',
-            'mobile_money_provider',
-            'bank_name',
-            'bank_account_number',
-            'bank_branch',
-            'swift_code',
-            'is_active',
-            'is_default',
-            'requires_approval',
-            'minimum_amount',
-            'maximum_amount',
-            'has_transaction_fee',
-            'transaction_fee_type',
-            'transaction_fee_amount',
-            'fee_bearer',
-            'processing_time',
-            'requires_reference',
-            'icon',
-            'color_code',
-            'display_order',
-            'instructions',
-            'notes',
+            'name', 'code', 'method_type', 'mobile_money_provider',
+            'bank_name', 'bank_account_number', 'bank_branch', 'swift_code',
+            'is_active', 'is_default', 'requires_approval',
+            'minimum_amount', 'maximum_amount',
+            'has_transaction_fee', 'transaction_fee_type', 'transaction_fee_amount',
+            'fee_bearer', 'processing_time', 'requires_reference',
+            'icon', 'color_code', 'display_order', 'instructions', 'notes',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'e.g., Cash, MTN Mobile Money'
+                'placeholder': 'e.g., Cash, MTN Mobile Money',
             }),
             'code': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., CASH, MTN_MM'
+                'class': 'form-control', 'placeholder': 'e.g., CASH, MTN_MM',
             }),
-            'method_type': forms.Select(attrs={'class': 'form-select'}),
+            'method_type':           forms.Select(attrs={'class': 'form-select'}),
             'mobile_money_provider': forms.Select(attrs={'class': 'form-select'}),
-            'bank_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'bank_account_number': forms.TextInput(attrs={'class': 'form-control'}),
-            'bank_branch': forms.TextInput(attrs={'class': 'form-control'}),
-            'swift_code': forms.TextInput(attrs={'class': 'form-control'}),
-            'minimum_amount': MoneyInput(),
-            'maximum_amount': MoneyInput(),
-            'transaction_fee_type': forms.Select(attrs={'class': 'form-select'}),
+            'bank_name':             forms.TextInput(attrs={'class': 'form-control'}),
+            'bank_account_number':   forms.TextInput(attrs={'class': 'form-control'}),
+            'bank_branch':           forms.TextInput(attrs={'class': 'form-control'}),
+            'swift_code':            forms.TextInput(attrs={'class': 'form-control'}),
+            'minimum_amount':        MoneyInput(),
+            'maximum_amount':        MoneyInput(),
+            'transaction_fee_type':  forms.Select(attrs={'class': 'form-select'}),
             'transaction_fee_amount': MoneyInput(),
-            'fee_bearer': forms.Select(attrs={'class': 'form-select'}),
+            'fee_bearer':            forms.Select(attrs={'class': 'form-select'}),
             'processing_time': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'e.g., Instant, 1-2 business days'
+                'placeholder': 'e.g., Instant, 1-2 business days',
             }),
             'icon': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'e.g., fa-money-bill, fa-mobile-alt'
+                'placeholder': 'e.g., fa-money-bill, fa-mobile-alt',
             }),
             'color_code': forms.TextInput(attrs={
-                'type': 'color',
-                'class': 'form-control form-control-color'
+                'type': 'color', 'class': 'form-control form-control-color',
             }),
-            'display_order': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '0'
-            }),
+            'display_order': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
             'instructions': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'form-control',
-                'placeholder': 'Payment instructions for users'
+                'rows': 3, 'class': 'form-control',
+                'placeholder': 'Payment instructions for users',
             }),
             'notes': forms.Textarea(attrs={
-                'rows': 2,
-                'class': 'form-control',
-                'placeholder': 'Internal notes'
+                'rows': 2, 'class': 'form-control', 'placeholder': 'Internal notes',
             }),
         }
-    
+        
     def clean_code(self):
-        """Normalize code to uppercase"""
-        code = self.cleaned_data.get('code')
-        if code:
-            return code.upper().replace(' ', '_')
-        return code
-    
+            code = self.cleaned_data.get('code')
+            if code:
+                return code.upper().replace(' ', '_')
+            return code
+
     def clean(self):
-        """Validate payment method configuration"""
-        cleaned_data = super().clean()
-        
-        method_type = cleaned_data.get('method_type')
-        min_amount = cleaned_data.get('minimum_amount')
-        max_amount = cleaned_data.get('maximum_amount')
-        has_fee = cleaned_data.get('has_transaction_fee')
-        fee_type = cleaned_data.get('transaction_fee_type')
-        fee_amount = cleaned_data.get('transaction_fee_amount')
-        
-        # Validate mobile money provider
+        cleaned_data   = super().clean()
+        method_type    = cleaned_data.get('method_type')
+        min_amount     = cleaned_data.get('minimum_amount')
+        max_amount     = cleaned_data.get('maximum_amount')
+        has_fee        = cleaned_data.get('has_transaction_fee')
+        fee_type       = cleaned_data.get('transaction_fee_type')
+        fee_amount     = cleaned_data.get('transaction_fee_amount')
+
         if method_type == 'MOBILE_MONEY' and not cleaned_data.get('mobile_money_provider'):
             raise ValidationError({
-                'mobile_money_provider': 'Mobile money provider is required for mobile money payment methods.'
+                'mobile_money_provider': (
+                    'Mobile money provider is required for mobile money payment methods.'
+                )
             })
-        
-        # Validate amount range
-        if min_amount and max_amount:
-            if min_amount >= max_amount:
-                raise ValidationError({
-                    'maximum_amount': 'Maximum amount must be greater than minimum amount.'
-                })
-        
-        # Validate transaction fees
+
+        if min_amount and max_amount and min_amount >= max_amount:
+            raise ValidationError({
+                'maximum_amount': 'Maximum amount must be greater than minimum amount.'
+            })
+
         if has_fee:
             if not fee_type:
                 raise ValidationError({
-                    'transaction_fee_type': 'Fee type is required when transaction fees are enabled.'
+                    'transaction_fee_type': (
+                        'Fee type is required when transaction fees are enabled.'
+                    )
                 })
             if not fee_amount:
                 raise ValidationError({
-                    'transaction_fee_amount': 'Fee amount is required when transaction fees are enabled.'
+                    'transaction_fee_amount': (
+                        'Fee amount is required when transaction fees are enabled.'
+                    )
                 })
-        
+
         return cleaned_data
 
 
-class PaymentMethodFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """HTMX-powered payment method filter form"""
-    
-    htmx_get = 'core:payment_method_search'
-    htmx_target = '#payment-method-list'
-    search_delay = 300
-    
+class PaymentMethodFilterForm(BootstrapFormMixin, forms.Form):
+    """
+    Payment method filter form.
+    Uses plain GET submission — no HTMX dependency.
+    """
+
     q = forms.CharField(
         label='Search',
         required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, code...'
-        })
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'}),
     )
-    
     method_type = forms.ChoiceField(
         label='Method Type',
         choices=[('', 'All Types')] + PaymentMethod.METHOD_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=SelectWithDefault(default_label="All Types"),
     )
-    
     is_active = forms.NullBooleanField(
         label='Active',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
     )
-    
     has_transaction_fee = forms.NullBooleanField(
         label='Has Transaction Fee',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Yes'),
-            ('false', 'No')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Yes'), ('false', 'No')],
+            attrs={'class': 'form-select'},
+        ),
     )
 
 
@@ -1885,11 +1738,11 @@ class PaymentMethodFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.For
 class TaxRateForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     """
     Form for creating/editing tax rates.
-    Uses school timezone for date validations. ⭐
+    Uses school timezone for date validations.
     """
-    
+
     class Meta:
-        model = TaxRate
+        model  = TaxRate
         fields = [
             'name',
             'tax_type',
@@ -1904,108 +1757,91 @@ class TaxRateForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         ]
         widgets = {
             'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., VAT 18%'
+                'class':       'form-control',
+                'placeholder': 'e.g., VAT 18%',
             }),
-            'tax_type': forms.Select(attrs={'class': 'form-select'}),
-            'rate': PercentageInput(),
-            'effective_from': DatePickerInput(),
-            'effective_to': DatePickerInput(),
-            'description': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'form-control'
-            }),
+            'tax_type':        forms.Select(attrs={'class': 'form-select'}),
+            'rate':            PercentageInput(),
+            'effective_from':  DatePickerInput(),
+            'effective_to':    DatePickerInput(),
+            'description':     forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
             'legal_reference': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., VAT Act 2013'
+                'class':       'form-control',
+                'placeholder': 'e.g., VAT Act 2013',
             }),
         }
-    
+
     def clean_rate(self):
-        """Validate tax rate percentage"""
         rate = self.cleaned_data.get('rate')
         if rate is not None:
             validate_percentage(rate)
         return rate
-    
+
     def clean_effective_from(self):
-        """Validate effective from date using school timezone ⭐"""
-        date = self.cleaned_data.get('effective_from')
-        if date:
+        """Validate effective from date using school timezone."""
+        effective_from = self.cleaned_data.get('effective_from')
+        if effective_from:
             from core.utils import get_school_today
             from datetime import timedelta
-            
-            today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Allow tax rates to be created up to 2 years in advance
-            max_future = today + timedelta(days=2*365)
-            if date > max_future:
+            today      = get_school_today()
+            max_future = today + timedelta(days=2 * 365)
+            if effective_from > max_future:
                 raise ValidationError(
                     "Effective from date cannot be more than 2 years in the future."
                 )
-        
-        return date
-    
+        return effective_from
+
     def clean(self):
-        """Validate date range using school timezone ⭐"""
-        cleaned_data = super().clean()
+        """Validate date range using school timezone."""
+        cleaned_data   = super().clean()
         effective_from = cleaned_data.get('effective_from')
-        effective_to = cleaned_data.get('effective_to')
-        
+        effective_to   = cleaned_data.get('effective_to')
+
         if effective_from and effective_to:
             if effective_to <= effective_from:
                 raise ValidationError({
-                    'effective_to': 'Effective to date must be after effective from date.'
+                    'effective_to': (
+                        'Effective to date must be after effective from date.'
+                    )
                 })
-        
+
         return cleaned_data
 
 
-class TaxRateFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMixin, forms.Form):
+class TaxRateFilterForm(BootstrapFormMixin, DateRangeFormMixin, forms.Form):
     """
-    HTMX-powered tax rate filter form.
-    Uses school timezone for date validations. ⭐
+    Tax rate filter form.
+    Uses plain GET submission — no HTMX dependency.
     """
-    
-    htmx_get = 'core:tax_rate_search'
-    htmx_target = '#tax-rate-list'
-    search_delay = 300
-    
+
     q = forms.CharField(
         label='Search',
         required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name...'
-        })
+        widget=SearchInput(attrs={'placeholder': 'Search by name...'}),
     )
-    
     tax_type = forms.ChoiceField(
         label='Tax Type',
         choices=[('', 'All Types')] + TaxRate.TAX_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=SelectWithDefault(default_label="All Types"),
     )
-    
     is_active = forms.NullBooleanField(
         label='Active',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
     )
-    
     effective_from = forms.DateField(
         label='Effective From',
         required=False,
-        widget=DatePickerInput()
+        widget=DatePickerInput(),
     )
-    
     effective_to = forms.DateField(
         label='Effective To',
         required=False,
-        widget=DatePickerInput()
+        widget=DatePickerInput(),
     )
 
 
@@ -2013,11 +1849,16 @@ class TaxRateFilterForm(HTMXFilterFormMixin, DateRangeFormMixin, BootstrapFormMi
 # UNIT OF MEASURE FORMS
 # =============================================================================
 
-class UnitOfMeasureForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
-    """Form for creating/editing units of measure"""
-    
+class UnitOfMeasureForm(WarningsMixin, BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
+    """
+    Form for creating/editing units of measure.
+
+    Uses WarningsMixin to surface non-blocking advisory messages
+    (e.g. suspicious conversion factor) without preventing save.
+    """
+
     class Meta:
-        model = UnitOfMeasure
+        model  = UnitOfMeasure
         fields = [
             'name',
             'abbreviation',
@@ -2030,142 +1871,696 @@ class UnitOfMeasureForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm
         ]
         widgets = {
             'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., Meter, Kilogram'
+                'class':       'form-control',
+                'placeholder': 'e.g., Meter, Kilogram',
             }),
             'abbreviation': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., m, kg'
+                'class':       'form-control',
+                'placeholder': 'e.g., m, kg',
             }),
             'symbol': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., m, kg (optional)'
+                'class':       'form-control',
+                'placeholder': 'e.g., m, kg (optional)',
             }),
             'uom_type': forms.Select(attrs={'class': 'form-select'}),
             'base_unit': forms.Select(attrs={
-                'class': 'form-select',
-                'data-placeholder': 'Select Base Unit (Optional)'
+                'class':            'form-select',
+                'data-placeholder': 'Select Base Unit (Optional)',
             }),
             'conversion_factor': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.000001',
-                'min': '0.000001',
-                'placeholder': '1.0'
+                'class':       'form-control',
+                'step':        '0.000001',
+                'min':         '0.000001',
+                'placeholder': '1.0',
             }),
-            'description': forms.Textarea(attrs={
-                'rows': 3,
-                'class': 'form-control'
-            }),
+            'description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Filter base unit to exclude self and show only same type
+
+        # Filter base_unit to same UOM type, excluding self to prevent circular refs
         if self.instance.pk:
             self.fields['base_unit'].queryset = UnitOfMeasure.objects.filter(
                 uom_type=self.instance.uom_type,
-                is_active=True
+                is_active=True,
             ).exclude(pk=self.instance.pk)
-        
-        # Help text
+        else:
+            self.fields['base_unit'].queryset = UnitOfMeasure.objects.filter(
+                is_active=True,
+            )
+
         self.fields['conversion_factor'].help_text = (
             'Multiply by this factor to convert to the base unit. '
-            'Example: For centimeters to meters, factor is 0.01'
+            'Example: for centimetres to metres, factor is 0.01.'
         )
         self.fields['base_unit'].help_text = (
-            'Leave blank if this is a base unit. Otherwise, select the base unit this derives from.'
+            'Leave blank if this is a base unit. '
+            'Otherwise, select the base unit this derives from.'
         )
-    
+
     def clean_conversion_factor(self):
-        """Validate conversion factor is positive"""
         factor = self.cleaned_data.get('conversion_factor')
         if factor is not None and factor <= 0:
             raise ValidationError('Conversion factor must be greater than zero.')
         return factor
-    
+
     def clean(self):
-        """Validate unit configuration"""
-        cleaned_data = super().clean()
-        
-        base_unit = cleaned_data.get('base_unit')
-        conversion_factor = cleaned_data.get('conversion_factor')
-        
-        # If base unit is set, conversion factor must not be 1
+        cleaned_data       = super().clean()
+        base_unit          = cleaned_data.get('base_unit')
+        conversion_factor  = cleaned_data.get('conversion_factor')
+
+        # Advisory warnings — do not block save
         if base_unit and conversion_factor == 1:
             self.add_warning(
                 'conversion_factor',
-                'Conversion factor of 1.0 suggests this should be a base unit.'
+                'A conversion factor of 1.0 with a base unit set suggests '
+                'this might should be a base unit itself.',
             )
-        
-        # If no base unit, conversion factor should be 1
-        if not base_unit and conversion_factor != 1:
+
+        if not base_unit and conversion_factor and conversion_factor != 1:
             self.add_warning(
                 'conversion_factor',
-                'Base units typically have a conversion factor of 1.0'
+                'Base units typically have a conversion factor of 1.0. '
+                'Did you mean to select a base unit?',
             )
-        
+
         return cleaned_data
 
 
-class UnitOfMeasureFilterForm(HTMXFilterFormMixin, BootstrapFormMixin, forms.Form):
-    """HTMX-powered unit of measure filter form"""
-    
-    htmx_get = 'core:unit_of_measure_search'
-    htmx_target = '#unit-list'
-    search_delay = 300
-    
+class UnitOfMeasureFilterForm(BootstrapFormMixin, forms.Form):
+    """
+    Unit of measure filter form.
+    Uses plain GET submission — no HTMX dependency.
+    """
+
     q = forms.CharField(
         label='Search',
         required=False,
-        widget=SearchInput(attrs={
-            'placeholder': 'Search by name, abbreviation...'
-        })
+        widget=SearchInput(attrs={'placeholder': 'Search by name, abbreviation...'}),
     )
-    
     uom_type = forms.ChoiceField(
         label='Unit Type',
         choices=[('', 'All Types')] + UnitOfMeasure.UOM_TYPE_CHOICES,
         required=False,
-        widget=SelectWithDefault(default_label="All Types")
+        widget=SelectWithDefault(default_label="All Types"),
     )
-    
     is_active = forms.NullBooleanField(
         label='Active',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
     )
-    
     has_base_unit = forms.NullBooleanField(
         label='Has Base Unit',
         required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Derived Units'),
-            ('false', 'Base Units')
-        ], attrs={'class': 'form-select'})
+        widget=forms.Select(
+            choices=[
+                ('', 'All'),
+                ('true',  'Derived Units'),
+                ('false', 'Base Units'),
+            ],
+            attrs={'class': 'form-select'},
+        ),
     )
 
 
 # =============================================================================
-# HELPER FUNCTIONS
+# FISCAL YEAR FILTER FORM (no HTMX)
 # =============================================================================
 
-def add_warning(form, field_name, message):
-    """Add a warning message to a form field (non-blocking)"""
-    if not hasattr(form, '_warnings'):
-        form._warnings = {}
-    
-    if field_name not in form._warnings:
-        form._warnings[field_name] = []
-    
-    form._warnings[field_name].append(message)
+class FiscalYearFilterForm(BootstrapFormMixin, DateRangeFormMixin, forms.Form):
+    """
+    Fiscal year filter form.
+    Uses plain GET submission — no HTMX dependency.
+    """
+
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'}),
+    )
+    status = forms.ChoiceField(
+        label='Status',
+        choices=[('', 'All Statuses')] + FiscalYear.STATUS_CHOICES,
+        required=False,
+        widget=SelectWithDefault(default_label="All Statuses"),
+    )
+    is_active = forms.NullBooleanField(
+        label='Active',
+        required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
+    )
+    is_closed = forms.NullBooleanField(
+        label='Closed',
+        required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Closed'), ('false', 'Open')],
+            attrs={'class': 'form-select'},
+        ),
+    )
+    start_date_from = forms.DateField(
+        label='Start Date From',
+        required=False,
+        widget=DatePickerInput(),
+    )
+    start_date_to = forms.DateField(
+        label='Start Date To',
+        required=False,
+        widget=DatePickerInput(),
+    )
 
 
-# Monkey patch to add warnings capability to forms
-forms.Form.add_warning = add_warning
-forms.ModelForm.add_warning = add_warning
+# =============================================================================
+# FISCAL PERIOD FILTER FORM (no HTMX)
+# =============================================================================
+
+class FiscalPeriodFilterForm(BootstrapFormMixin, DateRangeFormMixin, forms.Form):
+    """
+    Fiscal period filter form.
+    Uses plain GET submission — no HTMX dependency.
+    """
+
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'}),
+    )
+    fiscal_year = forms.ModelChoiceField(
+        label='Fiscal Year',
+        queryset=None,
+        required=False,
+        widget=SelectWithDefault(default_label="All Fiscal Years"),
+    )
+    period_type = forms.ChoiceField(
+        label='Period Type',
+        choices=[('', 'All Types')] + FiscalPeriod.PERIOD_TYPE_CHOICES,
+        required=False,
+        widget=SelectWithDefault(default_label="All Types"),
+    )
+    status = forms.ChoiceField(
+        label='Status',
+        choices=[('', 'All Statuses')] + FiscalPeriod.STATUS_CHOICES,
+        required=False,
+        widget=SelectWithDefault(default_label="All Statuses"),
+    )
+    is_active = forms.NullBooleanField(
+        label='Active',
+        required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
+    )
+    is_closed = forms.NullBooleanField(
+        label='Closed',
+        required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Closed'), ('false', 'Open')],
+            attrs={'class': 'form-select'},
+        ),
+    )
+    start_date_from = forms.DateField(
+        label='Start Date From',
+        required=False,
+        widget=DatePickerInput(),
+    )
+    start_date_to = forms.DateField(
+        label='Start Date To',
+        required=False,
+        widget=DatePickerInput(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            self.fields['fiscal_year'].queryset = (
+                FiscalYear.objects.all().order_by('-start_date')
+            )
+        except Exception as e:
+            logger.error(f"Error setting fiscal year queryset: {e}")
+
+
+# =============================================================================
+# EXCHANGE RATE FORMS
+# =============================================================================
+
+class ExchangeRateForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
+    """
+    Bursar enters today's exchange rate from the bank.
+
+    KEY BEHAVIOURS:
+    - source is always forced to 'MANUAL' — not exposed in the form.
+    - Saving this form automatically creates/updates the inverse rate too
+      (to → from direction) so the bursar only needs to type one direction.
+    - MANUAL rates take priority over auto-fetched rates in ExchangeRate.get_rate().
+      This means the bursar can always override a fetched rate.
+
+    IMPORTANT: This form only records a *suggested* rate for cashier pre-fill.
+    The rate stored on Payment.exchange_rate / FeeInvoice.exchange_rate /
+    UniformSale.exchange_rate is the legal record and is never recalculated
+    from this table after the transaction is saved.
+    """
+
+    class Meta:
+        model  = ExchangeRate
+        fields = ['from_currency', 'to_currency', 'rate', 'date', 'notes']
+        widgets = {
+            'rate': forms.NumberInput(attrs={
+                'class':       'form-control',
+                'step':        '0.000001',
+                'placeholder': 'e.g. 1315.000000',
+            }),
+            'date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type':  'date',
+            }),
+            'notes': forms.TextInput(attrs={
+                'class':       'form-control',
+                'placeholder': 'e.g. Bank of Uganda official closing rate',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Currency dropdowns — populated from FinancialSettings.get_currency_choices()
+        # which now exists as a classmethod on the model.
+        currency_choices = [('', '--- Select ---')] + FinancialSettings.get_currency_choices()
+
+        self.fields['from_currency'] = forms.ChoiceField(
+            label='From Currency',
+            choices=currency_choices,
+            widget=forms.Select(attrs={'class': 'form-select select2'}),
+        )
+        self.fields['to_currency'] = forms.ChoiceField(
+            label='To Currency',
+            choices=currency_choices,
+            widget=forms.Select(attrs={'class': 'form-select select2'}),
+        )
+
+        # Default date to today in school timezone
+        from core.utils import get_school_today
+        if not self.initial.get('date') and not self.data.get('date'):
+            self.fields['date'].initial = get_school_today()
+
+        # Pre-fill to_currency with the school's primary currency
+        try:
+            school_currency = FinancialSettings.get_school_currency()
+            if not self.initial.get('to_currency') and not self.data.get('to_currency'):
+                self.fields['to_currency'].initial = school_currency
+        except Exception:
+            pass
+
+        self.fields['from_currency'].help_text = (
+            "The currency you are converting FROM (e.g. USD)."
+        )
+        self.fields['to_currency'].help_text = (
+            "The currency you are converting TO (e.g. UGX). "
+            "The inverse rate is saved automatically so you only need to enter one direction."
+        )
+        self.fields['rate'].help_text = (
+            "How many units of 'To Currency' equal one unit of 'From Currency'. "
+            "Example: if 1 USD = 3,850 SSD, enter 3850."
+        )
+        self.fields['notes'].required = False
+
+    # -------------------------------------------------------------------------
+    # VALIDATION
+    # -------------------------------------------------------------------------
+
+    def clean_from_currency(self):
+        code = self.cleaned_data.get('from_currency', '').upper().strip()
+        if not code:
+            raise ValidationError("Please select a currency.")
+        if len(code) != 3:
+            raise ValidationError("Currency code must be 3 characters (ISO 4217).")
+        return code
+
+    def clean_to_currency(self):
+        code = self.cleaned_data.get('to_currency', '').upper().strip()
+        if not code:
+            raise ValidationError("Please select a currency.")
+        if len(code) != 3:
+            raise ValidationError("Currency code must be 3 characters (ISO 4217).")
+        return code
+
+    def clean_rate(self):
+        rate = self.cleaned_data.get('rate')
+        if rate is None:
+            raise ValidationError("Rate is required.")
+        if rate <= 0:
+            raise ValidationError("Rate must be greater than zero.")
+        return rate
+
+    def clean(self):
+        cleaned_data  = super().clean()
+        from_currency = cleaned_data.get('from_currency')
+        to_currency   = cleaned_data.get('to_currency')
+
+        if from_currency and to_currency and from_currency == to_currency:
+            raise ValidationError(
+                "'From Currency' and 'To Currency' cannot be the same."
+            )
+
+        return cleaned_data
+
+    # -------------------------------------------------------------------------
+    # SAVE — writes the entered rate AND the inverse
+    # -------------------------------------------------------------------------
+
+    def save(self, commit=True):
+        """
+        Save the entered rate with source='MANUAL' and is_active=True,
+        then automatically create/update the inverse rate (to → from).
+
+        Bursar only needs to enter one direction.
+        """
+        instance           = super().save(commit=False)
+        instance.source    = 'MANUAL'
+        instance.is_active = True
+
+        if commit:
+            instance.save()
+            self._save_inverse(instance)
+
+        return instance
+
+    def _save_inverse(self, instance):
+        """
+        Create or update the inverse exchange rate (to → from).
+
+        Uses update_or_create so multiple saves on the same day do not
+        create duplicate records.
+        """
+        try:
+            inverse_rate = (
+                Decimal('1') / instance.rate
+            ).quantize(Decimal('0.000001'))
+
+            ExchangeRate.objects.update_or_create(
+                from_currency=instance.to_currency,
+                to_currency=instance.from_currency,
+                date=instance.date,
+                source='MANUAL (inverse)',
+                defaults={
+                    'rate':      inverse_rate,
+                    'is_active': True,
+                    'notes': (
+                        f"Auto-computed inverse of: "
+                        f"1 {instance.from_currency} = {instance.rate} "
+                        f"{instance.to_currency} ({instance.date})"
+                    ),
+                },
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to save inverse rate for {instance}: {e}",
+                exc_info=True,
+            )
+
+
+class ExchangeRateFilterForm(BootstrapFormMixin, forms.Form):
+    """
+    Exchange rate filter form.
+    Uses plain GET submission — no HTMX dependency.
+    """
+
+    q = forms.CharField(
+        label='Search',
+        required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by currency code, notes...'}),
+    )
+    from_currency = forms.ChoiceField(
+        label='From Currency',
+        choices=[],
+        required=False,
+        widget=SelectWithDefault(default_label="All Currencies"),
+    )
+    to_currency = forms.ChoiceField(
+        label='To Currency',
+        choices=[],
+        required=False,
+        widget=SelectWithDefault(default_label="All Currencies"),
+    )
+    source = forms.ChoiceField(
+        label='Source',
+        choices=[
+            ('',              'All Sources'),
+            ('MANUAL',        'Manual'),
+            ('MANUAL (inverse)', 'Manual (Inverse)'),
+        ],
+        required=False,
+        widget=SelectWithDefault(default_label="All Sources"),
+    )
+    is_active = forms.NullBooleanField(
+        label='Active',
+        required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+            attrs={'class': 'form-select'},
+        ),
+    )
+    date_from = forms.DateField(
+        label='Date From',
+        required=False,
+        widget=DatePickerInput(),
+    )
+    date_to = forms.DateField(
+        label='Date To',
+        required=False,
+        widget=DatePickerInput(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Populate currency choices from FinancialSettings
+        try:
+            currency_choices = (
+                [('', 'All Currencies')]
+                + FinancialSettings.get_currency_choices()
+            )
+            self.fields['from_currency'].choices = currency_choices
+            self.fields['to_currency'].choices   = currency_choices
+        except Exception as e:
+            logger.error(f"Error loading currency choices for filter form: {e}")
+
+
+# =============================================================================
+# PAYMENT CURRENCY MIXIN
+# =============================================================================
+
+class PaymentCurrencyMixin:
+    """
+    Mixin for PaymentForm — adds currency and exchange_rate field handling.
+
+    Attach to any ModelForm whose model has:
+        currency                  — CharField (ISO 4217 or blank for school currency)
+        exchange_rate             — DecimalField (rate to school currency)
+        amount_in_school_currency — DecimalField (calculated: amount × exchange_rate)
+
+    Usage:
+        class PaymentForm(PaymentCurrencyMixin, BootstrapFormMixin, forms.ModelForm):
+            class Meta:
+                model  = Payment
+                fields = [..., 'currency', 'exchange_rate', 'amount_in_school_currency']
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.setup_currency_fields()
+
+    The mixin:
+      1. Populates the currency selector with ISO 4217 choices.
+      2. Pre-fills exchange_rate from ExchangeRate.get_rate() for today
+         if a foreign currency is already selected.
+      3. Calculates amount_in_school_currency in clean().
+      4. Validates that exchange_rate > 0 when a foreign currency is chosen.
+    """
+
+    def setup_currency_fields(self):
+        """
+        Call from the host form's __init__ after super().__init__().
+        Configures currency/rate/school-currency fields.
+        """
+        try:
+            school_currency = FinancialSettings.get_school_currency()
+        except Exception:
+            school_currency = 'UGX'
+
+        # ----------------------------------------------------------------
+        # Currency selector
+        # ----------------------------------------------------------------
+        if 'currency' in self.fields:
+            currency_choices = (
+                [('', f'School Currency ({school_currency})')]
+                + FinancialSettings.get_currency_choices()
+            )
+            self.fields['currency'].widget = forms.Select(
+                choices=currency_choices,
+                attrs={
+                    'class':                'form-select select2',
+                    'data-school-currency': school_currency,
+                    'id':                   'id_currency',
+                },
+            )
+            self.fields['currency'].required  = False
+            self.fields['currency'].help_text = (
+                f"Leave blank if paying in {school_currency}. "
+                "Select a different currency if the parent is paying in foreign currency."
+            )
+            if not self.initial.get('currency'):
+                self.fields['currency'].initial = school_currency
+
+        # ----------------------------------------------------------------
+        # Exchange rate field
+        # ----------------------------------------------------------------
+        if 'exchange_rate' in self.fields:
+            self.fields['exchange_rate'].widget = forms.NumberInput(attrs={
+                'class':       'form-control',
+                'step':        '0.000001',
+                'placeholder': '1.000000',
+                'id':          'id_exchange_rate',
+            })
+            self.fields['exchange_rate'].help_text = (
+                "Rate used for this payment. "
+                "Pre-filled from today's exchange rates — confirm or override. "
+                "This value is stored permanently with the payment and is never "
+                "recalculated after saving."
+            )
+            self.fields['exchange_rate'].initial = Decimal('1.000000')
+
+            # Pre-fill rate if a currency is already selected
+            selected_currency = (
+                self.initial.get('currency')
+                or (
+                    self.instance.currency
+                    if self.instance and self.instance.pk
+                    else None
+                )
+                or school_currency
+            )
+            if selected_currency and selected_currency != school_currency:
+                self._prefill_rate(selected_currency, school_currency)
+
+        # ----------------------------------------------------------------
+        # amount_in_school_currency — read-only, calculated on clean()
+        # ----------------------------------------------------------------
+        if 'amount_in_school_currency' in self.fields:
+            self.fields['amount_in_school_currency'].widget = forms.NumberInput(attrs={
+                'class':    'form-control',
+                'readonly': True,
+                'id':       'id_amount_in_school_currency',
+            })
+            self.fields['amount_in_school_currency'].required  = False
+            self.fields['amount_in_school_currency'].help_text = (
+                f"Calculated: amount × exchange rate. "
+                f"This is what credits the student account in {school_currency}."
+            )
+
+    def _prefill_rate(self, from_currency, to_currency):
+        """Pre-fill exchange_rate from today's ExchangeRate table."""
+        try:
+            rate = ExchangeRate.get_rate(from_currency, to_currency)
+            if rate and 'exchange_rate' in self.fields:
+                self.fields['exchange_rate'].initial = rate
+                logger.debug(
+                    f"Pre-filled exchange rate {from_currency}→{to_currency}: {rate}"
+                )
+            elif 'exchange_rate' in self.fields:
+                logger.warning(
+                    f"No exchange rate found for {from_currency}→{to_currency}. "
+                    "Cashier must enter manually."
+                )
+        except Exception as e:
+            logger.error(f"Error pre-filling exchange rate: {e}")
+
+    # -------------------------------------------------------------------------
+    # FIELD-LEVEL VALIDATION
+    # -------------------------------------------------------------------------
+
+    def clean_currency(self):
+        currency = self.cleaned_data.get('currency', '').upper().strip()
+        if not currency:
+            return FinancialSettings.get_school_currency()
+        if len(currency) != 3:
+            raise ValidationError("Currency code must be 3 characters (ISO 4217).")
+        return currency
+
+    def clean_exchange_rate(self):
+        rate = self.cleaned_data.get('exchange_rate')
+        if rate is None:
+            return Decimal('1.000000')
+        if rate <= 0:
+            raise ValidationError("Exchange rate must be greater than zero.")
+        return rate
+
+    # -------------------------------------------------------------------------
+    # CROSS-FIELD VALIDATION AND SCHOOL-CURRENCY CALCULATION
+    # -------------------------------------------------------------------------
+
+    def clean(self):
+        cleaned_data    = super().clean()
+        currency        = cleaned_data.get('currency', '')
+        exchange_rate   = cleaned_data.get('exchange_rate', Decimal('1.000000'))
+        amount          = cleaned_data.get('amount')
+
+        try:
+            school_currency = FinancialSettings.get_school_currency()
+        except Exception:
+            school_currency = 'UGX'
+
+        # Advisory log when cashier overrides a rate for which no DB entry exists
+        if currency and currency != school_currency:
+            db_rate = ExchangeRate.get_rate(currency, school_currency)
+            if not db_rate:
+                logger.warning(
+                    f"No exchange rate in DB for {currency}→{school_currency}. "
+                    f"Cashier is using manually entered rate: {exchange_rate}"
+                )
+
+        # Calculate amount_in_school_currency
+        if amount and exchange_rate:
+            try:
+                cleaned_data['amount_in_school_currency'] = (
+                    Decimal(str(amount)) * Decimal(str(exchange_rate))
+                ).quantize(Decimal('0.01'))
+            except Exception as e:
+                logger.error(f"Error calculating amount_in_school_currency: {e}")
+                cleaned_data['amount_in_school_currency'] = amount
+
+        return cleaned_data
+
+    # -------------------------------------------------------------------------
+    # SAVE HELPER
+    # -------------------------------------------------------------------------
+
+    def save_with_currency(self, commit=True):
+        """
+        Call instead of save() when using this mixin.
+
+        Sets currency, exchange_rate, and amount_in_school_currency on the
+        instance from cleaned_data before saving.
+        """
+        instance = self.instance
+
+        instance.currency = self.cleaned_data.get(
+            'currency', FinancialSettings.get_school_currency()
+        )
+        instance.exchange_rate = self.cleaned_data.get(
+            'exchange_rate', Decimal('1.000000')
+        )
+        instance.amount_in_school_currency = self.cleaned_data.get(
+            'amount_in_school_currency',
+            getattr(instance, 'amount', Decimal('0.00')),
+        )
+
+        if commit:
+            instance.save()
+
+        return instance

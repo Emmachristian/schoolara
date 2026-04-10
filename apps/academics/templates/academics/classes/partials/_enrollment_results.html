@@ -1,0 +1,339 @@
+{# academics/templates/academics/classes/partials/_enrollment_results.html #}
+{% load currency_filters %}
+
+<style>
+.enr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.enr-tbl thead th {
+    background: #f8fafc; padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.enr-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.enr-tbl tbody tr:last-child td { border-bottom: none; }
+.enr-tbl tbody tr:hover td { background: #eff6ff !important; }
+
+.avatar-wrapper { position: relative; flex-shrink: 0; }
+.student-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; }
+.student-initials {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #eff6ff; color: #1d4ed8; border: 2px solid #bfdbfe;
+    font-size: .85rem; font-weight: 700; text-transform: uppercase;
+}
+.status-dot {
+    position: absolute; bottom: 1px; right: 1px;
+    width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff;
+}
+.dot-ongoing     { background: #16a34a; animation: pulse-green 2s infinite; }
+.dot-completed   { background: #2563eb; }
+.dot-dropped     { background: #dc2626; }
+.dot-transferred { background: #7c3aed; }
+.dot-suspended   { background: #d97706; }
+.dot-withdrawn,
+.dot-dismissed   { background: #64748b; }
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0   rgba(22,163,74,.6); }
+    70%  { box-shadow: 0 0 0 7px rgba(22,163,74,0);  }
+    100% { box-shadow: 0 0 0 0   rgba(22,163,74,0);  }
+}
+
+.stu-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; line-height: 1.3; }
+.stu-name:hover { color: #1d4ed8; }
+.stu-adm  { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 1px; display: block; }
+
+.gender-pill  { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; vertical-align: middle; }
+.gender-m     { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.gender-f     { background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; }
+
+.roll-chip { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 2px 7px; display: inline-block; }
+
+.inv-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 700; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; text-decoration: none; }
+.inv-badge:hover { background: #dcfce7; color: #15803d; }
+
+.cp-pill        { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.cp-ongoing     { background: #dcfce7; color: #15803d; }
+.cp-completed   { background: #dbeafe; color: #1d4ed8; }
+.cp-dropped     { background: #fee2e2; color: #b91c1c; }
+.cp-transferred { background: #ede9fe; color: #6d28d9; }
+.cp-suspended   { background: #fef9c3; color: #92400e; }
+.cp-other       { background: #f1f5f9; color: #475569; }
+
+.missing-inv-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    background: #fffbeb;
+    border-bottom: 1px solid #fde68a;
+    font-size: 13px;
+    color: #92400e;
+}
+.missing-inv-bar strong { font-weight: 700; }
+
+.pag-bar {
+    padding: 12px 16px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: #64748b;
+}
+
+.tbl-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.dropdown-menu   { font-size: .85rem; min-width: 200px; border: 1px solid #e2e8f0; }
+.dropdown-item   { padding: 6px 13px; }
+.dropdown-header { font-size: .7rem; padding: 6px 13px 2px; }
+</style>
+
+{# ── Generate Missing Invoices banner ── #}
+{% if missing_invoice_count > 0 %}
+<div class="missing-inv-bar">
+    <span>
+        <i class="fa fa-exclamation-triangle me-1" style="font-size:11px;"></i>
+        <strong>{{ missing_invoice_count }}</strong>
+        enrollment{{ missing_invoice_count|pluralize }} ha{{ missing_invoice_count|pluralize:"s,ve" }} no invoice.
+    </span>
+    <button class="btn btn-sm btn-warning"
+            style="font-size:12px;padding:4px 12px;"
+            hx-get="{% url 'academics:class_generate_missing_invoices_modal' class_instance.pk %}"
+            hx-target="#modal-container"
+            hx-swap="innerHTML">
+        <i class="fa fa-file-invoice me-1" style="font-size:11px;"></i>Generate Missing Invoices
+    </button>
+</div>
+{% endif %}
+
+{% if enrollments %}
+<div style="overflow-x:auto;">
+    <table class="enr-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Student</th>
+                <th class="text-center">Roll No.</th>
+                <th class="text-center">Invoice</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for enr in enrollments %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+
+                {# ── Student ── #}
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-wrapper">
+                            {% if enr.student.photo %}
+                                <img src="{{ enr.student.photo.url }}"
+                                     alt="{{ enr.student.get_full_name }}"
+                                     class="student-avatar">
+                            {% else %}
+                                <div class="student-initials">
+                                    {{ enr.student.first_name|first }}{{ enr.student.last_name|first }}
+                                </div>
+                            {% endif %}
+                            <span class="status-dot dot-{{ enr.completion_status|lower }}"
+                                  data-bs-toggle="tooltip"
+                                  title="{{ enr.get_completion_status_display }}"></span>
+                        </div>
+                        <div>
+                            <a href="{% url 'students:student_profile' enr.student.pk %}" class="stu-name">
+                                {{ enr.student.get_full_name }}
+                                {% if enr.student.gender == 'M' %}
+                                    <span class="gender-pill gender-m">Male</span>
+                                {% elif enr.student.gender == 'F' %}
+                                    <span class="gender-pill gender-f">Female</span>
+                                {% endif %}
+                            </a>
+                            <span class="stu-adm">{{ enr.student.admission_number }}</span>
+                        </div>
+                    </div>
+                </td>
+
+                {# ── Roll No. ── #}
+                <td class="text-center">
+                    {% if enr.roll_number %}
+                        <span class="roll-chip">{{ enr.roll_number }}</span>
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+
+                {# ── Invoice ── #}
+                <td class="text-center">
+                    {% if enr.academic_invoice %}
+                        <a href="{% url 'fees:invoice_detail' enr.academic_invoice.pk %}" class="inv-badge">
+                            <i class="fa fa-file-invoice"></i>{{ enr.academic_invoice.invoice_number }}
+                        </a>
+                    {% else %}
+                        <button class="btn btn-xs btn-outline-warning"
+                                style="font-size:10px;padding:2px 7px;"
+                                hx-get="{% url 'academics:enrollment_create_invoice_modal' enr.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-plus me-1" style="font-size:9px;"></i>Create
+                        </button>
+                    {% endif %}
+                </td>
+
+                {# ── Completion status ── #}
+                <td class="text-center">
+                    {% if enr.completion_status == 'ONGOING' %}
+                        <span class="cp-pill cp-ongoing"><i class="fa fa-circle" style="font-size:7px;"></i>Active</span>
+                    {% elif enr.completion_status == 'COMPLETED' %}
+                        <span class="cp-pill cp-completed"><i class="fa fa-check-circle" style="font-size:9px;"></i>Completed</span>
+                    {% elif enr.completion_status == 'DROPPED' %}
+                        <span class="cp-pill cp-dropped"><i class="fa fa-times-circle" style="font-size:9px;"></i>Dropped</span>
+                    {% elif enr.completion_status == 'TRANSFERRED' %}
+                        <span class="cp-pill cp-transferred"><i class="fa fa-exchange-alt" style="font-size:9px;"></i>Transferred</span>
+                    {% elif enr.completion_status == 'SUSPENDED' %}
+                        <span class="cp-pill cp-suspended"><i class="fa fa-ban" style="font-size:9px;"></i>Suspended</span>
+                    {% else %}
+                        <span class="cp-pill cp-other">{{ enr.get_completion_status_display }}</span>
+                    {% endif %}
+                </td>
+
+                {# ── Actions ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><h6 class="dropdown-header">View</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'academics:enrollment_detail' enr.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>Enrollment Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'students:student_profile' enr.student.pk %}">
+                                    <i class="fa fa-user me-2 text-secondary"></i>Student Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Manage</h6></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'academics:enrollment_edit_modal' enr.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit Enrollment
+                                </button>
+                            </li>
+                            {% if not enr.academic_invoice %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'academics:enrollment_create_invoice_modal' enr.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-file-invoice-dollar me-2 text-success"></i>Create Invoice
+                                </button>
+                            </li>
+                            {% else %}
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:invoice_detail' enr.academic_invoice.pk %}">
+                                    <i class="fa fa-file-invoice me-2 text-success"></i>View Invoice
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'academics:enrollment_delete_modal' enr.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Remove
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if enrollments.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ enrollments.start_index }}</strong>–<strong>{{ enrollments.end_index }}</strong>
+        of <strong>{{ enrollments.paginator.count|format_number }}</strong> students
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if enrollments.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'academics:class_enrollments_partial' class_instance.pk %}"
+                    hx-target="#tab-content" hx-include="#enrollmentFilterForm"
+                    hx-vals='{"page":"{{ enrollments.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+
+        {% for p in enrollments.paginator.page_range %}
+            {% if p == enrollments.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > enrollments.number|add:"-3" and p < enrollments.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'academics:class_enrollments_partial' class_instance.pk %}"
+                            hx-target="#tab-content" hx-include="#enrollmentFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if enrollments.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'academics:class_enrollments_partial' class_instance.pk %}"
+                    hx-target="#tab-content" hx-include="#enrollmentFilterForm"
+                    hx-vals='{"page":"{{ enrollments.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-users"></i>
+    <p>
+        {% if request.GET.q or request.GET.gender or request.GET.completion_status or request.GET.has_invoice %}
+            No students match your filters.
+        {% else %}
+            No students enrolled in this class yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.gender or request.GET.completion_status or request.GET.has_invoice %}
+    <button type="button" onclick="clearEnrollmentFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <button hx-get="{% url 'academics:enrollment_create_modal' %}?class_pk={{ class_instance.pk }}"
+            hx-target="#modal-container" hx-swap="innerHTML"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;border:none;cursor:pointer;">
+        <i class="fa fa-user-plus" style="font-size:11px;"></i>Enroll Student
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

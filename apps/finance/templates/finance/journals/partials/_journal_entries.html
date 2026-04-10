@@ -1,0 +1,337 @@
+{% load currency_filters %}
+
+<style>
+.je-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.je-tbl thead th {
+    background: #f8fafc;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.je-tbl tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.je-tbl tbody tr:last-child td { border-bottom: none; }
+.je-tbl tbody tr:hover td      { background: #eff6ff !important; }
+
+.je-number {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #1d4ed8;
+    text-decoration: none;
+    display: block;
+}
+.je-number:hover { text-decoration: underline; }
+.je-ref {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 2px;
+    display: block;
+}
+.je-desc {
+    font-size: 12.5px;
+    color: #0f172a;
+    display: block;
+    max-width: 260px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.je-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.jes-posted   { background: #dcfce7; color: #15803d; }
+.jes-draft    { background: #fef3c7; color: #b45309; }
+.jes-reversed { background: #fee2e2; color: #dc2626; }
+
+.amt-dr { font-weight: 600; font-size: 12.5px; color: #dc2626; }
+.amt-cr { font-weight: 600; font-size: 12.5px; color: #15803d; }
+.amt-na { font-size: 12px; color: #94a3b8; }
+
+.txn-count {
+    font-size: 11.5px;
+    color: #64748b;
+}
+
+.act-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .15s, border-color .15s, color .15s;
+    padding: 0;
+}
+.act-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+.tbl-empty   { text-align: center; padding: 48px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.5rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0; }
+
+.pag-bar {
+    padding: 12px 18px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: #64748b;
+}
+.pag-bar .page-link {
+    color: #1d4ed8; border-color: #e2e8f0;
+    font-size: 12px; padding: 4px 9px;
+}
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
+
+.dropdown-menu   { font-size: 0.84rem; min-width: 180px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="je-tbl">
+    <thead>
+        <tr>
+            <th>Entry</th>
+            <th>Description</th>
+            <th>Date</th>
+            <th>Period</th>
+            <th class="text-end">Debit</th>
+            <th class="text-end">Credit</th>
+            <th class="text-center">Txns</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:44px;"></th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if entries_page %}
+        {% for entry in entries_page %}
+        <tr>
+
+            <!-- Entry number + ref -->
+            <td>
+                <a href="{% url 'finance:journal_entry_detail' entry.pk %}"
+                   class="je-number">
+                    {{ entry.entry_number }}
+                </a>
+                {% if entry.reference_number %}
+                <span class="je-ref">ref: {{ entry.reference_number }}</span>
+                {% endif %}
+            </td>
+
+            <!-- Description -->
+            <td>
+                <span class="je-desc" title="{{ entry.description }}">
+                    {{ entry.description }}
+                </span>
+            </td>
+
+            <!-- Date -->
+            <td style="white-space:nowrap;font-size:12.5px;">
+                {{ entry.entry_date|date:"d M Y" }}
+            </td>
+
+            <!-- Fiscal period -->
+            <td style="font-size:12px;color:#64748b;white-space:nowrap;">
+                {{ entry.fiscal_period.name|default:"—" }}
+            </td>
+
+            <!-- Debit total -->
+            <td class="text-end">
+                {% if entry.total_debit %}
+                <span class="amt-dr">{{ entry.total_debit|money }}</span>
+                {% else %}
+                <span class="amt-na">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Credit total -->
+            <td class="text-end">
+                {% if entry.total_credit %}
+                <span class="amt-cr">{{ entry.total_credit|money }}</span>
+                {% else %}
+                <span class="amt-na">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Transaction count -->
+            <td class="text-center">
+                <span class="txn-count">{{ entry.transaction_count|default:0 }}</span>
+            </td>
+
+            <!-- Status -->
+            <td class="text-center">
+                {% if entry.status == 'POSTED' %}
+                <span class="je-status jes-posted">
+                    <i class="fa fa-circle" style="font-size:7px;"></i> Posted
+                </span>
+                {% elif entry.status == 'DRAFT' %}
+                <span class="je-status jes-draft">
+                    <i class="fa fa-pencil" style="font-size:8px;"></i> Draft
+                </span>
+                {% elif entry.status == 'REVERSED' %}
+                <span class="je-status jes-reversed">
+                    <i class="fa fa-undo" style="font-size:8px;"></i> Reversed
+                </span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="act-btn"
+                            data-bs-toggle="dropdown"
+                            data-bs-boundary="viewport"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'finance:journal_entry_detail' entry.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Entry
+                            </a>
+                        </li>
+                        {% if entry.status == 'DRAFT' %}
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'finance:journal_entry_edit' entry.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="9">
+                <div class="tbl-empty">
+                    <i class="pe-7s-albums"></i>
+                    <p>No journal entries found.</p>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
+</div>
+
+<!-- ── Pagination ── -->
+{% if entries_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing
+        <strong>{{ entries_page.start_index }}</strong>–<strong>{{ entries_page.end_index }}</strong>
+        of <strong>{{ entries_page.paginator.count|format_number }}</strong>
+        entr{{ entries_page.paginator.count|pluralize:"y,ies" }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+
+            {% if entries_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'finance:journal_detail' journal.pk %}"
+                        hx-target="#entries-list"
+                        hx-vals='{"page":"{{ entries_page.previous_page_number }}"}'>
+                    &laquo;
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">&laquo;</span>
+            </li>
+            {% endif %}
+
+            {% for p in entries_page.paginator.page_range %}
+                {% if p == entries_page.number %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ p }}</span>
+                    </li>
+                {% elif p > entries_page.number|add:"-3" and p < entries_page.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'finance:journal_detail' journal.pk %}"
+                                hx-target="#entries-list"
+                                hx-vals='{"page":"{{ p }}"}'>
+                            {{ p }}
+                        </button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if entries_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'finance:journal_detail' journal.pk %}"
+                        hx-target="#entries-list"
+                        hx-vals='{"page":"{{ entries_page.next_page_number }}"}'>
+                    &raquo;
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">&raquo;</span>
+            </li>
+            {% endif %}
+
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+<!-- ── Bootstrap re-init ── -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+})();
+</script>

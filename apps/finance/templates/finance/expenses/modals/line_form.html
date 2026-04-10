@@ -1,0 +1,179 @@
+{% load widget_tweaks %}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#e0f7fa;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa fa-list-ul" style="color:#00838f;font-size:15px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">
+                        {% if line %}Edit Line Item{% else %}Add Line Item{% endif %}
+                    </h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;">
+                        {{ expense.expense_number }} &mdash; {{ expense.category.name }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        {% if not can_edit %}
+        <!-- CANNOT EDIT -->
+        <div class="modal-body" style="padding:20px;">
+            <div class="alert alert-warning mb-0">
+                <i class="fa fa-lock me-1"></i>
+                Line items cannot be edited while the expense is in
+                <strong>{{ expense.get_status_display }}</strong> status.
+            </div>
+        </div>
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:14px 20px;">
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+
+        {% else %}
+
+        <!-- FORM
+             The modal view (expense_line_form_modal) handles both GET and POST.
+             On valid POST it saves the line and returns HX-Close-Modal + HX-Redirect headers.
+             On invalid POST it re-renders this modal with form errors.
+        -->
+        {% if line %}
+        <form id="lineForm"
+              method="post"
+              action="{% url 'finance:expense_line_edit_modal' expense.pk line.pk %}"
+              hx-post="{% url 'finance:expense_line_edit_modal' expense.pk line.pk %}"
+              hx-target=".modal-dialog"
+              hx-swap="outerHTML">
+        {% else %}
+        <form id="lineForm"
+              method="post"
+              action="{% url 'finance:expense_line_add_modal' expense.pk %}"
+              hx-post="{% url 'finance:expense_line_add_modal' expense.pk %}"
+              hx-target=".modal-dialog"
+              hx-swap="outerHTML">
+        {% endif %}
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:20px;">
+
+                <!-- Non-field errors -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger py-2 mb-3" style="font-size:12.5px;">
+                    {% for error in form.non_field_errors %}
+                    <div><i class="fa fa-times-circle me-1"></i>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Description -->
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#495057;">
+                        Description <span style="color:#dc3545;">*</span>
+                    </label>
+                    {{ form.description|add_class:"form-control form-control-sm" }}
+                    {% if form.description.errors %}
+                    <div style="font-size:11.5px;color:#dc3545;margin-top:3px;">
+                        <i class="fa fa-times-circle me-1"></i>{{ form.description.errors.0 }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Qty + UoM row -->
+                <div class="row g-3 mb-3">
+                    <div class="col-5">
+                        <label class="form-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#495057;">
+                            Quantity <span style="color:#dc3545;">*</span>
+                        </label>
+                        {{ form.quantity|add_class:"form-control form-control-sm" }}
+                        {% if form.quantity.errors %}
+                        <div style="font-size:11.5px;color:#dc3545;margin-top:3px;">{{ form.quantity.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-7">
+                        <label class="form-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#495057;">
+                            Unit of Measure <span style="color:#dc3545;">*</span>
+                        </label>
+                        {{ form.unit_of_measure|add_class:"form-select form-select-sm uom-select-modal" }}
+                        {% if form.unit_of_measure.errors %}
+                        <div style="font-size:11.5px;color:#dc3545;margin-top:3px;">{{ form.unit_of_measure.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Unit Price + Amount row -->
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#495057;">
+                            Unit Price <span style="color:#dc3545;">*</span>
+                        </label>
+                        {{ form.unit_price|add_class:"form-control form-control-sm" }}
+                        {% if form.unit_price.errors %}
+                        <div style="font-size:11.5px;color:#dc3545;margin-top:3px;">{{ form.unit_price.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#495057;">
+                            Amount
+                        </label>
+                        {{ form.amount|add_class:"form-control form-control-sm"|attr:"readonly:readonly" }}
+                        <div style="font-size:11px;color:#64748b;margin-top:3px;">Calculated automatically</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:14px 20px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-success btn-sm" style="min-width:130px;">
+                    <i class="fa fa-save me-1"></i>
+                    {% if line %}Save Changes{% else %}Add Line{% endif %}
+                </button>
+            </div>
+
+        </form>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+/* Auto-calculate amount = qty × unit_price inside this modal */
+(function () {
+    var modal = document.querySelector('#lineForm');
+    if (!modal) return;
+
+    var qtyEl   = modal.querySelector('[name="quantity"]');
+    var priceEl = modal.querySelector('[name="unit_price"]');
+    var amtEl   = modal.querySelector('[name="amount"]');
+
+    function calc() {
+        var qty   = parseFloat(qtyEl?.value)   || 0;
+        var price = parseFloat(priceEl?.value)  || 0;
+        if (amtEl && qty > 0 && price > 0) {
+            amtEl.value = (qty * price).toFixed(0);
+        }
+    }
+
+    qtyEl?.addEventListener('input', calc);
+    priceEl?.addEventListener('input', calc);
+
+    /* Select2 for UoM inside modal */
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+        var uomEl = modal.querySelector('.uom-select-modal');
+        if (uomEl) {
+            $(uomEl).select2({
+                theme:       'bootstrap4',
+                width:       '100%',
+                placeholder: '— Select unit —',
+                dropdownParent: $(modal.closest('.modal-content')),
+            });
+        }
+    }
+})();
+</script>

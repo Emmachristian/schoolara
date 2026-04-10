@@ -1,0 +1,431 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --radius:    10px;
+}
+
+/* ── Stat cards ── */
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 3px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
+
+/* ── Main list card ── */
+.list-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+.list-card-head {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.list-card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+}
+.filter-bar .form-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px;
+}
+.filter-bar .form-control,
+.filter-bar .form-select {
+    border-radius: 8px; border-color: #dee2e6; font-size: 13px;
+}
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.1);
+}
+
+/* ── Table ── */
+.disc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.disc-tbl thead th {
+    background: var(--surface-2);
+    padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--ink-muted);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+.disc-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle; color: var(--ink);
+}
+.disc-tbl tbody tr:last-child td { border-bottom: none; }
+.disc-tbl tbody tr:hover td { background: #eff6ff !important; }
+
+/* ── Student initials ── */
+.student-initials {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #eff6ff; color: var(--accent);
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+    border: 2px solid #bfdbfe; flex-shrink: 0;
+}
+.stu-name {
+    font-weight: 600; font-size: 13px; color: var(--ink);
+    text-decoration: none; display: block; line-height: 1.3;
+}
+.stu-name:hover { color: var(--accent); }
+.stu-adm {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px; color: #64748b; display: block; margin-top: 1px;
+}
+
+/* ── Status pills ── */
+.s-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.sp-active    { background: #dcfce7; color: #15803d; }
+.sp-suspended { background: #fef3c7; color: #92400e; }
+.sp-expired   { background: #f1f5f9; color: #64748b; }
+.sp-revoked   { background: #fee2e2; color: #dc2626; }
+.sp-pending   { background: #dbeafe; color: #1d4ed8; }
+.sp-default   { background: #f1f5f9; color: #475569; }
+
+/* ── Value mode badge ── */
+.mode-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 700; white-space: nowrap;
+    background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+}
+
+/* ── Pagination ── */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: var(--ink-muted);
+}
+
+/* ── Empty state ── */
+.tbl-empty { text-align: center; padding: 60px 20px; color: var(--ink-faint); }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ── Dropdown ── */
+.dropdown-menu { font-size: 0.85rem; min-width: 190px; border: 1px solid var(--border); }
+.dropdown-item { padding: 6px 14px; }
+.dropdown-header { font-size: 0.7rem; padding: 6px 14px 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Title -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-ticket icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Student Discount Awards
+                <div class="page-title-subheading">
+                    Manage discount awards assigned to individual students
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'fees:student_discount_create' %}" class="btn btn-primary me-1">
+                <i class="fa fa-plus me-1"></i> Award Discount
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown">
+                    <i class="fa fa-download me-1"></i> Export
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a class="dropdown-item"
+                       href="{% url 'fees:student_discount_list_print' %}?{{ request.GET.urlencode }}"
+                       target="_blank">
+                        <i class="fa fa-print me-2"></i>Print
+                    </a>
+                    <a class="dropdown-item"
+                       href="{% url 'fees:export_student_discounts_excel' %}?{{ request.GET.urlencode }}">
+                        <i class="fa fa-file-excel me-2 text-success"></i>Export Excel
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+            showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+            showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+            showWarning('{{ message|escapejs }}');
+        {% else %}
+            showInfo('{{ message|escapejs }}');
+        {% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- Stat Cards -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-ticket"></i></div>
+            <div>
+                <div class="stat-label">Total Awards</div>
+                <div class="stat-value">{{ stats.total|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value">{{ stats.active|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Suspended</div>
+                <div class="stat-value">{{ stats.suspended|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-close-circle"></i></div>
+            <div>
+                <div class="stat-label">Revoked</div>
+                <div class="stat-value">{{ stats.revoked|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-secondary"><i class="pe-7s-clock"></i></div>
+            <div>
+                <div class="stat-label">Expired</div>
+                <div class="stat-value">{{ stats.expired|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Total Discounted</div>
+                <div class="stat-value" style="font-size:15px;">
+                    {{ stats.total_discounted|money_short }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main List Card -->
+<div class="list-card">
+
+    <!-- Card Head -->
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-tags text-primary"></i>
+            Student Discount Awards
+        </span>
+        <div class="d-flex gap-2">
+            <a href="{% url 'fees:discount_list' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-list me-1"></i> Policies
+            </a>
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                <i class="fa fa-times me-1"></i> Reset
+            </button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    hx-get="{% url 'fees:student_discount_list' %}"
+                    hx-target="#discount-list"
+                    hx-include="#filterForm">
+                <i class="fa fa-refresh me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <form id="filterForm"
+              hx-get="{% url 'fees:student_discount_list' %}"
+              hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
+              hx-target="#discount-list"
+              hx-swap="innerHTML">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">{{ filter_form.q.label }}</label>
+                    {{ filter_form.q|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.policy.label }}</label>
+                    {{ filter_form.policy|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.status.label }}</label>
+                    {{ filter_form.status|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.active_on_date.label }}</label>
+                    {{ filter_form.active_on_date|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="fa fa-search me-1"></i> Filter
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results -->
+    <div id="discount-list">
+        {% include 'fees/discounts/partials/_student_discount_results.html' %}
+    </div>
+
+</div>
+
+<!-- Dynamic Modal Container -->
+<div id="modal-container" style="display:none;"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function resetFilters() {
+    window.location.href = "{% url 'fees:student_discount_list' %}";
+}
+
+/* ── HTMX modal handling ── */
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalDialog    = modalContainer.querySelector('.modal-dialog');
+        if (!modalDialog) return;
+
+        let modalWrapper = document.getElementById('dynamicModalWrapper');
+        if (modalWrapper) {
+            const existing = bootstrap.Modal.getInstance(modalWrapper);
+            if (existing) existing.dispose();
+            modalWrapper.remove();
+        }
+        modalWrapper = document.createElement('div');
+        modalWrapper.className = 'modal fade';
+        modalWrapper.id = 'dynamicModalWrapper';
+        modalWrapper.setAttribute('tabindex', '-1');
+        modalWrapper.setAttribute('aria-hidden', 'true');
+        modalWrapper.appendChild(modalDialog);
+        document.body.appendChild(modalWrapper);
+
+        currentModal = new bootstrap.Modal(modalWrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+
+        modalWrapper.addEventListener('hidden.bs.modal', function() {
+            modalWrapper.remove();
+            modalContainer.innerHTML = '';
+            currentModal = null;
+        });
+    }
+});
+
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr     = event.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title   = xhr.getResponseHeader('HX-Alert-Title');
+
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon:             type,
+                title:            title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text:             message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: type === 'success' ? '#28a745'
+                                  : type === 'error'   ? '#dc3545'
+                                  : type === 'warning' ? '#ffc107' : '#17a2b8',
+                timer:            type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            });
+        }, 300);
+    }
+
+    if (xhr.getResponseHeader('HX-Close-Modal') === 'true' && currentModal) {
+        currentModal.hide();
+    }
+
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (redirect) {
+        setTimeout(() => { window.location.href = redirect; }, message ? 1500 : 0);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+        new bootstrap.Tooltip(el)
+    );
+});
+</script>
+{% endblock %}

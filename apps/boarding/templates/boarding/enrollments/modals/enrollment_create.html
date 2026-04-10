@@ -1,0 +1,280 @@
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+
+    <div class="modal-header"
+         style="background:#f0fdf4; border-bottom:1px solid #bbf7d0; padding:16px 22px;">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:40px; height:40px; border-radius:10px; background:#dcfce7; border:1px solid #bbf7d0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class="fa fa-user-plus" style="color:#15803d; font-size:1rem;"></i>
+            </div>
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700; font-size:16px; color:#14532d;">
+                    Enroll Student
+                </h5>
+                <div style="font-size:11.5px; color:#16a34a; margin-top:3px;">
+                    {{ dormitory.name }} &middot; {{ dormitory.get_dormitory_type_display }}
+                    {% if session %}&middot; {{ session.name }}{% endif %}
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+
+    <form method="POST"
+          hx-post="{% url 'boarding:enrollment_create' %}"
+          hx-target="#modal-container"
+          hx-swap="innerHTML">
+        {% csrf_token %}
+
+        <div class="modal-body" style="padding:22px; max-height:65vh; overflow-y:auto;">
+
+            {% if form.non_field_errors %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #ef4444; border-radius:0 7px 7px 0; margin-bottom:18px;">
+                <i class="fa fa-times-circle" style="color:#dc2626; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#991b1b;">
+                    {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# Dormitory capacity warning #}
+            {% if dormitory.is_full %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #ef4444; border-radius:0 8px 8px 0; margin-bottom:18px;">
+                <i class="fa fa-exclamation-triangle" style="color:#dc2626; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#7f1d1d;">
+                    <strong>{{ dormitory.name }} is at full capacity</strong> ({{ dormitory.total_capacity }} beds).
+                    You may still enroll but the student will not have a bed until capacity is increased.
+                </div>
+            </div>
+            {% elif dormitory.is_nearly_full %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #d97706; border-radius:0 8px 8px 0; margin-bottom:18px;">
+                <i class="fa fa-exclamation-triangle" style="color:#b45309; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#78350f;">
+                    {{ dormitory.name }} is nearly full —
+                    <strong>{{ dormitory.get_available_capacity }} bed{{ dormitory.get_available_capacity|pluralize }} remaining</strong>.
+                </div>
+            </div>
+            {% endif %}
+
+            {# ── Student & Session ── #}
+            <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94a3b8; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+                Student &amp; Session
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Student <span style="color:#ef4444;">*</span>
+                    </label>
+                    {{ form.student }}
+                    {% if form.student.errors %}
+                        {% for e in form.student.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    <div style="font-size:11px; color:#475569; margin-top:4px;">
+                        {% if dormitory.dormitory_type == 'BOYS' %}
+                            Only male students can be enrolled in this dormitory.
+                        {% elif dormitory.dormitory_type == 'GIRLS' %}
+                            Only female students can be enrolled in this dormitory.
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Academic Session <span style="color:#ef4444;">*</span>
+                    </label>
+                    {{ form.academic_session }}
+                    {% if form.academic_session.errors %}
+                        {% for e in form.academic_session.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ── Boarding ── #}
+            <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94a3b8; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+                Boarding Details
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Boarding Type <span style="color:#ef4444;">*</span>
+                    </label>
+                    {{ form.boarding_type }}
+                    {% if form.boarding_type.errors %}
+                        {% for e in form.boarding_type.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <div class="col-md-6" id="flexi-days-col" style="display:none;">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Boarding Days
+                    </label>
+                    {{ form.boarding_days }}
+                    {% if form.boarding_days.errors %}
+                        {% for e in form.boarding_days.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ── Dates ── #}
+            <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94a3b8; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+                Dates
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Enrollment Date <span style="color:#ef4444;">*</span>
+                    </label>
+                    {{ form.enrollment_date }}
+                    {% if form.enrollment_date.errors %}
+                        {% for e in form.enrollment_date.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Effective Start <span style="color:#ef4444;">*</span>
+                    </label>
+                    {{ form.effective_start_date }}
+                    {% if form.effective_start_date.errors %}
+                        {% for e in form.effective_start_date.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                        Effective End
+                        <span style="font-size:10px; color:#94a3b8; font-weight:400; text-transform:none;">(optional)</span>
+                    </label>
+                    {{ form.effective_end_date }}
+                    {% if form.effective_end_date.errors %}
+                        {% for e in form.effective_end_date.errors %}
+                        <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                            <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ── Options ── #}
+            <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94a3b8; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+                Options
+            </div>
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+                <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; font-size:13px; font-weight:500; color:#0f172a; flex:1; min-width:160px;">
+                    {{ form.auto_create_invoice }}
+                    <div>
+                        <span>Auto-create invoice</span>
+                        <div style="font-size:11px; color:#64748b; margin-top:1px;">
+                            Attach boarding fees when academic invoice is generated
+                        </div>
+                    </div>
+                </label>
+                {% if form.require_guardian_consent %}
+                <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; font-size:13px; font-weight:500; color:#0f172a; flex:1; min-width:160px;">
+                    {{ form.require_guardian_consent }}
+                    <div>
+                        <span>Require guardian consent</span>
+                        <div style="font-size:11px; color:#64748b; margin-top:1px;">
+                            Mark enrollment as requiring consent
+                        </div>
+                    </div>
+                </label>
+                {% endif %}
+            </div>
+
+            {# ── Notes ── #}
+            {% if form.reason_for_boarding %}
+            <div>
+                <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                    Reason for Boarding
+                    <span style="font-size:10px; color:#94a3b8; font-weight:400; text-transform:none;">(optional)</span>
+                </label>
+                {{ form.reason_for_boarding }}
+                {% if form.reason_for_boarding.errors %}
+                    {% for e in form.reason_for_boarding.errors %}
+                    <div style="font-size:11.5px; color:#dc2626; margin-top:3px;">
+                        <i class="fa fa-exclamation-circle me-1"></i>{{ e }}
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer"
+             style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:12px 22px; justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+            <button type="submit" class="btn btn-success btn-sm">
+                <i class="fa fa-user-plus me-1"></i>Enroll Student
+            </button>
+        </div>
+
+    </form>
+</div>
+</div>
+
+<script>
+(function () {
+    /* Show boarding_days field only for FLEXI_BOARDER */
+    var typeSel   = document.querySelector('[name="boarding_type"]');
+    var flexiCol  = document.getElementById('flexi-days-col');
+    function toggleFlexi() {
+        if (typeSel && flexiCol) {
+            flexiCol.style.display = typeSel.value === 'FLEXI_BOARDER' ? '' : 'none';
+        }
+    }
+    if (typeSel) { typeSel.addEventListener('change', toggleFlexi); toggleFlexi(); }
+
+    /* Select2 — student search */
+    function initSelect2() {
+        var $modal = $('#dynamicModalWrapper');
+        $modal.find('select[name="student"]').select2({
+            dropdownParent: $modal,
+            placeholder:    'Search student by name or admission number…',
+            allowClear:     true,
+            width:          '100%',
+        });
+        $modal.find('select[name="academic_session"]').select2({
+            dropdownParent:             $modal,
+            minimumResultsForSearch:    Infinity,
+            width:                      '100%',
+        });
+        $modal.find('select[name="boarding_type"]').select2({
+            dropdownParent:             $modal,
+            minimumResultsForSearch:    Infinity,
+            width:                      '100%',
+        });
+    }
+    var wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) $(wrapper).on('shown.bs.modal', initSelect2);
+    setTimeout(initSelect2, 50);
+})();
+</script>

@@ -1,0 +1,746 @@
+{# academics/templates/academics/enrollments/detail.html #}
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --border-2:  #cbd5e1;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.enr-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 20px;
+    align-items: start;
+}
+.hero-avatar {
+    width: 64px; height: 64px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #1d4ed8;
+    background: #eff6ff;
+    border: 2px solid #bfdbfe;
+    flex-shrink: 0;
+}
+.hero-avatar img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.hero-name  { font-size: 20px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; margin-bottom: 2px; text-decoration: none; display: block; }
+.hero-name:hover { color: var(--accent); }
+.hero-adm   { font-family: 'Courier New', monospace; font-size: 12.5px; color: var(--ink-muted); margin-bottom: 8px; }
+.hero-tags  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+/* ── Pills ── */
+.st-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+.sp-active      { background: var(--green-lt);  color: var(--green);  border: 1px solid #bbf7d0; }
+.sp-inactive    { background: var(--red-lt);    color: var(--red);    border: 1px solid #fecaca; }
+.sp-ongoing     { background: var(--green-lt);  color: var(--green);  border: 1px solid #bbf7d0; }
+.sp-completed   { background: var(--accent-lt); color: var(--accent); border: 1px solid #bfdbfe; }
+.sp-dropped     { background: var(--red-lt);    color: var(--red);    border: 1px solid #fecaca; }
+.sp-transferred { background: var(--purple-lt); color: var(--purple); border: 1px solid #ddd6fe; }
+.sp-suspended   { background: var(--amber-lt);  color: var(--amber);  border: 1px solid #fde68a; }
+.sp-withdrawn   { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border-2); }
+.roll-chip { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-lt); border: 1px solid #bfdbfe; border-radius: 5px; padding: 3px 10px; }
+
+/* ── Cards ── */
+.det-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.det-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.det-card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0 22px; }
+.info-cell { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.info-cell:nth-child(odd)  { padding-right: 24px; }
+.info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.info-cell:last-child, .info-cell:nth-last-child(2) { border-bottom: none; }
+.info-cell.full { grid-column: span 2; padding-right: 0; border-left: none; }
+.info-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.info-val { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.info-val small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-muted); margin-top: 2px; }
+.info-val a { color: var(--accent); text-decoration: none; }
+.info-val a:hover { text-decoration: underline; }
+
+/* ── Sidebar ── */
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.side-card-head { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 7px; }
+.side-card-body { padding: 14px 18px; }
+.side-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.side-row:last-child { border-bottom: none; }
+.s-label { color: var(--ink-muted); font-size: 12.5px; }
+.s-value { font-weight: 700; color: var(--ink); font-size: 12.5px; }
+.s-value.green  { color: var(--green); }
+.s-value.red    { color: var(--red); }
+.s-value.accent { color: var(--accent); }
+.s-value.muted  { color: var(--ink-muted); font-weight: 500; }
+.s-value a { color: inherit; text-decoration: none; }
+.s-value a:hover { text-decoration: underline; }
+
+/* ── Invoice panel ── */
+.inv-panel {
+    background: var(--green-lt);
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.inv-panel.inv-missing {
+    background: var(--amber-lt);
+    border-color: #fde68a;
+}
+.inv-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.inv-icon.has  { background: #dcfce7; color: var(--green); }
+.inv-icon.miss { background: #fef3c7; color: var(--amber); }
+.inv-detail { flex: 1; min-width: 0; }
+.inv-number { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--green); }
+.inv-status { font-size: 11px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 1px; }
+.inv-missing-text { font-size: 12.5px; font-weight: 600; color: var(--amber); }
+
+/* ── History table ── */
+.hist-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hist-tbl thead th {
+    background: var(--surface-2); padding: 9px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--ink-muted);
+    border-bottom: 2px solid var(--border); white-space: nowrap;
+}
+.hist-tbl tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.hist-tbl tbody tr:last-child td { border-bottom: none; }
+.hist-tbl tbody tr:hover td { background: #fafbff; }
+.hist-tbl tbody tr.current-row td { background: var(--accent-lt); }
+
+/* ── Notes box ── */
+.notes-box {
+    padding: 14px 22px;
+    background: var(--amber-lt);
+    border-left: 3px solid var(--amber);
+    font-size: 13px; color: var(--ink); line-height: 1.7;
+}
+
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid var(--border); }
+.dropdown-item  { padding: 6px 13px; }
+
+@media (max-width: 768px) {
+    .enr-hero { grid-template-columns: auto 1fr; }
+    .hero-right { grid-column: span 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+    .info-grid { grid-template-columns: 1fr; }
+    .info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+    .info-cell.full { grid-column: span 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-add-user icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Enrollment Detail
+                <div class="page-title-subheading">{{ enrollment.student.get_full_name }} &mdash; {{ enrollment.class_instance }}</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back to Class
+            </a>
+            <button class="btn btn-sm btn-warning me-1"
+                    hx-get="{% url 'academics:enrollment_edit_modal' enrollment.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-edit me-1"></i>Edit
+            </button>
+            <div class="btn-group me-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown">
+                    <i class="fa fa-cog me-1"></i>Actions
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li><h6 class="dropdown-header" style="font-size:.7rem;">Manage</h6></li>
+                    <li>
+                        <button class="dropdown-item"
+                                hx-get="{% url 'academics:enrollment_toggle_active_modal' enrollment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            {% if enrollment.is_active %}
+                                <i class="fa fa-pause-circle me-2 text-secondary"></i>Deactivate
+                            {% else %}
+                                <i class="fa fa-check-circle me-2 text-success"></i>Activate
+                            {% endif %}
+                        </button>
+                    </li>
+                    {% if not enrollment.academic_invoice %}
+                    <li>
+                        <button class="dropdown-item"
+                                hx-get="{% url 'academics:enrollment_create_invoice_modal' enrollment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-file-invoice me-2 text-success"></i>Create Invoice
+                        </button>
+                    </li>
+                    {% endif %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'academics:enrollment_print_detail' enrollment.pk %}" target="_blank">
+                            <i class="fa fa-print me-2 text-secondary"></i>Print
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Remove Enrollment
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-graduation-cap me-1"></i>Academics
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_detail' enrollment.class_instance.academic_level.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ enrollment.class_instance.academic_level.name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ enrollment.class_instance.get_display_name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page" style="color:#0f172a;font-weight:600;">
+            {{ enrollment.student.get_full_name }}
+        </li>
+    </ol>
+</nav>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+{# ── Hero ── #}
+<div class="enr-hero">
+    <div class="hero-avatar">
+        {% if enrollment.student.photo %}
+            <img src="{{ enrollment.student.photo.url }}" alt="{{ enrollment.student.get_full_name }}">
+        {% else %}
+            {{ enrollment.student.first_name|first }}{{ enrollment.student.last_name|first }}
+        {% endif %}
+    </div>
+    <div>
+        <a href="{% url 'students:student_profile' enrollment.student.pk %}" class="hero-name">
+            {{ enrollment.student.get_full_name }}
+        </a>
+        <div class="hero-adm">
+            <i class="fa fa-id-card me-1" style="font-size:10px;"></i>{{ enrollment.student.admission_number }}
+        </div>
+        <div class="hero-tags">
+            {# Completion status #}
+            {% if enrollment.completion_status == 'ONGOING' %}
+                <span class="st-pill sp-ongoing"><i class="fa fa-circle" style="font-size:7px;"></i>Active</span>
+            {% elif enrollment.completion_status == 'COMPLETED' %}
+                <span class="st-pill sp-completed"><i class="fa fa-check-circle"></i>Completed</span>
+            {% elif enrollment.completion_status == 'DROPPED' %}
+                <span class="st-pill sp-dropped"><i class="fa fa-times-circle"></i>Dropped</span>
+            {% elif enrollment.completion_status == 'TRANSFERRED' %}
+                <span class="st-pill sp-transferred"><i class="fa fa-exchange-alt"></i>Transferred</span>
+            {% elif enrollment.completion_status == 'SUSPENDED' %}
+                <span class="st-pill sp-suspended"><i class="fa fa-ban"></i>Suspended</span>
+            {% elif enrollment.completion_status == 'WITHDRAWN' %}
+                <span class="st-pill sp-withdrawn"><i class="fa fa-sign-out-alt"></i>Withdrawn</span>
+            {% endif %}
+
+            {# Active/inactive #}
+            {% if not enrollment.is_active %}
+                <span class="st-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
+            {% endif %}
+
+            {# Roll number #}
+            {% if enrollment.roll_number %}
+                <span class="roll-chip"><i class="fa fa-hashtag" style="font-size:10px;margin-right:3px;"></i>{{ enrollment.roll_number }}</span>
+            {% endif %}
+
+            {# Enrollment type #}
+            <span style="font-size:11px;color:var(--ink-muted);font-weight:600;background:var(--surface-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;">
+                {{ enrollment.get_enrollment_type_display }}
+            </span>
+        </div>
+    </div>
+    <div class="hero-right">
+        <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}"
+           style="text-align:right;text-decoration:none;">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700;">Class</div>
+            <div style="font-size:17px;font-weight:800;color:var(--ink);">{{ enrollment.class_instance.get_display_name }}</div>
+            <div style="font-size:11.5px;color:var(--ink-muted);">{{ enrollment.academic_session.name }}</div>
+        </a>
+    </div>
+</div>
+
+{# ── Two-column layout ── #}
+<div class="row">
+    <div class="col-lg-8">
+
+        {# ENROLLMENT DETAILS #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-user-graduate text-primary"></i>Enrollment Details</span>
+            </div>
+            <div class="info-grid">
+                <div class="info-cell">
+                    <div class="info-lbl">Student</div>
+                    <div class="info-val">
+                        <a href="{% url 'students:student_profile' enrollment.student.pk %}">{{ enrollment.student.get_full_name }}</a>
+                        <small>{{ enrollment.student.admission_number }}</small>
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Class</div>
+                    <div class="info-val">
+                        <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}">{{ enrollment.class_instance }}</a>
+                        <small>{{ enrollment.class_instance.academic_level.name }}</small>
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Academic Session</div>
+                    <div class="info-val">
+                        <a href="{% url 'academics:session_detail' enrollment.academic_session.pk %}">{{ enrollment.academic_session.name }}</a>
+                        <small>{{ enrollment.academic_session.start_date|date:"d M Y" }} – {{ enrollment.academic_session.end_date|date:"d M Y" }}</small>
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Enrollment Date</div>
+                    <div class="info-val">{{ enrollment.enrollment_date|date:"d M Y" }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Enrollment Type</div>
+                    <div class="info-val">{{ enrollment.get_enrollment_type_display }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Progression Type</div>
+                    <div class="info-val">{{ enrollment.get_progression_type_display }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Roll Number</div>
+                    <div class="info-val">
+                        {% if enrollment.roll_number %}
+                            <span class="roll-chip">{{ enrollment.roll_number }}</span>
+                        {% else %}
+                            <span style="color:var(--ink-faint);font-weight:500;">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Class Teacher</div>
+                    <div class="info-val">
+                        {% if enrollment.class_instance.class_teacher %}
+                            {{ enrollment.class_instance.class_teacher.staff.get_full_name }}
+                        {% else %}
+                            <span style="color:var(--ink-faint);font-weight:500;">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# COMPLETION STATUS #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-tasks text-warning"></i>Status & Completion</span>
+            </div>
+            <div class="info-grid">
+                <div class="info-cell">
+                    <div class="info-lbl">Completion Status</div>
+                    <div class="info-val">
+                        {% if enrollment.completion_status == 'ONGOING' %}
+                            <span class="st-pill sp-ongoing" style="font-size:11px;padding:3px 10px;"><i class="fa fa-circle" style="font-size:7px;"></i>Active / Ongoing</span>
+                        {% elif enrollment.completion_status == 'COMPLETED' %}
+                            <span class="st-pill sp-completed" style="font-size:11px;padding:3px 10px;"><i class="fa fa-check-circle"></i>Completed</span>
+                        {% elif enrollment.completion_status == 'DROPPED' %}
+                            <span class="st-pill sp-dropped" style="font-size:11px;padding:3px 10px;"><i class="fa fa-times-circle"></i>Dropped</span>
+                        {% elif enrollment.completion_status == 'TRANSFERRED' %}
+                            <span class="st-pill sp-transferred" style="font-size:11px;padding:3px 10px;"><i class="fa fa-exchange-alt"></i>Transferred</span>
+                        {% elif enrollment.completion_status == 'SUSPENDED' %}
+                            <span class="st-pill sp-suspended" style="font-size:11px;padding:3px 10px;"><i class="fa fa-ban"></i>Suspended</span>
+                        {% else %}
+                            <span class="st-pill sp-withdrawn" style="font-size:11px;padding:3px 10px;">{{ enrollment.get_completion_status_display }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Record Active</div>
+                    <div class="info-val">
+                        {% if enrollment.is_active %}
+                            <span class="st-pill sp-active" style="font-size:11px;padding:3px 10px;"><i class="fa fa-check-circle"></i>Active</span>
+                        {% else %}
+                            <span class="st-pill sp-inactive" style="font-size:11px;padding:3px 10px;"><i class="fa fa-times-circle"></i>Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Completion Date</div>
+                    <div class="info-val">
+                        {% if enrollment.completion_date %}
+                            {{ enrollment.completion_date|date:"d M Y" }}
+                        {% else %}
+                            <span style="color:var(--ink-faint);font-weight:500;">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Auto-Create Invoice</div>
+                    <div class="info-val">
+                        {% if enrollment.auto_create_invoice %}
+                            <i class="fa fa-check-circle" style="color:var(--green);"></i> Yes
+                        {% else %}
+                            <i class="fa fa-times-circle" style="color:var(--ink-faint);"></i> No
+                        {% endif %}
+                    </div>
+                </div>
+                {% if enrollment.previous_enrollment %}
+                <div class="info-cell full">
+                    <div class="info-lbl">Previous Enrollment</div>
+                    <div class="info-val">
+                        <a href="{% url 'academics:enrollment_detail' enrollment.previous_enrollment.pk %}">
+                            {{ enrollment.previous_enrollment.class_instance }} — {{ enrollment.previous_enrollment.academic_session.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if next_enrollment %}
+                <div class="info-cell full">
+                    <div class="info-lbl">Next Enrollment</div>
+                    <div class="info-val">
+                        <a href="{% url 'academics:enrollment_detail' next_enrollment.pk %}">
+                            {{ next_enrollment.class_instance }} — {{ next_enrollment.academic_session.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Notes #}
+            {% if enrollment.enrollment_notes %}
+            <div class="notes-box">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--amber);margin-bottom:6px;">
+                    <i class="fa fa-sticky-note me-1"></i>Enrollment Notes
+                </div>
+                {{ enrollment.enrollment_notes }}
+            </div>
+            {% endif %}
+        </div>
+
+        {# ENROLLMENT HISTORY #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-history text-secondary"></i>Enrollment History for {{ enrollment.student.first_name }}</span>
+                <a href="{% url 'students:student_profile' enrollment.student.pk %}"
+                   class="btn btn-xs btn-outline-secondary"
+                   style="font-size:11.5px;padding:3px 10px;">
+                    <i class="fa fa-user me-1"></i>Full Profile
+                </a>
+            </div>
+            {% if enrollment_history %}
+            <div style="overflow-x:auto;">
+                <table class="hist-tbl">
+                    <thead>
+                        <tr>
+                            <th>Class</th>
+                            <th>Session</th>
+                            <th>Enrolled</th>
+                            <th class="text-center">Roll</th>
+                            <th class="text-center">Type</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center" style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hist in enrollment_history %}
+                        <tr class="{% if hist.pk == enrollment.pk %}current-row{% endif %}">
+                            <td>
+                                <a href="{% url 'academics:class_detail' hist.class_instance.pk %}"
+                                   style="font-weight:600;color:{% if hist.pk == enrollment.pk %}var(--accent){% else %}var(--ink){% endif %};text-decoration:none;">
+                                    {{ hist.class_instance.get_display_name }}
+                                </a>
+                                {% if hist.pk == enrollment.pk %}
+                                    <span style="font-size:10px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;font-weight:700;">Current</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size:12.5px;color:var(--ink-muted);">{{ hist.academic_session.name }}</td>
+                            <td style="font-size:12.5px;">{{ hist.enrollment_date|date:"d M Y" }}</td>
+                            <td class="text-center">
+                                {% if hist.roll_number %}
+                                    <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--accent);">{{ hist.roll_number }}</span>
+                                {% else %}
+                                    <span style="color:var(--ink-faint);">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center" style="font-size:11.5px;color:var(--ink-muted);">{{ hist.get_enrollment_type_display }}</td>
+                            <td class="text-center">
+                                {% if hist.completion_status == 'ONGOING' %}
+                                    <span class="st-pill sp-ongoing" style="font-size:10px;padding:2px 8px;">Active</span>
+                                {% elif hist.completion_status == 'COMPLETED' %}
+                                    <span class="st-pill sp-completed" style="font-size:10px;padding:2px 8px;">Completed</span>
+                                {% elif hist.completion_status == 'DROPPED' %}
+                                    <span class="st-pill sp-dropped" style="font-size:10px;padding:2px 8px;">Dropped</span>
+                                {% elif hist.completion_status == 'TRANSFERRED' %}
+                                    <span class="st-pill sp-transferred" style="font-size:10px;padding:2px 8px;">Transferred</span>
+                                {% else %}
+                                    <span class="st-pill sp-withdrawn" style="font-size:10px;padding:2px 8px;">{{ hist.get_completion_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if hist.pk != enrollment.pk %}
+                                <a href="{% url 'academics:enrollment_detail' hist.pk %}"
+                                   style="font-size:11.5px;color:var(--accent);">
+                                    <i class="fa fa-eye"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="padding:30px;text-align:center;color:var(--ink-faint);font-size:13px;">
+                No enrollment history found.
+            </div>
+            {% endif %}
+        </div>
+
+    </div>{# /col-lg-8 #}
+
+    {# ── SIDEBAR ── #}
+    <div class="col-lg-4" style="align-self:flex-start;">
+    <div style="position:sticky;top:80px;max-height:calc(100vh - 100px);overflow-y:auto;">
+
+        {# INVOICE #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-file-invoice text-success"></i>Academic Invoice</div>
+            <div class="side-card-body">
+                {% if enrollment.academic_invoice %}
+                <div class="inv-panel">
+                    <div class="inv-icon has"><i class="fa fa-file-invoice"></i></div>
+                    <div class="inv-detail">
+                        <div class="inv-number">{{ enrollment.academic_invoice.invoice_number }}</div>
+                        <div class="inv-status">{{ enrollment.academic_invoice.get_status_display }}</div>
+                    </div>
+                    <a href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}"
+                       class="btn btn-xs btn-outline-success" style="font-size:11px;padding:3px 9px;flex-shrink:0;">
+                        <i class="fa fa-eye me-1"></i>View
+                    </a>
+                </div>
+                {% else %}
+                <div class="inv-panel inv-missing">
+                    <div class="inv-icon miss"><i class="fa fa-exclamation-triangle"></i></div>
+                    <div class="inv-detail">
+                        <div class="inv-missing-text">No invoice yet</div>
+                        <div style="font-size:11px;color:var(--ink-muted);margin-top:1px;">Create one to track fees</div>
+                    </div>
+                    <button class="btn btn-xs btn-outline-warning"
+                            style="font-size:11px;padding:3px 9px;flex-shrink:0;"
+                            hx-get="{% url 'academics:enrollment_create_invoice_modal' enrollment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-plus me-1"></i>Create
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# QUICK ACTIONS #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-bolt text-warning"></i>Quick Actions</div>
+            <div class="side-card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-outline-{% if enrollment.is_active %}secondary{% else %}success{% endif %}"
+                            hx-get="{% url 'academics:enrollment_toggle_active_modal' enrollment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        {% if enrollment.is_active %}
+                            <i class="fa fa-pause-circle me-1"></i>Deactivate
+                        {% else %}
+                            <i class="fa fa-check-circle me-1"></i>Activate
+                        {% endif %}
+                    </button>
+                    <a href="{% url 'students:student_profile' enrollment.student.pk %}"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-user me-1"></i>Student Profile
+                    </a>
+                    <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-chalkboard me-1"></i>View Class
+                    </a>
+                    <a href="{% url 'academics:enrollment_print_detail' enrollment.pk %}"
+                       target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-print me-1"></i>Print
+                    </a>
+                    <button class="btn btn-sm btn-outline-danger"
+                            hx-get="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-trash me-1"></i>Remove Enrollment
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {# SUMMARY #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-info-circle text-primary"></i>Summary</div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Academic Level</span>
+                    <span class="s-value accent">{{ enrollment.class_instance.academic_level.name }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Session</span>
+                    <span class="s-value" style="font-size:12px;">{{ enrollment.academic_session.name }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Gender</span>
+                    <span class="s-value">{{ enrollment.student.get_gender_display }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Progression</span>
+                    <span class="s-value muted">{{ enrollment.get_progression_type_display }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Classroom</span>
+                    <span class="s-value muted">
+                        {% if enrollment.class_instance.classroom %}
+                            {{ enrollment.class_instance.classroom.room_number }}
+                        {% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Total Enrollments</span>
+                    <span class="s-value accent">{{ enrollment_history.count }}</span>
+                </div>
+            </div>
+        </div>
+
+        {# RECORD INFO #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-clock text-secondary"></i>Record Info</div>
+            <div class="side-card-body">
+                <div class="side-row">
+                    <span class="s-label">Created</span>
+                    <span class="s-value muted" style="font-size:11.5px;">{{ enrollment.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value muted" style="font-size:11.5px;">{{ enrollment.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>{# /sticky #}
+    </div>{# /col-lg-4 #}
+
+</div>{# /row #}
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true, focus: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+});
+</script>
+{% endblock %}

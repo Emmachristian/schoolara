@@ -1,0 +1,252 @@
+{# uniforms/templates/uniforms/items/partials/_size_recs_tab.html #}
+{% load currency_filters %}
+
+<style>
+.rec-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.rec-tbl thead th {
+    background:#f8fafc; padding:10px 14px;
+    font-size:10.5px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.55px; color:#64748b;
+    border-bottom:2px solid #e2e8f0; white-space:nowrap;
+}
+.rec-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color:#0f172a; }
+.rec-tbl tbody tr:last-child td { border-bottom:none; }
+.rec-tbl tbody tr:hover td { background:#fafbff !important; }
+
+.stu-name { font-weight:600; font-size:13px; color:#0f172a; text-decoration:none; display:block; }
+.stu-name:hover { color:#1d4ed8; }
+.stu-adm  { font-family:'Courier New',monospace; font-size:11px; color:#64748b; margin-top:1px; }
+
+.student-avatar {
+    width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#eff6ff; color:#1d4ed8; border:2px solid #bfdbfe;
+    font-size:.8rem; font-weight:700; text-transform:uppercase;
+}
+
+.size-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:42px; height:30px; padding:0 10px;
+    background:#eff6ff; border:1px solid #bfdbfe;
+    border-radius:6px; font-size:13px; font-weight:700; color:#1d4ed8;
+}
+
+/* ── Confidence pill ── */
+.conf-pill { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:700; }
+.conf-high   { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.conf-medium { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.conf-low    { background:#fee2e2; color:#dc2626; border:1px solid #fecaca; }
+
+/* ── Method chip ── */
+.method-chip {
+    display:inline-block; font-size:10.5px; font-weight:600; padding:2px 7px;
+    border-radius:4px; background:#f8fafc; border:1px solid #e2e8f0; color:#64748b;
+}
+
+/* ── Growth badge ── */
+.growth-badge {
+    display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700;
+    padding:1px 5px; border-radius:3px;
+    background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd;
+}
+
+.pag-bar {
+    padding:12px 16px; border-top:1px solid #e2e8f0; background:#f8fafc;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:8px; font-size:12.5px; color:#64748b;
+}
+
+.tbl-empty { text-align:center; padding:48px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.6rem; display:block; margin-bottom:12px; opacity:.35; }
+.tbl-empty p { font-size:13px; margin:0 0 14px; }
+
+.dropdown-menu { font-size:.85rem; min-width:185px; border:1px solid #e2e8f0; border-radius:8px; }
+.dropdown-item { padding:6px 14px; }
+</style>
+
+{% if recs_page %}
+<div style="overflow-x:auto;">
+    <table class="rec-tbl">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th class="text-center">Recommended Size</th>
+                <th class="text-center">Confidence</th>
+                <th class="text-center">Method</th>
+                <th>Session</th>
+                <th class="text-center">Date</th>
+                <th class="text-center" style="width:50px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rec in recs_page %}
+            <tr>
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="student-avatar">
+                            {{ rec.student.first_name|first }}{{ rec.student.last_name|first }}
+                        </div>
+                        <div>
+                            <a href="{% url 'students:student_profile' rec.student.pk %}" class="stu-name">
+                                {{ rec.student.get_full_name }}
+                            </a>
+                            <div class="stu-adm">{{ rec.student.admission_number }}</div>
+                        </div>
+                    </div>
+                </td>
+
+                <td class="text-center">
+                    <span class="size-badge">{{ rec.recommended_size.name }}</span>
+                    {% if rec.growth_allowance %}
+                    <div style="margin-top:4px;">
+                        <span class="growth-badge"><i class="fa fa-arrow-up" style="font-size:8px;"></i>+1 growth</span>
+                    </div>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if rec.confidence_level == 'HIGH' %}
+                        <span class="conf-pill conf-high"><i class="fa fa-check" style="font-size:8px;"></i>High</span>
+                    {% elif rec.confidence_level == 'MEDIUM' %}
+                        <span class="conf-pill conf-medium"><i class="fa fa-minus" style="font-size:8px;"></i>Medium</span>
+                    {% else %}
+                        <span class="conf-pill conf-low"><i class="fa fa-exclamation" style="font-size:8px;"></i>Low</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <span class="method-chip">{{ rec.get_sizing_method_display }}</span>
+                </td>
+
+                <td>
+                    <span style="font-size:12.5px;color:#0f172a;font-weight:500;">
+                        {{ rec.academic_session.name }}
+                    </span>
+                </td>
+
+                <td class="text-center">
+                    <span style="font-size:12px;color:#64748b;">
+                        {{ rec.recommendation_date|date:"d M Y" }}
+                    </span>
+                </td>
+
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:student_uniform_size_detail' rec.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:student_uniform_size_edit' rec.pk %}">
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Override Size
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'students:student_profile' rec.student.pk %}">
+                                    <i class="fa fa-user me-2"></i>Student Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:student_uniform_size_delete_modal' rec.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if recs_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ recs_page.start_index }}</strong>–<strong>{{ recs_page.end_index }}</strong>
+        of <strong>{{ recs_page.paginator.count|format_number }}</strong>
+        recommendation{{ recs_page.paginator.count|pluralize }}
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if recs_page.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_item_size_recs_partial' item.pk %}"
+                    hx-target="#tab-content" hx-include="#sizeRecsFilterForm"
+                    hx-vals='{"page":"{{ recs_page.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+        {% for p in recs_page.paginator.page_range %}
+            {% if p == recs_page.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > recs_page.number|add:"-3" and p < recs_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'uniforms:uniform_item_size_recs_partial' item.pk %}"
+                            hx-target="#tab-content" hx-include="#sizeRecsFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+        {% if recs_page.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_item_size_recs_partial' item.pk %}"
+                    hx-target="#tab-content" hx-include="#sizeRecsFilterForm"
+                    hx-vals='{"page":"{{ recs_page.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-ruler"></i>
+    <p>
+        {% if request.GET.q or request.GET.academic_session %}
+            No recommendations match your filters.
+        {% else %}
+            No size recommendations yet for this item.
+            They are generated automatically when student measurements are verified.
+        {% endif %}
+    </p>
+    {% if not request.GET.q and not request.GET.academic_session %}
+    <a href="{% url 'uniforms:student_uniform_size_create' %}?uniform_item={{ item.pk }}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:500;border-radius:6px;background:#fff;
+              color:#64748b;border:1px solid #e2e8f0;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Create Manually
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

@@ -1,0 +1,461 @@
+{% load currency_filters %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink:       #111827;
+            --ink-mid:   #374151;
+            --ink-soft:  #6b7280;
+            --ink-faint: #d1d5db;
+            --accent:    #1e3a5f;
+            --accent-bg: #eef2f7;
+            --success:   #15803d;
+            --white:     #ffffff;
+            --radius:    6px;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background: #f1f5f9;
+            padding: 24px;
+            line-height: 1.5;
+        }
+
+        /* ── Screen toolbar ── */
+        .screen-toolbar {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--accent); color: var(--white);
+            padding: 12px 20px; border-radius: 8px;
+            margin-bottom: 24px; gap: 12px; flex-wrap: wrap;
+            max-width: 720px; margin-left: auto; margin-right: auto;
+        }
+        .screen-toolbar span { font-size: 0.85rem; opacity: 0.85; }
+        .toolbar-actions { display: flex; gap: 8px; }
+        .btn-print, .btn-close {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; border-radius: 4px;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            border: none; text-decoration: none; transition: opacity 0.15s;
+        }
+        .btn-print { background: var(--white); color: var(--accent); }
+        .btn-close  { background: rgba(255,255,255,0.15); color: var(--white); }
+        .btn-print:hover, .btn-close:hover { opacity: 0.85; }
+
+        /* ── Receipt card ── */
+        .receipt {
+            background: var(--white);
+            border-radius: 10px;
+            max-width: 720px;
+            margin: 0 auto;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        /* ── Receipt header ── */
+        .receipt-header {
+            background: var(--accent);
+            color: var(--white);
+            padding: 28px 32px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .receipt-header-left { display: flex; align-items: center; gap: 16px; }
+        .school-logo {
+            width: 56px; height: 56px;
+            object-fit: contain; border-radius: 6px;
+            background: rgba(255,255,255,0.15);
+        }
+        .school-logo-placeholder {
+            width: 56px; height: 56px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem; color: var(--white); font-weight: 700; flex-shrink: 0;
+        }
+        .school-info h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.3rem; line-height: 1.2; margin-bottom: 3px;
+        }
+        .school-info p { font-size: 0.8rem; opacity: 0.75; line-height: 1.5; }
+        .receipt-header-right { text-align: right; flex-shrink: 0; }
+        .receipt-label {
+            font-size: 0.7rem; text-transform: uppercase;
+            letter-spacing: 1px; opacity: 0.7; margin-bottom: 4px;
+        }
+        .receipt-number {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem; font-weight: 700;
+        }
+        .receipt-date { font-size: 0.8rem; opacity: 0.75; margin-top: 4px; }
+
+        /* ── Status banner ── */
+        .status-banner {
+            padding: 10px 32px;
+            font-size: 0.8rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.6px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .status-verified   { background: #dcfce7; color: #15803d; }
+        .status-unverified { background: #fef9c3; color: #92400e; }
+        .status-reversed   { background: #fee2e2; color: #b91c1c; }
+        .status-refunded   { background: #ede9fe; color: #6d28d9; }
+        .status-failed     { background: #fee2e2; color: #b91c1c; }
+        .status-pending    { background: #f1f5f9; color: #64748b; }
+
+        /* ── Receipt body ── */
+        .receipt-body { padding: 28px 32px; }
+
+        /* ── Amount hero ── */
+        .amount-hero {
+            text-align: center;
+            padding: 24px 20px;
+            background: var(--accent-bg);
+            border-radius: var(--radius);
+            margin-bottom: 28px;
+        }
+        .amount-hero .label {
+            font-size: 0.72rem; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--ink-soft); margin-bottom: 6px;
+        }
+        .amount-hero .amount {
+            font-family: 'DM Serif Display', serif;
+            font-size: 2.4rem; color: var(--accent); line-height: 1;
+        }
+        .amount-hero .amount.crossed {
+            text-decoration: line-through; color: var(--ink-soft); font-size: 1.8rem;
+        }
+
+        /* ── Detail grid ── */
+        .detail-section { margin-bottom: 24px; }
+        .detail-section-title {
+            font-size: 0.68rem; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--ink-soft);
+            margin-bottom: 10px; padding-bottom: 6px;
+            border-bottom: 1px solid var(--ink-faint);
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 24px;
+        }
+        .detail-grid.single { grid-template-columns: 1fr; }
+        .detail-item {}
+        .detail-item .di-label {
+            font-size: 0.72rem; text-transform: uppercase;
+            letter-spacing: 0.4px; color: var(--ink-soft); margin-bottom: 2px;
+        }
+        .detail-item .di-value {
+            font-size: 0.9rem; color: var(--ink); font-weight: 500;
+        }
+        .detail-item .di-value.mono {
+            font-family: 'Courier New', monospace; font-size: 0.85rem;
+            color: var(--accent); background: var(--accent-bg);
+            padding: 2px 6px; border-radius: 3px; display: inline-block;
+        }
+        .detail-item .di-value.muted { color: var(--ink-soft); font-weight: 400; }
+
+        /* ── Invoice link box ── */
+        .invoice-box {
+            background: var(--accent-bg);
+            border: 1px solid #bfdbfe;
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .invoice-box .ib-left .ib-label {
+            font-size: 0.7rem; text-transform: uppercase;
+            letter-spacing: 0.4px; color: var(--ink-soft); margin-bottom: 2px;
+        }
+        .invoice-box .ib-left .ib-number {
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem; font-weight: 700; color: var(--accent);
+        }
+        .invoice-box .ib-right { text-align: right; }
+        .invoice-box .ib-right .ib-balance-label {
+            font-size: 0.7rem; text-transform: uppercase;
+            letter-spacing: 0.4px; color: var(--ink-soft); margin-bottom: 2px;
+        }
+        .invoice-box .ib-right .ib-balance {
+            font-size: 0.95rem; font-weight: 700;
+        }
+        .ib-balance.settled { color: var(--success); }
+        .ib-balance.owing   { color: #dc2626; }
+
+        /* ── Remarks ── */
+        .remarks-box {
+            background: #f9fafb; border: 1px solid var(--ink-faint);
+            border-radius: var(--radius); padding: 12px 16px;
+            font-size: 0.85rem; color: var(--ink-mid); margin-bottom: 24px;
+        }
+        .remarks-box .remarks-label {
+            font-size: 0.68rem; text-transform: uppercase;
+            letter-spacing: 0.4px; color: var(--ink-soft); margin-bottom: 4px;
+        }
+
+        /* ── Receipt footer ── */
+        .receipt-footer {
+            border-top: 1px dashed var(--ink-faint);
+            padding: 18px 32px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 20px;
+        }
+        .footer-note { font-size: 0.78rem; color: var(--ink-soft); }
+        .footer-printed { font-size: 0.75rem; color: var(--ink-faint); text-align: right; }
+
+        /* ── Print ── */
+        @media print {
+            @page { size: A5 portrait; margin: 10mm; }
+            body { background: white; padding: 0; }
+            .screen-toolbar { display: none !important; }
+            .receipt { box-shadow: none; max-width: 100%; }
+        }
+        @media screen { body { min-height: 100vh; } }
+    </style>
+</head>
+<body>
+
+<!-- Screen toolbar -->
+<div class="screen-toolbar">
+    <span>Payment Receipt — use Print / Save PDF to export.</span>
+    <div class="toolbar-actions">
+        <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+        <button class="btn-close" onclick="window.close()">✕ Close</button>
+    </div>
+</div>
+
+<div class="receipt">
+
+    <!-- Header -->
+    <div class="receipt-header">
+        <div class="receipt-header-left">
+            {% if school_logo_url %}
+                <img src="{{ school_logo_url }}" alt="{{ school_name }}" class="school-logo">
+            {% else %}
+                <div class="school-logo-placeholder">{{ school_name|first|upper }}</div>
+            {% endif %}
+            <div class="school-info">
+                <h1>{{ school_name }}</h1>
+                {% if school_address %}<p>{{ school_address }}</p>{% endif %}
+                {% if school_contact %}<p>{{ school_contact }}</p>{% endif %}
+            </div>
+        </div>
+        <div class="receipt-header-right">
+            <div class="receipt-label">Receipt</div>
+            <div class="receipt-number">
+                {{ payment.receipt_number|default:payment.payment_number }}
+            </div>
+            <div class="receipt-date">{{ payment.payment_date|date:"d M Y" }}</div>
+        </div>
+    </div>
+
+    <!-- Status banner -->
+    {% if payment.reversed %}
+        <div class="status-banner status-reversed">⚠ This payment has been reversed</div>
+    {% elif payment.refunded %}
+        <div class="status-banner status-refunded">↩ This payment has been refunded</div>
+    {% elif payment.status == 'FAILED' %}
+        <div class="status-banner status-failed">✕ Payment failed</div>
+    {% elif payment.status == 'PENDING' %}
+        <div class="status-banner status-pending">⏳ Pending verification</div>
+    {% elif payment.is_verified %}
+        <div class="status-banner status-verified">✓ Verified payment</div>
+    {% else %}
+        <div class="status-banner status-unverified">⏳ Awaiting verification</div>
+    {% endif %}
+
+    <!-- Body -->
+    <div class="receipt-body">
+
+        <!-- Amount hero -->
+        <div class="amount-hero">
+            <div class="label">Amount Paid</div>
+            <div class="amount {% if payment.reversed or payment.refunded %}crossed{% endif %}">
+                {{ payment.amount|money }}
+            </div>
+        </div>
+
+        <!-- Student -->
+        <div class="detail-section">
+            <div class="detail-section-title">Student</div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="di-label">Name</div>
+                    <div class="di-value">{{ payment.student.get_full_name }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="di-label">Admission Number</div>
+                    <div class="di-value mono">{{ payment.student.admission_number }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice -->
+        {% if payment.invoice %}
+        <div class="invoice-box">
+            <div class="ib-left">
+                <div class="ib-label">Applied to Invoice</div>
+                <div class="ib-number">{{ payment.invoice.invoice_number }}</div>
+            </div>
+            <div class="ib-right">
+                <div class="ib-balance-label">Invoice Balance After</div>
+                {% with bal=payment.invoice.balance %}
+                    {% if bal <= 0 %}
+                        <div class="ib-balance settled">✓ Settled</div>
+                    {% else %}
+                        <div class="ib-balance owing">{{ bal|money }} owing</div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Payment details -->
+        <div class="detail-section">
+            <div class="detail-section-title">Payment Details</div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="di-label">Payment Method</div>
+                    <div class="di-value">{{ payment.payment_method.name|default:"—" }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="di-label">Payment Date</div>
+                    <div class="di-value">{{ payment.payment_date|date:"d M Y" }}</div>
+                </div>
+                {% if payment.reference_number %}
+                <div class="detail-item">
+                    <div class="di-label">Reference Number</div>
+                    <div class="di-value mono">{{ payment.reference_number }}</div>
+                </div>
+                {% endif %}
+                {% if payment.transaction_id %}
+                <div class="detail-item">
+                    <div class="di-label">Transaction ID</div>
+                    <div class="di-value mono">{{ payment.transaction_id }}</div>
+                </div>
+                {% endif %}
+                {% if payment.bank_name %}
+                <div class="detail-item">
+                    <div class="di-label">Bank</div>
+                    <div class="di-value">{{ payment.bank_name }}</div>
+                </div>
+                {% endif %}
+                {% if payment.cheque_number %}
+                <div class="detail-item">
+                    <div class="di-label">Cheque Number</div>
+                    <div class="di-value mono">{{ payment.cheque_number }}</div>
+                </div>
+                {% endif %}
+                {% if payment.mobile_money_provider %}
+                <div class="detail-item">
+                    <div class="di-label">Mobile Provider</div>
+                    <div class="di-value">{{ payment.mobile_money_provider }}</div>
+                </div>
+                {% endif %}
+                {% if payment.mobile_number %}
+                <div class="detail-item">
+                    <div class="di-label">Mobile Number</div>
+                    <div class="di-value mono">{{ payment.mobile_number }}</div>
+                </div>
+                {% endif %}
+                {% if payment.academic_session %}
+                <div class="detail-item">
+                    <div class="di-label">Academic Session</div>
+                    <div class="di-value">{{ payment.academic_session.name }}</div>
+                </div>
+                {% endif %}
+                {% if payment.fiscal_period %}
+                <div class="detail-item">
+                    <div class="di-label">Fiscal Period</div>
+                    <div class="di-value">{{ payment.fiscal_period.name }}</div>
+                </div>
+                {% endif %}
+                {% if payment.amount_applied_to_invoice and payment.amount_applied_to_invoice != payment.amount %}
+                <div class="detail-item">
+                    <div class="di-label">Applied to Invoice</div>
+                    <div class="di-value">{{ payment.amount_applied_to_invoice|money }}</div>
+                </div>
+                {% endif %}
+                {% if payment.overpayment_amount and payment.overpayment_amount > 0 %}
+                <div class="detail-item">
+                    <div class="di-label">Overpayment / Credit</div>
+                    <div class="di-value" style="color:#1d4ed8;">{{ payment.overpayment_amount|money }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Paid by (if different from student) -->
+        {% if payment.paid_by_name %}
+        <div class="detail-section">
+            <div class="detail-section-title">Received From</div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="di-label">Name</div>
+                    <div class="di-value">{{ payment.paid_by_name }}</div>
+                </div>
+                {% if payment.paid_by_phone %}
+                <div class="detail-item">
+                    <div class="di-label">Phone</div>
+                    <div class="di-value">{{ payment.paid_by_phone }}</div>
+                </div>
+                {% endif %}
+                {% if payment.paid_by_relationship %}
+                <div class="detail-item">
+                    <div class="di-label">Relationship</div>
+                    <div class="di-value">{{ payment.get_paid_by_relationship_display }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Remarks -->
+        {% if payment.remarks %}
+        <div class="remarks-box">
+            <div class="remarks-label">Remarks</div>
+            {{ payment.remarks }}
+        </div>
+        {% endif %}
+
+        <!-- Reversal / refund details -->
+        {% if payment.reversed and payment.reversal_reason %}
+        <div class="remarks-box" style="border-color:#fecaca; background:#fff5f5;">
+            <div class="remarks-label" style="color:#dc2626;">Reversal Reason</div>
+            {{ payment.reversal_reason }}
+        </div>
+        {% endif %}
+        {% if payment.refunded and payment.refund_notes %}
+        <div class="remarks-box" style="border-color:#ddd6fe; background:#faf5ff;">
+            <div class="remarks-label" style="color:#6d28d9;">Refund Notes</div>
+            {{ payment.refund_notes }}
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- Footer -->
+    <div class="receipt-footer">
+        <div class="footer-note">
+            {{ school_name }} — Official Payment Receipt
+        </div>
+        <div class="footer-printed">
+            Printed: {{ now|date:"d M Y, H:i" }}
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

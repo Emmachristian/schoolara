@@ -1,0 +1,124 @@
+{# uniforms/templates/uniforms/sales/partials/_items_tab.html #}
+{% load currency_filters %}
+{% load custom_filters %}
+
+<style>
+.si-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.si-tbl thead th { background:#f8fafc; padding:10px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.si-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.si-tbl tbody tr:last-child td { border-bottom:none; }
+.si-tbl tfoot td { padding:11px 14px; border-top:2px solid #e2e8f0; font-weight:700; background:#f8fafc; font-size:13px; }
+
+.item-link { font-weight:600; color:#0f172a; text-decoration:none; }
+.item-link:hover { color:#1d4ed8; }
+.item-code { font-family:'Courier New',monospace; font-size:11px; color:#94a3b8; margin-top:1px; }
+
+.size-chip { display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:24px; padding:0 7px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; font-size:11.5px; font-weight:700; color:#1d4ed8; }
+
+.disc-chip { display:inline-block; font-size:10px; font-weight:700; padding:1px 5px; border-radius:3px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+.tax-chip  { display:inline-block; font-size:10px; font-weight:700; padding:1px 5px; border-radius:3px; background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+
+.tbl-empty { text-align:center; padding:40px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.4rem; display:block; margin-bottom:10px; opacity:.35; }
+</style>
+
+{% if items %}
+<div style="overflow-x:auto;">
+    <table class="si-tbl">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th class="text-center">Size</th>
+                <th class="text-center">Qty</th>
+                <th class="text-center">Unit Price</th>
+                <th class="text-center">Adjustments</th>
+                <th class="text-center">Line Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for si in items %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                <td>
+                    <a href="{% url 'uniforms:uniform_item_detail' si.uniform_item.pk %}" class="item-link">
+                        {{ si.uniform_item.name }}
+                    </a>
+                    <div class="item-code">{{ si.uniform_item.code }}</div>
+                </td>
+                <td class="text-center">
+                    {% if si.size %}<span class="size-chip">{{ si.size.name }}</span>
+                    {% else %}<span style="color:#94a3b8;">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                    <span style="font-size:15px;font-weight:700;">{{ si.quantity }}</span>
+                </td>
+                <td class="text-center">
+                    <span style="font-size:13px;font-weight:600;">{{ si.unit_price|money }}</span>
+                    {% if si.unit_cost %}
+                    <div style="font-size:10.5px;color:#94a3b8;margin-top:1px;">cost {{ si.unit_cost|money }}</div>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if si.discount_percentage and si.discount_percentage > 0 %}
+                    <span class="disc-chip">−{{ si.discount_percentage|floatformat:1 }}%</span>
+                    {% endif %}
+                    {% if si.tax_percentage and si.tax_percentage > 0 %}
+                    <span class="tax-chip">+{{ si.tax_percentage|floatformat:1 }}% tax</span>
+                    {% endif %}
+                    {% if not si.discount_percentage and not si.tax_percentage %}
+                    <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    <span style="font-size:14px;font-weight:700;color:#0f172a;">{{ si.total_price|money }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            {% if sale.discount_amount and sale.discount_amount > 0 %}
+            <tr>
+                <td colspan="5"></td>
+                <td class="text-end" style="font-weight:500;color:#64748b;font-size:12px;">Discount</td>
+                <td class="text-center" style="color:#dc2626;">−{{ sale.discount_amount|money }}</td>
+            </tr>
+            {% endif %}
+            {% if sale.tax_amount and sale.tax_amount > 0 %}
+            <tr>
+                <td colspan="5"></td>
+                <td class="text-end" style="font-weight:500;color:#64748b;font-size:12px;">Tax</td>
+                <td class="text-center">{{ sale.tax_amount|money }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td colspan="5"></td>
+                <td class="text-end" style="color:#0f172a;">Total</td>
+                <td class="text-center" style="color:#1d4ed8;font-size:15px;">{{ sale.total_amount|money }}</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-list"></i>
+    <p>No line items on this sale.</p>
+    {% if sale.status == 'DRAFT' %}
+    <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:600;border-radius:6px;
+              background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-edit" style="font-size:11px;"></i>Edit Sale to Add Items
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el); if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+})();
+</script>

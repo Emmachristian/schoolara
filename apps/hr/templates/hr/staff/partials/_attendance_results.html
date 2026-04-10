@@ -1,0 +1,123 @@
+{% load humanize %}
+
+<!-- Summary strip -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="attendance-box present">
+            <div class="a-value">{{ attendance_summary.present }}</div>
+            <div class="a-label">Present</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="attendance-box absent">
+            <div class="a-value">{{ attendance_summary.absent }}</div>
+            <div class="a-label">Absent</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="attendance-box late">
+            <div class="a-value">{{ attendance_summary.late }}</div>
+            <div class="a-label">Late</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="attendance-box on-leave">
+            <div class="a-value">{{ attendance_summary.on_leave }}</div>
+            <div class="a-label">On Leave</div>
+        </div>
+    </div>
+</div>
+
+{% if attendance %}
+<div class="table-responsive">
+    <table class="table table-hover" style="font-size:0.85rem;">
+        <thead style="background:var(--bg);">
+            <tr>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Check In</th>
+                <th>Check Out</th>
+                <th>Hours</th>
+                <th>Mode</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in attendance %}
+            <tr>
+                <td>{{ record.date|date:"d M Y" }}</td>
+                <td>
+                    {% if record.status == 'PRESENT' %}<span class="pill pill-active">Present</span>
+                    {% elif record.status == 'ABSENT' %}<span class="pill pill-expired">Absent</span>
+                    {% elif record.status == 'LATE' %}<span class="pill pill-late">Late</span>
+                    {% elif record.status == 'LEAVE' %}<span class="pill pill-approved">Leave</span>
+                    {% else %}<span class="pill pill-draft">{{ record.get_status_display }}</span>
+                    {% endif %}
+                </td>
+                <td style="color:var(--text-muted);">
+                    {% if record.check_in %}{{ record.check_in|time:"H:i" }}{% else %}—{% endif %}
+                </td>
+                <td style="color:var(--text-muted);">
+                    {% if record.check_out %}{{ record.check_out|time:"H:i" }}{% else %}—{% endif %}
+                </td>
+                <td>{% if record.work_hours %}{{ record.work_hours }}h{% else %}—{% endif %}</td>
+                <td style="color:var(--text-muted);">
+                    {% if record.work_mode %}{{ record.get_work_mode_display }}{% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if attendance.has_other_pages %}
+<div class="d-flex justify-content-between align-items-center mt-3 px-1"
+     style="font-size:0.82rem;">
+    <span style="color:var(--text-muted);">
+        Page {{ attendance.number }} of {{ attendance.paginator.num_pages }}
+        &nbsp;·&nbsp; {{ attendance.paginator.count }} record{{ attendance.paginator.count|pluralize }}
+    </span>
+    <div class="d-flex gap-1">
+        {% if attendance.has_previous %}
+        <button class="btn btn-sm btn-outline-secondary"
+                style="padding:2px 10px;"
+                hx-get="{% url 'hr:staff_attendance_partial' staff.pk %}?page={{ attendance.previous_page_number }}"
+                hx-target="#attendance-content"
+                hx-include="#attendance-filter-form"
+                hx-swap="innerHTML">
+            <i class="fa fa-chevron-left"></i>
+        </button>
+        {% endif %}
+        {% for num in attendance.paginator.page_range %}
+            {% if attendance.number == num %}
+            <button class="btn btn-sm btn-primary" style="padding:2px 10px; min-width:32px;">{{ num }}</button>
+            {% elif num == 1 or num == attendance.paginator.num_pages or num|add:"-1" == attendance.number or num|add:"1" == attendance.number %}
+            <button class="btn btn-sm btn-outline-secondary"
+                    style="padding:2px 10px; min-width:32px;"
+                    hx-get="{% url 'hr:staff_attendance_partial' staff.pk %}?page={{ num }}"
+                    hx-target="#attendance-content"
+                    hx-include="#attendance-filter-form"
+                    hx-swap="innerHTML">{{ num }}</button>
+            {% endif %}
+        {% endfor %}
+        {% if attendance.has_next %}
+        <button class="btn btn-sm btn-outline-secondary"
+                style="padding:2px 10px;"
+                hx-get="{% url 'hr:staff_attendance_partial' staff.pk %}?page={{ attendance.next_page_number }}"
+                hx-target="#attendance-content"
+                hx-include="#attendance-filter-form"
+                hx-swap="innerHTML">
+            <i class="fa fa-chevron-right"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<p class="list-footer mt-2">{{ attendance.paginator.count }} record{{ attendance.paginator.count|pluralize }}</p>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon"><i class="fa fa-calendar-check"></i></div>
+    <p class="empty-text">No attendance records match your filters</p>
+</div>
+{% endif %}

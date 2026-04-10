@@ -1,0 +1,310 @@
+{% load currency_filters %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block page_title %}Report{% endblock %} — {{ school_name|default:"School" }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink:        #111827;
+            --ink-mid:    #374151;
+            --ink-soft:   #6b7280;
+            --ink-faint:  #d1d5db;
+            --accent:     #1e3a5f;
+            --accent-bg:  #eef2f7;
+            --stripe:     #f9fafb;
+            --white:      #ffffff;
+            --success:    #16a34a;
+            --warning:    #b45309;
+            --danger:     #b91c1c;
+            --radius:     4px;
+            --table-font: 11pt;
+            --cell-pad-v: 6px;
+            --cell-pad-h: 10px;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background: var(--white);
+            padding: 24px 32px;
+            line-height: 1.5;
+        }
+
+        /* ── Screen toolbar ──────────────────────────────────────── */
+        .screen-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--accent);
+            color: var(--white);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .screen-toolbar span { font-size: 0.85rem; opacity: 0.85; }
+        .toolbar-actions { display: flex; gap: 8px; }
+        .btn-print, .btn-close {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; border-radius: var(--radius);
+            font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            border: none; text-decoration: none; transition: opacity 0.15s;
+        }
+        .btn-print { background: var(--white); color: var(--accent); }
+        .btn-close  { background: rgba(255,255,255,0.15); color: var(--white); }
+        .btn-print:hover, .btn-close:hover { opacity: 0.85; }
+        #font-info { font-size: 0.75rem; opacity: 0.7; font-style: italic; }
+
+        /* ── Document header ─────────────────────────────────────── */
+        .doc-header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between;
+            padding-bottom: 16px;
+            border-bottom: 3px solid var(--accent);
+            margin-bottom: 20px; gap: 20px;
+        }
+        .doc-header-left { display: flex; align-items: center; gap: 16px; }
+        .school-logo {
+            width: 64px; height: 64px; object-fit: contain; border-radius: 6px;
+        }
+        .school-logo-placeholder {
+            width: 64px; height: 64px; background: var(--accent-bg);
+            border-radius: 6px; display: flex; align-items: center;
+            justify-content: center; font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem; color: var(--accent); font-weight: 700; flex-shrink: 0;
+        }
+        .school-info h1 {
+            font-family: 'DM Serif Display', serif; font-size: 1.55rem;
+            color: var(--accent); line-height: 1.2; margin-bottom: 4px;
+        }
+        .school-info p { font-size: 0.84rem; color: var(--ink-soft); line-height: 1.45; }
+        .doc-header-right { text-align: right; flex-shrink: 0; }
+        .doc-header-right h2 {
+            font-family: 'DM Serif Display', serif; font-size: 1.25rem;
+            color: var(--ink); margin-bottom: 4px;
+        }
+        .doc-header-right p { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.6; }
+
+        /* ── Stats bar ───────────────────────────────────────────── */
+        .stats-bar {
+            display: flex; background: var(--accent-bg);
+            border: 1px solid var(--ink-faint); border-radius: var(--radius);
+            overflow: hidden; margin-bottom: 18px; flex-wrap: wrap;
+        }
+        .stat-cell {
+            flex: 1; min-width: 100px;
+            padding: 10px 14px; border-right: 1px solid var(--ink-faint);
+            text-align: center;
+        }
+        .stat-cell:last-child { border-right: none; }
+        .stat-cell .stat-value {
+            font-size: 1.2rem; font-weight: 700; color: var(--accent);
+            display: block; line-height: 1; margin-bottom: 3px;
+        }
+        .stat-cell .stat-label {
+            font-size: 0.68rem; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--ink-soft);
+        }
+
+        /* ── Table ───────────────────────────────────────────────── */
+        .table-wrap {
+            width: 100%; overflow: hidden;
+            border: 1px solid var(--ink-faint); border-radius: var(--radius);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: var(--table-font); }
+        thead tr { background: var(--accent); color: var(--white); }
+        thead th {
+            padding: var(--cell-pad-v) var(--cell-pad-h);
+            text-align: left; font-weight: 600; font-size: 0.8em;
+            text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;
+        }
+        thead th.num { text-align: right; }
+        thead th.ctr { text-align: center; }
+        thead th:first-child { width: 32px; text-align: center; }
+
+        tbody tr:nth-child(even) { background: var(--stripe); }
+        tbody tr:nth-child(odd)  { background: var(--white); }
+        tbody td {
+            padding: var(--cell-pad-v) var(--cell-pad-h);
+            border-bottom: 1px solid var(--ink-faint);
+            vertical-align: middle; color: var(--ink-mid);
+            word-break: break-word; overflow-wrap: anywhere;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        td:first-child { text-align: center; color: var(--ink-soft); font-size: 0.8em; width: 32px; white-space: nowrap; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        td.ctr { text-align: center; }
+
+        /* ── Chips & badges ──────────────────────────────────────── */
+        .chip-adm {
+            font-family: monospace; font-size: 0.85em; color: var(--accent);
+            background: var(--accent-bg); padding: 2px 6px;
+            border-radius: 3px; display: inline-block; white-space: nowrap;
+        }
+        .chip-code {
+            font-family: monospace; font-size: 0.82em; color: var(--ink-mid);
+            background: #f3f4f6; padding: 2px 6px;
+            border-radius: 3px; display: inline-block; white-space: nowrap;
+        }
+
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 20px;
+            font-size: 0.75em; text-transform: uppercase;
+            letter-spacing: 0.3px; white-space: nowrap; font-weight: 600;
+        }
+
+        /* Invoice / generic status */
+        .s-draft       { background: #f3f4f6; color: #374151; }
+        .s-pending     { background: #fef9c3; color: #92400e; }
+        .s-paid        { background: #dcfce7; color: #15803d; }
+        .s-partial     { background: #dbeafe; color: #1d4ed8; }
+        .s-overdue     { background: #fee2e2; color: #b91c1c; }
+        .s-void,
+        .s-cancelled   { background: #f3f4f6; color: #6b7280; }
+        .s-active      { background: #dcfce7; color: #15803d; }
+        .s-suspended   { background: #fef3c7; color: #b45309; }
+        .s-terminated  { background: #fee2e2; color: #b91c1c; }
+        .s-completed   { background: #ede9fe; color: #6d28d9; }
+        .s-approved    { background: #dcfce7; color: #15803d; }
+        .s-rejected    { background: #fee2e2; color: #b91c1c; }
+        .s-submitted   { background: #dbeafe; color: #1d4ed8; }
+        .s-review      { background: #fef9c3; color: #92400e; }
+        .s-requested   { background: #fef9c3; color: #92400e; }
+        .s-processing  { background: #dbeafe; color: #1d4ed8; }
+        .s-reversed    { background: #fce7f3; color: #9d174d; }
+        .s-refunded    { background: #ede9fe; color: #6d28d9; }
+        .s-default     { background: #f3f4f6; color: #374151; }
+
+        .bool-yes { color: var(--success); font-weight: 600; }
+        .bool-no  { color: var(--ink-soft); }
+        .text-danger  { color: var(--danger); font-weight: 600; }
+        .text-success { color: var(--success); font-weight: 600; }
+        .text-muted   { color: var(--ink-soft); }
+        .text-warn    { color: var(--warning); font-weight: 600; }
+
+        /* ── Empty state ─────────────────────────────────────────── */
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-soft); }
+        .empty-state p { font-size: 0.85rem; margin-top: 8px; }
+
+        /* ── Footer ──────────────────────────────────────────────── */
+        .doc-footer {
+            margin-top: 20px; padding-top: 12px;
+            border-top: 1px solid var(--ink-faint);
+            display: flex; justify-content: space-between;
+            align-items: center; font-size: 0.75rem; color: var(--ink-soft);
+        }
+
+        /* ── Print ───────────────────────────────────────────────── */
+        @media print {
+            @page {
+                margin: 12mm 10mm;
+                {% block print_orientation %}size: A4 landscape;{% endblock %}
+            }
+            body            { padding: 0; background: white; }
+            .screen-toolbar { display: none !important; }
+            .doc-header     { page-break-inside: avoid; }
+            .stats-bar      { page-break-inside: avoid; }
+            .table-wrap     { border: none; }
+            thead           { display: table-header-group; }
+            tfoot           { display: table-footer-group; }
+            tbody tr        { page-break-inside: avoid; }
+            a               { text-decoration: none; color: inherit; }
+        }
+
+        @media screen { body { max-width: 1280px; margin: 0 auto; } }
+    </style>
+</head>
+<body>
+
+<!-- Screen toolbar -->
+<div class="screen-toolbar">
+    <div>
+        <span>Preview — use Print / Save PDF to export.</span>&nbsp;
+        <span id="font-info"></span>
+    </div>
+    <div class="toolbar-actions">
+        <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+        <button class="btn-close" onclick="window.close()">✕ Close</button>
+    </div>
+</div>
+
+<!-- Document header -->
+<div class="doc-header">
+    <div class="doc-header-left">
+    {% if school_logo_url %}
+        <img src="{{ school_logo_url }}" alt="{{ school_name }}" class="school-logo">
+    {% else %}
+        <div class="school-logo-placeholder">{{ school_name|first|upper }}</div>
+    {% endif %}
+        <div class="school-info">
+            <h1>{{ school_name|default:"School" }}</h1>
+            {% if school_address %}<p>{{ school_address }}</p>{% endif %}
+            {% if school_contact %}<p>{{ school_contact }}</p>{% endif %}
+        </div>
+    </div>
+    <div class="doc-header-right">
+        <h2>{% block doc_title %}Report{% endblock %}</h2>
+        <p>
+            Generated: {{ now|date:"d M Y, H:i" }}<br>
+            Printed by: {{ printed_by|default:"—" }}<br>
+            Total records: {% block record_count %}—{% endblock %}
+        </p>
+    </div>
+</div>
+
+<!-- Stats bar (override per template) -->
+{% block stats_bar %}{% endblock %}
+
+<!-- Table -->
+<div class="table-wrap">
+    <table id="main-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                {% for name in selected_field_names %}<th>{{ name }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% block table_body %}{% endblock %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Footer -->
+<div class="doc-footer">
+    <span>{{ school_name|default:"School" }} — {{ title }}</span>
+    <span>{{ print_date|date:"d M Y" }}</span>
+</div>
+
+<script>
+(function () {
+    var LANDSCAPE = {{ landscape|yesno:"true,false" }};
+    var cols = document.querySelectorAll('#main-table thead th').length;
+    var fontSize, padV, padH;
+    if      (cols <= 4)  { fontSize = '11pt';  padV = '7px'; padH = '11px'; }
+    else if (cols <= 6)  { fontSize = '10pt';  padV = '6px'; padH = '10px'; }
+    else if (cols <= 8)  { fontSize = '9pt';   padV = '5px'; padH = '9px';  }
+    else if (cols <= 10) { fontSize = '8.5pt'; padV = '5px'; padH = '8px';  }
+    else if (cols <= 12) { fontSize = '8pt';   padV = '4px'; padH = '7px';  }
+    else                 { fontSize = '7.5pt'; padV = '4px'; padH = '6px';  }
+    var root = document.documentElement;
+    root.style.setProperty('--table-font', fontSize);
+    root.style.setProperty('--cell-pad-v', padV);
+    root.style.setProperty('--cell-pad-h', padH);
+    var info = document.getElementById('font-info');
+    if (info) {
+        var hint = cols + ' column' + (cols !== 1 ? 's' : '') + ' — font: ' + fontSize + '.';
+        if (!LANDSCAPE && cols >= 8) hint += ' Tip: use Landscape for more room.';
+        info.textContent = hint;
+    }
+})();
+</script>
+
+</body>
+</html>

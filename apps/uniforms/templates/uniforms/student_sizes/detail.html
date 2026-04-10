@@ -1,0 +1,485 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0; --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.sr-hero { background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:var(--radius); padding:26px 30px 22px; margin-bottom:24px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; }
+.hero-item { font-size:20px; font-weight:800; color:var(--ink); }
+.hero-top  { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.hero-meta { display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; }
+.hero-meta-item  { display:flex; flex-direction:column; gap:2px; }
+.hero-meta-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value { font-size:13px; font-weight:600; color:var(--ink); }
+
+.status-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+.sp-current { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.sp-old     { background:var(--surface-3); color:var(--ink-muted); border:1px solid var(--border); }
+
+.confidence-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:6px; font-size:12px; font-weight:700; }
+.cb-high   { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.cb-medium { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.cb-low    { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
+
+.other-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.other-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid var(--border); }
+.other-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.other-tbl tbody tr:last-child td { border-bottom:none; }
+.other-tbl tbody tr:hover td { background:#fafbff; }
+.other-tbl tbody tr.row-current td { background:var(--accent-lt); }
+
+.size-chip { display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:32px; padding:0 10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; font-size:15px; font-weight:800; color:#1d4ed8; }
+
+.alt-size-list { display:flex; gap:6px; flex-wrap:wrap; padding:14px 20px; }
+.alt-chip { display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:30px; padding:0 10px; background:var(--surface-3); border:1px solid var(--border); border-radius:6px; font-size:13px; font-weight:700; color:var(--ink-muted); }
+
+.sidebar-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+.sidebar-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.sidebar-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.s-label { color:var(--ink-muted); font-size:12.5px; }
+.s-value { font-weight:700; color:var(--ink); }
+.s-value.green  { color:var(--green); }
+.s-value.accent { color:var(--accent); }
+.s-value.muted  { color:var(--ink-muted); font-weight:500; }
+.s-value.amber  { color:var(--amber); }
+.s-value.red    { color:var(--red); }
+
+.tbl-empty { text-align:center; padding:32px 20px; color:var(--ink-faint); }
+.tbl-empty i { font-size:2rem; display:block; margin-bottom:8px; opacity:.35; }
+
+@media (max-width:768px) { .sr-hero { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-tools icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Size Recommendation
+                <div class="page-title-subheading">
+                    {{ size_rec.student.get_full_name }} &mdash; {{ size_rec.uniform_item.name }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'students:student_profile' size_rec.student.pk %}#uniforms"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back to Student
+            </a>
+            <a href="{% url 'uniforms:student_uniform_size_edit' size_rec.pk %}"
+               class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"><i class="fa fa-ellipsis-v"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:student_uniform_size_delete_modal' size_rec.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Delete
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'students:student_profile' size_rec.student.pk %}#uniforms"
+               style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-user me-1"></i>{{ size_rec.student.get_full_name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">
+            {{ size_rec.uniform_item.name }}
+        </li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="sr-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-item">{{ size_rec.uniform_item.name }}</span>
+            {% if size_rec.is_current %}
+                <span class="status-pill sp-current">
+                    <i class="fa fa-star"></i> Current
+                </span>
+            {% else %}
+                <span class="status-pill sp-old">
+                    <i class="fa fa-clock"></i> Superseded
+                </span>
+            {% endif %}
+            {% if size_rec.confidence_level == 'HIGH' %}
+                <span class="confidence-badge cb-high">
+                    <i class="fa fa-check-circle" style="font-size:9px;"></i> High Confidence
+                </span>
+            {% elif size_rec.confidence_level == 'MEDIUM' %}
+                <span class="confidence-badge cb-medium">
+                    <i class="fa fa-exclamation-circle" style="font-size:9px;"></i> Medium Confidence
+                </span>
+            {% else %}
+                <span class="confidence-badge cb-low">
+                    <i class="fa fa-times-circle" style="font-size:9px;"></i> Low Confidence
+                </span>
+            {% endif %}
+            {% if size_rec.growth_allowance %}
+            <span style="font-size:11.5px;font-weight:700;color:#7c3aed;background:#fdf4ff;border:1px solid #f0abfc;border-radius:6px;padding:3px 9px;">
+                <i class="fa fa-arrow-up" style="font-size:9px;"></i> Growth Allowance Applied
+            </span>
+            {% endif %}
+        </div>
+        <p style="margin:4px 0 0;font-size:13.5px;font-weight:600;color:var(--ink-muted);">
+            <a href="{% url 'students:student_profile' size_rec.student.pk %}"
+               style="color:var(--ink-muted);text-decoration:none;">
+                <i class="fa fa-user" style="font-size:11px;margin-right:5px;"></i>
+                {{ size_rec.student.get_full_name }}
+            </a>
+            <span style="margin:0 8px;color:var(--border-2);">·</span>
+            <span style="font-family:'Courier New',monospace;font-size:12px;">{{ size_rec.student.admission_number }}</span>
+        </p>
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Item Type</span>
+                <span class="hero-meta-value">{{ size_rec.uniform_item.get_item_type_display }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Session</span>
+                <span class="hero-meta-value">{{ size_rec.academic_session.name }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Method</span>
+                <span class="hero-meta-value">{{ size_rec.get_sizing_method_display }}</span>
+            </div>
+            {% if size_rec.recommendation_date %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Date</span>
+                <span class="hero-meta-value">{{ size_rec.recommendation_date|date:"d M Y" }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">
+            Recommended Size
+        </div>
+        <div style="font-size:60px;font-weight:900;line-height:1;color:var(--accent);margin-top:4px;">
+            {{ size_rec.recommended_size.name }}
+        </div>
+        <div style="font-size:12px;color:var(--ink-muted);margin-top:4px;">
+            {{ size_rec.recommended_size.get_size_type_display }}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+<div class="col-lg-8">
+
+    {# ── Alternative sizes (from algorithm) ── #}
+    {% if size_rec.alternative_sizes %}
+    <div class="det-card">
+        <div class="det-card-head">
+            <h6 class="det-card-title">
+                <i class="fa fa-list-ol"></i> Alternative Sizes
+                <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">
+                    from recommendation algorithm — in order of fit
+                </span>
+            </h6>
+        </div>
+        <div class="alt-size-list">
+            {% for size_pk in size_rec.alternative_sizes %}
+            <span class="alt-chip">{{ size_pk }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Other recommendations for same student ── #}
+    <div class="det-card">
+        <div class="det-card-head">
+            <h6 class="det-card-title">
+                <i class="fa fa-tshirt"></i> All Size Recommendations
+                <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">
+                    same student — all items
+                </span>
+            </h6>
+            <a href="{% url 'uniforms:student_uniform_size_create' %}?student={{ size_rec.student.pk }}"
+               style="font-size:12px;color:var(--accent);text-decoration:none;">
+                <i class="fa fa-plus" style="font-size:10px;"></i> Add
+            </a>
+        </div>
+
+        {% if other_recommendations %}
+        <div style="overflow-x:auto;">
+            <table class="other-tbl">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-center">Size</th>
+                        <th>Session</th>
+                        <th class="text-center">Confidence</th>
+                        <th class="text-center">Current</th>
+                        <th style="width:40px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for other in other_recommendations %}
+                    <tr {% if other.is_current %}class="row-current"{% endif %}>
+                        <td>
+                            <a href="{% url 'uniforms:student_uniform_size_detail' other.pk %}"
+                               style="font-weight:600;color:var(--ink);text-decoration:none;">
+                                {{ other.uniform_item.name }}
+                            </a>
+                            <div style="font-size:11px;color:var(--ink-faint);">{{ other.uniform_item.get_item_type_display }}</div>
+                        </td>
+                        <td class="text-center">
+                            <span class="size-chip" style="font-size:13px;">{{ other.recommended_size.name }}</span>
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);">{{ other.academic_session.name }}</td>
+                        <td class="text-center">
+                            {% if other.confidence_level == 'HIGH' %}
+                                <span style="font-size:11px;font-weight:700;color:#15803d;">High</span>
+                            {% elif other.confidence_level == 'MEDIUM' %}
+                                <span style="font-size:11px;font-weight:700;color:#b45309;">Medium</span>
+                            {% else %}
+                                <span style="font-size:11px;font-weight:700;color:#dc2626;">Low</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if other.is_current %}
+                            <i class="fa fa-check-circle text-success"></i>
+                            {% else %}
+                            <span style="color:var(--ink-faint);font-size:11px;">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{% url 'uniforms:student_uniform_size_detail' other.pk %}"
+                               class="btn btn-xs btn-outline-secondary"
+                               style="padding:2px 7px;font-size:11px;">
+                                <i class="fa fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tbl-empty">
+            <i class="fa fa-tshirt"></i>
+            <p style="font-size:13px;">No other size recommendations for this student.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if size_rec.notes %}
+    <div class="det-card">
+        <div class="det-card-head">
+            <h6 class="det-card-title"><i class="fa fa-sticky-note"></i>Notes</h6>
+        </div>
+        <div style="padding:18px 20px;font-size:13.5px;color:var(--ink-muted);line-height:1.7;">
+            {{ size_rec.notes }}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<div class="col-lg-4">
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-info-circle"></i>Details</div>
+        <div class="sidebar-body">
+            <div class="side-row">
+                <span class="s-label">Recommended Size</span>
+                <span class="s-value accent" style="font-size:18px;">{{ size_rec.recommended_size.name }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Size Type</span>
+                <span class="s-value muted">{{ size_rec.recommended_size.get_size_type_display }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Sizing Method</span>
+                <span class="s-value muted" style="font-size:12px;">{{ size_rec.get_sizing_method_display }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Confidence</span>
+                <span class="s-value {% if size_rec.confidence_level == 'HIGH' %}green{% elif size_rec.confidence_level == 'MEDIUM' %}amber{% else %}red{% endif %}">
+                    {{ size_rec.get_confidence_level_display }}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Growth Allowance</span>
+                <span class="s-value {% if size_rec.growth_allowance %}green{% else %}muted{% endif %}">
+                    {{ size_rec.growth_allowance|yesno:"Applied,Not applied" }}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Is Current</span>
+                <span class="s-value {% if size_rec.is_current %}green{% else %}muted{% endif %}">
+                    {{ size_rec.is_current|yesno:"Yes,No" }}
+                </span>
+            </div>
+            {% if size_rec.recommendation_date %}
+            <div class="side-row">
+                <span class="s-label">Date</span>
+                <span class="s-value muted">{{ size_rec.recommendation_date|date:"d M Y" }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-user"></i>Student</div>
+        <div class="sidebar-body">
+            <div class="side-row">
+                <span class="s-label">Name</span>
+                <span class="s-value" style="font-size:12px;">
+                    <a href="{% url 'students:student_profile' size_rec.student.pk %}#uniforms"
+                       style="color:var(--accent);text-decoration:none;">
+                        {{ size_rec.student.get_full_name }}
+                    </a>
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Adm. No.</span>
+                <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                    {{ size_rec.student.admission_number }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-tshirt"></i>Uniform Item</div>
+        <div class="sidebar-body">
+            <div class="side-row">
+                <span class="s-label">Item</span>
+                <span class="s-value" style="font-size:12px;">
+                    <a href="{% url 'uniforms:uniform_item_detail' size_rec.uniform_item.pk %}"
+                       style="color:var(--accent);text-decoration:none;">
+                        {{ size_rec.uniform_item.name }}
+                    </a>
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Code</span>
+                <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                    {{ size_rec.uniform_item.code }}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Type</span>
+                <span class="s-value muted">{{ size_rec.uniform_item.get_item_type_display }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Gender</span>
+                <span class="s-value muted">{{ size_rec.uniform_item.get_gender_display }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+        <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+            <a href="{% url 'uniforms:student_uniform_size_edit' size_rec.pk %}"
+               class="btn btn-sm btn-outline-warning w-100 text-start">
+                <i class="fa fa-edit me-2"></i> Edit Recommendation
+            </a>
+            <a href="{% url 'uniforms:student_uniform_size_create' %}?student={{ size_rec.student.pk }}"
+               class="btn btn-sm btn-outline-primary w-100 text-start">
+                <i class="fa fa-plus me-2"></i> Add Another Item
+            </a>
+            <a href="{% url 'uniforms:uniform_sale_create' %}?student={{ size_rec.student.pk }}"
+               class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-shopping-cart me-2"></i> Create Sale
+            </a>
+            <a href="{% url 'students:student_profile' size_rec.student.pk %}#uniforms"
+               class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-user me-2"></i> Student Profile
+            </a>
+            <hr style="margin:4px 0;">
+            <button class="btn btn-sm btn-outline-danger w-100 text-start"
+                    hx-get="{% url 'uniforms:student_uniform_size_delete_modal' size_rec.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-2"></i> Delete
+            </button>
+        </div>
+    </div>
+
+</div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null;
+    });
+});
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type, title: type.charAt(0).toUpperCase() + type.slice(1), text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
+                timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, { popperConfig: d => Object.assign({}, d, { strategy: 'fixed' }) });
+    });
+});
+</script>
+{% endblock %}

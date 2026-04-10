@@ -1,0 +1,311 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff; --accent-bd:#bfdbfe;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; display:flex; align-items:center; gap:14px; }
+.stat-icon { width:44px; height:44px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); margin-bottom:3px; }
+.stat-value { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.stat-sub   { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+
+.rep-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:22px; }
+.rep-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.rep-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+
+.filter-bar { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; margin-bottom:20px; }
+.filter-bar .form-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); margin-bottom:4px; }
+
+.rep-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.rep-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.rep-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.rep-tbl tbody tr:last-child td { border-bottom:none; }
+.rep-tbl tbody tr:hover td { background:var(--surface-2); }
+.rep-tbl tfoot td { padding:10px 14px; background:var(--surface-2); font-weight:700; border-top:2px solid var(--border); }
+
+.s-badge { display:inline-block; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:700; }
+.sb-draft    { background:#f1f5f9; color:#64748b; }
+.sb-pending  { background:var(--amber-lt); color:var(--amber); border:1px solid #fde68a; }
+.sb-partial  { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.sb-paid     { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.sb-issued   { background:var(--accent-lt); color:var(--accent); border:1px solid var(--accent-bd); }
+
+.margin-bar { width:60px; height:6px; background:#e2e8f0; border-radius:3px; display:inline-block; vertical-align:middle; margin-left:4px; overflow:hidden; }
+.margin-fill { height:100%; border-radius:3px; background:var(--green); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-cash icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Sales Report
+                <div class="page-title-subheading">Revenue, cost and margin analysis for uniform sales</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:export_uniform_sales_excel' %}{% if date_from or date_to %}?{% if date_from %}date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% endif %}"
+               class="btn btn-sm btn-outline-success me-1">
+                <i class="fa fa-file-excel me-1"></i> Export
+            </a>
+            <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Date filter ── #}
+<form method="get" class="filter-bar">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">Date From</label>
+            <input type="date" name="date_from" value="{{ date_from|default:'' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Date To</label>
+            <input type="date" name="date_to" value="{{ date_to|default:'' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-auto">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa fa-filter me-1"></i> Apply
+            </button>
+            <a href="{% url 'uniforms:sales_report' %}" class="btn btn-sm btn-outline-secondary ms-1">
+                Clear
+            </a>
+        </div>
+        {% if date_from or date_to %}
+        <div class="col-md-auto">
+            <span style="font-size:12px;color:var(--ink-muted);">
+                <i class="fa fa-calendar me-1"></i>
+                {% if date_from %}From {{ date_from }}{% endif %}
+                {% if date_to %} to {{ date_to }}{% endif %}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+</form>
+
+{# ── Stat cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-server"></i></div>
+            <div>
+                <div class="stat-label">Total Sales</div>
+                <div class="stat-value">{{ stats.total_sales|default:0 }}</div>
+                <div class="stat-sub">{{ stats.issued_count|default:0 }} issued</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Revenue</div>
+                <div class="stat-value" style="font-size:15px;">{{ stats.total_revenue|money }}</div>
+                <div class="stat-sub">active sales only</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-graph1"></i></div>
+            <div>
+                <div class="stat-label">Gross Profit</div>
+                <div class="stat-value" style="font-size:15px;">{{ stats.gross_profit|money }}</div>
+                <div class="stat-sub">{{ stats.gross_margin_pct|default:0 }}% margin</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-clock"></i></div>
+            <div>
+                <div class="stat-label">Pending</div>
+                <div class="stat-value amber">{{ stats.pending_count|default:0 }}</div>
+                <div class="stat-sub">{{ stats.draft_count|default:0 }} drafts</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-secondary"><i class="pe-7s-less"></i></div>
+            <div>
+                <div class="stat-label">Total Discount</div>
+                <div class="stat-value" style="font-size:15px;">{{ stats.total_discount|money }}</div>
+                <div class="stat-sub">across all sales</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-culture"></i></div>
+            <div>
+                <div class="stat-label">Avg Sale Value</div>
+                <div class="stat-value" style="font-size:15px;">{{ stats.avg_sale_value|money }}</div>
+                <div class="stat-sub">per transaction</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Revenue by item type ── #}
+{% if by_item_type %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-chart-bar" style="color:var(--accent);"></i> Revenue by Item Type</h6>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Item Type</th>
+                    <th class="text-end">Qty Sold</th>
+                    <th class="text-end">Revenue</th>
+                    <th class="text-end">COGS</th>
+                    <th class="text-end">Gross Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in by_item_type %}
+                <tr>
+                    <td style="font-weight:600;">{{ row.item_type_display }}</td>
+                    <td class="text-end">{{ row.quantity_sold }}</td>
+                    <td class="text-end" style="font-weight:700;">{{ row.total_revenue|money }}</td>
+                    <td class="text-end" style="color:var(--ink-muted);">{{ row.total_cost|money }}</td>
+                    <td class="text-end" style="font-weight:700;color:var(--green);">{{ row.gross_profit|money }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td>Total</td>
+                    <td class="text-end">—</td>
+                    <td class="text-end">{{ stats.total_revenue|money }}</td>
+                    <td class="text-end">{{ stats.total_cost|money }}</td>
+                    <td class="text-end" style="color:var(--green);">{{ stats.gross_profit|money }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# ── Profitability by item ── #}
+{% if cogs_margin.by_item %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-percentage" style="color:var(--green);"></i> Profitability by Item</h6>
+        <span style="font-size:12px;color:var(--ink-muted);">Overall margin: {{ cogs_margin.gross_margin_pct|default:0 }}%</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Revenue</th>
+                    <th class="text-end">COGS</th>
+                    <th class="text-end">Profit</th>
+                    <th class="text-center">Margin</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in cogs_margin.by_item %}
+                <tr>
+                    <td style="font-weight:600;">
+                        <a href="{% url 'uniforms:uniform_item_detail' row.item_id %}"
+                           style="color:var(--ink);text-decoration:none;">{{ row.item_name }}</a>
+                        <div style="font-size:11px;color:var(--ink-faint);font-family:'Courier New',monospace;">{{ row.item_code }}</div>
+                    </td>
+                    <td class="text-end">{{ row.quantity_sold }}</td>
+                    <td class="text-end">{{ row.revenue|money }}</td>
+                    <td class="text-end" style="color:var(--ink-muted);">{{ row.cogs|money }}</td>
+                    <td class="text-end" style="font-weight:700;color:var(--green);">{{ row.profit|money }}</td>
+                    <td class="text-center">
+                        <span style="font-size:12px;font-weight:700;color:var(--green);">{{ row.margin_pct }}%</span>
+                        <div class="margin-bar">
+                            <div class="margin-fill" style="width:{% if row.margin_pct > 100 %}100{% else %}{{ row.margin_pct|floatformat:0 }}{% endif %}%;"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# ── Sale transactions ── #}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-list" style="color:var(--ink-muted);"></i> Sale Transactions</h6>
+        <span style="font-size:12px;color:var(--ink-muted);">Showing first 100 matching sales</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Sale #</th>
+                    <th>Student</th>
+                    <th>Date</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Paid</th>
+                    <th class="text-end">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>
+                        <a href="{% url 'uniforms:uniform_sale_detail' sale.pk %}"
+                           style="font-weight:700;color:var(--accent);text-decoration:none;font-family:'Courier New',monospace;font-size:12px;">
+                            {{ sale.sale_number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div style="font-weight:600;font-size:13px;">{{ sale.student.get_full_name }}</div>
+                        <div style="font-size:11px;color:var(--ink-faint);">{{ sale.student.admission_number }}</div>
+                    </td>
+                    <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">{{ sale.sale_date|date:"d M Y" }}</td>
+                    <td class="text-center">
+                        {% if sale.status == 'DRAFT' %}<span class="s-badge sb-draft">Draft</span>
+                        {% elif sale.status == 'PENDING' %}<span class="s-badge sb-pending">Pending</span>
+                        {% elif sale.status == 'PARTIAL' %}<span class="s-badge sb-partial">Partial</span>
+                        {% elif sale.status == 'PAID' %}<span class="s-badge sb-paid">Paid</span>
+                        {% elif sale.status == 'ISSUED' %}<span class="s-badge sb-issued">Issued</span>
+                        {% else %}<span class="s-badge sb-draft">{{ sale.get_status_display }}</span>{% endif %}
+                    </td>
+                    <td class="text-end" style="font-weight:700;">{{ sale.total_amount|money }}</td>
+                    <td class="text-end" style="color:var(--green);">{{ sale.paid_amount|money }}</td>
+                    <td class="text-end" style="{% if sale.balance > 0 %}color:var(--red);font-weight:700;{% else %}color:var(--ink-muted);{% endif %}">
+                        {% if sale.balance > 0 %}{{ sale.balance|money }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" style="text-align:center;padding:28px;color:var(--ink-faint);">No sales found for the selected period.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

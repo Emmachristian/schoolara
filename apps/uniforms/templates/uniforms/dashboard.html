@@ -1,0 +1,742 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff; --accent-bd:#bfdbfe;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2;
+    --radius:10px;
+}
+
+/* ── Stat cards ── */
+.stat-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px 20px;
+    display:flex; align-items:center; gap:14px; transition:box-shadow .2s;
+    height:100%;
+}
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width:44px; height:44px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; color:#fff; flex-shrink:0;
+}
+.stat-label     { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); margin-bottom:3px; }
+.stat-value     { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.stat-value-sub { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+.stat-card.danger  { border-color:#fecaca; background:var(--red-lt); }
+.stat-card.warning { border-color:#fde68a; background:var(--amber-lt); }
+.stat-card.danger  .stat-value { color:var(--red); }
+.stat-card.warning .stat-value { color:var(--amber); }
+
+/* ── Section cards ── */
+.dash-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:20px; }
+.dash-card-head { padding:14px 20px; border-bottom:1px solid var(--border); background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.dash-card-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+.dash-card-link  { font-size:12px; color:var(--accent); text-decoration:none; }
+.dash-card-link:hover { text-decoration:underline; }
+
+/* ── Tables ── */
+.dash-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.dash-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.dash-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.dash-tbl tbody tr:last-child td { border-bottom:none; }
+.dash-tbl tbody tr:hover td { background:#fafbff; }
+.dash-tbl .empty-row td { text-align:center; padding:28px; color:var(--ink-faint); font-size:12.5px; }
+
+/* ── Status badges ── */
+.s-badge { display:inline-block; padding:3px 9px; border-radius:5px; font-size:11px; font-weight:700; white-space:nowrap; }
+.sb-draft    { background:#f1f5f9; color:#64748b; }
+.sb-pending  { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.sb-partial  { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.sb-paid     { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.sb-issued   { background:var(--accent-lt); color:var(--accent); border:1px solid var(--accent-bd); }
+.sb-cancelled{ background:#f1f5f9; color:#64748b; text-decoration:line-through; }
+.sb-returned { background:#fdf4ff; color:#7e22ce; border:1px solid #f0abfc; }
+.sb-sub      { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.sb-approved { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.sb-ordered  { background:var(--accent-lt); color:var(--accent); border:1px solid var(--accent-bd); }
+.sb-received { background:#f0fdf4; color:#15803d; }
+.sb-cancelled-po { background:#f1f5f9; color:#64748b; }
+
+/* ── Low stock list ── */
+.stock-row { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--border); gap:12px; }
+.stock-row:last-child { border-bottom:none; }
+.stock-row:hover { background:var(--surface-2); }
+.stock-name { font-size:13px; font-weight:600; color:var(--ink); flex:1; }
+.stock-type { font-size:11px; color:var(--ink-faint); margin-top:2px; }
+.stock-level { text-align:right; flex-shrink:0; }
+.stock-qty { font-size:16px; font-weight:800; line-height:1; }
+.stock-qty.critical { color:var(--red); }
+.stock-qty.low { color:var(--amber); }
+.stock-sub { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+.stock-bar-wrap { width:60px; height:5px; background:#e2e8f0; border-radius:3px; margin-top:4px; }
+.stock-bar { height:100%; border-radius:3px; }
+
+/* ── Quick action grid ── */
+.qa-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:14px; }
+.qa-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:12px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); text-decoration:none; font-size:11.5px; font-weight:700; color:var(--ink-muted); transition:all .15s; text-align:center; cursor:pointer; }
+.qa-btn:hover { border-color:var(--accent-bd); background:var(--accent-lt); color:var(--accent); }
+.qa-btn i { font-size:20px; color:var(--ink-faint); }
+.qa-btn:hover i { color:var(--accent); }
+
+/* ── PO mini list ── */
+.po-row { padding:10px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.po-row:last-child { border-bottom:none; }
+.po-row:hover { background:var(--surface-2); }
+.po-number { font-size:12px; font-weight:700; color:var(--ink); font-family:'Courier New',monospace; }
+.po-supplier { font-size:11px; color:var(--ink-faint); margin-top:1px; }
+
+/* ── Welcome banner ── */
+.welcome-banner { background:linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%); color:#fff; border-radius:var(--radius); padding:20px 28px; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+.wb-text strong { font-size:16px; font-weight:800; display:block; }
+.wb-text span   { font-size:12.5px; opacity:.85; }
+.wb-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.wb-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; font-size:12.5px; font-weight:700; text-decoration:none; }
+.wb-btn-solid  { background:#fff; color:#1d4ed8; }
+.wb-btn-outline{ background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.4); }
+.wb-btn-solid:hover  { background:#eff6ff; color:#1d4ed8; }
+.wb-btn-outline:hover{ background:rgba(255,255,255,.25); color:#fff; }
+
+/* ── Nav links row ── */
+.module-nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+.mod-link { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:8px; background:var(--surface); border:1px solid var(--border); font-size:12.5px; font-weight:700; color:var(--ink-muted); text-decoration:none; transition:all .15s; }
+.mod-link:hover { border-color:var(--accent-bd); background:var(--accent-lt); color:var(--accent); }
+.mod-link i { font-size:14px; }
+.mod-link .mod-count { background:var(--surface-3); border-radius:12px; padding:1px 7px; font-size:10.5px; color:var(--ink-faint); font-weight:700; }
+.mod-link .mod-count.alert { background:var(--red-lt); color:var(--red); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-tools icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Uniforms
+                <div class="page-title-subheading">
+                    Inventory, sales and measurements &mdash; {{ today|date:"l, d F Y" }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:uniform_sale_create' %}" class="btn btn-sm btn-primary me-1">
+                <i class="fa fa-plus me-1"></i> New Sale
+            </a>
+            <a href="{% url 'uniforms:student_measurement_create' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-ruler me-1"></i> Record Measurement
+            </a>
+            <a href="{% url 'uniforms:purchase_order_create' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-file-alt me-1"></i> New PO
+            </a>
+        </div>
+    </div>
+</div>
+
+{# ── Module nav ── #}
+<div class="module-nav">
+    <a href="{% url 'uniforms:uniform_item_list' %}" class="mod-link">
+        <i class="fa fa-tshirt"></i> Items
+        <span class="mod-count">{{ total_items }}</span>
+    </a>
+    <a href="{% url 'uniforms:uniform_stock_list' %}" class="mod-link">
+        <i class="fa fa-warehouse"></i> Stock
+        {% if low_stock_count > 0 %}
+        <span class="mod-count alert">{{ low_stock_count }} low</span>
+        {% endif %}
+    </a>
+    <a href="{% url 'uniforms:uniform_sale_list' %}" class="mod-link">
+        <i class="fa fa-shopping-cart"></i> Sales
+        {% if pending_sales_count > 0 %}
+        <span class="mod-count alert">{{ pending_sales_count }} pending</span>
+        {% endif %}
+    </a>
+    <a href="{% url 'uniforms:purchase_order_list' %}" class="mod-link">
+        <i class="fa fa-file-alt"></i> Purchase Orders
+        {% if pending_pos_count > 0 %}
+        <span class="mod-count alert">{{ pending_pos_count }} open</span>
+        {% endif %}
+    </a>
+    <a href="{% url 'uniforms:student_measurement_list' %}" class="mod-link">
+        <i class="fa fa-ruler-combined"></i> Measurements
+    </a>
+    <a href="{% url 'uniforms:uniform_size_list' %}" class="mod-link">
+        <i class="fa fa-tag"></i> Sizes
+    </a>
+    <a href="{% url 'uniforms:measurement_type_list' %}" class="mod-link">
+        <i class="fa fa-sliders-h"></i> Measurement Types
+    </a>
+    <a href="{% url 'uniforms:sales_report' %}" class="mod-link">
+        <i class="fa fa-chart-bar"></i> Reports
+    </a>
+</div>
+
+{# ── Stat cards row 1: Inventory ── #}
+<div class="row g-3 mb-3" id="stat-cards">
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card{% if low_stock_count == 0 %} {% endif %}">
+            <div class="stat-icon bg-primary"><i class="pe-7s-box2"></i></div>
+            <div>
+                <div class="stat-label">Active Items</div>
+                <div class="stat-value">{{ total_items }}</div>
+                <div class="stat-value-sub">uniform items</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card {% if low_stock_count > 0 %}danger{% endif %}">
+            <div class="stat-icon {% if low_stock_count > 0 %}bg-danger{% else %}bg-success{% endif %}">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div>
+                <div class="stat-label">Low Stock</div>
+                <div class="stat-value">{{ low_stock_count }}</div>
+                <div class="stat-value-sub">{% if low_stock_count == 1 %}item needs restocking{% else %}items need restocking{% endif %}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-graph"></i></div>
+            <div>
+                <div class="stat-label">Stock Value</div>
+                <div class="stat-value" style="font-size:16px;">{{ total_stock_value|money }}</div>
+                <div class="stat-value-sub">at cost price</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Revenue This Month</div>
+                <div class="stat-value" style="font-size:16px;">{{ revenue_this_month|money }}</div>
+                <div class="stat-value-sub">{{ sales_count_this_month }} sale{{ sales_count_this_month|pluralize }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card {% if outstanding_balance > 0 %}warning{% endif %}">
+            <div class="stat-icon {% if outstanding_balance > 0 %}bg-warning{% else %}bg-success{% endif %}">
+                <i class="pe-7s-wallet"></i>
+            </div>
+            <div>
+                <div class="stat-label">Outstanding</div>
+                <div class="stat-value" style="font-size:16px;">{{ outstanding_balance|money }}</div>
+                <div class="stat-value-sub">unpaid balance</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card {% if pending_pos_count > 0 %}warning{% endif %}">
+            <div class="stat-icon {% if pending_pos_count > 0 %}bg-warning{% else %}bg-secondary{% endif %}">
+                <i class="pe-7s-file"></i>
+            </div>
+            <div>
+                <div class="stat-label">Open POs</div>
+                <div class="stat-value">{{ pending_pos_count }}</div>
+                <div class="stat-value-sub">purchase orders</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{# ── Charts row ── #}
+<div class="row g-3 mb-4">
+
+    {# Sales trend — area chart #}
+    <div class="col-xl-8">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-card-head">
+                <h6 class="dash-card-title">
+                    <i class="fa fa-chart-area" style="color:var(--accent);"></i>
+                    Sales Revenue — Last 30 Days
+                </h6>
+                <a href="{% url 'uniforms:sales_report' %}" class="dash-card-link">
+                    Full report <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+                </a>
+            </div>
+            {% if trend_has_data %}
+            <div id="chart-trend" style="min-height:220px;padding:8px 4px 0;"></div>
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--ink-faint);flex-direction:column;gap:8px;">
+                <i class="fa fa-chart-area" style="font-size:2rem;opacity:.25;"></i>
+                <span style="font-size:13px;">No sales data for the last 30 days</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Revenue by item type — donut chart #}
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-card-head">
+                <h6 class="dash-card-title">
+                    <i class="fa fa-chart-pie" style="color:var(--green);"></i>
+                    Revenue by Type &mdash; This Month
+                </h6>
+            </div>
+            {% if type_has_data %}
+            <div id="chart-type" style="min-height:220px;"></div>
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--ink-faint);flex-direction:column;gap:8px;">
+                <i class="fa fa-chart-pie" style="font-size:2rem;opacity:.25;"></i>
+                <span style="font-size:13px;">No sales this month yet</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{% if sellers_has_data %}
+<div class="dash-card mb-4">
+    <div class="dash-card-head">
+        <h6 class="dash-card-title">
+            <i class="fa fa-trophy" style="color:var(--amber);"></i>
+            Top 5 Items &mdash; This Month
+        </h6>
+        <a href="{% url 'uniforms:uniform_item_list' %}" class="dash-card-link">
+            All items <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+        </a>
+    </div>
+    <div id="chart-sellers" style="min-height:200px;padding:8px 4px 0;"></div>
+</div>
+{% endif %}
+
+{# ── Main content ── #}
+<div class="row">
+
+{# ── Left: Recent Sales ── #}
+<div class="col-lg-8">
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-shopping-cart" style="color:var(--accent);"></i>
+                Recent Sales
+            </h6>
+            <a href="{% url 'uniforms:uniform_sale_list' %}" class="dash-card-link">
+                View all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+            </a>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Sale #</th>
+                        <th>Student</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-right">Total</th>
+                        <th class="text-right">Balance</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in recent_sales %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'uniforms:uniform_sale_detail' sale.pk %}"
+                               style="font-weight:700;color:var(--accent);text-decoration:none;font-family:'Courier New',monospace;font-size:12px;">
+                                {{ sale.sale_number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div style="font-weight:600;font-size:13px;color:var(--ink);">
+                                {{ sale.student.get_full_name }}
+                            </div>
+                            <div style="font-size:11px;color:var(--ink-faint);">
+                                {{ sale.student.admission_number }}
+                            </div>
+                        </td>
+                        <td class="text-center">
+                            {% if sale.cancelled %}
+                                <span class="s-badge sb-cancelled">Cancelled</span>
+                            {% elif sale.returned %}
+                                <span class="s-badge sb-returned">Returned</span>
+                            {% elif sale.status == 'DRAFT' %}
+                                <span class="s-badge sb-draft">Draft</span>
+                            {% elif sale.status == 'PENDING' %}
+                                <span class="s-badge sb-pending">Pending</span>
+                            {% elif sale.status == 'PARTIAL' %}
+                                <span class="s-badge sb-partial">Partial</span>
+                            {% elif sale.status == 'PAID' %}
+                                <span class="s-badge sb-paid">Paid</span>
+                            {% elif sale.status == 'ISSUED' %}
+                                <span class="s-badge sb-issued">Issued</span>
+                            {% else %}
+                                <span class="s-badge sb-draft">{{ sale.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right" style="font-weight:700;font-size:13px;">
+                            {{ sale.total_amount|money }}
+                        </td>
+                        <td class="text-right" style="font-size:13px;">
+                            {% if sale.balance > 0 %}
+                                <span style="color:var(--red);font-weight:700;">{{ sale.balance|money }}</span>
+                            {% else %}
+                                <span style="color:var(--green);font-weight:600;">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">
+                            {{ sale.sale_date|date:"d M Y" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="empty-row">
+                        <td colspan="6">
+                            <i class="fa fa-shopping-cart" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:8px;"></i>
+                            No sales recorded yet.
+                            <a href="{% url 'uniforms:uniform_sale_create' %}" style="color:var(--accent);">Create the first sale</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# ── Recent Purchase Orders ── #}
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-file-alt" style="color:var(--amber);"></i>
+                Purchase Orders
+            </h6>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <a href="{% url 'uniforms:purchase_order_create' %}" class="dash-card-link">
+                    <i class="fa fa-plus" style="font-size:10px;"></i> New PO
+                </a>
+                <a href="{% url 'uniforms:purchase_order_list' %}" class="dash-card-link">
+                    View all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+                </a>
+            </div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Supplier</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-right">Total</th>
+                        <th>Order Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for po in recent_pos %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'uniforms:purchase_order_detail' po.pk %}"
+                               style="font-weight:700;color:var(--accent);text-decoration:none;font-family:'Courier New',monospace;font-size:12px;">
+                                {{ po.po_number }}
+                            </a>
+                        </td>
+                        <td style="font-size:13px;font-weight:600;color:var(--ink);">
+                            {{ po.supplier_name }}
+                        </td>
+                        <td class="text-center">
+                            {% if po.status == 'DRAFT' %}
+                                <span class="s-badge sb-draft">Draft</span>
+                            {% elif po.status == 'SUBMITTED' %}
+                                <span class="s-badge sb-sub">Submitted</span>
+                            {% elif po.status == 'APPROVED' %}
+                                <span class="s-badge sb-approved">Approved</span>
+                            {% elif po.status == 'ORDERED' %}
+                                <span class="s-badge sb-ordered">Ordered</span>
+                            {% elif po.status == 'RECEIVED' %}
+                                <span class="s-badge sb-received">Received</span>
+                            {% elif po.status == 'PARTIAL' %}
+                                <span class="s-badge sb-partial">Partial</span>
+                            {% elif po.status == 'CANCELLED' %}
+                                <span class="s-badge sb-cancelled-po">Cancelled</span>
+                            {% else %}
+                                <span class="s-badge sb-draft">{{ po.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right" style="font-weight:700;font-size:13px;">
+                            {{ po.total_amount|money }}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">
+                            {{ po.order_date|date:"d M Y" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="empty-row">
+                        <td colspan="5">
+                            <i class="fa fa-file-alt" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:8px;"></i>
+                            No purchase orders yet.
+                            <a href="{% url 'uniforms:purchase_order_create' %}" style="color:var(--accent);">Create one</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>{# /col-lg-8 #}
+
+{# ── Right sidebar ── #}
+<div class="col-lg-4">
+
+    {# ── Quick actions ── #}
+    <div class="dash-card" style="margin-bottom:20px;">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title"><i class="fa fa-bolt" style="color:var(--amber);"></i> Quick Actions</h6>
+        </div>
+        <div class="qa-grid">
+            <a href="{% url 'uniforms:uniform_sale_create' %}" class="qa-btn">
+                <i class="fa fa-shopping-cart"></i>
+                New Sale
+            </a>
+            <a href="{% url 'uniforms:student_measurement_create' %}" class="qa-btn">
+                <i class="fa fa-ruler-combined"></i>
+                Measure Student
+            </a>
+            <a href="{% url 'uniforms:student_uniform_size_create' %}" class="qa-btn">
+                <i class="fa fa-tshirt"></i>
+                Size Recommendation
+            </a>
+            <a href="{% url 'uniforms:purchase_order_create' %}" class="qa-btn">
+                <i class="fa fa-file-alt"></i>
+                New PO
+            </a>
+            <a href="{% url 'uniforms:uniform_item_create' %}" class="qa-btn">
+                <i class="pe-7s-box2" style="font-size:20px;"></i>
+                Add Item
+            </a>
+            <a href="{% url 'uniforms:uniform_stock_create' %}" class="qa-btn">
+                <i class="fa fa-warehouse"></i>
+                Add Stock
+            </a>
+            <a href="{% url 'uniforms:sales_report' %}" class="qa-btn">
+                <i class="fa fa-chart-bar"></i>
+                Sales Report
+            </a>
+            <a href="{% url 'uniforms:inventory_report' %}" class="qa-btn">
+                <i class="fa fa-chart-pie"></i>
+                Inventory Report
+            </a>
+        </div>
+    </div>
+
+    {# ── Low stock alerts ── #}
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-exclamation-triangle" style="color:var(--red);"></i>
+                Low Stock Alerts
+                {% if low_stock_count > 0 %}
+                <span style="background:var(--red-lt);color:var(--red);border-radius:12px;padding:1px 8px;font-size:11px;font-weight:700;border:1px solid #fecaca;">
+                    {{ low_stock_count }}
+                </span>
+                {% endif %}
+            </h6>
+            {% if low_stock_count > 10 %}
+            <a href="{% url 'uniforms:low_stock_report' %}" class="dash-card-link">
+                See all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+            </a>
+            {% endif %}
+        </div>
+
+        {% if low_stock_list %}
+        {% for item in low_stock_list %}
+        <div class="stock-row">
+            <div>
+                <a href="{% url 'uniforms:uniform_item_detail' item.pk %}"
+                   style="text-decoration:none;">
+                    <div class="stock-name">{{ item.name }}</div>
+                    <div class="stock-type">{{ item.get_item_type_display }}</div>
+                </a>
+            </div>
+            <div class="stock-level">
+                <div class="stock-qty {% if item.current_stock == 0 %}critical{% else %}low{% endif %}">
+                    {{ item.current_stock }}
+                </div>
+                <div class="stock-sub">of {{ item.reorder_level }} reorder</div>
+                <div class="stock-bar-wrap">
+                    {% if item.reorder_level > 0 %}
+                    <div class="stock-bar"
+                         style="width:{% widthratio item.current_stock item.reorder_level 100 %}%;background:{% if item.current_stock == 0 %}var(--red){% else %}var(--amber){% endif %};"></div>
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <a href="{% url 'uniforms:purchase_order_create' %}"
+                   class="btn btn-xs btn-outline-danger"
+                   style="padding:2px 7px;font-size:11px;white-space:nowrap;">
+                    <i class="fa fa-plus" style="font-size:9px;"></i> PO
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div style="text-align:center;padding:28px 20px;color:var(--ink-faint);">
+            <i class="fa fa-check-circle" style="font-size:2rem;display:block;margin-bottom:8px;color:var(--green);opacity:.6;"></i>
+            <p style="font-size:13px;margin:0;font-weight:600;color:var(--green);">All items are sufficiently stocked</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+    var currency = (window.SCHOOL_CONFIG && window.SCHOOL_CONFIG.currency) || 'UGX';
+
+    function fmtMoney(val) {
+        return currency + ' ' + Number(val).toLocaleString('en-US', {
+            minimumFractionDigits: 0, maximumFractionDigits: 0
+        });
+    }
+
+    // ── 1. Sales trend — area chart ──────────────────────────────────────
+    {% if trend_has_data %}
+    var trendLabels  = {{ chart_trend_labels|safe }};
+    var trendRevenue = {{ chart_trend_revenue|safe }};
+    var trendCounts  = {{ chart_trend_counts|safe }};
+
+    new ApexCharts(document.getElementById('chart-trend'), {
+        chart:  { type: 'area', height: 220, toolbar: { show: false }, sparkline: { enabled: false } },
+        series: [{ name: 'Revenue', data: trendRevenue }],
+        xaxis:  {
+            categories: trendLabels,
+            labels: {
+                rotate: -30,
+                formatter: function (v) {
+                    if (!v) return '';
+                    var d = new Date(v);
+                    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                },
+                style: { fontSize: '10px', colors: '#94a3b8' },
+            },
+            axisBorder: { show: false },
+            axisTicks:  { show: false },
+        },
+        yaxis: {
+            labels: {
+                formatter: function (v) { return fmtMoney(v); },
+                style: { fontSize: '10px', colors: '#94a3b8' },
+            },
+        },
+        tooltip: {
+            shared: true,
+            custom: function ({ series, dataPointIndex }) {
+                var rev = series[0][dataPointIndex] || 0;
+                var cnt = trendCounts[dataPointIndex] || 0;
+                return '<div style="padding:8px 12px;font-size:12px;">' +
+                    '<strong>' + trendLabels[dataPointIndex] + '</strong><br>' +
+                    'Revenue: <strong>' + fmtMoney(rev) + '</strong><br>' +
+                    'Sales: <strong>' + cnt + '</strong>' +
+                    '</div>';
+            },
+        },
+        fill: {
+            type: 'gradient',
+            gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.02, stops: [0, 100] },
+        },
+        stroke:      { curve: 'smooth', width: 2 },
+        colors:      ['#1d4ed8'],
+        dataLabels:  { enabled: false },
+        grid: {
+            borderColor: '#f1f5f9',
+            xaxis: { lines: { show: false } },
+        },
+    }).render();
+    {% endif %}
+
+    // ── 2. Revenue by item type — donut chart ────────────────────────────
+    {% if type_has_data %}
+    var typeLabels  = {{ chart_type_labels|safe }};
+    var typeRevenue = {{ chart_type_revenue|safe }};
+
+    new ApexCharts(document.getElementById('chart-type'), {
+        chart:  { type: 'donut', height: 220 },
+        series: typeRevenue,
+        labels: typeLabels,
+        colors: ['#1d4ed8','#15803d','#b45309','#7c3aed','#0f766e','#dc2626','#64748b'],
+        legend: {
+            position: 'bottom',
+            fontSize:  '11px',
+            labels:    { colors: '#64748b' },
+        },
+        dataLabels: { enabled: false },
+        tooltip: {
+            y: { formatter: function (v) { return fmtMoney(v); } },
+        },
+        plotOptions: {
+            pie: {
+                donut: {
+                    size: '65%',
+                    labels: {
+                        show: true,
+                        total: {
+                            show: true, label: 'Total',
+                            fontSize: '11px', color: '#64748b',
+                            formatter: function (w) {
+                                return fmtMoney(
+                                    w.globals.seriesTotals.reduce(function (a, b) { return a + b; }, 0)
+                                );
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }).render();
+    {% endif %}
+
+    // ── 3. Top 5 sellers — horizontal bar chart ──────────────────────────
+    {% if sellers_has_data %}
+    var sellerNames = {{ chart_seller_names|safe }};
+    var sellerQty   = {{ chart_seller_qty|safe }};
+    var sellerRev   = {{ chart_seller_rev|safe }};
+
+    new ApexCharts(document.getElementById('chart-sellers'), {
+        chart:  { type: 'bar', height: 200, toolbar: { show: false } },
+        series: [{ name: 'Qty Sold', data: sellerQty }],
+        xaxis:  {
+            categories: sellerNames,
+            labels: { style: { fontSize: '11px', colors: '#64748b' } },
+        },
+        yaxis:  {
+            labels: { style: { fontSize: '10px', colors: '#94a3b8' } },
+        },
+        tooltip: {
+            custom: function ({ dataPointIndex }) {
+                return '<div style="padding:8px 12px;font-size:12px;">' +
+                    '<strong>' + sellerNames[dataPointIndex] + '</strong><br>' +
+                    'Qty sold: <strong>' + sellerQty[dataPointIndex] + '</strong><br>' +
+                    'Revenue: <strong>' + fmtMoney(sellerRev[dataPointIndex]) + '</strong>' +
+                    '</div>';
+            },
+        },
+        colors:     ['#1d4ed8'],
+        dataLabels: { enabled: true, style: { fontSize: '11px' } },
+        plotOptions: {
+            bar: { horizontal: false, borderRadius: 4, columnWidth: '55%' },
+        },
+        grid: {
+            borderColor: '#f1f5f9',
+            yaxis: { lines: { show: true } },
+        },
+    }).render();
+    {% endif %}
+})();
+</script>
+{% endblock %}

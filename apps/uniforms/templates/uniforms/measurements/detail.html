@@ -1,0 +1,448 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0; --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.m-hero { background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:var(--radius); padding:26px 30px 22px; margin-bottom:24px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; }
+.hero-type { font-size:20px; font-weight:800; color:var(--ink); }
+.hero-top  { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.hero-meta { display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; }
+.hero-meta-item  { display:flex; flex-direction:column; gap:2px; }
+.hero-meta-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value { font-size:13px; font-weight:600; color:var(--ink); }
+.s-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+.sp-verified   { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.sp-unverified { background:var(--amber-lt); color:var(--amber); border:1px solid #fde68a; }
+.sp-current    { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
+.hist-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.hist-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid var(--border); }
+.hist-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.hist-tbl tbody tr:last-child td { border-bottom:none; }
+.hist-tbl tbody tr:hover td { background:#fafbff; }
+.hist-tbl tbody tr.row-current td { background:var(--accent-lt); }
+.value-big  { font-size:42px; font-weight:900; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--ink); }
+.value-unit { font-size:18px; font-weight:500; color:var(--ink-muted); margin-left:4px; }
+.sidebar-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+.sidebar-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.sidebar-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.s-label { color:var(--ink-muted); font-size:12.5px; }
+.s-value { font-weight:700; color:var(--ink); }
+.s-value.green  { color:var(--green); }
+.s-value.amber  { color:var(--amber); }
+.s-value.accent { color:var(--accent); }
+.s-value.muted  { color:var(--ink-muted); font-weight:500; }
+.tbl-empty { text-align:center; padding:32px 20px; color:var(--ink-faint); }
+.tbl-empty i { font-size:2rem; display:block; margin-bottom:8px; opacity:.35; }
+@media (max-width:768px) { .m-hero { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-ruler icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ measurement.measurement_type.name }}
+                <div class="page-title-subheading">
+                    {{ measurement.student.get_full_name }} &mdash; {{ measurement.measurement_date|date:"d M Y" }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:student_measurement_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+            <a href="{% url 'uniforms:student_measurement_edit' measurement.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
+            </a>
+            {% if not measurement.is_verified %}
+            <button class="btn btn-sm btn-outline-success me-1"
+                    hx-get="{% url 'uniforms:student_measurement_verify_modal' measurement.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-1"></i>Verify
+            </button>
+            {% endif %}
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"><i class="fa fa-ellipsis-v"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'uniforms:student_measurement_print_detail' measurement.pk %}" target="_blank">
+                            <i class="fa fa-print me-2"></i>Print
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:student_measurement_delete_modal' measurement.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Delete
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:student_measurement_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-ruler me-1"></i>Measurements
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:measurement_type_detail' measurement.measurement_type.pk %}"
+               style="color:#64748b;text-decoration:none;">{{ measurement.measurement_type.name }}</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'students:student_profile' measurement.student.pk %}"
+               style="color:#64748b;text-decoration:none;">{{ measurement.student.get_full_name }}</a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">
+            {{ measurement.measurement_date|date:"d M Y" }}
+        </li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="m-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-type">{{ measurement.measurement_type.name }}</span>
+            {% if measurement.is_verified %}
+                <span class="s-pill sp-verified"><i class="fa fa-check-circle"></i>Verified</span>
+            {% else %}
+                <span class="s-pill sp-unverified"><i class="fa fa-clock"></i>Unverified</span>
+            {% endif %}
+            {% if measurement.is_current %}
+                <span class="s-pill sp-current"><i class="fa fa-star"></i>Current</span>
+            {% endif %}
+        </div>
+        <p style="margin:4px 0 0;font-size:13.5px;font-weight:600;color:var(--ink-muted);">
+            <a href="{% url 'students:student_profile' measurement.student.pk %}"
+               style="color:var(--ink-muted);text-decoration:none;">
+                <i class="fa fa-user" style="font-size:11px;margin-right:5px;"></i>
+                {{ measurement.student.get_full_name }}
+            </a>
+            <span style="margin:0 8px;color:var(--border-2);">·</span>
+            <span style="font-family:'Courier New',monospace;font-size:12px;">{{ measurement.student.admission_number }}</span>
+        </p>
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Category</span>
+                <span class="hero-meta-value">{{ measurement.measurement_type.get_category_display }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Date Recorded</span>
+                <span class="hero-meta-value">{{ measurement.measurement_date|date:"d M Y" }}</span>
+            </div>
+            {% if measurement.academic_session %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Session</span>
+                <span class="hero-meta-value">{{ measurement.academic_session.name }}</span>
+            </div>
+            {% endif %}
+            {% if measurement.measurement_context %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Context</span>
+                <span class="hero-meta-value">{{ measurement.get_measurement_context_display }}</span>
+            </div>
+            {% endif %}
+            {% if measurement.measurement_method %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Method</span>
+                <span class="hero-meta-value">{{ measurement.get_measurement_method_display }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">
+            Measured Value
+        </div>
+        <div>
+            <span class="value-big">{{ measurement.value|floatformat:1 }}</span>
+            {% if measurement.measurement_type.unit %}
+            <span class="value-unit">{{ measurement.measurement_type.unit.abbreviation }}</span>
+            {% endif %}
+        </div>
+        {% if measurement.measurement_type.min_value is not None or measurement.measurement_type.max_value is not None %}
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">
+            Range: {{ measurement.measurement_type.min_value|default:"—" }} –
+            {{ measurement.measurement_type.max_value|default:"∞" }}
+            {% if measurement.measurement_type.unit %}{{ measurement.measurement_type.unit.abbreviation }}{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+<div class="col-lg-8">
+
+    {# ── Previous measurements (same type/student) ── #}
+    <div class="det-card">
+        <div class="det-card-head">
+            <h6 class="det-card-title">
+                <i class="fa fa-history"></i>Previous Measurements
+                <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">same type — last 5</span>
+            </h6>
+            <a href="{% url 'uniforms:student_measurement_list' %}?student={{ measurement.student.pk }}&measurement_type={{ measurement.measurement_type.pk }}"
+               style="font-size:12px;color:var(--accent);text-decoration:none;">
+                All records <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+            </a>
+        </div>
+        {% if other_measurements %}
+        <div style="overflow-x:auto;">
+            <table class="hist-tbl">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="text-center">Value</th>
+                        <th>Session</th>
+                        <th class="text-center">Verified</th>
+                        <th class="text-center">Current</th>
+                        <th style="width:40px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for om in other_measurements %}
+                    <tr {% if om.is_current %}class="row-current"{% endif %}>
+                        <td>
+                            <a href="{% url 'uniforms:student_measurement_detail' om.pk %}"
+                               style="font-weight:600;color:var(--ink);text-decoration:none;">
+                                {{ om.measurement_date|date:"d M Y" }}
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <span style="font-size:15px;font-weight:700;">{{ om.value|floatformat:1 }}</span>
+                            {% if measurement.measurement_type.unit %}
+                            <span style="font-size:11px;color:var(--ink-faint);">{{ measurement.measurement_type.unit.abbreviation }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);">{{ om.academic_session.name|default:"—" }}</td>
+                        <td class="text-center">
+                            {% if om.is_verified %}
+                            <i class="fa fa-check-circle text-success"></i>
+                            {% else %}
+                            <i class="fa fa-clock" style="color:var(--ink-faint);"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if om.is_current %}
+                            <span style="font-size:10.5px;font-weight:700;color:var(--accent);">Yes</span>
+                            {% else %}
+                            <span style="font-size:11px;color:var(--ink-faint);">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{% url 'uniforms:student_measurement_detail' om.pk %}"
+                               class="btn btn-xs btn-outline-secondary" style="padding:2px 7px;font-size:11px;">
+                                <i class="fa fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tbl-empty">
+            <i class="fa fa-history"></i>
+            <p style="font-size:13px;">No other measurements of this type recorded for this student.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if measurement.notes %}
+    <div class="det-card">
+        <div class="det-card-head">
+            <h6 class="det-card-title"><i class="fa fa-sticky-note"></i>Notes</h6>
+        </div>
+        <div style="padding:18px 20px;font-size:13.5px;color:var(--ink-muted);line-height:1.7;">
+            {{ measurement.notes }}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+<div class="col-lg-4">
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-info-circle"></i>Details</div>
+        <div class="sidebar-body">
+            <div class="side-row">
+                <span class="s-label">Value</span>
+                <span class="s-value accent" style="font-size:15px;">
+                    {{ measurement.value|floatformat:1 }}
+                    {% if measurement.measurement_type.unit %}{{ measurement.measurement_type.unit.abbreviation }}{% endif %}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Unit</span>
+                <span class="s-value">
+                    {% if measurement.measurement_type.unit %}
+                        {{ measurement.measurement_type.unit.abbreviation }}
+                        <span style="font-weight:400;color:var(--ink-muted);font-size:11.5px;">({{ measurement.measurement_type.unit.name }})</span>
+                    {% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Verified</span>
+                <span class="s-value {% if measurement.is_verified %}green{% else %}amber{% endif %}">
+                    {{ measurement.is_verified|yesno:"Yes,No" }}
+                </span>
+            </div>
+            {% if verified_by %}
+            <div class="side-row">
+                <span class="s-label">Verified by</span>
+                <span class="s-value muted" style="font-size:12px;">{{ verified_by }}</span>
+            </div>
+            {% endif %}
+            <div class="side-row">
+                <span class="s-label">Is Current</span>
+                <span class="s-value {% if measurement.is_current %}accent{% else %}muted{% endif %}">
+                    {{ measurement.is_current|yesno:"Yes,No" }}
+                </span>
+            </div>
+            {% if measurement.measurement_context %}
+            <div class="side-row">
+                <span class="s-label">Context</span>
+                <span class="s-value muted">{{ measurement.get_measurement_context_display }}</span>
+            </div>
+            {% endif %}
+            {% if measurement.measurement_method %}
+            <div class="side-row">
+                <span class="s-label">Method</span>
+                <span class="s-value muted">{{ measurement.get_measurement_method_display }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-user"></i>Student</div>
+        <div class="sidebar-body">
+            <div class="side-row">
+                <span class="s-label">Name</span>
+                <span class="s-value" style="font-size:12px;">
+                    <a href="{% url 'students:student_profile' measurement.student.pk %}"
+                       style="color:var(--accent);text-decoration:none;">
+                        {{ measurement.student.get_full_name }}
+                    </a>
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-label">Adm. No.</span>
+                <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                    {{ measurement.student.admission_number }}
+                </span>
+            </div>
+            {% if measurement.student.current_academic_level %}
+            <div class="side-row">
+                <span class="s-label">Level</span>
+                <span class="s-value muted" style="font-size:12px;">{{ measurement.student.current_academic_level }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+        <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+            <a href="{% url 'uniforms:student_measurement_edit' measurement.pk %}"
+               class="btn btn-sm btn-outline-warning w-100 text-start">
+                <i class="fa fa-edit me-2"></i>Edit Measurement
+            </a>
+            {% if not measurement.is_verified %}
+            <button class="btn btn-sm btn-outline-success w-100 text-start"
+                    hx-get="{% url 'uniforms:student_measurement_verify_modal' measurement.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-2"></i>Verify
+            </button>
+            {% endif %}
+            <a href="{% url 'uniforms:student_measurement_create' %}?student={{ measurement.student.pk }}&measurement_type={{ measurement.measurement_type.pk }}"
+               class="btn btn-sm btn-outline-primary w-100 text-start">
+                <i class="fa fa-plus me-2"></i>New (same type)
+            </a>
+            <a href="{% url 'uniforms:student_measurement_list' %}?student={{ measurement.student.pk }}"
+               class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-list me-2"></i>All for this Student
+            </a>
+            <a href="{% url 'uniforms:student_measurement_print_detail' measurement.pk %}"
+               target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-print me-2"></i>Print
+            </a>
+        </div>
+    </div>
+
+</div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null;
+    });
+});
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type, title: type.charAt(0).toUpperCase() + type.slice(1), text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
+                timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, { popperConfig: d => Object.assign({}, d, { strategy: 'fixed' }) });
+    });
+});
+</script>
+{% endblock %}

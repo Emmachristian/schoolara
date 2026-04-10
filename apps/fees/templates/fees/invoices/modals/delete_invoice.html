@@ -1,68 +1,81 @@
-{# fees/templates/fees/invoices/modals/delete_invoice.html #}
-<div class="modal-dialog">
+{% load currency_filters %}
+<div class="modal-dialog modal-md">
     <div class="modal-content">
-        <div class="modal-header bg-danger text-white">
-            <h5 class="modal-title">
-                <i class="fa fa-trash me-2"></i>Delete Invoice
-            </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+
+        <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fecaca;padding:16px 22px;">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#fee2e2;border:1px solid #fecaca;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-trash" style="color:#dc2626;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#7f1d1d;">Delete Invoice</h5>
+                    <div style="font-size:11.5px;color:#991b1b;margin-top:3px;">{{ invoice.invoice_number }} &middot; {{ invoice.student.get_full_name }}</div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body text-center py-4">
-            {% if can_delete %}
-                <div class="mb-3">
-                    <i class="fa fa-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+
+        <div class="modal-body" style="padding:22px;max-height:65vh;overflow-y:auto;">
+
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:18px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13px;color:#0f172a;">{{ invoice.invoice_number }}</div>
+                    <div style="font-size:11.5px;color:#64748b;margin-top:1px;">{{ invoice.student.get_full_name }} &middot; {{ invoice.academic_session }}</div>
                 </div>
-                <h4 class="mb-3">Are you sure?</h4>
-                <p class="text-muted mb-3">
-                    You are about to delete invoice:
-                </p>
-                <div class="alert alert-info">
-                    <strong>{{ invoice.invoice_number }}</strong><br>
-                    <small>Student: {{ invoice.student.get_full_name }}</small><br>
-                    <small>Amount: {{ invoice.total_amount|money }}</small><br>
-                    <small>Status: {{ invoice.get_status_display }}</small>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:15px;font-weight:700;color:#0f172a;">{{ invoice.total_amount|money }}</div>
+                    <span style="font-size:11px;padding:1px 8px;border-radius:20px;font-weight:600;
+                        {% if invoice.status == 'PAID' %}background:#dcfce7;color:#15803d;
+                        {% elif invoice.status == 'VOID' or invoice.status == 'CANCELLED' %}background:#f1f5f9;color:#64748b;
+                        {% elif invoice.status == 'PARTIALLY_PAID' %}background:#fef9c3;color:#a16207;
+                        {% else %}background:#dbeafe;color:#1d4ed8;{% endif %}">
+                        {{ invoice.get_status_display }}
+                    </span>
                 </div>
-                <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-circle me-2"></i>
-                    <strong>Warning:</strong> This action cannot be undone!
-                </div>
+            </div>
+
+            {% for warning in warnings %}
+            {% if not can_delete %}
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:0 7px 7px 0;margin-bottom:12px;">
+                <i class="fa fa-ban" style="color:#dc2626;margin-top:2px;flex-shrink:0;"></i>
+                <div style="font-size:13px;color:#7f1d1d;line-height:1.6;">{{ warning }}</div>
+            </div>
             {% else %}
-                <div class="mb-3">
-                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
-                </div>
-                <h4 class="mb-3 text-danger">Cannot Delete Invoice</h4>
-                <div class="alert alert-danger">
-                    {% for warning in warnings %}
-                        <div class="mb-2">
-                            <i class="fa fa-exclamation-circle me-2"></i>{{ warning }}
-                        </div>
-                    {% endfor %}
-                </div>
-                <p class="text-muted">
-                    Please resolve the above issues before attempting to delete this invoice.
-                </p>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #f97316;border-radius:0 7px 7px 0;margin-bottom:12px;">
+                <i class="fa fa-exclamation-triangle" style="color:#f97316;margin-top:2px;flex-shrink:0;"></i>
+                <div style="font-size:13px;color:#9a3412;line-height:1.6;">{{ warning }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            {% if can_delete %}
+            <p style="font-size:13.5px;color:#0f172a;line-height:1.7;margin-bottom:0;">
+                Are you sure you want to permanently delete invoice <strong>{{ invoice.invoice_number }}</strong>?
+                <span style="display:block;margin-top:5px;font-size:12px;color:#64748b;">
+                    <i class="fa fa-exclamation-circle me-1"></i>This action cannot be undone.
+                </span>
+            </p>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i> Cancel
+            </button>
+            {% if can_delete %}
+            <form method="POST" hx-post="{% url 'fees:invoice_delete' invoice.pk %}" hx-target="body" hx-swap="none" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm">
+                    <i class="fa fa-trash me-1"></i> Yes, Delete
+                </button>
+            </form>
+            {% else %}
+            <button class="btn btn-danger btn-sm" disabled>
+                <i class="fa fa-ban me-1"></i> Cannot Delete
+            </button>
             {% endif %}
         </div>
-        {% if can_delete %}
-            <form hx-post="{% url 'fees:invoice_delete' invoice.pk %}"
-                  hx-target="#invoice-list"
-                  hx-swap="innerHTML">
-                {% csrf_token %}
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fa fa-times me-1"></i>Cancel
-                    </button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fa fa-trash me-1"></i>Yes, Delete Invoice
-                    </button>
-                </div>
-            </form>
-        {% else %}
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fa fa-times me-1"></i>Close
-                </button>
-            </div>
-        {% endif %}
+
     </div>
 </div>

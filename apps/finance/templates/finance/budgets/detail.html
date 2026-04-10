@@ -1,0 +1,849 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+/* ============================================================
+   BUDGET DETAIL — matches expense detail styling
+   ============================================================ */
+
+/* ── Info cards ───────────────────────────────────────────── */
+.info-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+.info-card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #f8fafc;
+}
+.info-card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.info-card-body { padding: 18px 20px; }
+
+/* ── Detail grid ──────────────────────────────────────────── */
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+}
+.detail-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.detail-item:nth-child(odd) { padding-right: 24px; }
+.detail-item:nth-child(even) { padding-left: 24px; border-left: 1px solid #f1f5f9; }
+.detail-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #94a3b8;
+    margin-bottom: 3px;
+}
+.detail-value { font-size: 13px; color: #334155; }
+
+/* ── Status pill ──────────────────────────────────────────── */
+.s-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.sp-draft    { background:#f1f3f5; color:#495057; }
+.sp-pending  { background:#fff3cd; color:#856404; }
+.sp-approved { background:#cff4fc; color:#055160; }
+.sp-active   { background:#d1e7dd; color:#0a3622; }
+.sp-closed   { background:#f8d7da; color:#842029; }
+.sp-rejected { background:#e2e3e5; color:#41464b; }
+
+/* ── Summary stat boxes ───────────────────────────────────── */
+.budget-stat {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 18px;
+    text-align: center;
+}
+.budget-stat .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 5px; }
+.budget-stat .val { font-size: 20px; font-weight: 700; font-family: monospace; line-height: 1; }
+
+/* ── Budget lines table ───────────────────────────────────── */
+.bgt-lines-tbl thead th {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #495057;
+    padding: 10px 12px;
+    white-space: nowrap;
+}
+.bgt-lines-tbl tbody td { vertical-align: middle; padding: 10px 12px; font-size: 13px; }
+.bgt-lines-tbl tbody tr:hover { background: #f8fafc; }
+.mono { font-family: monospace; }
+
+/* Progress bar */
+.prog-wrap { background: #e9ecef; border-radius: 4px; height: 6px; margin-top: 4px; }
+.prog-bar  { border-radius: 4px; height: 6px; }
+
+/* Variance pill */
+.var-over  { background: #fee2e2; color: #b91c1c; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.var-under { background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.var-ok    { background: #f0fdf4; color: #16a34a; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+
+/* ── Side cards ───────────────────────────────────────────── */
+.side-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.side-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #64748b;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.side-card-body { padding: 14px 16px; }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 20px; }
+.tl-item  { position: relative; margin-bottom: 16px; }
+.tl-item:last-child { margin-bottom: 0; }
+.tl-dot {
+    position: absolute; left: -24px; top: 4px;
+    width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff;
+    box-shadow: 0 0 0 2px currentColor;
+}
+.tl-dot.info    { color: #0ea5e9; }
+.tl-dot.warning { color: #f59e0b; }
+.tl-dot.success { color: #22c55e; }
+.tl-dot.danger  { color: #ef4444; }
+.tl-title { font-size: 13px; font-weight: 600; color: #334155; }
+.tl-date  { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+.tl-note  { font-size: 12px; color: #64748b; margin-top: 4px; background: #f8fafc; padding: 6px 10px; border-radius: 6px; border-left: 3px solid #e2e8f0; }
+
+/* Quick info rows */
+.qi-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; }
+.qi-row:last-child { border-bottom: none; }
+.qi-key { color: #64748b; }
+.qi-val { color: #0f172a; font-weight: 500; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Page Title ─────────────────────────────────────────── -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-piggy icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ budget.name }}
+                <div class="page-title-subheading">
+                    {{ budget.get_budget_type_display }} &middot;
+                    {{ budget.start_date|date:"d M Y" }} – {{ budget.end_date|date:"d M Y" }}
+                    {% if budget.fiscal_year %}&middot; {{ budget.fiscal_year.year_name }}{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2 flex-wrap">
+            <a href="{% url 'finance:budget_list' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Budgets
+            </a>
+            <a href="{% url 'finance:budget_print_view' budget.pk %}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-print me-1"></i> Print
+            </a>
+
+            {% if budget.status == 'DRAFT' %}
+            <a href="{% url 'finance:budget_edit' budget.pk %}" class="btn btn-outline-warning btn-sm">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            <button class="btn btn-primary btn-sm"
+                    hx-get="{% url 'finance:budget_submit_modal' budget.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-paper-plane me-1"></i> Submit for Approval
+            </button>
+            {% endif %}
+
+            {% if budget.status == 'PENDING_APPROVAL' %}
+            <button class="btn btn-success btn-sm"
+                    hx-get="{% url 'finance:budget_approve_modal' budget.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check-circle me-1"></i> Approve
+            </button>
+            <button class="btn btn-outline-danger btn-sm"
+                    hx-get="{% url 'finance:budget_reject_modal' budget.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-times-circle me-1"></i> Reject
+            </button>
+            {% endif %}
+
+            {% if budget.status == 'APPROVED' %}
+            <button class="btn btn-success btn-sm"
+                    hx-get="{% url 'finance:budget_activate_modal' budget.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-play me-1"></i> Activate
+            </button>
+            {% endif %}
+
+            {% if budget.status == 'ACTIVE' %}
+            <button class="btn btn-outline-warning btn-sm"
+                    hx-get="{% url 'finance:budget_close_modal' budget.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-lock me-1"></i> Close Budget
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ── Status Hero ─────────────────────────────────────────── -->
+<div class="info-card mb-3">
+    <div class="info-card-body">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:48px;height:48px;border-radius:12px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:22px;color:#667eea;">
+                    <i class="pe-7s-piggy"></i>
+                </div>
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:#0f172a;">{{ budget.name }}</div>
+                    <div style="font-size:12.5px;color:#64748b;margin-top:2px;">
+                        {% if budget.status == 'DRAFT' %}<span class="s-pill sp-draft"><i class="fa fa-file"></i>Draft</span>
+                        {% elif budget.status == 'PENDING_APPROVAL' %}<span class="s-pill sp-pending"><i class="fa fa-clock"></i>Pending Approval</span>
+                        {% elif budget.status == 'APPROVED' %}<span class="s-pill sp-approved"><i class="fa fa-check-circle"></i>Approved</span>
+                        {% elif budget.status == 'ACTIVE' %}<span class="s-pill sp-active"><i class="fa fa-check-double"></i>Active</span>
+                        {% elif budget.status == 'CLOSED' %}<span class="s-pill sp-closed"><i class="fa fa-lock"></i>Closed</span>
+                        {% elif budget.status == 'REJECTED' %}<span class="s-pill sp-rejected"><i class="fa fa-times-circle"></i>Rejected</span>
+                        {% endif %}
+                        &nbsp;&nbsp;{{ budget.get_budget_type_display }}
+                        {% if budget.parent_budget %}
+                        &nbsp;&middot;&nbsp;
+                        <span style="color:#94a3b8;">Sub-budget of</span>
+                        <a href="{% url 'finance:budget_detail' budget.parent_budget.pk %}" style="color:#667eea;">{{ budget.parent_budget.name }}</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Net Budget amount -->
+            <div style="text-align:right;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Net Budget</div>
+                <div style="font-size:26px;font-weight:700;font-family:monospace;color:{% if budget.net_budget >= 0 %}#15803d{% else %}#b91c1c{% endif %};">
+                    {{ budget.net_budget|money }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Budget Summary Stats ────────────────────────────────── -->
+<div class="row mb-3 g-3">
+    <div class="col-md-3 col-6">
+        <div class="budget-stat">
+            <div class="lbl">Revenue Budget</div>
+            <div class="val" style="color:#15803d;">{{ budget.total_revenue_budget|money }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="budget-stat">
+            <div class="lbl">Expense Budget</div>
+            <div class="val" style="color:#b91c1c;">{{ budget.total_expense_budget|money }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="budget-stat">
+            <div class="lbl">Actual Revenue</div>
+            <div class="val" style="color:#0369a1;">{{ budget.actual_revenue_total|money }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="budget-stat">
+            <div class="lbl">Actual Expenses</div>
+            <div class="val" style="color:#9333ea;">{{ budget.actual_expense_total|money }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Main Content ────────────────────────────────────────── -->
+<div class="row">
+
+    <!-- LEFT COLUMN -->
+    <div class="col-lg-8">
+
+        <!-- Budget Details -->
+        <div class="info-card">
+            <div class="info-card-header">
+                <span class="info-card-title">
+                    <i class="fa fa-info-circle text-primary"></i> Budget Details
+                </span>
+            </div>
+            <div class="info-card-body">
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Budget Name</div>
+                        <div class="detail-value fw-semibold">{{ budget.name }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Budget Type</div>
+                        <div class="detail-value">{{ budget.get_budget_type_display }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Start Date</div>
+                        <div class="detail-value">{{ budget.start_date|date:"d M Y" }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">End Date</div>
+                        <div class="detail-value">{{ budget.end_date|date:"d M Y" }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Fiscal Year</div>
+                        <div class="detail-value">{{ budget.fiscal_year.year_name|default:"—" }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Academic Session</div>
+                        <div class="detail-value">{{ budget.academic_session.year_name|default:"—" }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Parent Budget</div>
+                        <div class="detail-value">
+                            {% if budget.parent_budget %}
+                            <a href="{% url 'finance:budget_detail' budget.parent_budget.pk %}" style="color:#667eea;">
+                                {{ budget.parent_budget.name }}
+                            </a>
+                            {% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Sub-Budgets</div>
+                        <div class="detail-value">
+                            {% with count=budget.child_budgets.count %}
+                            {% if count > 0 %}
+                            <a href="{% url 'finance:budget_list' %}?parent_budget={{ budget.pk }}" style="color:#667eea;">
+                                {{ count }} sub-budget{{ count|pluralize }}
+                            </a>
+                            {% else %}None{% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Net Budget</div>
+                        <div class="detail-value mono fw-bold" style="color:{% if budget.net_budget >= 0 %}#15803d{% else %}#b91c1c{% endif %};">
+                            {{ budget.net_budget|money }}
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Last Actuals Sync</div>
+                        <div class="detail-value">{{ budget.last_actuals_sync|date:"d M Y, H:i"|default:"Never" }}</div>
+                    </div>
+                </div>
+
+                {% if budget.description %}
+                <div style="margin-top:16px;padding-top:14px;border-top:1px solid #f1f5f9;">
+                    <div class="detail-label mb-1">Description</div>
+                    <div style="font-size:13px;color:#475569;line-height:1.6;">{{ budget.description }}</div>
+                </div>
+                {% endif %}
+
+                {% if budget.notes %}
+                <div style="margin-top:12px;">
+                    <div class="detail-label mb-1">Notes</div>
+                    <div style="font-size:13px;color:#475569;line-height:1.6;">{{ budget.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Revenue Lines -->
+        <div class="info-card">
+            <div class="info-card-header">
+                <span class="info-card-title">
+                    <i class="fa fa-arrow-up text-success"></i> Revenue Budget Lines
+                    <span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-size:11px;">
+                        {{ revenue_lines.count }}
+                    </span>
+                </span>
+                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                <button class="btn btn-sm btn-outline-success"
+                        hx-get="{% url 'finance:budget_line_add_modal' budget.pk %}?line_type=REVENUE"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-plus me-1"></i> Add Revenue Line
+                </button>
+                {% endif %}
+            </div>
+
+            {% if revenue_lines %}
+            <div class="table-responsive">
+                <table class="table table-hover bgt-lines-tbl mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Account</th>
+                            <th>Description</th>
+                            <th class="text-end">Budgeted</th>
+                            <th class="text-end">Actual</th>
+                            <th class="text-end">Variance</th>
+                            <th class="text-center" width="80">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in revenue_lines %}
+                        <tr>
+                            <td class="text-muted" style="font-size:12px;">{{ forloop.counter }}</td>
+                            <td>
+                                <div class="fw-semibold" style="font-size:13px;">{{ line.account.name }}</div>
+                                <div style="font-size:11.5px;color:#94a3b8;">{{ line.account.account_number }}</div>
+                            </td>
+                            <td style="color:#64748b;font-size:12.5px;">{{ line.description|default:"—" }}</td>
+                            <td class="text-end mono" style="color:#15803d;font-weight:600;">{{ line.budgeted_amount|money }}</td>
+                            <td class="text-end">
+                                <div class="mono" style="font-size:13px;">{{ line.actual_amount|money }}</div>
+                                {% if line.budgeted_amount > 0 %}
+                                <div class="prog-wrap">
+                                    {% widthratio line.actual_amount line.budgeted_amount 100 as pct %}
+                                    <div class="prog-bar {% if pct > 100 %}bg-danger{% elif pct > 80 %}bg-warning{% else %}bg-success{% endif %}"
+                                         style="width:{% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%"></div>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% with var=line.actual_amount|subtract:line.budgeted_amount %}
+                                {% if var > 0 %}
+                                    <span class="var-under">+{{ var|money }}</span>
+                                {% elif var < 0 %}
+                                    <span class="var-over">{{ var|money }}</span>
+                                {% else %}
+                                    <span class="var-ok">On target</span>
+                                {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td class="text-center">
+                                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                                <div class="dropdown">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fa fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <button class="dropdown-item"
+                                                    hx-get="{% url 'finance:budget_line_edit_modal' budget.pk line.pk %}"
+                                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item text-danger"
+                                                    hx-get="{% url 'finance:budget_line_delete_modal' line.pk %}"
+                                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                                <i class="fa fa-trash me-2"></i>Delete
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:#f0fdf4;font-weight:700;">
+                            <td colspan="3" style="font-size:12px;color:#15803d;text-transform:uppercase;letter-spacing:.4px;">Total Revenue</td>
+                            <td class="text-end mono" style="color:#15803d;">{{ budget.total_revenue_budget|money }}</td>
+                            <td class="text-end mono" style="color:#15803d;">{{ budget.actual_revenue_total|money }}</td>
+                            <td class="text-end">
+                                {% if revenue_variance > 0 %}
+                                    <span class="var-under">+{{ revenue_variance|money }}</span>
+                                {% elif revenue_variance < 0 %}
+                                    <span class="var-over">{{ revenue_variance|money }}</span>
+                                {% else %}
+                                    <span class="var-ok">On target</span>
+                                {% endif %}
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="info-card-body text-center py-4">
+                <i class="pe-7s-graph2" style="font-size:3rem;color:#e2e8f0;display:block;margin-bottom:12px;"></i>
+                <p class="text-muted mb-2">No revenue lines yet</p>
+                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                <button class="btn btn-sm btn-outline-success"
+                        hx-get="{% url 'finance:budget_line_add_modal' budget.pk %}?line_type=REVENUE"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-plus me-1"></i> Add First Revenue Line
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Expense Lines -->
+        <div class="info-card">
+            <div class="info-card-header">
+                <span class="info-card-title">
+                    <i class="fa fa-arrow-down text-danger"></i> Expense Budget Lines
+                    <span style="background:#fee2e2;color:#991b1b;padding:1px 8px;border-radius:10px;font-size:11px;">
+                        {{ expense_lines.count }}
+                    </span>
+                </span>
+                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                <button class="btn btn-sm btn-outline-danger"
+                        hx-get="{% url 'finance:budget_line_add_modal' budget.pk %}?line_type=EXPENSE"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-plus me-1"></i> Add Expense Line
+                </button>
+                {% endif %}
+            </div>
+
+            {% if expense_lines %}
+            <div class="table-responsive">
+                <table class="table table-hover bgt-lines-tbl mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Account</th>
+                            <th>Description</th>
+                            <th class="text-end">Budgeted</th>
+                            <th class="text-end">Actual</th>
+                            <th class="text-end">Variance</th>
+                            <th class="text-center" width="80">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in expense_lines %}
+                        {% with spent_pct=line.actual_amount|div:line.budgeted_amount|mul:100 %}
+                        <tr>
+                            <td class="text-muted" style="font-size:12px;">{{ forloop.counter }}</td>
+                            <td>
+                                <div class="fw-semibold" style="font-size:13px;">{{ line.account.name }}</div>
+                                <div style="font-size:11.5px;color:#94a3b8;">{{ line.account.account_number }}</div>
+                            </td>
+                            <td style="color:#64748b;font-size:12.5px;">{{ line.description|default:"—" }}</td>
+                            <td class="text-end mono" style="color:#b91c1c;font-weight:600;">{{ line.budgeted_amount|money }}</td>
+                            <td class="text-end">
+                                <div class="mono" style="font-size:13px;">{{ line.actual_amount|money }}</div>
+                                {% if line.budgeted_amount > 0 %}
+                                <div class="prog-wrap">
+                                    {% widthratio line.actual_amount line.budgeted_amount 100 as pct %}
+                                    <div class="prog-bar {% if pct > 100 %}bg-danger{% elif pct > 80 %}bg-warning{% else %}bg-info{% endif %}"
+                                         style="width:{% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%"></div>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% with var=line.budgeted_amount|subtract:line.actual_amount %}
+                                {% if var < 0 %}
+                                    <span class="var-over">{{ var|abs_value|money }} over</span>
+                                {% elif var == 0 %}
+                                    <span class="var-ok">On target</span>
+                                {% else %}
+                                    <span class="var-under">{{ var|money }} left</span>
+                                {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td class="text-center">
+                                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                                <div class="dropdown">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fa fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <button class="dropdown-item"
+                                                    hx-get="{% url 'finance:budget_line_edit_modal' budget.pk line.pk %}"
+                                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item text-danger"
+                                                    hx-get="{% url 'finance:budget_line_delete_modal' line.pk %}"
+                                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                                <i class="fa fa-trash me-2"></i>Delete
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:#fff5f5;font-weight:700;">
+                            <td colspan="3" style="font-size:12px;color:#b91c1c;text-transform:uppercase;letter-spacing:.4px;">Total Expenses</td>
+                            <td class="text-end mono" style="color:#b91c1c;">{{ budget.total_expense_budget|money }}</td>
+                            <td class="text-end mono" style="color:#b91c1c;">{{ budget.actual_expense_total|money }}</td>
+                            <td class="text-end">
+                                {% if expense_variance < 0 %}
+                                    <span class="var-over">{{ expense_variance|abs_value|money }} over</span>
+                                {% elif expense_variance == 0 %}
+                                    <span class="var-ok">On target</span>
+                                {% else %}
+                                    <span class="var-under">{{ expense_variance|money }} left</span>
+                                {% endif %}
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="info-card-body text-center py-4">
+                <i class="pe-7s-wallet" style="font-size:3rem;color:#e2e8f0;display:block;margin-bottom:12px;"></i>
+                <p class="text-muted mb-2">No expense lines yet</p>
+                {% if budget.status in 'DRAFT,PENDING_APPROVAL' %}
+                <button class="btn btn-sm btn-outline-danger"
+                        hx-get="{% url 'finance:budget_line_add_modal' budget.pk %}?line_type=EXPENSE"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-plus me-1"></i> Add First Expense Line
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- RIGHT COLUMN -->
+    <div class="col-lg-4">
+
+        <!-- Quick Actions -->
+        <div class="side-card">
+            <div class="side-card-header"><i class="fa fa-bolt text-warning"></i> Quick Actions</div>
+            <div class="side-card-body d-grid gap-2">
+                {% if budget.status == 'DRAFT' %}
+                <button class="btn btn-primary btn-sm"
+                        hx-get="{% url 'finance:budget_submit_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-paper-plane me-1"></i> Submit for Approval
+                </button>
+                <a href="{% url 'finance:budget_edit' budget.pk %}" class="btn btn-outline-warning btn-sm">
+                    <i class="fa fa-edit me-1"></i> Edit Budget
+                </a>
+                <button class="btn btn-outline-danger btn-sm"
+                        hx-get="{% url 'finance:budget_delete_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-trash me-1"></i> Delete Budget
+                </button>
+                {% endif %}
+
+                {% if budget.status == 'PENDING_APPROVAL' %}
+                <button class="btn btn-success btn-sm"
+                        hx-get="{% url 'finance:budget_approve_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-check-circle me-1"></i> Approve Budget
+                </button>
+                <button class="btn btn-outline-danger btn-sm"
+                        hx-get="{% url 'finance:budget_reject_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-times-circle me-1"></i> Reject Budget
+                </button>
+                {% endif %}
+
+                {% if budget.status == 'APPROVED' %}
+                <button class="btn btn-success btn-sm"
+                        hx-get="{% url 'finance:budget_activate_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-play me-1"></i> Activate Budget
+                </button>
+                {% endif %}
+
+                {% if budget.status == 'ACTIVE' %}
+                <button class="btn btn-outline-warning btn-sm"
+                        hx-get="{% url 'finance:budget_close_modal' budget.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-lock me-1"></i> Close Budget
+                </button>
+                {% endif %}
+
+                <a href="{% url 'finance:budget_print_view' budget.pk %}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-print me-1"></i> Print Budget
+                </a>
+
+                <a href="{% url 'finance:budget_create' %}?parent={{ budget.pk }}" class="btn btn-outline-info btn-sm">
+                    <i class="fa fa-plus me-1"></i> Create Sub-Budget
+                </a>
+            </div>
+        </div>
+
+        <!-- Budget Variance Summary -->
+        <div class="side-card">
+            <div class="side-card-header"><i class="fa fa-chart-bar text-info"></i> Variance Summary</div>
+            <div class="side-card-body">
+                <div class="qi-row">
+                    <span class="qi-key">Revenue Budget</span>
+                    <span class="qi-val mono" style="color:#15803d;">{{ budget.total_revenue_budget|money }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Actual Revenue</span>
+                    <span class="qi-val mono">{{ budget.actual_revenue_total|money }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Revenue Variance</span>
+                    <span class="qi-val">
+                        {% if revenue_variance > 0 %}<span class="var-under">+{{ revenue_variance|money }}</span>
+                        {% elif revenue_variance < 0 %}<span class="var-over">{{ revenue_variance|money }}</span>
+                        {% else %}<span class="var-ok">On target</span>{% endif %}
+                    </span>
+                </div>
+                <div style="border-top:2px solid #e2e8f0;margin:10px 0;"></div>
+                <div class="qi-row">
+                    <span class="qi-key">Expense Budget</span>
+                    <span class="qi-val mono" style="color:#b91c1c;">{{ budget.total_expense_budget|money }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Actual Expenses</span>
+                    <span class="qi-val mono">{{ budget.actual_expense_total|money }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Expense Variance</span>
+                    <span class="qi-val">
+                        {% if expense_variance < 0 %}<span class="var-over">{{ expense_variance|abs_value|money }} over</span>
+                        {% elif expense_variance == 0 %}<span class="var-ok">On target</span>
+                        {% else %}<span class="var-under">{{ expense_variance|money }} left</span>{% endif %}
+                    </span>
+                </div>
+                <div style="border-top:2px solid #e2e8f0;margin:10px 0;"></div>
+                <div class="qi-row">
+                    <span class="qi-key" style="font-weight:600;">Net Budget</span>
+                    <span class="qi-val mono fw-bold" style="color:{% if budget.net_budget >= 0 %}#15803d{% else %}#b91c1c{% endif %};">
+                        {{ budget.net_budget|money }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Record Info -->
+        <div class="side-card">
+            <div class="side-card-header"><i class="fa fa-info-circle text-secondary"></i> Record Info</div>
+            <div class="side-card-body">
+                <div class="qi-row">
+                    <span class="qi-key">Created</span>
+                    <span class="qi-val">{{ budget.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Last Updated</span>
+                    <span class="qi-val">{{ budget.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Revenue Lines</span>
+                    <span class="qi-val">{{ revenue_lines.count }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Expense Lines</span>
+                    <span class="qi-val">{{ expense_lines.count }}</span>
+                </div>
+                <div class="qi-row">
+                    <span class="qi-key">Auto-Sync Actuals</span>
+                    <span class="qi-val">{% if budget.auto_sync_actuals %}Yes{% else %}No{% endif %}</span>
+                </div>
+                {% if budget.child_budgets.count > 0 %}
+                <div class="qi-row">
+                    <span class="qi-key">Sub-Budgets</span>
+                    <span class="qi-val">
+                        <a href="{% url 'finance:budget_list' %}?parent_budget={{ budget.pk }}" style="color:#667eea;">
+                            {{ budget.child_budgets.count }}
+                        </a>
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /col-lg-4 -->
+
+</div><!-- /row -->
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    const xhr      = event.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+
+    if (xhr.getResponseHeader('HX-Close-Modal') === 'true' && currentModal) currentModal.hide();
+
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: type.charAt(0).toUpperCase() + type.slice(1),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#ffc107',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+            });
+        }, 300);
+    }
+});
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id !== 'modal-container') return;
+    const modalDialog = document.querySelector('#modal-container .modal-dialog');
+    if (!modalDialog) return;
+
+    let wrapper = document.getElementById('dynamicModalWrapper');
+    if (wrapper) {
+        const existing = bootstrap.Modal.getInstance(wrapper);
+        if (existing) existing.dispose();
+        wrapper.remove();
+    }
+
+    wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(modalDialog);
+    document.body.appendChild(wrapper);
+
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+
+    wrapper.addEventListener('hidden.bs.modal', function() {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+</script>
+{% endblock %}

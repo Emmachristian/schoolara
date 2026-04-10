@@ -1,0 +1,96 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Account Transactions{% endblock %}
+{% block doc_title %}Account Transactions{% endblock %}
+{% block record_count %}{{ transactions|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.payment_count|default:0 }}</span>
+        <span class="stat-label">Payments</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.invoice_count|default:0 }}</span>
+        <span class="stat-label">Invoices</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.adjustment_count|default:0 }}</span>
+        <span class="stat-label">Adjustments</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_credits|money_short }}</span>
+        <span class="stat-label">Total Credits</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_debits|money_short }}</span>
+        <span class="stat-label">Total Debits</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if transactions %}
+    {% for txn in transactions %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "amount,balance_after" %} class="num"{% endif %}>
+            {% if field == 'date' %}
+                {% if txn.created_at %}{{ txn.created_at|date:"d M Y, H:i" }}{% else %}—{% endif %}
+            {% elif field == 'student_id' %}
+                <span class="chip-adm">{{ txn.student_account.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ txn.student_account.student.get_full_name }}
+            {% elif field == 'transaction_type' %}
+                {% with t=txn.transaction_type|lower %}
+                    {% if t == 'payment' %}<span class="badge s-active">{{ txn.get_transaction_type_display }}</span>
+                    {% elif t == 'invoice' %}<span class="badge s-pending">{{ txn.get_transaction_type_display }}</span>
+                    {% elif t == 'adjustment' %}<span class="badge s-review">{{ txn.get_transaction_type_display }}</span>
+                    {% elif t == 'refund' %}<span class="badge s-refunded">{{ txn.get_transaction_type_display }}</span>
+                    {% else %}<span class="badge s-default">{{ txn.get_transaction_type_display }}</span>
+                    {% endif %}
+                {% endwith %}
+            {% elif field == 'amount' %}
+                {% if txn.amount >= 0 %}
+                    <span class="text-success">{{ txn.amount|amount }}</span>
+                {% else %}
+                    <span class="text-danger">{{ txn.amount|abs_money }}</span>
+                {% endif %}
+            {% elif field == 'balance_after' %}
+                {% if txn.balance_after < 0 %}
+                    <span class="text-danger">{{ txn.balance_after|abs_money }}</span>
+                {% elif txn.balance_after > 0 %}
+                    <span class="text-success">{{ txn.balance_after|amount }}</span>
+                {% else %}—{% endif %}
+            {% elif field == 'description' %}
+                {{ txn.description|default:"—"|truncatechars:70 }}
+            {% elif field == 'reference_number' %}
+                {% if txn.reference_number %}<span class="chip-code">{{ txn.reference_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'invoice' %}
+                {% if txn.invoice %}<span class="chip-code">{{ txn.invoice.invoice_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'payment' %}
+                {% if txn.payment %}<span class="chip-code">{{ txn.payment.payment_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'academic_session' %}
+                {{ txn.academic_session.name|default:"—" }}
+            {% elif field == 'fiscal_period' %}
+                {{ txn.fiscal_period.name|default:"—" }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No transactions found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

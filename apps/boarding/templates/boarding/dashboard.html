@@ -1,0 +1,791 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load currency_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --teal:      #0f766e;
+    --teal-lt:   #f0fdfa;
+    --radius:    10px;
+}
+
+/* ── Hero banner ── */
+.dash-hero {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 60%, #2563eb 100%);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+}
+.dash-hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -60px;
+    width: 280px; height: 280px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.06);
+    pointer-events: none;
+}
+.dash-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; right: 80px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.04);
+    pointer-events: none;
+}
+.dash-hero-title { font-size: 22px; font-weight: 800; letter-spacing: -.3px; margin-bottom: 4px; }
+.dash-hero-sub   { font-size: 13px; opacity: .75; }
+.hero-stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 20px; }
+.hero-stat { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 12px 16px; }
+.hero-stat-num   { font-size: 24px; font-weight: 800; line-height: 1; margin-bottom: 3px; }
+.hero-stat-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; opacity: .7; }
+.hero-stat-sub   { font-size: 11px; opacity: .6; margin-top: 2px; }
+
+/* ── Occupancy bar ── */
+.occ-bar-wrap  { height: 6px; background: rgba(255,255,255,.2); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+.occ-bar-fill  { height: 100%; border-radius: 99px; background: #4ade80; transition: width .5s; }
+.occ-bar-fill.amber { background: #fbbf24; }
+.occ-bar-fill.red   { background: #f87171; }
+
+/* ── Stat cards ── */
+.stat-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+.stat-card-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 5px; }
+.stat-card-val   { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.stat-card-val.green  { color: var(--green); }
+.stat-card-val.amber  { color: var(--amber); }
+.stat-card-val.red    { color: var(--red); }
+.stat-card-val.accent { color: var(--accent); }
+.stat-card-sub   { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Boarding type pills ── */
+.type-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.type-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 16px; flex: 1; min-width: 120px;
+}
+.type-pill-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.type-pill-num  { font-size: 18px; font-weight: 800; color: var(--ink); }
+.type-pill-lbl  { font-size: 11px; color: var(--ink-muted); font-weight: 600; }
+
+/* ── Section cards ── */
+.section-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.section-head {
+    background: var(--surface-2); padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.section-head-left { display: flex; align-items: center; gap: 8px; }
+.sec-icon { width: 26px; height: 26px; border-radius: 6px; background: var(--accent-lt); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.sec-icon.green  { background: #dcfce7; color: var(--green); }
+.sec-icon.amber  { background: var(--amber-lt); color: var(--amber); }
+.sec-icon.red    { background: var(--red-lt); color: var(--red); }
+.sec-icon.purple { background: var(--purple-lt); color: var(--purple); }
+.sec-icon.teal   { background: var(--teal-lt); color: var(--teal); }
+.sec-icon.muted  { background: var(--surface-3); color: var(--ink-muted); }
+.sec-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.sec-sub   { font-size: 11px; color: var(--ink-muted); }
+
+/* ── Data tables ── */
+.dash-tbl { width: 100%; border-collapse: collapse; }
+.dash-tbl thead { background: var(--surface-2); }
+.dash-tbl th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); padding: 9px 14px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.dash-tbl td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: middle; }
+.dash-tbl tbody tr:last-child td { border-bottom: none; }
+.dash-tbl tbody tr:hover td { background: var(--surface-2); }
+
+/* ── Student cell ── */
+.stu-cell { display: flex; align-items: center; gap: 10px; }
+.stu-init  { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-lt); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; border: 2px solid var(--accent-bd); }
+.stu-name  { font-weight: 600; font-size: 12.5px; color: var(--ink); display: block; text-decoration: none; }
+.stu-name:hover { color: var(--accent); }
+.stu-adm   { font-size: 11px; color: var(--ink-muted); font-family: 'Courier New', monospace; }
+
+/* ── Status pills ── */
+.s-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.sp-active    { background: #dcfce7; color: #15803d; }
+.sp-pending   { background: #fef9c3; color: #92400e; }
+.sp-suspended { background: #fee2e2; color: #b91c1c; }
+.sp-terminated{ background: #f1f5f9; color: #64748b; }
+
+/* ── Alert items ── */
+.alert-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+}
+.alert-item:last-child { border-bottom: none; }
+.alert-item:hover { background: var(--surface-2); }
+.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.alert-dot.red   { background: var(--red); }
+.alert-dot.amber { background: #f59e0b; }
+
+/* ── Dormitory mini row ── */
+.dorm-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.dorm-row:last-child { border-bottom: none; }
+.dorm-row:hover { background: var(--surface-2); }
+.dorm-occ-bar { width: 80px; height: 5px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
+.dorm-occ-fill { height: 100%; border-radius: 99px; }
+
+/* ── Empty state ── */
+.empty-sm { padding: 28px 16px; text-align: center; color: var(--ink-faint); }
+.empty-sm i { font-size: 22px; display: block; margin-bottom: 8px; }
+.empty-sm p { font-size: 12.5px; margin: 0; }
+
+/* ── Quick links ── */
+.quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; }
+.quick-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 12px; font-weight: 600;
+    color: var(--ink); text-decoration: none; background: var(--surface);
+    transition: all .15s;
+}
+.quick-link:hover { background: var(--accent-lt); border-color: var(--accent-bd); color: var(--accent); text-decoration: none; }
+.quick-link i { width: 14px; text-align: center; }
+
+@media (max-width: 992px) {
+    .hero-stat-strip { grid-template-columns: repeat(2, 1fr); }
+    .stat-strip      { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 576px) {
+    .hero-stat-strip { grid-template-columns: 1fr 1fr; }
+    .stat-strip      { grid-template-columns: 1fr; }
+    .type-strip      { flex-direction: column; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-home icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Boarding
+                <div class="page-title-subheading">Overview of dormitories, enrollments and alerts</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'boarding:dormitory_list' %}"
+               class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-home me-1"></i>Dormitories
+            </a>
+            <a href="{% url 'boarding:bulk_enrollment_step1' %}"
+               class="btn btn-sm btn-outline-primary me-1">
+                <i class="fa fa-users me-1"></i>Bulk Enroll
+            </a>
+            <a href="{% url 'boarding:enrollment_create' %}"
+               class="btn btn-sm btn-success">
+                <i class="fa fa-user-plus me-1"></i>New Enrollment
+            </a>
+        </div>
+    </div>
+</div>
+
+{# ── Hero banner ── #}
+<div class="dash-hero">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+            <div class="dash-hero-title">
+                <i class="fa fa-home me-2" style="opacity:.8;"></i>Boarding Overview
+            </div>
+            <div class="dash-hero-sub">
+                {{ dormitory_stats.active_dormitories|default:0 }} active
+                dormitor{{ dormitory_stats.active_dormitories|default:0|pluralize:"y,ies" }}
+                &nbsp;·&nbsp;
+                {{ dormitory_stats.total_dormitories|default:0 }} total
+            </div>
+        </div>
+        <a href="{% url 'boarding:dormitory_create' %}"
+           style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
+            <i class="fa fa-plus" style="font-size:11px;"></i>Add Dormitory
+        </a>
+    </div>
+
+    <div class="hero-stat-strip">
+        {# Total boarders #}
+        <div class="hero-stat">
+            <div class="hero-stat-num">{{ enrollment_stats.active_enrollments|default:0|intcomma }}</div>
+            <div class="hero-stat-label">Active Boarders</div>
+            {% if dormitory_stats.total_capacity %}
+            <div class="occ-bar-wrap">
+                <div class="occ-bar-fill
+                    {% if occupancy_percentage >= 90 %}red
+                    {% elif occupancy_percentage >= 70 %}amber{% endif %}"
+                     style="width:{{ occupancy_percentage|default:0 }}%;"></div>
+            </div>
+            {% endif %}
+            <div class="hero-stat-sub">{{ occupancy_percentage|default:0 }}% occupancy</div>
+        </div>
+
+        {# Capacity #}
+        <div class="hero-stat">
+            <div class="hero-stat-num">{{ dormitory_stats.total_capacity|default:0|intcomma }}</div>
+            <div class="hero-stat-label">Total Capacity</div>
+            <div class="hero-stat-sub">
+                {{ dormitory_stats.available_beds|default:0 }} beds available
+            </div>
+        </div>
+
+        {# Pending approvals #}
+        <div class="hero-stat"
+             style="{% if enrollment_stats.pending_approval %}border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1);{% endif %}">
+            <div class="hero-stat-num"
+                 style="{% if enrollment_stats.pending_approval %}color:#fde68a;{% endif %}">
+                {{ enrollment_stats.pending_approval|default:0 }}
+            </div>
+            <div class="hero-stat-label">Pending Approval</div>
+            <div class="hero-stat-sub">Awaiting review</div>
+        </div>
+
+        {# Missing consent #}
+        <div class="hero-stat"
+             style="{% if enrollment_stats.without_consent %}border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08);{% endif %}">
+            <div class="hero-stat-num"
+                 style="{% if enrollment_stats.without_consent %}color:#fca5a5;{% endif %}">
+                {{ enrollment_stats.without_consent|default:0 }}
+            </div>
+            <div class="hero-stat-label">Missing Consent</div>
+            <div class="hero-stat-sub">Active &amp; pending</div>
+        </div>
+    </div>
+</div>
+
+{# ── Boarding type breakdown ── #}
+<div class="type-strip">
+    <div class="type-pill">
+        <span class="type-pill-dot" style="background:#1d4ed8;"></span>
+        <div>
+            <div class="type-pill-num">{{ enrollment_stats.full_boarders|default:0 }}</div>
+            <div class="type-pill-lbl">Full Boarders</div>
+        </div>
+    </div>
+    <div class="type-pill">
+        <span class="type-pill-dot" style="background:#0f766e;"></span>
+        <div>
+            <div class="type-pill-num">{{ enrollment_stats.weekly_boarders|default:0 }}</div>
+            <div class="type-pill-lbl">Weekly Boarders</div>
+        </div>
+    </div>
+    <div class="type-pill">
+        <span class="type-pill-dot" style="background:#7c3aed;"></span>
+        <div>
+            <div class="type-pill-num">{{ enrollment_stats.flexi_boarders|default:0 }}</div>
+            <div class="type-pill-lbl">Flexible</div>
+        </div>
+    </div>
+    <div class="type-pill">
+        <span class="type-pill-dot" style="background:#15803d;"></span>
+        <div>
+            <div class="type-pill-num">{{ enrollment_stats.with_invoice|default:0 }}</div>
+            <div class="type-pill-lbl">Have Invoice</div>
+        </div>
+    </div>
+    <div class="type-pill">
+        <span class="type-pill-dot" style="background:#94a3b8;"></span>
+        <div>
+            <div class="type-pill-num">{{ enrollment_stats.suspended_enrollments|default:0 }}</div>
+            <div class="type-pill-lbl">Suspended</div>
+        </div>
+    </div>
+</div>
+
+{# ── Stat strip (by dormitory type) ── #}
+<div class="stat-strip">
+    <div class="stat-card">
+        <div class="stat-card-label">Boys Dormitories</div>
+        <div class="stat-card-val accent">{{ dormitory_stats.boys_dormitories|default:0 }}</div>
+        <div class="stat-card-sub">Male housing</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Girls Dormitories</div>
+        <div class="stat-card-val" style="color:#be185d;">{{ dormitory_stats.girls_dormitories|default:0 }}</div>
+        <div class="stat-card-sub">Female housing</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Mixed / Staff</div>
+        <div class="stat-card-val" style="color:#7c3aed;">{{ dormitory_stats.mixed_dormitories|default:0 }}</div>
+        <div class="stat-card-sub">Mixed or staff quarters</div>
+    </div>
+</div>
+
+<div class="row">
+
+{# ══════════════ LEFT COLUMN ══════════════ #}
+<div class="col-lg-8">
+
+    {# ── Pending approvals ── #}
+    {% if pending_approvals %}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon amber"><i class="fa fa-clock-o"></i></div>
+                <div>
+                    <div class="sec-title">Pending Approvals</div>
+                    <div class="sec-sub">Enrollments awaiting review</div>
+                </div>
+            </div>
+            <span style="font-size:11px;color:var(--amber);font-weight:700;">
+                {{ enrollment_stats.pending_approval|default:0 }} waiting
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Dormitory</th>
+                        <th>Type</th>
+                        <th>Enrolled</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for enr in pending_approvals %}
+                <tr>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-init">
+                                {{ enr.student.first_name|first }}{{ enr.student.last_name|first }}
+                            </div>
+                            <div>
+                                <a href="{% url 'boarding:enrollment_detail' enr.pk %}"
+                                   class="stu-name">{{ enr.student.get_full_name }}</a>
+                                <div class="stu-adm">{{ enr.student.admission_number }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="{% url 'boarding:dormitory_detail' enr.dormitory.pk %}"
+                           style="color:var(--ink);text-decoration:none;font-weight:600;">
+                            {{ enr.dormitory.name }}
+                        </a>
+                        <div style="font-size:11px;color:var(--ink-muted);">{{ enr.dormitory.get_dormitory_type_display }}</div>
+                    </td>
+                    <td style="color:var(--ink-muted);">{{ enr.get_boarding_type_display }}</td>
+                    <td style="color:var(--ink-muted);font-size:12px;white-space:nowrap;">
+                        {{ enr.enrollment_date|date:"d M Y"|default:"—" }}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-xs btn-outline-success me-1"
+                                style="font-size:10.5px;padding:3px 8px;"
+                                hx-get="{% url 'boarding:enrollment_approve_modal' enr.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML"
+                                title="Approve">
+                            <i class="fa fa-check"></i>
+                        </button>
+                        <a href="{% url 'boarding:enrollment_detail' enr.pk %}"
+                           class="btn btn-xs btn-outline-primary"
+                           style="font-size:10.5px;padding:3px 8px;" title="View">
+                            <i class="fa fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Recent enrollments ── #}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon"><i class="fa fa-history"></i></div>
+                <div>
+                    <div class="sec-title">Recent Enrollments</div>
+                    <div class="sec-sub">Last 10 boarding enrollments created</div>
+                </div>
+            </div>
+            <a href="{% url 'boarding:dormitory_list' %}"
+               style="font-size:11px;color:var(--accent);text-decoration:none;">
+                View Dormitories <i class="fa fa-arrow-right ms-1"></i>
+            </a>
+        </div>
+        {% if recent_enrollments %}
+        <div class="table-responsive">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Dormitory</th>
+                        <th>Roll No.</th>
+                        <th>Session</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for enr in recent_enrollments %}
+                <tr>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-init">
+                                {{ enr.student.first_name|first }}{{ enr.student.last_name|first }}
+                            </div>
+                            <div>
+                                <a href="{% url 'boarding:enrollment_detail' enr.pk %}"
+                                   class="stu-name">{{ enr.student.get_full_name }}</a>
+                                <div class="stu-adm">{{ enr.student.admission_number }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="{% url 'boarding:dormitory_detail' enr.dormitory.pk %}"
+                           style="color:var(--ink);text-decoration:none;font-weight:600;">
+                            {{ enr.dormitory.name }}
+                        </a>
+                    </td>
+                    <td>
+                        <span style="font-family:'Courier New',monospace;font-weight:700;color:var(--accent);">
+                            {{ enr.boarding_roll_number|default:"—" }}
+                        </span>
+                    </td>
+                    <td style="font-size:12px;color:var(--ink-muted);">{{ enr.academic_session.name }}</td>
+                    <td class="text-center">
+                        {% if enr.status == 'ACTIVE' %}
+                            <span class="s-pill sp-active"><i class="fa fa-circle" style="font-size:7px;"></i>Active</span>
+                        {% elif enr.status == 'PENDING' %}
+                            <span class="s-pill sp-pending"><i class="fa fa-clock-o" style="font-size:9px;"></i>Pending</span>
+                        {% elif enr.status == 'SUSPENDED' %}
+                            <span class="s-pill sp-suspended"><i class="fa fa-ban" style="font-size:9px;"></i>Suspended</span>
+                        {% elif enr.status == 'TERMINATED' %}
+                            <span class="s-pill sp-terminated">Terminated</span>
+                        {% else %}
+                            <span class="s-pill sp-terminated">{{ enr.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-sm">
+            <i class="pe-7s-users"></i>
+            <p>No enrollments recorded yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Missing consent ── #}
+    {% if missing_consent %}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon red"><i class="fa fa-file-signature"></i></div>
+                <div>
+                    <div class="sec-title">Missing Guardian Consent</div>
+                    <div class="sec-sub">Active and pending enrollments without consent on record</div>
+                </div>
+            </div>
+            <span style="font-size:11px;color:var(--red);font-weight:700;">
+                {{ enrollment_stats.without_consent|default:0 }} missing
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Dormitory</th>
+                        <th>Status</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for enr in missing_consent %}
+                <tr>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-init" style="background:var(--red-lt);color:var(--red);border-color:#fecaca;">
+                                {{ enr.student.first_name|first }}{{ enr.student.last_name|first }}
+                            </div>
+                            <div>
+                                <a href="{% url 'boarding:enrollment_detail' enr.pk %}" class="stu-name">
+                                    {{ enr.student.get_full_name }}
+                                </a>
+                                <div class="stu-adm">{{ enr.student.admission_number }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="font-weight:600;">{{ enr.dormitory.name }}</td>
+                    <td>
+                        {% if enr.status == 'PENDING' %}
+                            <span class="s-pill sp-pending">Pending</span>
+                        {% else %}
+                            <span class="s-pill sp-active">Active</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-xs btn-outline-primary"
+                                style="font-size:10.5px;padding:3px 8px;"
+                                hx-get="{% url 'boarding:enrollment_update_consent_modal' enr.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-file-signature me-1" style="font-size:9px;"></i>Record
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>{# /col-lg-8 #}
+
+{# ══════════════ RIGHT COLUMN ══════════════ #}
+<div class="col-lg-4">
+
+    {# ── Quick links ── #}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon muted"><i class="fa fa-th"></i></div>
+                <span class="sec-title">Quick Links</span>
+            </div>
+        </div>
+        <div class="quick-links">
+            <a href="{% url 'boarding:dormitory_list' %}" class="quick-link">
+                <i class="fa fa-home text-primary"></i> Dormitories
+            </a>
+            <a href="{% url 'boarding:enrollment_create' %}" class="quick-link">
+                <i class="fa fa-user-plus" style="color:var(--green);"></i> Enroll Student
+            </a>
+            <a href="{% url 'boarding:bulk_enrollment_step1' %}" class="quick-link">
+                <i class="fa fa-users text-primary"></i> Bulk Enroll
+            </a>
+            <a href="{% url 'boarding:dormitory_create' %}" class="quick-link">
+                <i class="fa fa-plus-circle" style="color:var(--teal);"></i> Add Dormitory
+            </a>
+            <a href="{% url 'boarding:report_occupancy_modal' %}"
+               class="quick-link"
+               hx-get="{% url 'boarding:report_occupancy_modal' %}"
+               hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-chart-bar" style="color:var(--purple);"></i> Occupancy Report
+            </a>
+            <a href="{% url 'boarding:report_statistics_modal' %}"
+               class="quick-link"
+               hx-get="{% url 'boarding:report_statistics_modal' %}"
+               hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-bar-chart" style="color:var(--amber);"></i> Statistics
+            </a>
+        </div>
+    </div>
+
+    {# ── Dormitory status ── #}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon"><i class="fa fa-home"></i></div>
+                <div>
+                    <div class="sec-title">Dormitory Status</div>
+                    <div class="sec-sub">Occupancy at a glance</div>
+                </div>
+            </div>
+            <a href="{% url 'boarding:dormitory_list' %}"
+               style="font-size:11px;color:var(--accent);text-decoration:none;">All</a>
+        </div>
+        {# Full dormitories alert #}
+        {% if full_dormitories %}
+        <div style="padding:10px 16px;background:var(--red-lt);border-bottom:1px solid #fecaca;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--red);">
+            <i class="fa fa-exclamation-circle" style="flex-shrink:0;"></i>
+            <span>
+                <strong>{{ full_dormitories|length }}</strong>
+                dormitor{{ full_dormitories|length|pluralize:"y,ies" }} at full capacity.
+            </span>
+        </div>
+        {% for dorm in full_dormitories %}
+        <div class="dorm-row">
+            <div>
+                <a href="{% url 'boarding:dormitory_detail' dorm.pk %}"
+                   style="font-weight:700;font-size:12.5px;color:var(--ink);text-decoration:none;">
+                    {{ dorm.name }}
+                </a>
+                <div style="font-size:11px;color:var(--ink-muted);">{{ dorm.get_dormitory_type_display }}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-weight:700;font-size:12.5px;color:var(--red);">FULL</div>
+                <div style="font-size:11px;color:var(--ink-muted);">{{ dorm.total_capacity }} beds</div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-sm" style="padding:20px 16px;">
+            <i class="fa fa-check-circle" style="color:var(--green);"></i>
+            <p style="color:var(--green);font-weight:600;">No dormitories at capacity</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Maintenance due ── #}
+    {% if maintenance_due %}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon amber"><i class="fa fa-tools"></i></div>
+                <div>
+                    <div class="sec-title">Maintenance Due</div>
+                    <div class="sec-sub">Overdue or due today</div>
+                </div>
+            </div>
+            <span style="font-size:11px;color:var(--amber);font-weight:700;">
+                {{ dormitory_stats.needs_maintenance|default:0 }} overdue
+            </span>
+        </div>
+        {% for dorm in maintenance_due %}
+        <div class="alert-item">
+            <span class="alert-dot amber"></span>
+            <div style="flex:1;min-width:0;">
+                <a href="{% url 'boarding:dormitory_detail' dorm.pk %}"
+                   style="font-weight:600;font-size:12.5px;color:var(--ink);text-decoration:none;">
+                    {{ dorm.name }}
+                </a>
+                <div style="font-size:11px;color:var(--ink-muted);">
+                    Due {{ dorm.next_maintenance_due|date:"d M Y" }}
+                </div>
+            </div>
+            <button class="btn btn-xs btn-outline-warning"
+                    style="font-size:10px;padding:2px 7px;flex-shrink:0;"
+                    hx-get="{% url 'boarding:dormitory_update_maintenance_modal' dorm.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                Update
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Summary counts sidebar card ── #}
+    <div class="section-card">
+        <div class="section-head">
+            <div class="section-head-left">
+                <div class="sec-icon teal"><i class="fa fa-bar-chart"></i></div>
+                <span class="sec-title">Enrollment Summary</span>
+            </div>
+        </div>
+        <div style="padding:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <span style="color:var(--ink-muted);">Total Enrollments</span>
+                <span style="font-weight:700;">{{ enrollment_stats.total_enrollments|default:0|intcomma }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <span style="color:var(--ink-muted);">Active</span>
+                <span style="font-weight:700;color:var(--green);">{{ enrollment_stats.active_enrollments|default:0|intcomma }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <span style="color:var(--ink-muted);">Pending Approval</span>
+                <span style="font-weight:700;color:var(--amber);">{{ enrollment_stats.pending_approval|default:0 }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <span style="color:var(--ink-muted);">Suspended</span>
+                <span style="font-weight:700;color:var(--red);">{{ enrollment_stats.suspended_enrollments|default:0 }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <span style="color:var(--ink-muted);">With Invoice</span>
+                <span style="font-weight:700;">{{ enrollment_stats.with_invoice|default:0 }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;font-size:12.5px;">
+                <span style="color:var(--ink-muted);">Consent Given</span>
+                <span style="font-weight:700;color:var(--green);">{{ enrollment_stats.with_consent|default:0 }}</span>
+            </div>
+        </div>
+    </div>
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+{# ── HTMX modal shell ── #}
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    let currentModal = null;
+
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target.id !== 'modal-container') return;
+        const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+        if (!dialog) return;
+        document.getElementById('dynamicModalWrapper')?.remove();
+        const wrapper = document.createElement('div');
+        wrapper.className = 'modal fade';
+        wrapper.id        = 'dynamicModalWrapper';
+        wrapper.setAttribute('tabindex', '-1');
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(dialog);
+        document.body.appendChild(wrapper);
+        currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+        wrapper.addEventListener('hidden.bs.modal', function () {
+            wrapper.remove();
+            document.getElementById('modal-container').innerHTML = '';
+            currentModal = null;
+        });
+    });
+
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        const xhr      = e.detail.xhr;
+        const message  = xhr.getResponseHeader('HX-Alert-Message');
+        const type     = xhr.getResponseHeader('HX-Alert-Type')  || 'success';
+        const title    = xhr.getResponseHeader('HX-Alert-Title');
+        const close    = xhr.getResponseHeader('HX-Close-Modal');
+        const redirect = xhr.getResponseHeader('HX-Redirect');
+        if (close === 'true' && currentModal) currentModal.hide();
+        if (message && typeof Swal !== 'undefined') {
+            setTimeout(() => {
+                Swal.fire({
+                    icon: type,
+                    title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                    text: message,
+                    confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                    timer: type === 'success' ? 3000 : null,
+                    timerProgressBar: type === 'success',
+                }).then(() => {
+                    if (redirect) window.location.href = redirect;
+                    else if (type === 'success') window.location.reload();
+                });
+            }, 300);
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+            el => new bootstrap.Tooltip(el)
+        );
+    });
+})();
+</script>
+{% endblock %}

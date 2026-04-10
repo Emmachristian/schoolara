@@ -33,49 +33,44 @@ def generate_invoice_number():
     - With prefix and year: INV-2024-0001
     - With prefix only: INV-0001
     - No prefix: 0001
-    
+
     Returns:
         str: Unique invoice number
     """
     from fees.models import FeeInvoice
     from core.models import FinancialSettings
-    
+
     settings = FinancialSettings.get_instance()
     prefix = settings.invoice_prefix.strip() if settings.invoice_prefix else ""
     include_year = settings.include_year_in_invoice_number
-    
+
     current_year = timezone.now().year
-    
-    # Build the prefix pattern for searching
+
     if prefix and include_year:
         search_prefix = f"{prefix}-{current_year}-"
     elif prefix:
         search_prefix = f"{prefix}-"
     else:
         search_prefix = ""
-    
+
     with transaction.atomic():
         if search_prefix:
             queryset = FeeInvoice.objects.filter(
                 invoice_number__startswith=search_prefix
             ).select_for_update()
         else:
-            # No prefix: get all numeric invoice numbers
             queryset = FeeInvoice.objects.select_for_update()
-        
+
         result = queryset.aggregate(max_number=Max('invoice_number'))
-        
+
         if result['max_number']:
             try:
-                # Extract the numeric part (last segment after split)
                 if search_prefix:
                     last_number = int(result['max_number'].split('-')[-1])
                 else:
-                    # Try to parse as pure number
                     last_number = int(result['max_number'])
                 new_number = last_number + 1
             except (ValueError, IndexError):
-                # Fallback: iterate to find max
                 numbers = []
                 for invoice_num in queryset.values_list('invoice_number', flat=True):
                     try:
@@ -89,9 +84,7 @@ def generate_invoice_number():
                 new_number = max(numbers) + 1 if numbers else 1
         else:
             new_number = 1
-        
-        # Dynamic padding: determine minimum digits needed
-        # Start with 4 digits, expand in increments
+
         if new_number <= 9999:
             min_digits = 4
         elif new_number <= 99999:
@@ -101,12 +94,10 @@ def generate_invoice_number():
         elif new_number <= 9999999:
             min_digits = 7
         else:
-            # For very large numbers, calculate required digits
             min_digits = len(str(new_number))
-        
+
         formatted_number = f"{new_number:0{min_digits}d}"
-        
-        # Build final invoice number
+
         if prefix and include_year:
             return f"{prefix}-{current_year}-{formatted_number}"
         elif prefix:
@@ -119,26 +110,26 @@ def generate_payment_number():
     """
     Generate unique payment number using company settings.
     Format: PMT-2024-0001 or PMT-0001 or 0001
-    
+
     Returns:
         str: Unique payment number
     """
     from fees.models import Payment
     from core.models import FinancialSettings
-    
+
     settings = FinancialSettings.get_instance()
     prefix = settings.payment_prefix.strip() if settings.payment_prefix else ""
     include_year = settings.include_year_in_payment_number
-    
+
     current_year = timezone.now().year
-    
+
     if prefix and include_year:
         search_prefix = f"{prefix}-{current_year}-"
     elif prefix:
         search_prefix = f"{prefix}-"
     else:
         search_prefix = ""
-    
+
     with transaction.atomic():
         if search_prefix:
             queryset = Payment.objects.filter(
@@ -146,9 +137,9 @@ def generate_payment_number():
             ).select_for_update()
         else:
             queryset = Payment.objects.select_for_update()
-        
+
         result = queryset.aggregate(max_number=Max('payment_number'))
-        
+
         if result['max_number']:
             try:
                 if search_prefix:
@@ -170,12 +161,12 @@ def generate_payment_number():
                 new_number = max(numbers) + 1 if numbers else 1
         else:
             new_number = 1
-        
+
         if new_number <= 9999:
             formatted_number = f"{new_number:04d}"
         else:
             formatted_number = str(new_number)
-        
+
         if prefix and include_year:
             return f"{prefix}-{current_year}-{formatted_number}"
         elif prefix:
@@ -188,21 +179,21 @@ def generate_receipt_number():
     """
     Generate unique receipt number using company settings.
     Format: RCPT-000001 or 000001
-    
+
     Returns:
         str: Unique receipt number
     """
     from fees.models import Payment
     from core.models import FinancialSettings
-    
+
     settings = FinancialSettings.get_instance()
     prefix = settings.receipt_prefix.strip() if settings.receipt_prefix else ""
-    
+
     if prefix:
         search_prefix = f"{prefix}-"
     else:
         search_prefix = ""
-    
+
     with transaction.atomic():
         if search_prefix:
             queryset = Payment.objects.filter(
@@ -212,9 +203,9 @@ def generate_receipt_number():
             queryset = Payment.objects.filter(
                 receipt_number__isnull=False
             ).exclude(receipt_number='').select_for_update()
-        
+
         result = queryset.aggregate(max_number=Max('receipt_number'))
-        
+
         if result['max_number']:
             try:
                 if search_prefix:
@@ -229,7 +220,6 @@ def generate_receipt_number():
                         if search_prefix and receipt_num.startswith(search_prefix):
                             num = int(receipt_num.split('-')[-1])
                         else:
-                            # Handle legacy formats
                             numeric_part = ''.join(filter(str.isdigit, receipt_num))
                             if numeric_part:
                                 num = int(numeric_part)
@@ -241,130 +231,77 @@ def generate_receipt_number():
                 new_number = max(numbers) + 1 if numbers else 1
         else:
             new_number = 1
-        
+
         if new_number <= 999999:
             formatted_number = f"{new_number:06d}"
         else:
             formatted_number = str(new_number)
-        
+
         if prefix:
             return f"{prefix}-{formatted_number}"
         else:
             return formatted_number
 
 
-def generate_refund_number():
-    """
-    Generate unique refund number.
-    Format: RFND-2024-0001
-    
-    Returns:
-        str: Unique refund number
-    """
-    from fees.models import Refund
-    
-    current_year = timezone.now().year
-    prefix = "RFND"
-    search_prefix = f"{prefix}-{current_year}-"
-    
-    with transaction.atomic():
-        queryset = Refund.objects.filter(
-            refund_number__startswith=search_prefix
-        ).select_for_update()
-        
-        result = queryset.aggregate(max_number=Max('refund_number'))
-        
-        if result['max_number']:
-            try:
-                last_number = int(result['max_number'].split('-')[-1])
-                new_number = last_number + 1
-            except (ValueError, IndexError):
-                numbers = []
-                for refund_num in queryset.values_list('refund_number', flat=True):
-                    try:
-                        num = int(refund_num.split('-')[-1])
-                        numbers.append(num)
-                    except (ValueError, IndexError):
-                        continue
-                new_number = max(numbers) + 1 if numbers else 1
-        else:
-            new_number = 1
-        
-        formatted_number = f"{new_number:04d}"
-        return f"{prefix}-{current_year}-{formatted_number}"
-
 
 def generate_scholarship_application_number(scholarship_program=None, year=None):
     """
     Generate unique scholarship application number.
-    Format: 
-    - With type: APP-2024-MERIT-001, APP-2024-NEED-001, APP-2024-SIB-001
+    Format:
+    - With type: APP-2024-MERIT-001, APP-2024-NEED-001
     - Without type: APP-2024-001
-    
+
     Args:
         scholarship_program: ScholarshipProgram instance (to get scholarship_type)
         year: Optional year (defaults to current year)
-    
+
     Returns:
         str: Unique application number
     """
     from fees.models import StudentScholarshipApplication
-    from django.utils import timezone
-    from django.db.models import Max
-    from django.db import transaction
-    
+
     if year is None:
         year = timezone.now().year
-    
+
     prefix = "APP"
-    
-    # Map scholarship types to short prefixes for application numbers
+
     TYPE_PREFIX_MAP = {
-        'ACADEMIC_MERIT': 'MERIT',
-        'SPORTS_EXCELLENCE': 'SPORT',
-        'ARTS_TALENT': 'ARTS',
-        'NEED_BASED': 'NEED',
-        'STAFF_CHILD': 'STAFF',
-        'SIBLING_DISCOUNT': 'SIB',
-        'MULTIPLE_SIBLING': 'SIB',
-        'COMMUNITY_SERVICE': 'COMMUNITY',
-        'LEADERSHIP': 'LEADER',
+        'ACADEMIC_MERIT':        'MERIT',
+        'SPORTS_EXCELLENCE':     'SPORT',
+        'ARTS_TALENT':           'ARTS',
+        'NEED_BASED':            'NEED',
+        'COMMUNITY_SERVICE':     'COMMUNITY',
+        'LEADERSHIP':            'LEADER',
         'SPECIAL_CIRCUMSTANCES': 'SPECIAL',
-        'ALUMNI_SPONSORED': 'ALUMNI',
-        'CORPORATE_SPONSORED': 'CORP',
-        'GOVERNMENT_BURSARY': 'GOV',
-        'FULL_SCHOLARSHIP': 'FULL',
-        'PARTIAL_SCHOLARSHIP': 'PARTIAL',
-        'EMERGENCY_AID': 'EMERG',
+        'ALUMNI_SPONSORED':      'ALUMNI',
+        'CORPORATE_SPONSORED':   'CORP',
+        'GOVERNMENT_BURSARY':    'GOV',
+        'FULL_SCHOLARSHIP':      'FULL',
+        'PARTIAL_SCHOLARSHIP':   'PARTIAL',
+        'EMERGENCY_AID':         'EMERG',
     }
-    
-    # Get scholarship type prefix
+
     type_prefix = None
     if scholarship_program:
-        scholarship_type = scholarship_program.scholarship_type
-        type_prefix = TYPE_PREFIX_MAP.get(scholarship_type)
-    
-    # Build search prefix based on whether type is provided
+        type_prefix = TYPE_PREFIX_MAP.get(scholarship_program.scholarship_type)
+
     if type_prefix:
         search_prefix = f"{prefix}-{year}-{type_prefix}-"
     else:
         search_prefix = f"{prefix}-{year}-"
-    
+
     with transaction.atomic():
-        # Query for applications with the same prefix
         queryset = StudentScholarshipApplication.objects.filter(
             application_number__startswith=search_prefix
         ).select_for_update()
-        
+
         result = queryset.aggregate(max_number=Max('application_number'))
-        
+
         if result['max_number']:
             try:
-                # Extract the last part (numeric portion)
                 last_number = int(result['max_number'].split('-')[-1])
                 new_number = last_number + 1
             except (ValueError, IndexError):
-                # Fallback: manually parse all numbers
                 numbers = []
                 for app_num in queryset.values_list('application_number', flat=True):
                     try:
@@ -375,11 +312,9 @@ def generate_scholarship_application_number(scholarship_program=None, year=None)
                 new_number = max(numbers) + 1 if numbers else 1
         else:
             new_number = 1
-        
-        # Format number with leading zeros (3 digits)
+
         formatted_number = f"{new_number:03d}"
-        
-        # Build final application number
+
         if type_prefix:
             return f"{prefix}-{year}-{type_prefix}-{formatted_number}"
         else:
@@ -393,15 +328,13 @@ def generate_scholarship_application_number(scholarship_program=None, year=None)
 def get_invoice_items_organized(invoice):
     """
     Organize invoice items based on display group settings.
-    
-    This function groups or displays items individually based on the 
-    display_group.show_as_group flag. This allows flexible invoice formatting
-    where some fee categories are grouped together (e.g., tuition fees) while
-    others are shown individually (e.g., uniform items).
-    
+
+    Groups or displays items individually based on the
+    display_group.show_as_group flag.
+
     Args:
         invoice: FeeInvoice instance
-        
+
     Returns:
         list: List of dicts with organized items:
         [
@@ -410,182 +343,147 @@ def get_invoice_items_organized(invoice):
                 'group': DisplayGroup instance or None,
                 'items': [FeeInvoiceItem, ...],
                 'show_subtotal': bool,
-                'subtotal': Decimal (if show_subtotal is True)
+                'subtotal': Decimal
             },
             ...
         ]
-        
-    Example:
-        organized = get_invoice_items_organized(invoice)
-        
-        for section in organized:
-            if section['type'] == 'grouped':
-                print(f"--- {section['group'].name} ---")
-                for item in section['items']:
-                    print(f"  {item.description}: {item.final_amount}")
-                if section['show_subtotal']:
-                    print(f"  Subtotal: {section['subtotal']}")
-            else:
-                # Individual item
-                item = section['items'][0]
-                print(f"{item.description}: {item.final_amount}")
     """
-    # Get all invoice items with related data
     items = invoice.items.select_related(
         'fee_category__display_group'
     ).order_by(
         'fee_category__display_group__display_order',
-        'fee_category__display_order'
+        'fee_category__display_order',
     )
-    
+
     organized = []
-    
-    # Group items by their display_group
+
     for group, items_in_group in groupby(items, key=lambda x: x.fee_category.display_group):
         items_list = list(items_in_group)
-        
+
         if group and group.show_as_group:
-            # Add as grouped section with subtotal
             subtotal = sum(item.final_amount for item in items_list)
-            
             organized.append({
-                'type': 'grouped',
-                'group': group,
-                'items': items_list,
+                'type':          'grouped',
+                'group':         group,
+                'items':         items_list,
                 'show_subtotal': group.show_group_subtotal,
-                'subtotal': subtotal
+                'subtotal':      subtotal,
             })
         else:
-            # Add items individually (each item is its own section)
             for item in items_list:
                 organized.append({
-                    'type': 'individual',
-                    'group': group,
-                    'items': [item],
+                    'type':          'individual',
+                    'group':         group,
+                    'items':         [item],
                     'show_subtotal': False,
-                    'subtotal': item.final_amount
+                    'subtotal':      item.final_amount,
                 })
-    
+
     return organized
 
 
 def calculate_invoice_totals_by_group(invoice):
     """
     Calculate invoice totals grouped by display group.
-    
-    Useful for reports and summaries showing revenue breakdown by fee type.
-    
+
     Args:
         invoice: FeeInvoice instance
-        
+
     Returns:
         dict: {
-            'by_group': [
-                {
-                    'group_name': str,
-                    'group': DisplayGroup or None,
-                    'subtotal': Decimal,
-                    'tax': Decimal,
-                    'total': Decimal,
-                    'item_count': int
-                },
-                ...
-            ],
+            'by_group': [...],
             'grand_total': Decimal,
             'total_tax': Decimal,
             'total_discount': Decimal
         }
     """
-    from django.db.models import Sum, Count
-    
     items = invoice.items.select_related('fee_category__display_group')
-    
-    # Group by display group and aggregate
+
     groups_data = []
     for group, items_in_group in groupby(
         items.order_by('fee_category__display_group__display_order'),
-        key=lambda x: x.fee_category.display_group
+        key=lambda x: x.fee_category.display_group,
     ):
         items_list = list(items_in_group)
-        
-        group_subtotal = sum(item.amount for item in items_list)
-        group_tax = sum(item.tax_amount for item in items_list)
-        group_total = sum(item.final_amount for item in items_list)
-        
+
+        group_subtotal = sum(item.amount       for item in items_list)
+        group_tax      = sum(item.tax_amount   for item in items_list)
+        group_total    = sum(item.final_amount for item in items_list)
+
         groups_data.append({
             'group_name': group.name if group else 'Other',
-            'group': group,
-            'subtotal': group_subtotal,
-            'tax': group_tax,
-            'total': group_total,
-            'item_count': len(items_list)
+            'group':      group,
+            'subtotal':   group_subtotal,
+            'tax':        group_tax,
+            'total':      group_total,
+            'item_count': len(items_list),
         })
-    
+
     return {
-        'by_group': groups_data,
-        'grand_total': invoice.total_amount,
-        'total_tax': invoice.tax_amount,
-        'total_discount': invoice.discount_amount
+        'by_group':       groups_data,
+        'grand_total':    invoice.total_amount,
+        'total_tax':      invoice.tax_amount,
+        'total_discount': invoice.discount_amount,
     }
 
 
 def format_invoice_for_display(invoice, include_payments=True):
     """
     Format invoice data for display in templates or PDFs.
-    
+
     Args:
         invoice: FeeInvoice instance
         include_payments: Whether to include payment history
-        
+
     Returns:
         dict: Formatted invoice data ready for rendering
     """
     organized_items = get_invoice_items_organized(invoice)
-    
+
     data = {
-        'invoice': invoice,
-        'student': invoice.student,
-        'organized_items': organized_items,
+        'invoice':          invoice,
+        'student':          invoice.student,
+        'organized_items':  organized_items,
         'totals': {
             'subtotal': invoice.subtotal_amount,
             'discount': invoice.discount_amount,
-            'tax': invoice.tax_amount,
-            'total': invoice.total_amount,
-            'paid': invoice.paid_amount,
-            'balance': invoice.balance
+            'tax':      invoice.tax_amount,
+            'total':    invoice.total_amount,
+            'paid':     invoice.paid_amount,
+            'balance':  invoice.balance,
         },
         'dates': {
             'issue': invoice.issue_date,
-            'due': invoice.due_date,
+            'due':   invoice.due_date,
         },
-        'status': invoice.get_status_display(),
+        'status':       invoice.get_status_display(),
         'status_color': get_invoice_status_color(invoice.status),
     }
-    
+
     if include_payments:
         data['payments'] = invoice.payments.all().order_by('-payment_date')
-    
+
     return data
 
 
 def get_invoice_status_color(status):
     """
-    Get color code for invoice status.
-    
+    Get hex color code for invoice status.
+
     Args:
         status: Invoice status string
-        
+
     Returns:
         str: Hex color code
     """
     colors = {
-        'DRAFT': '#6C757D',      # Gray
-        'PENDING': '#FFC107',     # Amber
-        'PARTIALLY_PAID': '#17A2B8',  # Cyan
-        'PAID': '#28A745',        # Green
-        'OVERDUE': '#DC3545',     # Red
-        'CANCELLED': '#343A40',   # Dark gray
-        'REFUNDED': '#6F42C1',    # Purple
+        'DRAFT':          '#6C757D',
+        'PENDING':        '#FFC107',
+        'PARTIALLY_PAID': '#17A2B8',
+        'PAID':           '#28A745',
+        'OVERDUE':        '#DC3545',
+        'CANCELLED':      '#343A40',
+        'REFUNDED':       '#6F42C1',
     }
     return colors.get(status, '#6C757D')
 
@@ -597,108 +495,91 @@ def get_invoice_status_color(status):
 def validate_invoice_data(invoice_data):
     """
     Validate invoice data before creation.
-    
+
     Args:
         invoice_data: Dict with invoice information
-        
+
     Returns:
-        dict: {
-            'valid': bool,
-            'errors': list of str,
-            'warnings': list of str
-        }
+        dict: {'valid': bool, 'errors': list, 'warnings': list}
     """
-    errors = []
+    errors   = []
     warnings = []
-    
-    # Check required fields
+
     required_fields = ['student', 'academic_session', 'items']
     for field in required_fields:
         if field not in invoice_data or not invoice_data[field]:
             errors.append(f"{field.replace('_', ' ').title()} is required")
-    
-    # Validate items
+
     if 'items' in invoice_data and invoice_data['items']:
         for idx, item in enumerate(invoice_data['items']):
             if 'fee_category' not in item:
                 errors.append(f"Item {idx + 1}: fee_category is required")
-            
             if 'amount' not in item or item['amount'] <= 0:
                 errors.append(f"Item {idx + 1}: amount must be positive")
     else:
         errors.append("At least one invoice item is required")
-    
-    # Validate dates
+
     if 'issue_date' in invoice_data and 'due_date' in invoice_data:
         if invoice_data['due_date'] < invoice_data['issue_date']:
             errors.append("Due date cannot be before issue date")
-    
-    # Check for negative amounts
+
     if 'discount_amount' in invoice_data and invoice_data['discount_amount'] < 0:
         errors.append("Discount amount cannot be negative")
-    
+
     if 'tax_amount' in invoice_data and invoice_data['tax_amount'] < 0:
         errors.append("Tax amount cannot be negative")
-    
-    valid = len(errors) == 0
-    
+
     return {
-        'valid': valid,
-        'errors': errors,
-        'warnings': warnings
+        'valid':    len(errors) == 0,
+        'errors':   errors,
+        'warnings': warnings,
     }
 
 
 def validate_payment_data(payment_data):
     """
     Validate payment data before creation.
-    
+
     Args:
         payment_data: Dict with payment information
-        
+
     Returns:
-        dict: {
-            'valid': bool,
-            'errors': list of str,
-            'warnings': list of str
-        }
+        dict: {'valid': bool, 'errors': list, 'warnings': list}
     """
-    errors = []
+    from core.utils import get_school_today
+
+    errors   = []
     warnings = []
-    
-    # Check required fields
+
     if 'amount' not in payment_data or payment_data['amount'] <= 0:
         errors.append("Payment amount must be positive")
-    
+
     if 'payment_method' not in payment_data:
         errors.append("Payment method is required")
-    
+
     if 'student' not in payment_data:
         errors.append("Student is required")
-    
-    # Validate against invoice if provided
+
     if 'invoice' in payment_data:
         invoice = payment_data['invoice']
-        amount = payment_data.get('amount', 0)
-        
+        amount  = payment_data.get('amount', 0)
+
         if amount > invoice.balance:
             warnings.append(
                 f"Payment amount ({amount}) exceeds invoice balance ({invoice.balance}). "
                 f"Excess will be recorded as overpayment."
             )
-    
-    # Validate payment date
+
     if 'payment_date' in payment_data:
+        today        = get_school_today()
         payment_date = payment_data['payment_date']
-        if payment_date > timezone.now().date():
+        if payment_date > today:
             errors.append("Payment date cannot be in the future")
-    
-    valid = len(errors) == 0
-    
+
     return {
-        'valid': valid,
-        'errors': errors,
-        'warnings': warnings
+        'valid':    len(errors) == 0,
+        'errors':   errors,
+        'warnings': warnings,
     }
 
 
@@ -709,13 +590,13 @@ def validate_payment_data(payment_data):
 def calculate_line_item_totals(amount, quantity=1, tax_percentage=0, discount_percentage=0):
     """
     Calculate line item totals with tax and discount.
-    
+
     Args:
         amount: Base amount per unit
         quantity: Quantity
         tax_percentage: Tax percentage (0-100)
         discount_percentage: Discount percentage (0-100)
-        
+
     Returns:
         dict: {
             'subtotal': Decimal,
@@ -725,391 +606,59 @@ def calculate_line_item_totals(amount, quantity=1, tax_percentage=0, discount_pe
             'final_amount': Decimal
         }
     """
-    amount = Decimal(str(amount))
-    quantity = Decimal(str(quantity))
-    tax_percentage = Decimal(str(tax_percentage))
+    amount              = Decimal(str(amount))
+    quantity            = Decimal(str(quantity))
+    tax_percentage      = Decimal(str(tax_percentage))
     discount_percentage = Decimal(str(discount_percentage))
-    
-    # Calculate subtotal
-    subtotal = amount * quantity
-    
-    # Calculate discount
-    discount_amount = (subtotal * discount_percentage) / 100
-    
-    # Calculate taxable amount (after discount)
-    taxable_amount = subtotal - discount_amount
-    
-    # Calculate tax
-    tax_amount = (taxable_amount * tax_percentage) / 100
-    
-    # Calculate final amount
-    final_amount = taxable_amount + tax_amount
-    
+
+    subtotal         = amount * quantity
+    discount_amount  = (subtotal * discount_percentage) / 100
+    taxable_amount   = subtotal - discount_amount
+    tax_amount       = (taxable_amount * tax_percentage) / 100
+    final_amount     = taxable_amount + tax_amount
+
     return {
-        'subtotal': subtotal,
+        'subtotal':        subtotal,
         'discount_amount': discount_amount,
-        'taxable_amount': taxable_amount,
-        'tax_amount': tax_amount,
-        'final_amount': final_amount
+        'taxable_amount':  taxable_amount,
+        'tax_amount':      tax_amount,
+        'final_amount':    final_amount,
     }
 
 
 def apply_discount_to_invoice(invoice, discount_amount=None, discount_percentage=None):
     """
     Apply discount to invoice and recalculate totals.
-    
+
     Args:
         invoice: FeeInvoice instance
         discount_amount: Fixed discount amount (optional)
         discount_percentage: Percentage discount (optional)
-        
+
     Returns:
         dict: Updated totals
     """
     subtotal = invoice.subtotal_amount
-    
+
     if discount_percentage:
         discount = (subtotal * Decimal(str(discount_percentage))) / 100
     elif discount_amount:
         discount = Decimal(str(discount_amount))
     else:
         discount = Decimal('0.00')
-    
-    # Ensure discount doesn't exceed subtotal
+
     discount = min(discount, subtotal)
-    
-    # Recalculate
+
     invoice.discount_amount = discount
-    invoice.total_amount = subtotal + invoice.tax_amount - discount
-    invoice.balance = invoice.total_amount - invoice.paid_amount
-    
+    invoice.total_amount    = subtotal + invoice.tax_amount - discount
+    invoice.balance         = invoice.total_amount - invoice.paid_amount
+
     return {
         'subtotal': invoice.subtotal_amount,
         'discount': invoice.discount_amount,
-        'tax': invoice.tax_amount,
-        'total': invoice.total_amount,
-        'balance': invoice.balance
+        'tax':      invoice.tax_amount,
+        'total':    invoice.total_amount,
+        'balance':  invoice.balance,
     }
 
 
-# =============================================================================
-# REPORTING HELPERS
-# =============================================================================
-
-def get_invoice_summary_stats(queryset):
-    """
-    Get summary statistics for a queryset of invoices.
-    
-    Args:
-        queryset: QuerySet of FeeInvoice instances
-        
-    Returns:
-        dict: Summary statistics
-    """
-    from django.db.models import Sum, Count, Avg
-    
-    stats = queryset.aggregate(
-        total_invoices=Count('id'),
-        total_amount=Sum('total_amount'),
-        total_paid=Sum('paid_amount'),
-        total_balance=Sum('balance'),
-        avg_invoice=Avg('total_amount')
-    )
-    
-    # Count by status
-    status_counts = {}
-    for status, _ in queryset.model.STATUS_CHOICES:
-        status_counts[status] = queryset.filter(status=status).count()
-    
-    stats['by_status'] = status_counts
-    
-    return stats
-
-# =============================================================================
-# PAYMENT REVERSAL UTILITIES
-# =============================================================================
-
-@transaction.atomic
-def reverse_payment(payment, user, reason):
-    """
-    Reverse a student fee payment (internal correction, no money returned).
-    
-    Accounting Impact:
-    - REVERSAL creates opposite journal entry:
-      DR: Student Receivables (increase what student owes)
-      CR: Cash/Bank Account (reduce cash received)
-    
-    Args:
-        payment: Payment instance to reverse
-        user: User performing the reversal
-        reason: Reason for reversal
-    
-    Returns:
-        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
-    
-    Example:
-        >>> success, msg, entry = reverse_payment(payment, request.user, "Duplicate entry")
-    """
-    if payment.reversed:
-        return False, "Payment already reversed", None
-    
-    if payment.refunded:
-        return False, "Cannot reverse a refunded payment", None
-    
-    try:
-        from fees.models import StudentAccount, AccountTransaction
-        from finance.models import JournalEntry, JournalTransaction, Journal
-        from core.models import FiscalPeriod
-        
-        # 1. Mark payment as reversed
-        payment.reversed = True
-        payment.reversed_on = timezone.now()
-        payment.reversed_by_id = str(user.id)
-        payment.reversal_reason = reason
-        
-        # 2. Update invoice balance (restore what was paid)
-        if payment.invoice:
-            payment.invoice.paid_amount -= payment.amount_applied_to_invoice
-            payment.invoice.balance = payment.invoice.total_amount - payment.invoice.paid_amount
-            
-            # Update status
-            if payment.invoice.balance > 0:
-                if payment.invoice.paid_amount > 0:
-                    payment.invoice.status = 'PARTIALLY_PAID'
-                else:
-                    payment.invoice.status = 'PENDING'
-            
-            payment.invoice.save()
-        
-        # 3. Update student account
-        student_account = StudentAccount.objects.get(student=payment.student)
-        new_balance = student_account.current_balance - payment.amount
-        
-        AccountTransaction.objects.create(
-            student_account=student_account,
-            transaction_type='ADJUSTMENT',
-            amount=-payment.amount,
-            description=f"Reversal of Payment {payment.payment_number}: {reason}",
-            balance_after=new_balance,
-            invoice=payment.invoice,
-            payment=payment,
-            academic_session=payment.academic_session,
-            fiscal_period=payment.fiscal_period,
-            reference_number=f"REV-{payment.payment_number}"
-        )
-        
-        student_account.current_balance = new_balance
-        student_account.total_payments_received -= payment.amount
-        student_account.last_transaction_date = timezone.now()
-        student_account.save()
-        
-        # 4. Create REVERSAL journal entry (opposite of original)
-        fiscal_period = FiscalPeriod.get_current_fiscal_period()
-        
-        general_journal = Journal.objects.filter(
-            journal_type='GENERAL',
-            is_active=True
-        ).first()
-        
-        if not general_journal:
-            logger.error("No active general journal found")
-            return False, "No active journal found for reversal", None
-        
-        reversal_entry = JournalEntry.objects.create(
-            journal=general_journal,
-            entry_date=timezone.now().date(),
-            fiscal_period=fiscal_period,
-            academic_session=payment.academic_session,
-            reference_number=payment.payment_number,
-            description=f"REVERSAL: Payment {payment.payment_number} - {reason}",
-            status='POSTED'
-        )
-        
-        # Get accounts
-        receivable_account = payment.get_receivable_account()
-        deposit_account = payment.get_deposit_account()
-        
-        if not receivable_account or not deposit_account:
-            logger.error("Required accounts not found for reversal")
-            return False, "Account configuration error", None
-        
-        # REVERSAL entries (opposite of payment):
-        # DR: Student Receivables (increases what student owes)
-        JournalTransaction.objects.create(
-            journal_entry=reversal_entry,
-            account=receivable_account,
-            amount=payment.amount,
-            is_debit=True,
-            description=f"Reversal: Student receivable restored"
-        )
-        
-        # CR: Cash/Bank (reduces cash we recorded)
-        JournalTransaction.objects.create(
-            journal_entry=reversal_entry,
-            account=deposit_account,
-            amount=payment.amount,
-            is_debit=False,
-            description=f"Reversal: Cash/bank payment reversed"
-        )
-        
-        # Update account balances
-        receivable_account.current_balance += payment.amount
-        receivable_account.save()
-        
-        deposit_account.current_balance -= payment.amount
-        deposit_account.save()
-        
-        # Link reversal journal to payment
-        payment.reversal_journal_entry = reversal_entry
-        payment.save()
-        
-        logger.info(
-            f"Payment reversed: {payment.payment_number} by {user} - "
-            f"Journal Entry: {reversal_entry.entry_number}"
-        )
-        
-        return True, f"Payment reversed successfully. Journal Entry: {reversal_entry.entry_number}", reversal_entry
-    
-    except Exception as e:
-        logger.error(f"Error reversing payment {payment.payment_number}: {e}", exc_info=True)
-        return False, f"Error reversing payment: {str(e)}", None
-
-
-@transaction.atomic
-def refund_payment(payment, user, refund_method, refund_reference, reason):
-    """
-    Process a payment refund (actual money returned to payer).
-    
-    Accounting Impact:
-    - REFUND returns actual cash:
-      DR: Student Receivables (increase what student owes)
-      DR: Cash/Bank (decrease cash on hand)
-      CR: Refund Clearing (if using clearing account)
-    
-    Args:
-        payment: Payment instance to refund
-        user: User processing refund
-        refund_method: How refund was issued (e.g., "Bank Transfer")
-        refund_reference: Reference number for refund transaction
-        reason: Reason for refund
-    
-    Returns:
-        tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
-    """
-    if payment.refunded:
-        return False, "Payment already refunded", None
-    
-    if payment.reversed:
-        return False, "Cannot refund a reversed payment (use reversal instead)", None
-    
-    try:
-        from fees.models import StudentAccount, AccountTransaction
-        from finance.models import JournalEntry, JournalTransaction, Journal
-        from core.models import FiscalPeriod, FinancialSettings
-        
-        # 1. Mark payment as refunded
-        payment.refunded = True
-        payment.refunded_on = timezone.now()
-        payment.refund_method = refund_method
-        payment.refund_reference = refund_reference
-        payment.reversal_reason = reason  # Store reason here too
-        
-        # 2. Update invoice balance
-        if payment.invoice:
-            payment.invoice.paid_amount -= payment.amount_applied_to_invoice
-            payment.invoice.balance = payment.invoice.total_amount - payment.invoice.paid_amount
-            
-            if payment.invoice.balance > 0:
-                if payment.invoice.paid_amount > 0:
-                    payment.invoice.status = 'PARTIALLY_PAID'
-                else:
-                    payment.invoice.status = 'PENDING'
-            
-            payment.invoice.save()
-        
-        # 3. Update student account
-        student_account = StudentAccount.objects.get(student=payment.student)
-        new_balance = student_account.current_balance - payment.amount
-        
-        AccountTransaction.objects.create(
-            student_account=student_account,
-            transaction_type='REFUND',
-            amount=-payment.amount,
-            description=f"Refund of Payment {payment.payment_number}: {reason}",
-            balance_after=new_balance,
-            invoice=payment.invoice,
-            payment=payment,
-            academic_session=payment.academic_session,
-            fiscal_period=payment.fiscal_period,
-            reference_number=refund_reference
-        )
-        
-        student_account.current_balance = new_balance
-        student_account.total_refunds_issued += payment.amount
-        student_account.last_transaction_date = timezone.now()
-        student_account.save()
-        
-        # 4. Create REFUND journal entry
-        fiscal_period = FiscalPeriod.get_current_fiscal_period()
-        
-        general_journal = Journal.objects.filter(
-            journal_type='GENERAL',
-            is_active=True
-        ).first()
-        
-        if not general_journal:
-            return False, "No active journal found for refund", None
-        
-        refund_entry = JournalEntry.objects.create(
-            journal=general_journal,
-            entry_date=timezone.now().date(),
-            fiscal_period=fiscal_period,
-            academic_session=payment.academic_session,
-            reference_number=refund_reference,
-            description=f"REFUND: Payment {payment.payment_number} - {reason}",
-            status='POSTED'
-        )
-        
-        # Get accounts
-        receivable_account = payment.get_receivable_account()
-        refund_account = payment.get_deposit_account()  # Money comes from same account
-        
-        # REFUND entries:
-        # DR: Student Receivables (restore what student owes)
-        JournalTransaction.objects.create(
-            journal_entry=refund_entry,
-            account=receivable_account,
-            amount=payment.amount,
-            is_debit=True,
-            description=f"Refund: Receivable restored"
-        )
-        
-        # CR: Cash/Bank (actual money out)
-        JournalTransaction.objects.create(
-            journal_entry=refund_entry,
-            account=refund_account,
-            amount=payment.amount,
-            is_debit=False,
-            description=f"Refund issued via {refund_method}"
-        )
-        
-        # Update balances
-        receivable_account.current_balance += payment.amount
-        receivable_account.save()
-        
-        refund_account.current_balance -= payment.amount
-        refund_account.save()
-        
-        payment.refund_journal_entry = refund_entry
-        payment.save()
-        
-        logger.info(
-            f"Payment refunded: {payment.payment_number} - "
-            f"Journal Entry: {refund_entry.entry_number}"
-        )
-        
-        return True, f"Refund processed. Journal Entry: {refund_entry.entry_number}", refund_entry
-    
-    except Exception as e:
-        logger.error(f"Error refunding payment {payment.payment_number}: {e}", exc_info=True)
-        return False, f"Error processing refund: {str(e)}", None

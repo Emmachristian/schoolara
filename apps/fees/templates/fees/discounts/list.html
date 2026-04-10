@@ -1,0 +1,696 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load widget_tweaks %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --green:     #15803d;
+    --amber:     #b45309;
+    --red:       #dc2626;
+    --radius:    10px;
+}
+
+/* ── Stat cards ── */
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 3px;
+}
+.stat-value     { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
+.stat-value-sub { font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
+
+/* ── List card ── */
+.list-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.list-card-head {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.list-card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+}
+.filter-bar .form-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px;
+}
+.filter-bar .form-control,
+.filter-bar .form-select {
+    border-radius: 8px;
+    border-color: #dee2e6;
+    font-size: 13px;
+}
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-ticket icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Discount Policies
+                <div class="page-title-subheading">
+                    Manage fee discount policies and student awards
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'fees:discount_create' %}" class="btn btn-primary me-1">
+                <i class="fa fa-plus me-1"></i> Create Policy
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown">
+                    <i class="fa fa-download me-1"></i> Export
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <button class="dropdown-item"
+                            data-bs-toggle="modal" data-bs-target="#printModal">
+                        <i class="fa fa-print me-2"></i>Print
+                    </button>
+                    <button class="dropdown-item"
+                            data-bs-toggle="modal" data-bs-target="#excelModal">
+                        <i class="fa fa-file-excel me-2 text-success"></i>Export Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<!-- ── Stat cards ── -->
+<div class="row mb-2" id="stats-cards">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-ticket"></i></div>
+            <div>
+                <div class="stat-label">Total Policies</div>
+                <div class="stat-value">{{ stats.total|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value">{{ stats.active|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Students Benefited</div>
+                <div class="stat-value">{{ stats.students_benefited|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-graph2"></i></div>
+            <div>
+                <div class="stat-label">Total Discounted</div>
+                <div class="stat-value">{{ stats.total_discount_value|default:0|money_short }}</div>
+                <div class="stat-value-sub">school currency</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Secondary stat row: budget ── -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#6f42c1;"><i class="pe-7s-piggy"></i></div>
+            <div style="flex:1;">
+                <div class="stat-label">Budget Allocated</div>
+                <div class="stat-value">{{ stats.total_budget_allocated|default:0|money_short }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0891b2;"><i class="pe-7s-cart"></i></div>
+            <div style="flex:1;">
+                <div class="stat-label">Budget Used</div>
+                <div class="stat-value">{{ stats.total_budget_used|default:0|money_short }}</div>
+                {% if stats.total_budget_allocated %}
+                <div class="stat-value-sub">
+                    {% widthratio stats.total_budget_used|default:0 stats.total_budget_allocated 100 as overall_pct %}
+                    {{ overall_pct }}% of total allocated
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Main list card ── -->
+<div class="list-card">
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-tags text-primary"></i> Discount Policies
+            {% if stats.auto_apply %}
+                <span style="font-size:11px;font-weight:400;color:#64748b;">
+                    — {{ stats.auto_apply }} auto-apply
+                </span>
+            {% endif %}
+        </span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                <i class="fa fa-times me-1"></i> Reset
+            </button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    hx-get="{% url 'fees:discount_list' %}"
+                    hx-target="#discount-list"
+                    hx-include="#searchForm">
+                <i class="fa fa-refresh me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- ── Filters ── -->
+    <div class="filter-bar">
+        <form id="searchForm"
+              hx-get="{% url 'fees:discount_list' %}"
+              hx-target="#discount-list"
+              hx-trigger="change, keyup changed delay:500ms from:input[name='q']">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">{{ filter_form.q.label }}</label>
+                    {{ filter_form.q|add_class:"form-control form-control-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.category.label }}</label>
+                    {{ filter_form.category|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.value_mode.label }}</label>
+                    {{ filter_form.value_mode|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ filter_form.application_method.label }}</label>
+                    {{ filter_form.application_method|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">{{ filter_form.auto_apply.label }}</label>
+                    {{ filter_form.auto_apply|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">{{ filter_form.is_active.label }}</label>
+                    {{ filter_form.is_active|add_class:"form-select form-select-sm" }}
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ── Results ── -->
+    <div id="discount-list"
+         hx-get="{% url 'fees:discount_list' %}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <p class="text-muted mb-0">Loading discount policies…</p>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<!-- ================================================================
+     PRINT MODAL
+================================================================ -->
+<div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="printModalLabel">
+                        <i class="fa fa-print text-primary me-2"></i>Print Options
+                    </h5>
+                    <p class="text-muted small mb-0 mt-1">
+                        Current filters will be applied.
+                        <span id="print_field_count">10</span> field(s) selected.
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body px-4 py-3">
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-semibold text-dark">Select fields to include</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary"   onclick="selectAllPrint()">Select all</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllPrint()">Clear all</button>
+                    </div>
+                </div>
+
+                <!-- Policy Info -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-tag me-1"></i>Policy Info
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="code"               id="pf_code"               checked><label class="form-check-label small" for="pf_code">Code</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="name"               id="pf_name"               checked><label class="form-check-label small" for="pf_name">Policy Name</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="category"           id="pf_category"           checked><label class="form-check-label small" for="pf_category">Category</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="value_mode"         id="pf_value_mode"         checked><label class="form-check-label small" for="pf_value_mode">Value Mode</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="combination_mode"   id="pf_combination_mode"         ><label class="form-check-label small" for="pf_combination_mode">Combination Mode</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="priority"           id="pf_priority"                 ><label class="form-check-label small" for="pf_priority">Priority</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="description"        id="pf_description"              ><label class="form-check-label small" for="pf_description">Description</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Discount Value -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-coins me-1"></i>Discount Value
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="flat_percentage"    id="pf_flat_percentage"    checked><label class="form-check-label small" for="pf_flat_percentage">Percentage</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="flat_fixed_amount"  id="pf_flat_fixed_amount"  checked><label class="form-check-label small" for="pf_flat_fixed_amount">Fixed Amount</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="total_budget"        id="pf_total_budget"             ><label class="form-check-label small" for="pf_total_budget">Total Budget</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="budget_used"         id="pf_budget_used"              ><label class="form-check-label small" for="pf_budget_used">Budget Used</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="max_beneficiaries"   id="pf_max_beneficiaries"        ><label class="form-check-label small" for="pf_max_beneficiaries">Max Beneficiaries</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Status & Flags -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-toggle-on me-1"></i>Status &amp; Flags
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="application_method" id="pf_application_method" checked><label class="form-check-label small" for="pf_application_method">Application Method</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="auto_apply"         id="pf_auto_apply"         checked><label class="form-check-label small" for="pf_auto_apply">Auto Apply</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="application_count"  id="pf_application_count"  checked><label class="form-check-label small" for="pf_application_count">Applications</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="active_award_count" id="pf_active_award_count"  checked><label class="form-check-label small" for="pf_active_award_count">Active Awards</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input print-field" type="checkbox" value="is_active"          id="pf_is_active"          checked><label class="form-check-label small" for="pf_is_active">Active</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Column order -->
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-sort me-1"></i>Column Order
+                    <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0;"> — drag to reorder</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2 p-3 rounded mb-1"
+                     style="background:#f8f9fa;min-height:48px;" id="print-order-list"></div>
+                <p class="text-muted small mb-3">Checked fields appear above. Drag chips left or right to set column order.</p>
+
+                <hr class="my-3">
+
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-cog me-1"></i>Print Options
+                </div>
+                <div class="row g-0">
+                    <div class="col-md-4"><div class="form-check py-1 px-3"><input class="form-check-input" type="checkbox" id="print_include_stats" checked><label class="form-check-label small" for="print_include_stats">Include stats summary</label></div></div>
+                    <div class="col-md-4"><div class="form-check py-1 px-3"><input class="form-check-input" type="checkbox" id="print_landscape" checked><label class="form-check-label small" for="print_landscape">Landscape orientation</label></div></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="print-btn" onclick="generateAndPrint()">
+                    <i class="fa fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     EXCEL MODAL
+================================================================ -->
+<div class="modal fade" id="excelModal" tabindex="-1" aria-labelledby="excelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="excelModalLabel">
+                        <i class="fa fa-file-excel text-success me-2"></i>Export to Excel
+                    </h5>
+                    <p class="text-muted small mb-0 mt-1">
+                        Current filters will be applied.
+                        <span id="excel_field_count">10</span> column(s) selected.
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body px-4 py-3">
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-semibold text-dark">Select columns to include</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success"   onclick="selectAllExcel()">Select all</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllExcel()">Clear all</button>
+                    </div>
+                </div>
+
+                <!-- Policy Info -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-tag me-1"></i>Policy Info
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="code"               id="xf_code"               checked><label class="form-check-label small" for="xf_code">Code</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="name"               id="xf_name"               checked><label class="form-check-label small" for="xf_name">Policy Name</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="category"           id="xf_category"           checked><label class="form-check-label small" for="xf_category">Category</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="value_mode"         id="xf_value_mode"         checked><label class="form-check-label small" for="xf_value_mode">Value Mode</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="combination_mode"   id="xf_combination_mode"         ><label class="form-check-label small" for="xf_combination_mode">Combination Mode</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="priority"           id="xf_priority"                 ><label class="form-check-label small" for="xf_priority">Priority</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="description"        id="xf_description"              ><label class="form-check-label small" for="xf_description">Description</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Discount Value -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-coins me-1"></i>Discount Value
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="flat_percentage"    id="xf_flat_percentage"    checked><label class="form-check-label small" for="xf_flat_percentage">Percentage</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="flat_fixed_amount"  id="xf_flat_fixed_amount"  checked><label class="form-check-label small" for="xf_flat_fixed_amount">Fixed Amount</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="total_budget"        id="xf_total_budget"             ><label class="form-check-label small" for="xf_total_budget">Total Budget</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="budget_used"         id="xf_budget_used"              ><label class="form-check-label small" for="xf_budget_used">Budget Used</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="max_beneficiaries"   id="xf_max_beneficiaries"        ><label class="form-check-label small" for="xf_max_beneficiaries">Max Beneficiaries</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Status & Flags -->
+                <div class="mb-1 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-toggle-on me-1"></i>Status &amp; Flags
+                </div>
+                <div class="row row-cols-2 row-cols-md-3 g-0 mb-3">
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="application_method" id="xf_application_method" checked><label class="form-check-label small" for="xf_application_method">Application Method</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="auto_apply"         id="xf_auto_apply"         checked><label class="form-check-label small" for="xf_auto_apply">Auto Apply</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="application_count"  id="xf_application_count"  checked><label class="form-check-label small" for="xf_application_count">Applications</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="active_award_count" id="xf_active_award_count"  checked><label class="form-check-label small" for="xf_active_award_count">Active Awards</label></div></div>
+                    <div class="col"><div class="form-check py-1 px-3"><input class="form-check-input excel-field" type="checkbox" value="is_active"          id="xf_is_active"          checked><label class="form-check-label small" for="xf_is_active">Active</label></div></div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Column order -->
+                <div class="mb-2 text-uppercase text-muted fw-semibold" style="font-size:.7rem;letter-spacing:.6px;">
+                    <i class="fa fa-sort me-1"></i>Column Order
+                    <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0;"> — drag to reorder</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2 p-3 rounded mb-1"
+                     style="background:#f8f9fa;min-height:48px;" id="excel-order-list"></div>
+                <p class="text-muted small mb-0">Checked fields appear above. Drag chips left or right to set column order.</p>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="exportExcel()">
+                    <i class="fa fa-file-excel me-1"></i>Download Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const FIELD_LABELS = {
+    code:               'Code',               name:               'Policy Name',
+    category:           'Category',           value_mode:         'Value Mode',
+    combination_mode:   'Combination',        priority:           'Priority',
+    description:        'Description',        flat_percentage:    'Percentage',
+    flat_fixed_amount:  'Fixed Amount',       total_budget:       'Budget',
+    budget_used:        'Budget Used',        max_beneficiaries:  'Max Beneficiaries',
+    application_method: 'Application',        auto_apply:         'Auto Apply',
+    application_count:  'Applications',       active_award_count: 'Active Awards',
+    is_active:          'Active',
+};
+
+// ── Drag-to-reorder ──────────────────────────────────────────────
+
+function initDragOrder(listId) {
+    const list = document.getElementById(listId);
+    let dragSrc = null;
+    list.addEventListener('dragstart', function (e) {
+        dragSrc = e.target.closest('.order-chip');
+        if (!dragSrc) return;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => { if (dragSrc) dragSrc.style.opacity = '0.4'; }, 0);
+    });
+    list.addEventListener('dragend', function (e) {
+        const chip = e.target.closest('.order-chip');
+        if (chip) chip.style.opacity = '1';
+        dragSrc = null;
+    });
+    list.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.order-chip');
+        if (target && dragSrc && target !== dragSrc) {
+            const mid = target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2;
+            list.insertBefore(dragSrc, e.clientX < mid ? target : target.nextSibling);
+        }
+    });
+}
+
+function syncOrderList(checkboxClass, listId) {
+    const list    = document.getElementById(listId);
+    const checked = new Set(
+        Array.from(document.querySelectorAll('.' + checkboxClass + ':checked')).map(cb => cb.value)
+    );
+    list.querySelectorAll('.order-chip').forEach(chip => {
+        if (!checked.has(chip.dataset.field)) chip.remove();
+    });
+    const existing = new Set(Array.from(list.querySelectorAll('.order-chip')).map(c => c.dataset.field));
+    checked.forEach(val => {
+        if (existing.has(val)) return;
+        const chip = document.createElement('div');
+        chip.className = 'order-chip badge d-inline-flex align-items-center gap-1 user-select-none';
+        chip.draggable = true;
+        chip.dataset.field = val;
+        chip.style.cssText = 'cursor:grab;padding:5px 10px;font-size:.78rem;font-weight:400;background:#1e3a5f;color:#fff;border-radius:4px;';
+        chip.innerHTML = `<i class="fa fa-grip-horizontal" style="opacity:.5;font-size:.7rem;"></i> ${FIELD_LABELS[val] || val}`;
+        list.appendChild(chip);
+    });
+}
+
+function getOrderedFields(listId, checkboxClass) {
+    const chips = document.querySelectorAll('#' + listId + ' .order-chip');
+    if (chips.length) return Array.from(chips).map(c => c.dataset.field);
+    return Array.from(document.querySelectorAll('.' + checkboxClass + ':checked')).map(cb => cb.value);
+}
+
+// ── Print ────────────────────────────────────────────────────────
+
+function selectAllPrint()   { document.querySelectorAll('.print-field').forEach(cb => cb.checked = true);  syncOrderList('print-field', 'print-order-list'); updateCount('print-field', 'print_field_count'); }
+function deselectAllPrint() { document.querySelectorAll('.print-field').forEach(cb => cb.checked = false); syncOrderList('print-field', 'print-order-list'); updateCount('print-field', 'print_field_count'); }
+
+function generateAndPrint() {
+    const fields = getOrderedFields('print-order-list', 'print-field');
+    if (!fields.length) {
+        Swal.fire({ icon: 'warning', title: 'No Fields Selected', text: 'Please select at least one field.', confirmButtonColor: '#ffc107' });
+        return;
+    }
+    const btn  = document.getElementById('print-btn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>Generating…';
+    btn.disabled  = true;
+
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
+    fields.forEach(f => params.append('fields', f));
+    if (document.getElementById('print_include_stats').checked) params.set('include_stats', 'true');
+    if (document.getElementById('print_landscape').checked)     params.set('landscape', 'true');
+
+    fetch(`{% url 'fees:discount_list_print' %}?${params.toString()}`)
+        .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+        .then(html => {
+            let frame = document.getElementById('print-frame');
+            if (!frame) {
+                frame = document.createElement('iframe');
+                frame.id = 'print-frame';
+                frame.style.display = 'none';
+                document.body.appendChild(frame);
+            }
+            const doc = frame.contentWindow.document;
+            doc.open(); doc.write(html); doc.close();
+            frame.onload = function () {
+                setTimeout(() => {
+                    frame.contentWindow.focus();
+                    frame.contentWindow.print();
+                    bootstrap.Modal.getInstance(document.getElementById('printModal'))?.hide();
+                    btn.innerHTML = orig;
+                    btn.disabled  = false;
+                }, 500);
+            };
+        })
+        .catch(() => {
+            Swal.fire({ icon: 'error', title: 'Print Error', text: 'Could not generate print view.', confirmButtonColor: '#dc3545' });
+            btn.innerHTML = orig;
+            btn.disabled  = false;
+        });
+}
+
+// ── Excel ────────────────────────────────────────────────────────
+
+function selectAllExcel()   { document.querySelectorAll('.excel-field').forEach(cb => cb.checked = true);  syncOrderList('excel-field', 'excel-order-list'); updateCount('excel-field', 'excel_field_count'); }
+function deselectAllExcel() { document.querySelectorAll('.excel-field').forEach(cb => cb.checked = false); syncOrderList('excel-field', 'excel-order-list'); updateCount('excel-field', 'excel_field_count'); }
+
+function exportExcel() {
+    const fields = getOrderedFields('excel-order-list', 'excel-field');
+    if (!fields.length) {
+        Swal.fire({ icon: 'warning', title: 'No Columns Selected', text: 'Please select at least one column.', confirmButtonColor: '#ffc107' });
+        return;
+    }
+    const params = new URLSearchParams(new FormData(document.getElementById('searchForm')));
+    fields.forEach(f => params.append('fields', f));
+    bootstrap.Modal.getInstance(document.getElementById('excelModal'))?.hide();
+    window.location.href = "{% url 'fees:export_discounts_excel' %}?" + params.toString();
+}
+
+// ── HTMX modal handler ───────────────────────────────────────────
+
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr      = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') htmx.trigger(document.getElementById('searchForm'), 'change');
+            });
+        }, 300);
+    }
+});
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function updateCount(checkboxClass, countId) {
+    const el = document.getElementById(countId);
+    if (el) el.textContent = document.querySelectorAll('.' + checkboxClass + ':checked').length;
+}
+
+function resetFilters() { window.location.href = "{% url 'fees:discount_list' %}"; }
+
+document.addEventListener('DOMContentLoaded', function () {
+    initDragOrder('print-order-list');
+    initDragOrder('excel-order-list');
+    syncOrderList('print-field', 'print-order-list');
+    syncOrderList('excel-field', 'excel-order-list');
+
+    document.querySelectorAll('.print-field').forEach(cb => cb.addEventListener('change', function () {
+        syncOrderList('print-field', 'print-order-list');
+        updateCount('print-field', 'print_field_count');
+    }));
+    document.querySelectorAll('.excel-field').forEach(cb => cb.addEventListener('change', function () {
+        syncOrderList('excel-field', 'excel-order-list');
+        updateCount('excel-field', 'excel_field_count');
+    }));
+
+    updateCount('print-field', 'print_field_count');
+    updateCount('excel-field', 'excel_field_count');
+
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

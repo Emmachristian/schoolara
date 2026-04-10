@@ -1,0 +1,587 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff; --accent-bd:#bfdbfe;
+    --green:#15803d; --green-lt:#f0fdf4; --green-bd:#bbf7d0;
+    --amber:#b45309; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+    --red:#dc2626; --red-lt:#fef2f2; --red-bd:#fecaca;
+    --violet:#7c3aed; --violet-lt:#f5f3ff;
+    --radius:10px;
+}
+
+/* ── Stat cards ── */
+.stat-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px 20px;
+    display:flex; align-items:center; gap:14px; transition:box-shadow .2s;
+    height:100%;
+}
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width:44px; height:44px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; color:#fff; flex-shrink:0;
+}
+.stat-label     { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); margin-bottom:3px; }
+.stat-value     { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.stat-value-sub { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+.stat-card.danger  { border-color:var(--red-bd);   background:var(--red-lt); }
+.stat-card.warning { border-color:var(--amber-bd); background:var(--amber-lt); }
+.stat-card.success { border-color:var(--green-bd); background:var(--green-lt); }
+.stat-card.accent  { border-color:var(--accent-bd);background:var(--accent-lt); }
+.stat-card.danger  .stat-value { color:var(--red); }
+.stat-card.warning .stat-value { color:var(--amber); }
+.stat-card.success .stat-value { color:var(--green); }
+.stat-card.accent  .stat-value { color:var(--accent); }
+
+/* ── Section cards ── */
+.dash-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:20px; }
+.dash-card-head { padding:14px 20px; border-bottom:1px solid var(--border); background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.dash-card-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+.dash-card-link  { font-size:12px; color:var(--accent); text-decoration:none; }
+.dash-card-link:hover { text-decoration:underline; }
+
+/* ── Tables ── */
+.dash-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.dash-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.dash-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.dash-tbl tbody tr:last-child td { border-bottom:none; }
+.dash-tbl tbody tr:hover td { background:#fafbff; }
+.dash-tbl .empty-row td { text-align:center; padding:28px; color:var(--ink-faint); font-size:12.5px; }
+
+/* ── Status badges ── */
+.s-badge { display:inline-block; padding:3px 9px; border-radius:5px; font-size:11px; font-weight:700; white-space:nowrap; }
+.sb-planned   { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
+.sb-scheduled { background:var(--accent-lt); color:var(--accent); border:1px solid var(--accent-bd); }
+.sb-ongoing   { background:var(--green-lt); color:var(--green); border:1px solid var(--green-bd); }
+.sb-completed { background:#f0fdf4; color:#166534; }
+.sb-cancelled { background:#f1f5f9; color:#94a3b8; text-decoration:line-through; }
+.sb-postponed { background:var(--amber-lt); color:var(--amber); border:1px solid var(--amber-bd); }
+.sb-suspended { background:var(--red-lt); color:var(--red); border:1px solid var(--red-bd); }
+
+/* ── Session progress bar ── */
+.sess-bar-wrap { background:var(--surface-3); border-radius:4px; height:6px; margin-top:6px; overflow:hidden; }
+.sess-bar      { height:100%; border-radius:4px; background:var(--accent); transition:width .4s ease; }
+
+/* ── Quick action grid ── */
+.qa-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:14px; }
+.qa-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:12px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); text-decoration:none; font-size:11.5px; font-weight:700; color:var(--ink-muted); transition:all .15s; text-align:center; cursor:pointer; }
+.qa-btn:hover { border-color:var(--accent-bd); background:var(--accent-lt); color:var(--accent); }
+.qa-btn i { font-size:20px; color:var(--ink-faint); }
+.qa-btn:hover i { color:var(--accent); }
+
+/* ── Alert rows (unpublished) ── */
+.alert-row { display:flex; align-items:center; justify-content:space-between; padding:11px 16px; border-bottom:1px solid var(--border); gap:10px; }
+.alert-row:last-child { border-bottom:none; }
+.alert-row:hover { background:var(--surface-2); }
+.alert-name { font-size:12.5px; font-weight:600; color:var(--ink); }
+.alert-meta  { font-size:11px; color:var(--ink-faint); margin-top:2px; }
+.alert-badge { font-size:10.5px; font-weight:700; background:var(--amber-lt); color:var(--amber); border:1px solid var(--amber-bd); border-radius:12px; padding:2px 8px; white-space:nowrap; }
+
+/* ── Module nav ── */
+.module-nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+.mod-link { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:8px; background:var(--surface); border:1px solid var(--border); font-size:12.5px; font-weight:700; color:var(--ink-muted); text-decoration:none; transition:all .15s; }
+.mod-link:hover { border-color:var(--accent-bd); background:var(--accent-lt); color:var(--accent); }
+.mod-link i { font-size:14px; }
+.mod-link .mod-count { background:var(--surface-3); border-radius:12px; padding:1px 7px; font-size:10.5px; color:var(--ink-faint); font-weight:700; }
+.mod-link .mod-count.alert { background:var(--amber-lt); color:var(--amber); border:1px solid var(--amber-bd); }
+.mod-link .mod-count.live  { background:var(--green-lt); color:var(--green); border:1px solid var(--green-bd); }
+
+/* ── Welcome banner ── */
+.welcome-banner { background:linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%); color:#fff; border-radius:var(--radius); padding:20px 28px; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+.wb-text strong { font-size:16px; font-weight:800; display:block; }
+.wb-text span   { font-size:12.5px; opacity:.85; }
+.wb-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.wb-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; font-size:12.5px; font-weight:700; text-decoration:none; }
+.wb-btn-solid   { background:#fff; color:#1d4ed8; }
+.wb-btn-outline { background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.4); }
+.wb-btn-solid:hover   { background:#eff6ff; color:#1d4ed8; }
+.wb-btn-outline:hover { background:rgba(255,255,255,.25); color:#fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Page title ── #}
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-note2 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Examinations
+                <div class="page-title-subheading">
+                    Results, grading &amp; report cards
+                    {% if current_session %}&mdash; {{ current_session }}{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'exams:examination_create' %}" class="btn btn-sm btn-primary me-1">
+                <i class="fa fa-plus me-1"></i> New Exam
+            </a>
+            <a href="{% url 'exams:results_by_class' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-table me-1"></i> Enter Results
+            </a>
+            <a href="{% url 'exams:grading_system_create' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-sliders-h me-1"></i> New Grading System
+            </a>
+        </div>
+    </div>
+</div>
+
+{# ── Module nav ── #}
+<div class="module-nav">
+    <a href="{% url 'exams:examination_list' %}" class="mod-link">
+        <i class="fa fa-file-alt"></i> Examinations
+        {% if overview.total_examinations %}
+        <span class="mod-count">{{ overview.total_examinations }}</span>
+        {% endif %}
+    </a>
+    <a href="{% url 'exams:results_by_class' %}" class="mod-link">
+        <i class="fa fa-table"></i> Results
+        {% if overview.pending_results %}
+        <span class="mod-count alert">{{ overview.pending_results }} pending</span>
+        {% endif %}
+    </a>
+    <a href="{% url 'exams:category_list' %}" class="mod-link">
+        <i class="fa fa-tags"></i> Categories
+        <span class="mod-count">{{ overview.total_categories }}</span>
+    </a>
+    <a href="{% url 'exams:grading_system_list' %}" class="mod-link">
+        <i class="fa fa-sliders-h"></i> Grading Systems
+        <span class="mod-count">{{ overview.total_grading_systems }}</span>
+    </a>
+    <a href="{% url 'exams:class_grading_system_list' %}" class="mod-link">
+        <i class="fa fa-chalkboard-teacher"></i> Class Assignments
+    </a>
+    <a href="{% url 'exams:exam_timetable' %}" class="mod-link">
+        <i class="fa fa-calendar-alt"></i> Timetable
+    </a>
+    <a href="{% url 'exams:grade_sheet_report_modal' %}" class="mod-link">
+        <i class="fa fa-chart-bar"></i> Reports
+    </a>
+    <a href="{% url 'exams:exam_settings' %}" class="mod-link">
+        <i class="fa fa-cog"></i> Settings
+    </a>
+</div>
+
+{# ── Welcome banner (only when there are ongoing exams) ── #}
+{% if overview.ongoing_exams %}
+<div class="welcome-banner">
+    <div class="wb-text">
+        <strong>{{ overview.ongoing_exams }} Examination{{ overview.ongoing_exams|pluralize }} In Progress</strong>
+        <span>
+            {% if current_session %}{{ current_session }} &mdash; {% endif %}
+            Results can be entered once examinations are marked complete.
+        </span>
+    </div>
+    <div class="wb-actions">
+        <a href="{% url 'exams:examination_list' %}?status=ONGOING" class="wb-btn wb-btn-solid">
+            <i class="fa fa-eye"></i> View Ongoing
+        </a>
+        <a href="{% url 'exams:results_by_class' %}" class="wb-btn wb-btn-outline">
+            <i class="fa fa-table"></i> Enter Results
+        </a>
+    </div>
+</div>
+{% endif %}
+
+{# ── Stat cards — Row 1: Examination counts ── #}
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="fa fa-file-alt"></i></div>
+            <div>
+                <div class="stat-label">Total Exams</div>
+                <div class="stat-value">{{ overview.total_examinations|default:"0" }}</div>
+                <div class="stat-value-sub">all time</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card {% if overview.upcoming_exams %}accent{% endif %}">
+            <div class="stat-icon {% if overview.upcoming_exams %}bg-primary{% else %}bg-secondary{% endif %}">
+                <i class="fa fa-calendar-check"></i>
+            </div>
+            <div>
+                <div class="stat-label">Upcoming</div>
+                <div class="stat-value">{{ overview.upcoming_exams|default:"0" }}</div>
+                <div class="stat-value-sub">planned &amp; scheduled</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card {% if overview.ongoing_exams %}success{% endif %}">
+            <div class="stat-icon {% if overview.ongoing_exams %}bg-success{% else %}bg-secondary{% endif %}">
+                <i class="fa fa-hourglass-half"></i>
+            </div>
+            <div>
+                <div class="stat-label">Ongoing</div>
+                <div class="stat-value">{{ overview.ongoing_exams|default:"0" }}</div>
+                <div class="stat-value-sub">in progress now</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="fa fa-check-circle"></i></div>
+            <div>
+                <div class="stat-label">Completed</div>
+                <div class="stat-value">{{ overview.completed_exams|default:"0" }}</div>
+                <div class="stat-value-sub">examinations done</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Stat cards — Row 2: Results / grading ── #}
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-dark"><i class="fa fa-list-ol"></i></div>
+            <div>
+                <div class="stat-label">Total Results</div>
+                <div class="stat-value">{{ overview.total_results|default:"0" }}</div>
+                <div class="stat-value-sub">student results</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card {% if overview.pending_results %}warning{% endif %}">
+            <div class="stat-icon {% if overview.pending_results %}bg-warning{% else %}bg-secondary{% endif %}">
+                <i class="fa fa-clock"></i>
+            </div>
+            <div>
+                <div class="stat-label">Awaiting Publish</div>
+                <div class="stat-value">{{ overview.pending_results|default:"0" }}</div>
+                <div class="stat-value-sub">submitted, unpublished</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card {% if overview.published_results %}success{% endif %}">
+            <div class="stat-icon {% if overview.published_results %}bg-success{% else %}bg-secondary{% endif %}">
+                <i class="fa fa-globe"></i>
+            </div>
+            <div>
+                <div class="stat-label">Published</div>
+                <div class="stat-value">{{ overview.published_results|default:"0" }}</div>
+                <div class="stat-value-sub">visible to authorised users</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-dark" style="background:#374151 !important;"><i class="fa fa-lock"></i></div>
+            <div>
+                <div class="stat-label">Locked Grades</div>
+                <div class="stat-value">{{ overview.locked_grades|default:"0" }}</div>
+                <div class="stat-value-sub">grade-locked results</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Main content ── #}
+<div class="row">
+
+{# ── Left: tables ── #}
+<div class="col-lg-8">
+
+    {# ── Upcoming examinations ── #}
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-calendar-alt" style="color:var(--accent);"></i>
+                Upcoming Examinations
+            </h6>
+            <a href="{% url 'exams:examination_list' %}?status=PLANNED" class="dash-card-link">
+                View all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+            </a>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Examination</th>
+                        <th>Subject</th>
+                        <th>Category</th>
+                        <th class="text-center">Status</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exam in upcoming_examinations %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'exams:examination_detail' exam.pk %}"
+                               style="font-weight:700;color:var(--accent);text-decoration:none;font-size:13px;">
+                                {{ exam.name }}
+                            </a>
+                            <div style="font-size:11px;color:var(--ink-faint);font-family:'Courier New',monospace;">
+                                {{ exam.code }}
+                            </div>
+                        </td>
+                        <td style="font-size:13px;color:var(--ink);">{{ exam.subject.name }}</td>
+                        <td style="font-size:12px;color:var(--ink-muted);">{{ exam.exam_category.abbreviation }}</td>
+                        <td class="text-center">
+                            {% if exam.status == 'PLANNED' %}
+                                <span class="s-badge sb-planned">Planned</span>
+                            {% elif exam.status == 'SCHEDULED' %}
+                                <span class="s-badge sb-scheduled">Scheduled</span>
+                            {% else %}
+                                <span class="s-badge sb-planned">{{ exam.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">
+                            {{ exam.exam_date|date:"d M Y" }}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">
+                            {{ exam.start_time|time:"H:i" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="empty-row">
+                        <td colspan="6">
+                            <i class="fa fa-calendar-check" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:8px;"></i>
+                            No upcoming examinations scheduled.
+                            <a href="{% url 'exams:examination_create' %}" style="color:var(--accent);">Schedule one</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# ── Recently added examinations ── #}
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-history" style="color:var(--ink-muted);"></i>
+                Recently Added Examinations
+            </h6>
+            <a href="{% url 'exams:examination_list' %}" class="dash-card-link">
+                View all <i class="fa fa-arrow-right" style="font-size:10px;"></i>
+            </a>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="dash-tbl">
+                <thead>
+                    <tr>
+                        <th>Examination</th>
+                        <th>Subject</th>
+                        <th>Session</th>
+                        <th class="text-center">Status</th>
+                        <th>Marks</th>
+                        <th>Exam Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exam in recent_examinations %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'exams:examination_detail' exam.pk %}"
+                               style="font-weight:700;color:var(--accent);text-decoration:none;font-size:13px;">
+                                {{ exam.name }}
+                            </a>
+                            <div style="font-size:11px;color:var(--ink-faint);font-family:'Courier New',monospace;">
+                                {{ exam.code }}
+                            </div>
+                        </td>
+                        <td style="font-size:13px;color:var(--ink);">{{ exam.subject.name }}</td>
+                        <td style="font-size:12px;color:var(--ink-muted);">{{ exam.academic_session }}</td>
+                        <td class="text-center">
+                            {% if exam.status == 'PLANNED' %}
+                                <span class="s-badge sb-planned">Planned</span>
+                            {% elif exam.status == 'SCHEDULED' %}
+                                <span class="s-badge sb-scheduled">Scheduled</span>
+                            {% elif exam.status == 'ONGOING' %}
+                                <span class="s-badge sb-ongoing">Ongoing</span>
+                            {% elif exam.status == 'COMPLETED' %}
+                                <span class="s-badge sb-completed">Completed</span>
+                            {% elif exam.status == 'CANCELLED' %}
+                                <span class="s-badge sb-cancelled">Cancelled</span>
+                            {% elif exam.status == 'POSTPONED' %}
+                                <span class="s-badge sb-postponed">Postponed</span>
+                            {% elif exam.status == 'SUSPENDED' %}
+                                <span class="s-badge sb-suspended">Suspended</span>
+                            {% else %}
+                                <span class="s-badge sb-planned">{{ exam.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:13px;font-weight:600;color:var(--ink);">
+                            {{ exam.total_marks|floatformat:0 }}
+                        </td>
+                        <td style="font-size:12px;color:var(--ink-muted);white-space:nowrap;">
+                            {{ exam.exam_date|date:"d M Y" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="empty-row">
+                        <td colspan="6">
+                            <i class="fa fa-file-alt" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:8px;"></i>
+                            No examinations created yet.
+                            <a href="{% url 'exams:examination_create' %}" style="color:var(--accent);">Create the first</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>{# /col-lg-8 #}
+
+{# ── Right sidebar ── #}
+<div class="col-lg-4">
+
+    {# ── Current session stats ── #}
+    {% if current_session and session_stats %}
+    <div class="dash-card" style="margin-bottom:20px;">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-calendar" style="color:var(--accent);"></i>
+                {{ current_session }}
+            </h6>
+        </div>
+        <div style="padding:16px 20px;">
+
+            {# Progress: completed out of total #}
+            {% if session_stats.total_exams %}
+            <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
+                    <span style="font-size:12px;font-weight:600;color:var(--ink-muted);">Completion</span>
+                    <span style="font-size:12px;font-weight:700;color:var(--ink);">
+                        {{ session_stats.completed }}&nbsp;/&nbsp;{{ session_stats.total_exams }}
+                    </span>
+                </div>
+                <div class="sess-bar-wrap">
+                    <div class="sess-bar"
+                         style="width:{% widthratio session_stats.completed session_stats.total_exams 100 %}%;"></div>
+                </div>
+            </div>
+            {% endif %}
+
+            {# Breakdown rows #}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="background:var(--surface-2);border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);">
+                    <div style="font-size:22px;font-weight:800;color:var(--accent);">{{ session_stats.upcoming }}</div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-top:2px;">Upcoming</div>
+                </div>
+                <div style="background:var(--surface-2);border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);">
+                    <div style="font-size:22px;font-weight:800;color:{% if session_stats.ongoing %}var(--green){% else %}var(--ink-faint){% endif %};">{{ session_stats.ongoing }}</div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-top:2px;">Ongoing</div>
+                </div>
+                <div style="background:var(--surface-2);border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);">
+                    <div style="font-size:22px;font-weight:800;color:var(--ink);">{{ session_stats.completed }}</div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-top:2px;">Completed</div>
+                </div>
+                <div style="background:var(--surface-2);border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);">
+                    <div style="font-size:22px;font-weight:800;color:var(--ink);">{{ session_stats.total_exams }}</div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-top:2px;">Total</div>
+                </div>
+            </div>
+
+            <a href="{% url 'exams:results_by_class' %}" class="btn btn-sm btn-outline-primary w-100 mt-3">
+                <i class="fa fa-table me-1"></i> View Class Results
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Quick actions ── #}
+    <div class="dash-card" style="margin-bottom:20px;">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title"><i class="fa fa-bolt" style="color:var(--amber);"></i> Quick Actions</h6>
+        </div>
+        <div class="qa-grid">
+            <a href="{% url 'exams:examination_create' %}" class="qa-btn">
+                <i class="fa fa-plus-circle"></i>
+                New Exam
+            </a>
+            <a href="{% url 'exams:results_by_class' %}" class="qa-btn">
+                <i class="fa fa-table"></i>
+                Enter Results
+            </a>
+            <a href="{% url 'exams:grading_system_create' %}" class="qa-btn">
+                <i class="fa fa-sliders-h"></i>
+                New Grading System
+            </a>
+            <a href="{% url 'exams:category_create' %}" class="qa-btn">
+                <i class="fa fa-tags"></i>
+                New Category
+            </a>
+            <a href="{% url 'exams:exam_timetable' %}" class="qa-btn">
+                <i class="fa fa-calendar-alt"></i>
+                Timetable
+            </a>
+            <a href="{% url 'exams:grade_sheet_report_modal' %}" class="qa-btn">
+                <i class="fa fa-file-export"></i>
+                Grade Sheet
+            </a>
+            <a href="{% url 'exams:class_grading_system_create' %}" class="qa-btn">
+                <i class="fa fa-chalkboard-teacher"></i>
+                Assign Grading
+            </a>
+            <a href="{% url 'exams:exam_settings' %}" class="qa-btn">
+                <i class="fa fa-cog"></i>
+                Settings
+            </a>
+        </div>
+    </div>
+
+    {# ── Results awaiting publication ── #}
+    <div class="dash-card">
+        <div class="dash-card-head">
+            <h6 class="dash-card-title">
+                <i class="fa fa-exclamation-circle" style="color:var(--amber);"></i>
+                Results Awaiting Publication
+                {% if unpublished_results %}
+                <span style="background:var(--amber-lt);color:var(--amber);border-radius:12px;padding:1px 8px;font-size:11px;font-weight:700;border:1px solid var(--amber-bd);">
+                    {{ unpublished_results|length }}
+                </span>
+                {% endif %}
+            </h6>
+        </div>
+
+        {% if unpublished_results %}
+            {% for exam in unpublished_results %}
+            <div class="alert-row">
+                <div style="flex:1;min-width:0;">
+                    <a href="{% url 'exams:examination_detail' exam.pk %}" style="text-decoration:none;">
+                        <div class="alert-name text-truncate">{{ exam.name }}</div>
+                        <div class="alert-meta">{{ exam.subject.name }} &bull; {{ exam.exam_date|date:"d M Y" }}</div>
+                    </a>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    <span class="alert-badge">{{ exam.results_count }} result{{ exam.results_count|pluralize }}</span>
+                    <a href="{% url 'exams:publish_results' exam.pk %}"
+                       class="btn btn-xs btn-outline-success"
+                       style="padding:2px 8px;font-size:11px;white-space:nowrap;">
+                        <i class="fa fa-upload" style="font-size:9px;"></i> Publish
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div style="text-align:center;padding:28px 20px;color:var(--ink-faint);">
+            <i class="fa fa-check-circle" style="font-size:2rem;display:block;margin-bottom:8px;color:var(--green);opacity:.6;"></i>
+            <p style="font-size:13px;margin:0;font-weight:600;color:var(--green);">All completed results are published</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+{% endblock %}

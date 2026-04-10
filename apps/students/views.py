@@ -890,49 +890,142 @@ def student_profile(request, pk):
         pk=pk
     )
 
-    # Get student summary
+    # ── Student summary ───────────────────────────────────────────
     try:
         summary = {
-            'admission_number': student.admission_number,
-            'full_name': student.get_full_name(),
-            'status': student.get_enrollment_status_display(),
-            'age': student.age,
-            'years_in_school': student_stats.get_years_in_school(student),
+            'admission_number':    student.admission_number,
+            'full_name':           student.get_full_name(),
+            'status':              student.get_enrollment_status_display(),
+            'age':                 student.age,
+            'years_in_school':     student_stats.get_years_in_school(student),
             'days_until_birthday': student_stats.get_days_until_birthday(student),
-            'is_birthday_today': student_stats.is_birthday_today(student),
-            
-            # Related counts
-            'guardian_count': student.guardians.count(),
-            'sibling_count': student_stats.get_sibling_count_for_student(student),
-            'has_medical_alerts': student.has_medical_alert(),
+            'is_birthday_today':   student_stats.is_birthday_today(student),
+            'guardian_count':      student.guardians.count(),
+            'sibling_count':       student_stats.get_sibling_count_for_student(student),
+            'has_medical_alerts':  student.has_medical_alert(),
         }
     except Exception as e:
         logger.error(f"Error getting student summary: {e}")
         summary = {}
 
-    # Get related data
-    guardians = student.guardian_relationships.filter(is_active=True)
-    primary_guardian = guardians.filter(is_primary=True).first()
-    emergency_contacts = guardians.filter(emergency_contact_priority__lte=5).order_by('emergency_contact_priority')
-    
-    # Sibling relationships
-    siblings_forward = student.sibling_relationships.select_related('to_student__current_academic_level')
-    siblings_reverse = student.reverse_sibling_relationships.select_related('from_student__current_academic_level')
-    
-    # Recent status changes
-    status_history = student.status_history.select_related('academic_session').order_by('-effective_date')[:5]
+    # ── Guardian / sibling data ───────────────────────────────────
+    guardians          = student.guardian_relationships.filter(is_active=True)
+    primary_guardian   = guardians.filter(is_primary=True).first()
+    emergency_contacts = guardians.filter(
+        emergency_contact_priority__lte=5
+    ).order_by('emergency_contact_priority')
+    siblings_forward   = student.sibling_relationships.select_related(
+        'to_student__current_academic_level'
+    )
+    siblings_reverse   = student.reverse_sibling_relationships.select_related(
+        'from_student__current_academic_level'
+    )
+    status_history     = student.status_history.select_related(
+        'academic_session'
+    ).order_by('-effective_date')[:5]
+
+    # ── Academic data ─────────────────────────────────────────────
+    from academics.models import StudentClassEnrollment, AcademicProgress
+
+    enrollments = StudentClassEnrollment.objects.filter(
+        student=student
+    ).select_related(
+        'class_instance__academic_level',
+        'class_instance__academic_session',
+        'academic_session',
+        'academic_invoice',
+    ).order_by('-academic_session__start_date')
+
+    current_enrollment = enrollments.filter(
+        completion_status='ONGOING',
+        is_active=True,
+    ).first()
+
+    academic_progress = AcademicProgress.objects.filter(
+        student=student
+    ).select_related(
+        'academic_session',
+        'class_enrollment',
+        'class_enrollment__class_instance',
+        'class_enrollment__class_instance__academic_level',
+        'promoted_to_level',
+    ).order_by('-academic_session__start_date')[:20]
+
+    # ── Financial data ────────────────────────────────────────────
+    from fees.models import StudentAccount, FeeInvoice, Payment, StudentScholarship
+
+    try:
+        student_account = StudentAccount.objects.get(student=student)
+    except StudentAccount.DoesNotExist:
+        student_account = None
+    except Exception as e:
+        logger.error(f"Error fetching student account for {student}: {e}")
+        student_account = None
+
+    recent_invoices = FeeInvoice.objects.filter(
+        student=student
+    ).select_related(
+        'academic_session', 'fiscal_period'
+    ).order_by('-issue_date')[:5]
+
+    recent_payments = Payment.objects.filter(
+        student=student
+    ).select_related(
+        'payment_method', 'invoice'
+    ).order_by('-payment_date')[:5]
+
+    active_scholarships = StudentScholarship.objects.filter(
+        student=student, status='ACTIVE'
+    ).select_related('scholarship_program')
+
+    # ── Uniform data ──────────────────────────────────────────────
+    from uniforms.models import UniformSale, StudentMeasurement, StudentUniformSize
+
+    uniform_sales = UniformSale.objects.filter(
+        student=student
+    ).select_related(
+        'fiscal_period'
+    ).order_by('-sale_date')[:5]
+
+    measurements = StudentMeasurement.objects.filter(
+        student=student
+    ).select_related(
+        'measurement_type__unit',
+        'academic_session',
+    ).order_by('-measurement_date')[:10]
+
+    size_records = StudentUniformSize.objects.filter(
+        student=student
+    ).select_related(
+        'uniform_item',
+        'recommended_size',
+    ).order_by('uniform_item__name')
 
     context = {
-        'student': student,
-        'summary': summary,
-        'guardians': guardians,
-        'primary_guardian': primary_guardian,
-        'emergency_contacts': emergency_contacts,
-        'siblings_forward': siblings_forward,
-        'siblings_reverse': siblings_reverse,
-        'status_history': status_history,
+        'student':             student,
+        'summary':             summary,
+        # Guardian / sibling
+        'guardians':           guardians,
+        'primary_guardian':    primary_guardian,
+        'emergency_contacts':  emergency_contacts,
+        'siblings_forward':    siblings_forward,
+        'siblings_reverse':    siblings_reverse,
+        'status_history':      status_history,
+        # Academic
+        'enrollments':         enrollments,
+        'current_enrollment':  current_enrollment,
+        'academic_progress':   academic_progress,
+        # Financial
+        'student_account':     student_account,
+        'recent_invoices':     recent_invoices,
+        'recent_payments':     recent_payments,
+        'active_scholarships': active_scholarships,
+        # Uniform
+        'uniform_sales':       uniform_sales,
+        'measurements':        measurements,
+        'size_records':        size_records,
     }
-    
+
     return render(request, "students/profile.html", context)
 
 

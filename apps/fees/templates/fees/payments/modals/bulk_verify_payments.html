@@ -1,0 +1,104 @@
+{% load currency_filters %}
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0;padding:16px 22px;">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#dcfce7;border:1px solid #bbf7d0;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-shield-alt" style="color:#15803d;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#14532d;">Bulk Verify Payments</h5>
+                    <div style="font-size:11.5px;color:#16a34a;margin-top:3px;">
+                        {{ unverified_payments|length }} unverified &middot; Total: {{ total_amount|money }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form method="POST" hx-post="{% url 'fees:payment_bulk_verify' %}" hx-target="body" hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:22px;max-height:65vh;overflow-y:auto;">
+
+                {% if not unverified_payments %}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:0 7px 7px 0;">
+                    <i class="fa fa-info-circle" style="color:#3b82f6;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#1e3a8a;line-height:1.6;">
+                        There are no unverified completed payments at this time.
+                    </div>
+                </div>
+                {% else %}
+
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:0 7px 7px 0;margin-bottom:16px;">
+                    <i class="fa fa-info-circle" style="color:#3b82f6;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#1e3a8a;line-height:1.6;">
+                        Select the payments to verify. Only <strong>COMPLETED</strong> unverified payments are shown (up to 50).
+                    </div>
+                </div>
+
+                <div style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:16px;">
+                    <table class="table table-sm table-hover" style="font-size:12.5px;margin-bottom:0;">
+                        <thead style="position:sticky;top:0;background:#f8fafc;">
+                            <tr>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;width:36px;">
+                                    <input type="checkbox" id="selectAll" class="form-check-input"
+                                           onchange="document.querySelectorAll('input[name=payment_ids]').forEach(cb=>cb.checked=this.checked)">
+                                </th>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Payment</th>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Student</th>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Method</th>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;text-align:right;">Amount</th>
+                                <th style="padding:8px 10px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in unverified_payments %}
+                            <tr>
+                                <td style="padding:7px 10px;">
+                                    <input type="checkbox" name="payment_ids" value="{{ payment.pk }}" checked class="form-check-input">
+                                </td>
+                                <td style="padding:7px 10px;font-weight:600;color:#0f172a;">{{ payment.payment_number }}</td>
+                                <td style="padding:7px 10px;color:#475569;">{{ payment.student.get_full_name }}</td>
+                                <td style="padding:7px 10px;color:#475569;">{{ payment.payment_method.name }}</td>
+                                <td style="padding:7px 10px;text-align:right;font-weight:600;color:#16a34a;">{{ payment.amount|money }}</td>
+                                <td style="padding:7px 10px;color:#475569;">{{ payment.payment_date }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mb-3">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                        Verification Notes <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none;">(optional)</span>
+                    </label>
+                    <textarea name="verification_notes" rows="2" class="form-control form-control-sm"
+                              placeholder="Batch verification source, bank confirmation, etc."></textarea>
+                </div>
+
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;font-size:13px;color:#14532d;">
+                    <input type="checkbox" name="confirm_verification" value="1" required class="form-check-input" style="margin:0;">
+                    <span>I confirm all selected payments have been verified against bank or mobile money records</span>
+                </label>
+
+                {% endif %}
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i> Cancel
+                </button>
+                {% if unverified_payments %}
+                <button type="submit" class="btn btn-success btn-sm">
+                    <i class="fa fa-shield-alt me-1"></i> Verify Selected
+                </button>
+                {% endif %}
+            </div>
+
+        </form>
+
+    </div>
+</div>

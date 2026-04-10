@@ -1,0 +1,297 @@
+{% extends 'exams/results/report_card_base.html' %}
+
+{% block page_title %}Report Cards — {{ class_instance.get_display_name }}{% if selected_category %} — {{ selected_category.name }}{% endif %} — {{ session.name }}{% endblock %}
+
+{% block toolbar_title %}
+    {{ cards|length }} Report Card{{ cards|length|pluralize }}
+    &nbsp;·&nbsp; {{ class_instance.get_display_name }}
+    {% if selected_category %} &nbsp;·&nbsp; {{ selected_category.name }}{% endif %}
+{% endblock %}
+{% block toolbar_sub %}{{ session.name }} &nbsp;·&nbsp; {{ school_name|default:"School" }}{% endblock %}
+
+{% block cards %}
+
+<!-- Summary banner — screen only, hidden on print -->
+<div class="no-print" style="
+    background:var(--accent-bg);
+    border:1px solid var(--ink-faint);
+    border-radius:var(--radius);
+    padding:10px 18px;
+    margin-bottom:20px;
+    font-size:10pt;
+    color:var(--accent);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    width:100%;">
+    <span>
+        <strong>{{ cards|length }}</strong> report card{{ cards|length|pluralize }}
+        &nbsp;·&nbsp; {{ class_instance.get_display_name }}
+        {% if selected_category %}&nbsp;·&nbsp; {{ selected_category.name }}{% endif %}
+        &nbsp;·&nbsp; {{ session.name }}
+        {% if ineligible_count %}
+        &nbsp;·&nbsp;
+        <span style="color:var(--danger);font-weight:700;">
+            {{ ineligible_count }} student{{ ineligible_count|pluralize }} withheld
+            (below {{ required_pct }}% payment)
+        </span>
+        {% endif %}
+    </span>
+    <span style="font-size:8.5pt;color:var(--ink-soft);">
+        Use <strong>Print / Save PDF</strong> in the toolbar above to export.
+    </span>
+</div>
+
+{% for card in cards %}
+<div class="rc-card">
+
+    <!-- ── Card header: logo | school info | student photo ── -->
+    <div class="rc-card-header">
+        <div class="rc-header-logo">
+            {% if school_logo_url %}
+            <img src="{{ school_logo_url }}" alt="{{ school_name }}">
+            {% else %}
+            <span class="rc-header-logo-placeholder">{{ school_name|first|upper }}</span>
+            {% endif %}
+        </div>
+
+        <div class="rc-header-school">
+            <h1>{{ school_name|default:"School" }}</h1>
+            {% if school_address %}<p>{{ school_address }}</p>{% endif %}
+            {% if school_contact %}<p>{{ school_contact }}</p>{% endif %}
+            <span class="rc-header-card-type">
+                Academic Report Card{% if selected_category %} — {{ selected_category.name }}{% endif %}
+            </span>
+        </div>
+
+        <div class="rc-header-photo">
+            {% if card.student.photo %}
+            <img src="{{ card.student.photo.url }}" alt="{{ card.student.get_full_name }}">
+            {% else %}
+            <div class="rc-header-photo-placeholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>No Photo</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Student info panel ── -->
+    <div class="rc-student-panel">
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Student Name</div>
+            <div class="rc-sp-value accent">{{ card.student.get_full_name }}</div>
+        </div>
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Admission Number</div>
+            <div class="rc-sp-value mono">{{ card.student.admission_number }}</div>
+        </div>
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Gender</div>
+            <div class="rc-sp-value">{{ card.student.get_gender_display }}</div>
+        </div>
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Class</div>
+            <div class="rc-sp-value">{{ class_instance.get_display_name }}</div>
+        </div>
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Class Teacher</div>
+            <div class="rc-sp-value">
+                {% if class_instance.class_teacher %}{{ class_instance.class_teacher.get_full_name }}{% else %}—{% endif %}
+            </div>
+        </div>
+        <div class="rc-sp-cell">
+            <div class="rc-sp-label">Academic Session</div>
+            <div class="rc-sp-value">{{ session.name }}</div>
+        </div>
+    </div>
+
+    <!-- ── Results ── -->
+    <p class="rc-section-label">
+        {% if selected_category %}{{ selected_category.name }} Results{% else %}Examination Results{% endif %}
+    </p>
+
+    {% for abbr, data in card.categories_data.items %}
+    <div class="rc-cat-wrap">
+        <div class="rc-cat-head">
+            <span>{{ data.category.name }}</span>
+            <span class="rc-cat-head-right">
+                {{ data.rows|length }} subject{{ data.rows|length|pluralize }}
+                &nbsp;·&nbsp; Total: {{ data.total }}
+                &nbsp;·&nbsp; Average: {{ data.average }}
+            </span>
+        </div>
+        <table class="rc-results-table">
+            <thead>
+                <tr>
+                    <th style="width:22px;">#</th>
+                    <th>Subject</th>
+                    <th class="num" style="width:46px;">Max</th>
+                    <th class="num" style="width:46px;">Score</th>
+                    <th class="ctr" style="width:44px;">Grade</th>
+                    {% if grading_system.uses_aggregates %}<th class="ctr" style="width:36px;">Agg.</th>{% endif %}
+                    <th class="ctr" style="width:42px;">Result</th>
+                    <th>Remarks</th>
+                    <th class="ctr" style="width:34px;">Tchr.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data.rows %}
+                {% with result=row.result grade_info=row.grade_info %}
+                <tr>
+                    <td class="ctr" style="color:var(--ink-faint);font-size:7.5pt;">{{ forloop.counter }}</td>
+                    <td style="font-weight:500;color:var(--ink);">{{ result.examination.subject.name }}</td>
+                    <td class="num">{{ result.examination.total_marks }}</td>
+                    <td class="num" style="font-weight:700;color:var(--ink);">
+                        {% if result.score is not None %}{{ result.score }}{% else %}—{% endif %}
+                    </td>
+                    <td class="ctr">
+                        {% if result.grade %}{% with g=result.grade|slice:":1" %}
+                        <span class="grade-badge {% if g == 'A' %}gA{% elif g == 'B' %}gB{% elif g == 'C' %}gC{% elif g == 'D' %}gD{% elif g == 'E' %}gE{% elif g == 'F' %}gF{% else %}gX{% endif %}">{{ result.grade }}</span>
+                        {% endwith %}{% else %}<span style="color:var(--ink-faint);">—</span>{% endif %}
+                    </td>
+                    {% if grading_system.uses_aggregates %}
+                    <td class="ctr" style="font-weight:700;color:var(--accent);">
+                        {% if grade_info and grade_info.aggregate %}{{ grade_info.aggregate }}{% else %}—{% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="ctr">
+                        {% if result.score is not None %}
+                            {% if result.is_pass %}<span class="pass-pill pill-pass">Pass</span>
+                            {% else %}<span class="pass-pill pill-fail">Fail</span>{% endif %}
+                        {% else %}<span class="pass-pill pill-na">—</span>{% endif %}
+                    </td>
+                    <td style="font-size:8pt;color:var(--ink-soft);">
+                        {% if grade_info and grade_info.comments %}{{ grade_info.comments }}{% else %}—{% endif %}
+                    </td>
+                    <td class="ctr" style="font-size:7.5pt;font-weight:700;color:var(--ink-mid);font-family:monospace;">
+                        {{ row.teacher_initials|default:"—" }}
+                    </td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3">Total / Average</td>
+                    <td class="num">{{ data.total }}</td>
+                    {% if grading_system.uses_aggregates %}
+                    <td class="ctr" style="font-weight:700;color:var(--accent);">
+                        {% if data.agg_total %}{{ data.agg_total }}{% else %}—{% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="ctr">—</td>
+                    <td>{{ data.average }}%</td>
+                    <td class="ctr">—</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endfor %}
+
+    <!-- ── Division / Position summary ── -->
+    {% if grading_system.uses_aggregates and card.aggregate_total is not None %}
+    <div class="rc-division-bar">
+        <div>
+            <span class="rc-division-item-label">Total Aggregates</span>
+            <span class="rc-division-item-val">{{ card.aggregate_total }}</span>
+        </div>
+        {% if card.division %}
+        <div>
+            <span class="rc-division-item-label">Division</span>
+            <span class="rc-division-item-val">{{ card.division }}</span>
+        </div>
+        {% endif %}
+        {% if card.class_position %}
+        <div>
+            <span class="rc-division-item-label">Class Position</span>
+            <span class="rc-division-item-val">{{ card.class_position }}<span style="font-size:10pt;font-weight:400;color:var(--ink-soft);"> / {{ card.class_size }}</span></span>
+        </div>
+        {% endif %}
+        {% if card.gpa %}<div><span class="rc-division-item-label">GPA</span><span class="rc-division-item-val">{{ card.gpa }}</span></div>{% endif %}
+    </div>
+    {% elif card.class_position %}
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:var(--accent-bg);border:1px solid var(--ink-faint);border-radius:var(--radius);font-size:9.5pt;margin-bottom:8px;">
+        <span style="color:var(--ink-soft);">Class Position:</span>
+        <strong style="color:var(--accent);font-size:13pt;">{{ card.class_position }}</strong>
+        <span style="color:var(--ink-soft);">out of {{ card.class_size }}</span>
+    </div>
+    {% endif %}
+
+    <!-- ── Grade scale ── -->
+    {% if grading_ranges %}
+    <p class="rc-section-label">Grade Scale</p>
+    <div class="rc-grade-scale">
+        <span class="rc-gs-label">Scale:</span>
+        {% for r in grading_ranges %}
+        <span class="rc-gs-item"><strong>{{ r.grade }}</strong>{% if r.grade_name %} {{ r.grade_name }}{% endif %}{% if r.aggregate %} ({{ r.aggregate }}){% endif %} {{ r.min_score }}–{{ r.max_score }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ── Remarks ── -->
+    <p class="rc-section-label">Remarks</p>
+    <div class="rc-comments-grid">
+        <div class="rc-comment-box">
+            <div class="rc-comment-head">Class Teacher's Remarks</div>
+            <div class="rc-comment-body">____________________________________<br>____________________________________</div>
+        </div>
+        <div class="rc-comment-box">
+            <div class="rc-comment-head">Head Teacher's Remarks</div>
+            <div class="rc-comment-body">____________________________________<br>____________________________________</div>
+        </div>
+    </div>
+
+    <!-- ── Signatures ── -->
+    <div class="rc-sigs">
+        <div class="rc-sig-box">
+            <strong>Class Teacher</strong>
+            {% if class_instance.class_teacher %}{{ class_instance.class_teacher.get_full_name }}{% endif %}
+        </div>
+        <div class="rc-sig-box"><strong>Head Teacher</strong>&nbsp;</div>
+    </div>
+
+    <div class="rc-stamp-note">Not valid without a school stamp and Head Teacher's signature.</div>
+
+    {% if next_session %}
+    <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 8px 16px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: var(--radius);
+        font-size: 9pt;
+        text-align: center;">
+        <span style="font-size: 14pt;">📅</span>
+        <span>
+            <strong>{{ next_session.name }}</strong> begins on
+            <strong>{{ next_session.start_date|date:"l, d F Y" }}</strong>
+            &nbsp;·&nbsp; All students must report on time with all requirements.
+        </span>
+    </div>
+    {% endif %}
+
+    <div class="rc-card-footer">
+        <span>{{ school_name|default:"School" }} — {{ session.name }}</span>
+        <span>{{ now|date:"d M Y" }}</span>
+    </div>
+
+</div>
+{% empty %}
+<div style="text-align:center;padding:60px 24px;background:#fff;border-radius:4px;color:#6b7280;font-size:10pt;width:100%;">
+    <div style="font-size:2rem;margin-bottom:12px;">📄</div>
+    <strong style="display:block;margin-bottom:6px;">No report cards to print</strong>
+    <p>No students have results for this category in the selected session.</p>
+</div>
+{% endfor %}
+
+{% endblock %}

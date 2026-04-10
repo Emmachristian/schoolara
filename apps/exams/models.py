@@ -130,13 +130,6 @@ class ExamCategory(BaseModel):
     )
     
     # Examination Settings
-    requires_registration = models.BooleanField("Requires Registration", default=False)
-    registration_deadline_days = models.PositiveIntegerField(
-        "Registration Deadline (Days Before Exam)",
-        default=7,
-        help_text="Days before exam when registration closes"
-    )
-    
     allows_retakes = models.BooleanField("Allows Retakes", default=True)
     max_retakes = models.PositiveIntegerField(
         "Maximum Retakes",
@@ -202,44 +195,43 @@ class ExamCategory(BaseModel):
                 self.curriculum_compatibility == curriculum_type)
 
     def get_payment_requirement_for_student(self, student):
-        """Get payment requirement details for a specific student"""
+        """Get payment requirement details for a specific student."""
         try:
-            # This would integrate with the finance system
-            from finance.utils import get_student_payment_status
-            
-            payment_status = get_student_payment_status(student)
-            
+            from fees.models import StudentAccount, FeeInvoice
+            from academics.models import AcademicSession
+
+            account = StudentAccount.objects.filter(student=student).first()
+
             if self.consider_all_outstanding_balances:
-                total_fees = payment_status.get('total_fees_charged', Decimal('0.00'))
-                total_paid = payment_status.get('total_payments_received', Decimal('0.00'))
+                total_fees = account.get_total_charges()   if account else Decimal('0.00')
+                total_paid = account.get_total_payments()  if account else Decimal('0.00')
             else:
-                # Current term only
-                current_session = AcademicSession.get_current()
-                current_invoices = student.fee_invoices.filter(academic_session=current_session)
-                total_fees = current_invoices.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-                total_paid = current_invoices.aggregate(paid=Sum('paid_amount'))['paid'] or Decimal('0.00')
-            
+                current_session = AcademicSession.get_current_session()
+                invoices = FeeInvoice.objects.filter(
+                    student=student, academic_session=current_session
+                )
+                total_fees = invoices.aggregate(t=Sum('total_amount'))['t'] or Decimal('0.00')
+                total_paid = invoices.aggregate(p=Sum('paid_amount'))['p']  or Decimal('0.00')
+
             if total_fees > 0:
                 payment_percentage = (total_paid / total_fees) * 100
-                meets_requirement = payment_percentage >= self.required_payment_percentage
+                meets_requirement  = payment_percentage >= self.required_payment_percentage
             else:
                 payment_percentage = 100
-                meets_requirement = True
-            
+                meets_requirement  = True
+
             return {
-                'total_fees': total_fees,
-                'total_paid': total_paid,
-                'payment_percentage': payment_percentage,
-                'required_percentage': self.required_payment_percentage,
-                'meets_requirement': meets_requirement,
-                'outstanding_amount': total_fees - total_paid
+                'total_fees':           total_fees,
+                'total_paid':           total_paid,
+                'payment_percentage':   payment_percentage,
+                'required_percentage':  self.required_payment_percentage,
+                'meets_requirement':    meets_requirement,
+                'outstanding_amount':   total_fees - total_paid,
             }
+
         except Exception as e:
             logger.error(f"Error calculating payment requirement: {e}")
-            return {
-                'meets_requirement': True,  # Default to allow if calculation fails
-                'error': str(e)
-            }
+            return {'meets_requirement': True, 'error': str(e)}
 
 
 # =============================================================================
@@ -1123,75 +1115,6 @@ class Examination(BaseModel):
             exam_registrations__is_active=True
         ).distinct()
 
-
-# =============================================================================
-# STUDENT EXAMINATION MODELS
-# =============================================================================
-
-class ExamRegistration(BaseModel):
-    """Model for student examination registrations"""
-    
-    REGISTRATION_STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('CONFIRMED', 'Confirmed'),
-        ('CANCELLED', 'Cancelled'),
-        ('REJECTED', 'Rejected'),
-        ('TRANSFERRED', 'Transferred'),
-    ]
-    
-    student = models.ForeignKey(
-        Student,
-        on_delete=models.CASCADE,
-        related_name='exam_registrations'
-    )
-    examination = models.ForeignKey(
-        Examination,
-        on_delete=models.CASCADE,
-        related_name='registrations'
-    )
-    
-    # Registration Details
-    registration_date = models.DateTimeField("Registration Date", auto_now_add=True)
-    status = models.CharField(
-        "Registration Status",
-        max_length=15,
-        choices=REGISTRATION_STATUS_CHOICES,
-        default='PENDING'
-    )
-    
-    # Payment Verification
-    payment_verified = models.BooleanField("Payment Verified", default=False)
-    payment_verification_date = models.DateTimeField("Payment Verification Date", null=True, blank=True)
-    
-    # Special Accommodations
-    special_accommodations = models.TextField("Special Accommodations", blank=True)
-    requires_assistance = models.BooleanField("Requires Assistance", default=False)
-    
-    # Administrative Details
-    registered_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='exam_registrations_processed'
-    )
-    
-    notes = models.TextField("Registration Notes", blank=True)
-    is_active = models.BooleanField("Is Active", default=True)
-
-    class Meta:
-        verbose_name = "Exam Registration"
-        verbose_name_plural = "Exam Registrations"
-        unique_together = ['student', 'examination']
-        ordering = ['-registration_date']
-        indexes = [
-            models.Index(fields=['student', 'status']),
-            models.Index(fields=['examination', 'status']),
-        ]
-
-    def __str__(self):
-        return f"{self.student.get_full_name()} - {self.examination.name}"
-
-
 class StudentExamResult(BaseModel):
     """Model for individual student examination results with grade locking"""
     
@@ -1658,121 +1581,6 @@ class StudentExamResult(BaseModel):
         return queryset
 
 
-# =============================================================================
-# EXAMINATION ANALYTICS MODEL
-# =============================================================================
 
-class ExamAnalytics(BaseModel):
-    """Model for storing examination analytics and statistics"""
-    
-    examination = models.OneToOneField(
-        Examination,
-        on_delete=models.CASCADE,
-        related_name='analytics'
-    )
-    
-    # Basic Statistics
-    total_students = models.PositiveIntegerField("Total Students", default=0)
-    students_appeared = models.PositiveIntegerField("Students Appeared", default=0)
-    students_passed = models.PositiveIntegerField("Students Passed", default=0)
-    students_failed = models.PositiveIntegerField("Students Failed", default=0)
-    
-    # Score Statistics
-    highest_score = models.DecimalField(
-        "Highest Score",
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    lowest_score = models.DecimalField(
-        "Lowest Score",
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    average_score = models.DecimalField(
-        "Average Score",
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    median_score = models.DecimalField(
-        "Median Score",
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    
-    # Performance Rates
-    pass_rate = models.DecimalField(
-        "Pass Rate (%)",
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    attendance_rate = models.DecimalField(
-        "Attendance Rate (%)",
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    
-    # Grade Distribution
-    grade_distribution = models.JSONField(
-        "Grade Distribution",
-        default=dict,
-        blank=True,
-        help_text="Distribution of grades (e.g., {'A': 5, 'B': 10, 'C': 15})"
-    )
-    
-    # Subject Type Specific Analytics
-    subject_type_performance = models.JSONField(
-        "Subject Type Performance",
-        default=dict,
-        blank=True,
-        help_text="Performance metrics specific to subject type"
-    )
-    
-    # Curriculum Specific Analytics
-    curriculum_performance = models.JSONField(
-        "Curriculum Performance",
-        default=dict,
-        blank=True,
-        help_text="Performance metrics by curriculum type"
-    )
-    
-    # Class Performance Breakdown
-    class_performance = models.JSONField(
-        "Class Performance",
-        default=dict,
-        blank=True,
-        help_text="Performance breakdown by target classes"
-    )
-    
-    # Time Statistics
-    average_time_taken = models.DecimalField(
-        "Average Time Taken (Minutes)",
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    
-    # Analysis Metadata
-    last_calculated = models.DateTimeField("Last Calculated", auto_now=True)
-    is_current = models.BooleanField("Is Current", default=True)
-
-    class Meta:
-        verbose_name = "Exam Analytics"
-        verbose_name_plural = "Exam Analytics"
-
-    def __str__(self):
-        return f"Analytics for {self.examination.name}"
     
 

@@ -1,0 +1,105 @@
+{# academics/templates/academics/enrollments/modals/enrollment_delete.html #}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fecaca;padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#7f1d1d;">
+                    <i class="fa fa-trash me-2" style="color:#dc2626;"></i>Remove Enrollment
+                </h5>
+                <div style="font-size:11.5px;color:#991b1b;margin-top:3px;">
+                    {{ enrollment.class_instance }} &middot; {{ enrollment.academic_session.name }}
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:22px;">
+
+            {# ── Student card ── #}
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:18px;">
+                <div style="width:44px;height:44px;border-radius:50%;background:#eff6ff;border:2px solid #bfdbfe;display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-weight:700;font-size:15px;flex-shrink:0;">
+                    {{ enrollment.student.first_name|first }}{{ enrollment.student.last_name|first }}
+                </div>
+                <div>
+                    <div style="font-weight:700;font-size:14px;color:#0f172a;">{{ enrollment.student.get_full_name }}</div>
+                    <div style="font-size:11.5px;color:#64748b;font-family:'Courier New',monospace;">{{ enrollment.student.admission_number }}</div>
+                </div>
+                <div style="margin-left:auto;text-align:right;">
+                    {% if enrollment.roll_number %}
+                    <div style="font-family:monospace;font-size:13px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 8px;display:inline-block;">#{{ enrollment.roll_number }}</div>
+                    {% endif %}
+                    <div style="font-size:11px;color:#64748b;margin-top:3px;">{{ enrollment.get_completion_status_display }}</div>
+                </div>
+            </div>
+
+            {# ── Invoice warning or notice ── #}
+            {% if enrollment.academic_invoice %}
+                {% if enrollment.academic_invoice.status == 'VOID' or enrollment.academic_invoice.status == 'CANCELLED' %}
+                {# Safe to delete — invoice will be removed too #}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:0 7px 7px 0;margin-bottom:18px;">
+                    <i class="fa fa-exclamation-triangle" style="color:#b45309;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#92400e;line-height:1.6;">
+                        This enrollment has a <strong>{{ enrollment.academic_invoice.get_status_display }}</strong> invoice
+                        (<span style="font-family:monospace;">{{ enrollment.academic_invoice.invoice_number }}</span>).
+                        It will be <strong>permanently deleted</strong> along with the enrollment.
+                    </div>
+                </div>
+                {% else %}
+                {# Blocked — active invoice #}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:0 7px 7px 0;margin-bottom:18px;">
+                    <i class="fa fa-ban" style="color:#dc2626;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#7f1d1d;line-height:1.6;">
+                        <strong>Cannot delete this enrollment.</strong><br>
+                        It has an active invoice
+                        (<span style="font-family:monospace;">{{ enrollment.academic_invoice.invoice_number }}</span>
+                        — <strong>{{ enrollment.academic_invoice.get_status_display }}</strong>).
+                        Cancel or void the invoice first, then try again.
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+
+            {# ── Confirmation message ── #}
+            {% if not enrollment.academic_invoice or enrollment.academic_invoice.status == 'VOID' or enrollment.academic_invoice.status == 'CANCELLED' %}
+            <div style="font-size:13.5px;color:#0f172a;line-height:1.7;">
+                Are you sure you want to remove
+                <strong>{{ enrollment.student.get_full_name }}</strong>
+                from <strong>{{ enrollment.class_instance.get_display_name }}</strong>?
+                <span style="display:block;margin-top:6px;font-size:12px;color:#64748b;">
+                    <i class="fa fa-exclamation-circle me-1"></i>This action cannot be undone.
+                </span>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+
+            {% if enrollment.academic_invoice and enrollment.academic_invoice.status != 'VOID' and enrollment.academic_invoice.status != 'CANCELLED' %}
+            {# Blocked — show disabled button #}
+            <button type="button" class="btn btn-danger btn-sm" disabled
+                    title="Cancel or void the invoice first">
+                <i class="fa fa-trash me-1"></i>Cannot Delete
+            </button>
+            {% else %}
+            {# Allowed — POST to delete view #}
+            <form method="POST"
+                  hx-post="{% url 'academics:enrollment_delete' enrollment.pk %}"
+                  hx-target="body"
+                  hx-swap="none"
+                  style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm">
+                    <i class="fa fa-trash me-1"></i>Yes, Remove Enrollment
+                </button>
+            </form>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

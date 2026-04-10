@@ -1,0 +1,78 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#d4edda;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa fa-check-circle" style="color:#155724;font-size:16px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">Verify Payment</h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;">{{ payment.reference_number|default:"—" }}</div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <!-- PAYMENT SUMMARY -->
+        <div style="background:#fff;border-bottom:1px solid #e9ecef;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:13px;font-weight:600;color:#1a1a2e;">{{ payment.expense.description|truncatewords:8 }}</div>
+                <div style="font-size:12px;color:#6c757d;margin-top:2px;">
+                    <i class="fa fa-credit-card me-1"></i>{{ payment.payment_method.name }}
+                    &nbsp;·&nbsp;<i class="fa fa-calendar me-1"></i>{{ payment.payment_date|date:"d M Y" }}
+                </div>
+                {% if payment.transaction_id %}
+                <div style="font-size:11px;color:#6c757d;font-family:monospace;margin-top:2px;">TXN: {{ payment.transaction_id }}</div>
+                {% endif %}
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:10px;color:#6c757d;text-transform:uppercase;letter-spacing:.4px;">Amount</div>
+                <div style="font-size:20px;font-weight:800;color:#1a1a2e;">{{ payment.amount|money }}</div>
+                {% if payment.processing_fee or payment.bank_charges %}
+                <div style="font-size:11px;color:#6c757d;">+ {{ payment.processing_fee|add:payment.bank_charges|money }} fees</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if not can_verify %}
+        <!-- BLOCKED -->
+        <div class="modal-body" style="padding:18px 20px;">
+            <div class="alert alert-warning mb-0" style="font-size:13px;">
+                <i class="fa fa-exclamation-triangle me-1"></i>
+                {% if payment.is_verified %}Payment is already verified.
+                {% elif payment.reversed %}Payment has been reversed and cannot be verified.
+                {% else %}This payment cannot be verified in its current state.{% endif %}
+            </div>
+        </div>
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:12px 20px;">
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+
+        {% else %}
+        <!-- CONFIRM -->
+        <div class="modal-body" style="padding:18px 20px;">
+            <div style="background:#e9f7ef;border:1px solid #b2dfdb;border-radius:8px;padding:12px 14px;font-size:13px;color:#1b5e20;">
+                <i class="fa fa-info-circle me-1"></i>
+                Verifying confirms the payment was received. A journal entry will be created automatically.
+            </div>
+        </div>
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:12px 20px;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <form method="post"
+                  action="{% url 'finance:expense_payment_verify' payment.pk %}"
+                  hx-post="{% url 'finance:expense_payment_verify' payment.pk %}"
+                  hx-target="body" hx-swap="none" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success btn-sm" style="min-width:130px;">
+                    <i class="fa fa-check-circle me-1"></i> Verify Payment
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+    </div>
+</div>

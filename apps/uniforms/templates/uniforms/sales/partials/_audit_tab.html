@@ -1,0 +1,120 @@
+{# uniforms/templates/uniforms/sales/partials/_audit_tab.html #}
+{% load currency_filters %}
+
+<style>
+.audit-list { padding: 0; }
+.audit-entry {
+    display: flex; gap: 16px; padding: 16px 22px;
+    border-bottom: 1px solid #f1f5f9; position: relative;
+}
+.audit-entry:last-child { border-bottom: none; }
+.audit-entry::before {
+    content: ''; position: absolute; left: 43px; top: 48px;
+    bottom: -1px; width: 2px; background: #f1f5f9;
+}
+.audit-entry:last-child::before { display: none; }
+
+.audit-icon {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #fff; position: relative; z-index: 1;
+}
+.ai-created    { background: #1d4ed8; }
+.ai-payment    { background: #15803d; }
+.ai-issued     { background: #0891b2; }
+.ai-cancelled  { background: #dc2626; }
+.ai-returned   { background: #a21caf; }
+.ai-status     { background: #64748b; }
+.ai-finalised  { background: #7c3aed; }
+.ai-default    { background: #94a3b8; }
+
+.audit-body { flex: 1; }
+.audit-action { font-size: 13px; font-weight: 700; color: #0f172a; }
+.audit-desc   { font-size: 12.5px; color: #64748b; margin-top: 2px; line-height: 1.5; }
+.audit-meta   { display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap; }
+.audit-time   { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; }
+.audit-user   { font-size: 11px; color: #64748b; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.audit-amount { font-size: 11.5px; font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 1px 6px; }
+
+.tbl-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .35; }
+</style>
+
+{% if audit_trail %}
+<div class="audit-list">
+    {% for entry in audit_trail %}
+    <div class="audit-entry">
+
+        {# ── Icon ── #}
+        {% with action=entry.action|lower %}
+        <div class="audit-icon
+            {% if 'creat' in action or 'open' in action %}ai-created
+            {% elif 'payment' in action or 'paid' in action %}ai-payment
+            {% elif 'issu' in action %}ai-issued
+            {% elif 'cancel' in action %}ai-cancelled
+            {% elif 'return' in action %}ai-returned
+            {% elif 'finalise' in action or 'finalize' in action %}ai-finalised
+            {% else %}ai-status{% endif %}">
+            {% if 'creat' in action or 'open' in action %}
+                <i class="fa fa-plus"></i>
+            {% elif 'payment' in action or 'paid' in action %}
+                <i class="fa fa-money-bill"></i>
+            {% elif 'issu' in action %}
+                <i class="fa fa-box-open"></i>
+            {% elif 'cancel' in action %}
+                <i class="fa fa-times"></i>
+            {% elif 'return' in action %}
+                <i class="fa fa-undo"></i>
+            {% elif 'finalise' in action or 'finalize' in action %}
+                <i class="fa fa-check"></i>
+            {% else %}
+                <i class="fa fa-exchange-alt"></i>
+            {% endif %}
+        </div>
+        {% endwith %}
+
+        {# ── Body ── #}
+        <div class="audit-body">
+            <div class="audit-action">{{ entry.action|title|replace:"_: " }}</div>
+            {% if entry.description %}
+            <div class="audit-desc">{{ entry.description }}</div>
+            {% endif %}
+            <div class="audit-meta">
+                {% if entry.timestamp %}
+                <span class="audit-time">
+                    <i class="fa fa-clock" style="font-size:9px;"></i>
+                    {{ entry.timestamp|date:"d M Y" }} at {{ entry.timestamp|time:"H:i" }}
+                </span>
+                {% elif entry.created_at %}
+                <span class="audit-time">
+                    <i class="fa fa-clock" style="font-size:9px;"></i>
+                    {{ entry.created_at|date:"d M Y" }} at {{ entry.created_at|time:"H:i" }}
+                </span>
+                {% endif %}
+                {% if entry.user %}
+                <span class="audit-user">
+                    <i class="fa fa-user" style="font-size:9px;"></i>
+                    {% if entry.user.get_full_name %}{{ entry.user.get_full_name }}
+                    {% else %}{{ entry.user }}{% endif %}
+                </span>
+                {% elif entry.performed_by %}
+                <span class="audit-user">
+                    <i class="fa fa-user" style="font-size:9px;"></i>
+                    {{ entry.performed_by }}
+                </span>
+                {% endif %}
+                {% if entry.amount %}
+                <span class="audit-amount">{{ entry.amount|money }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-history"></i>
+    <p style="font-size:13px;">No audit trail entries yet.</p>
+</div>
+{% endif %}

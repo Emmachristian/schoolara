@@ -1,0 +1,89 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Fee Categories{% endblock %}
+{% block doc_title %}Fee Categories{% endblock %}
+{% block record_count %}{{ categories|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.mandatory|default:0 }}</span>
+        <span class="stat-label">Mandatory</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.optional|default:0 }}</span>
+        <span class="stat-label">Optional</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.refundable|default:0 }}</span>
+        <span class="stat-label">Refundable</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.taxable|default:0 }}</span>
+        <span class="stat-label">Taxable</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if categories %}
+    {% for cat in categories %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "display_order,default_tax_rate,structure_count" %} class="ctr"{% endif %}>
+            {% if field == 'code' %}
+                <span class="chip-code">{{ cat.code }}</span>
+            {% elif field == 'name' %}
+                <strong>{{ cat.name }}</strong>
+            {% elif field == 'category_type' %}
+                {{ cat.get_category_type_display }}
+            {% elif field == 'display_group' %}
+                {{ cat.display_group.name|default:"—" }}
+            {% elif field == 'display_order' %}
+                {{ cat.display_order }}
+            {% elif field == 'applicability' %}
+                {{ cat.get_applicability_display }}
+            {% elif field == 'frequency' %}
+                {% if cat.frequency %}{{ cat.get_frequency_display }}{% else %}—{% endif %}
+            {% elif field == 'is_recurring' %}
+                {% if cat.is_recurring %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'is_mandatory' %}
+                {% if cat.is_mandatory %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'is_refundable' %}
+                {% if cat.is_refundable %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'allows_partial' %}
+                {% if cat.allows_partial_payment %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'is_taxable' %}
+                {% if cat.is_taxable %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'default_tax_rate' %}
+                {% if cat.default_tax_rate %}{{ cat.default_tax_rate|percentage }}{% else %}—{% endif %}
+            {% elif field == 'structure_count' %}
+                {{ cat.structure_count|default:0 }}
+            {% elif field == 'is_active' %}
+                {% if cat.is_active %}<span class="badge s-active">Active</span>{% else %}<span class="badge s-void">Inactive</span>{% endif %}
+            {% elif field == 'description' %}
+                {{ cat.description|default:"—"|truncatechars:70 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No fee categories found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

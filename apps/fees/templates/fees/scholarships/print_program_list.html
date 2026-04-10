@@ -1,0 +1,103 @@
+{% extends "print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Scholarship Programs{% endblock %}
+{% block doc_title %}Scholarship Programs{% endblock %}
+{% block record_count %}{{ programs|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.accepting_applications|default:0 }}</span>
+        <span class="stat-label">Accepting Apps</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_recipients|default:0 }}</span>
+        <span class="stat-label">Recipients</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_budget|money_short }}</span>
+        <span class="stat-label">Total Budget</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_used|money_short }}</span>
+        <span class="stat-label">Budget Used</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if programs %}
+    {% for program in programs %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "total_budget,budget_used,budget_remaining" %} class="num"{% elif field in "current_recipients,max_recipients" %} class="ctr"{% endif %}>
+            {% if field == 'code' %}
+                <span class="chip-code">{{ program.code }}</span>
+            {% elif field == 'name' %}
+                <strong>{{ program.name }}</strong>
+            {% elif field == 'scholarship_type' %}
+                {{ program.get_scholarship_type_display }}
+            {% elif field == 'program_type' %}
+                {{ program.get_program_type_display }}
+            {% elif field == 'discount_type' %}
+                {{ program.get_discount_type_display }}
+            {% elif field == 'discount_summary' %}
+                {{ program.get_discount_summary|default:"—"|truncatechars:50 }}
+            {% elif field == 'total_budget' %}
+                {% if program.total_budget_amount %}{{ program.total_budget_amount|amount }}{% else %}<span class="text-muted">Unlimited</span>{% endif %}
+            {% elif field == 'budget_used' %}
+                {% if program.current_budget_used %}{{ program.current_budget_used|amount }}{% else %}—{% endif %}
+            {% elif field == 'budget_remaining' %}
+                {% if program.total_budget_amount %}
+                    {% with remaining=program.get_remaining_budget %}
+                        {% if remaining is not None %}
+                            {% if remaining > 0 %}
+                                <span class="text-success">{{ remaining|amount }}</span>
+                            {% else %}
+                                <span class="text-danger">Exhausted</span>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    {% endwith %}
+                {% else %}<span class="text-muted">N/A</span>{% endif %}
+            {% elif field == 'max_recipients' %}
+                {% if program.maximum_recipients %}{{ program.maximum_recipients }}{% else %}<span class="text-muted">Unlimited</span>{% endif %}
+            {% elif field == 'current_recipients' %}
+                {{ program.current_recipient_count|default:0 }}
+            {% elif field == 'renewal_policy' %}
+                {{ program.get_renewal_policy_display }}
+            {% elif field == 'max_duration' %}
+                {% if program.maximum_duration_years %}{{ program.maximum_duration_years }} yr{% if program.maximum_duration_years != 1 %}s{% endif %}{% else %}—{% endif %}
+            {% elif field == 'sponsor_name' %}
+                {{ program.sponsor_name|default:"—" }}
+            {% elif field == 'is_active' %}
+                {% if program.is_active %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'accepting_apps' %}
+                {% if program.is_accepting_applications %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'app_start' %}
+                {% if program.application_start_date %}{{ program.application_start_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'app_end' %}
+                {% if program.application_end_date %}{{ program.application_end_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No scholarship programs found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

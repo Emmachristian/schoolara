@@ -1,0 +1,226 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+
+        <!-- ── Header ── -->
+        <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0;padding:16px 22px;">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#dcfce7;border:1px solid #bbf7d0;
+                            display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-check-double" style="color:#15803d;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#14532d;">
+                        Bulk Finalize Invoices
+                    </h5>
+                    <div style="font-size:11.5px;color:#16a34a;margin-top:3px;">
+                        {{ eligible|length }} invoice{{ eligible|length|pluralize }} ready
+                        {% if ineligible %}
+                            &middot;
+                            <span style="color:#b45309;">
+                                {{ ineligible|length }} skipped
+                            </span>
+                        {% endif %}
+                        {% if all_draft_pages %}
+                            &middot; <span style="color:#6d28d9;">all pages</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <!-- ── Body ── -->
+        <div class="modal-body" style="padding:22px;">
+
+            {% if not eligible and not ineligible %}
+            <!-- Nothing at all -->
+            <div style="text-align:center;padding:40px 20px;color:#94a3b8;">
+                <i class="fa fa-file-invoice" style="font-size:2.5rem;opacity:.3;display:block;margin-bottom:12px;"></i>
+                <p style="font-size:13px;margin:0;">No DRAFT invoices found.</p>
+            </div>
+
+            {% else %}
+
+            <!-- ── Ineligible warning ── -->
+            {% if ineligible %}
+            <div style="padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;
+                        border-left:4px solid #b45309;border-radius:0 7px 7px 0;margin-bottom:18px;">
+                <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">
+                    <i class="fa fa-exclamation-triangle me-1"></i>
+                    {{ ineligible|length }} invoice{{ ineligible|length|pluralize }} will be skipped:
+                </div>
+                <ul style="margin:0;padding-left:18px;font-size:12px;color:#78350f;">
+                    {% for item in ineligible %}
+                    <li>
+                        <strong>{{ item.invoice.invoice_number }}</strong>
+                        — {{ item.invoice.student.get_full_name }}
+                        — {{ item.reason }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if eligible %}
+
+            <!-- ── Summary bar ── -->
+            <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:120px;padding:12px 16px;background:#f8fafc;
+                            border:1px solid #e2e8f0;border-radius:8px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;
+                                text-transform:uppercase;letter-spacing:.4px;">Invoices</div>
+                    <div style="font-size:20px;font-weight:700;color:#0f172a;line-height:1.2;margin-top:4px;">
+                        {{ eligible|length }}
+                    </div>
+                </div>
+                <div style="flex:1;min-width:120px;padding:12px 16px;background:#f8fafc;
+                            border:1px solid #e2e8f0;border-radius:8px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;
+                                text-transform:uppercase;letter-spacing:.4px;">Total Value</div>
+                    <div style="font-size:20px;font-weight:700;color:#0f172a;line-height:1.2;margin-top:4px;">
+                        {{ total_amount|money }}
+                    </div>
+                </div>
+                {% if zero_count %}
+                <div style="flex:1;min-width:120px;padding:12px 16px;background:#f5f3ff;
+                            border:1px solid #ddd6fe;border-radius:8px;">
+                    <div style="font-size:11px;color:#6d28d9;font-weight:700;
+                                text-transform:uppercase;letter-spacing:.4px;">Zero Amount</div>
+                    <div style="font-size:20px;font-weight:700;color:#6d28d9;line-height:1.2;margin-top:4px;">
+                        {{ zero_count }}
+                        <span style="font-size:11px;font-weight:400;color:#8b5cf6;">no JE</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ── What will happen ── -->
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:#94a3b8;margin-bottom:10px;">
+                What will happen:
+            </div>
+            {% for step in steps %}
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;
+                        font-size:13px;color:#0f172a;">
+                <i class="fa fa-arrow-right" style="color:#16a34a;margin-top:3px;
+                           flex-shrink:0;font-size:10px;"></i>
+                <span>{{ step }}</span>
+            </div>
+            {% endfor %}
+
+            <!-- ── Invoice list ── -->
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:#94a3b8;margin:18px 0 10px;">
+                Invoices to finalize ({{ eligible|length }}):
+            </div>
+            <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                <div style="max-height:280px;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:8px 12px;text-align:left;font-size:10.5px;
+                                           font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+                                           color:#64748b;white-space:nowrap;
+                                           position:sticky;top:0;background:#f8fafc;">
+                                    Invoice #
+                                </th>
+                                <th style="padding:8px 12px;text-align:left;font-size:10.5px;
+                                           font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+                                           color:#64748b;position:sticky;top:0;background:#f8fafc;">
+                                    Student
+                                </th>
+                                <th style="padding:8px 12px;text-align:left;font-size:10.5px;
+                                           font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+                                           color:#64748b;position:sticky;top:0;background:#f8fafc;">
+                                    Session
+                                </th>
+                                <th style="padding:8px 12px;text-align:right;font-size:10.5px;
+                                           font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+                                           color:#64748b;white-space:nowrap;
+                                           position:sticky;top:0;background:#f8fafc;">
+                                    Amount
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inv in eligible %}
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:8px 12px;">
+                                    <span style="font-family:'Courier New',monospace;
+                                                 font-weight:600;font-size:12px;color:#1d4ed8;">
+                                        {{ inv.invoice_number }}
+                                    </span>
+                                </td>
+                                <td style="padding:8px 12px;color:#0f172a;">
+                                    {{ inv.student.get_full_name }}
+                                </td>
+                                <td style="padding:8px 12px;color:#64748b;font-size:12px;">
+                                    {{ inv.academic_session.name|default:"—" }}
+                                </td>
+                                <td style="padding:8px 12px;text-align:right;font-weight:600;
+                                           color:{% if inv.total_amount == 0 %}#94a3b8{% else %}#0f172a{% endif %};">
+                                    {% if inv.total_amount == 0 %}
+                                        <span style="font-size:11px;color:#94a3b8;">Zero</span>
+                                    {% else %}
+                                        {{ inv.total_amount|money }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- Eligible is empty but ineligible exists -->
+            <div style="text-align:center;padding:30px 20px;color:#94a3b8;">
+                <i class="fa fa-ban" style="font-size:2rem;opacity:.3;display:block;margin-bottom:10px;"></i>
+                <p style="font-size:13px;margin:0;">
+                    No eligible invoices to finalize after applying checks.
+                </p>
+            </div>
+            {% endif %}
+
+            {% endif %}
+
+        </div>
+
+        <!-- ── Footer ── -->
+        <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;
+                    padding:12px 22px;justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i> Cancel
+            </button>
+
+            {% if eligible %}
+            <form method="POST"
+                  hx-post="{% url 'fees:invoice_bulk_finalize' %}"
+                  hx-target="body"
+                  hx-swap="none">
+                {% csrf_token %}
+
+                {% if all_draft_pages %}
+                    <input type="hidden" name="all_draft_pages" value="1">
+                {% else %}
+                    {% for pk in pks %}
+                        <input type="hidden" name="pk" value="{{ pk }}">
+                    {% endfor %}
+                {% endif %}
+
+                <button type="submit" class="btn btn-success btn-sm">
+                    <i class="fa fa-check-double me-1"></i>
+                    Finalize {{ eligible|length }} Invoice{{ eligible|length|pluralize }}
+                </button>
+            </form>
+            {% else %}
+            <button class="btn btn-success btn-sm" disabled>
+                <i class="fa fa-ban me-1"></i> Nothing to Finalize
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

@@ -1,473 +1,322 @@
-{% load static %}
-{% load widget_tweaks %}
+{# fees/templates/fees/scholarships/partials/_application_results.html #}
+{% load humanize %}
 {% load currency_filters %}
 
-<!-- Scholarship Applications Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+.app-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.app-tbl thead th {
+    background: #f8fafc; padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.app-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.app-tbl tbody tr:last-child td { border-bottom: none; }
+.app-tbl tbody tr:hover td { background: #eff6ff !important; }
+
+.stu-initials {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #f5f3ff; color: #7c3aed; border: 2px solid #ddd6fe;
+    font-size: .8rem; font-weight: 700;
+}
+.stu-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; line-height: 1.3; }
+.stu-name:hover { color: #1d4ed8; }
+.stu-adm  { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 1px; display: block; }
+.app-num  { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 2px; display: block; }
+
+.s-pill        { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.s-submitted   { background: #dbeafe; color: #1d4ed8; }
+.s-review      { background: #fffbeb; color: #b45309; }
+.s-approved    { background: #dcfce7; color: #15803d; }
+.s-rejected    { background: #fee2e2; color: #b91c1c; }
+.s-waitlisted  { background: #f5f3ff; color: #7c3aed; }
+.s-withdrawn   { background: #f1f5f9; color: #475569; }
+.s-draft       { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
+
+.gpa-chip { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
+            background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+            border-radius: 4px; padding: 1px 7px; display: inline-block; }
+
+.att-track { height: 5px; background: #e2e8f0; border-radius: 5px; overflow: hidden; width: 70px; margin-top: 4px; }
+.att-fill  { height: 100%; border-radius: 5px; }
+
+.needs-action { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; font-size: 9.5px; font-weight: 700; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; margin-left: 4px; }
+
+.pag-bar {
+    padding: 12px 16px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: #64748b;
+}
+
+.tbl-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.dropdown-menu   { font-size: .85rem; min-width: 195px; border: 1px solid #e2e8f0; }
+.dropdown-item   { padding: 6px 13px; }
+.dropdown-header { font-size: .7rem; padding: 6px 13px 2px; }
+</style>
+
+{% if applications %}
+<div style="overflow-x:auto;">
+    <table class="app-tbl">
         <thead>
             <tr>
-                <th width="50">#</th>
-                <th width="150">Application #</th>
-                <th width="200">Student</th>
-                <th width="200">Program</th>
-                <th width="120">Applied Date</th>
-                <th width="120">Requested Amount</th>
-                <th width="120">Approved Amount</th>
-                <th width="100">Status</th>
-                <th width="120">Actions</th>
+                <th style="width:38px;">#</th>
+                <th>Applicant</th>
+                <th>Session</th>
+                <th class="text-right">Requested</th>
+                <th class="text-right">Approved</th>
+                <th class="text-center">GPA / Attendance</th>
+                <th class="text-center">Applied</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;"></th>
             </tr>
         </thead>
-        <tbody id="applicationTableBody">
-            {% if applications_page %}
-                {% for application in applications_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:applications_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Application Number -->
-                    <td>
-                        <a href="{% url 'fees:scholarship_application_detail' application.pk %}" class="text-primary fw-bold">
-                            {{ application.application_number }}
-                        </a>
-                        {% if application.academic_session %}
-                            <div class="mt-1">
-                                <small class="text-muted">{{ application.academic_session.name|truncatewords:2 }}</small>
-                            </div>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Student -->
-                    <td>
-                        <div class="d-flex flex-column">
-                            <a href="{% url 'students:student_profile' application.student.pk %}" class="text-dark fw-bold">
-                                {{ application.student.get_full_name }}
-                            </a>
-                            <small class="text-muted">{{ application.student.admission_number }}</small>
-                            {% if application.current_gpa %}
-                                <small class="text-info">
-                                    <i class="fa fa-graduation-cap me-1"></i>GPA: {{ application.current_gpa }}
-                                </small>
-                            {% endif %}
+        <tbody>
+            {% for app in applications %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+
+                {# ── Applicant ── #}
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stu-initials">
+                            {{ app.student.first_name|first }}{{ app.student.last_name|first }}
                         </div>
-                    </td>
-                    
-                    <!-- Program -->
-                    <td>
                         <div>
-                            <a href="{% url 'fees:scholarship_program_detail' application.scholarship_program.pk %}" class="text-dark">
-                                {{ application.scholarship_program.name|truncatewords:4 }}
+                            <a href="{% url 'fees:scholarship_application_detail' app.pk %}" class="stu-name">
+                                {{ app.student.get_full_name }}
+                                {% if app.status in 'SUBMITTED,UNDER_REVIEW' %}
+                                    <span class="needs-action"><i class="fa fa-clock" style="font-size:8px;"></i>Needs Review</span>
+                                {% endif %}
                             </a>
-                            <div class="mt-1">
-                                <span class="badge bg-primary" style="font-size: 0.7rem;">
-                                    {{ application.scholarship_program.get_scholarship_type_display }}
-                                </span>
+                            <span class="stu-adm">{{ app.student.admission_number }}</span>
+                            <span class="app-num">{{ app.application_number }}</span>
+                        </div>
+                    </div>
+                </td>
+
+                {# ── Session ── #}
+                <td style="font-size:12.5px;color:#64748b;">
+                    {% if app.academic_session %}{{ app.academic_session.name }}{% else %}—{% endif %}
+                </td>
+
+                {# ── Requested ── #}
+                <td class="text-right" style="font-weight:600;font-size:12.5px;">
+                    {% if app.requested_amount %}{{ app.requested_amount|money }}{% else %}<span style="color:#94a3b8;">—</span>{% endif %}
+                </td>
+
+                {# ── Approved ── #}
+                <td class="text-right" style="font-size:12.5px;">
+                    {% if app.approved_amount %}
+                        <span style="font-weight:700;color:#15803d;">{{ app.approved_amount|money }}</span>
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+
+                {# ── GPA / Attendance ── #}
+                <td class="text-center">
+                    {% if app.current_gpa %}
+                        <span class="gpa-chip">{{ app.current_gpa|floatformat:2 }}</span>
+                    {% endif %}
+                    {% if app.attendance_percentage %}
+                        <div style="margin-top:4px;">
+                            <div style="font-size:10.5px;color:#64748b;margin-bottom:2px;">
+                                {{ app.attendance_percentage|floatformat:0 }}%
+                            </div>
+                            <div class="att-track">
+                                <div class="att-fill"
+                                     style="width:{{ app.attendance_percentage|floatformat:0 }}%;
+                                            background:{% if app.attendance_percentage >= 80 %}#15803d{% elif app.attendance_percentage >= 60 %}#b45309{% else %}#dc2626{% endif %};"></div>
                             </div>
                         </div>
-                    </td>
-                    
-                    <!-- Applied Date -->
-                    <td>
-                        <div class="text-dark">{{ application.application_date|date:"M d, Y" }}</div>
-                        {% if application.review_date %}
-                            <small class="text-muted">
-                                <i class="fa fa-check me-1"></i>Reviewed: {{ application.review_date|date:"M d, Y" }}
-                            </small>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Requested Amount -->
-                    <td class="text-end">
-                        {% if application.requested_amount %}
-                            <strong class="text-primary">{{ application.requested_amount|money }}</strong>
-                        {% else %}
-                            <span class="text-muted">Not specified</span>
-                        {% endif %}
-                        {% if application.family_income %}
-                            <div class="mt-1">
-                                <small class="text-muted">Income: {{ application.family_income|amount_no_decimals }}</small>
-                            </div>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Approved Amount -->
-                    <td class="text-end">
-                        {% if application.approved_amount %}
-                            <strong class="text-success">{{ application.approved_amount|money }}</strong>
-                        {% else %}
-                            <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Status Badge -->
-                    <td class="text-center">
-                        {% if application.status == 'SUBMITTED' %}
-                            <span class="badge bg-secondary">
-                                <i class="fa fa-paper-plane me-1"></i>Submitted
-                            </span>
-                        {% elif application.status == 'UNDER_REVIEW' %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-eye me-1"></i>Under Review
-                            </span>
-                        {% elif application.status == 'APPROVED' %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-check-circle me-1"></i>Approved
-                            </span>
-                        {% elif application.status == 'REJECTED' %}
-                            <span class="badge bg-danger">
-                                <i class="fa fa-times-circle me-1"></i>Rejected
-                            </span>
-                        {% elif application.status == 'WAITLISTED' %}
-                            <span class="badge bg-info">
-                                <i class="fa fa-clock me-1"></i>Waitlisted
-                            </span>
-                        {% elif application.status == 'WITHDRAWN' %}
-                            <span class="badge bg-dark">
-                                <i class="fa fa-ban me-1"></i>Withdrawn
-                            </span>
-                        {% elif application.status == 'DRAFT' %}
-                            <span class="badge bg-light text-dark">
-                                <i class="fa fa-edit me-1"></i>Draft
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'fees:scholarship_application_detail' application.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
+                    {% endif %}
+                    {% if not app.current_gpa and not app.attendance_percentage %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+
+                {# ── Applied date ── #}
+                <td class="text-center" style="font-size:11.5px;color:#64748b;">
+                    {{ app.application_date|date:"M d, Y" }}
+                </td>
+
+                {# ── Status ── #}
+                <td class="text-center">
+                    {% if app.status == 'SUBMITTED' %}
+                        <span class="s-pill s-submitted"><i class="fa fa-inbox" style="font-size:7px;"></i>Submitted</span>
+                    {% elif app.status == 'UNDER_REVIEW' %}
+                        <span class="s-pill s-review"><i class="fa fa-search" style="font-size:7px;"></i>In Review</span>
+                    {% elif app.status == 'APPROVED' %}
+                        <span class="s-pill s-approved"><i class="fa fa-check" style="font-size:7px;"></i>Approved</span>
+                    {% elif app.status == 'REJECTED' %}
+                        <span class="s-pill s-rejected"><i class="fa fa-times" style="font-size:7px;"></i>Rejected</span>
+                    {% elif app.status == 'WAITLISTED' %}
+                        <span class="s-pill s-waitlisted"><i class="fa fa-clock" style="font-size:7px;"></i>Waitlisted</span>
+                    {% elif app.status == 'WITHDRAWN' %}
+                        <span class="s-pill s-withdrawn">Withdrawn</span>
+                    {% elif app.status == 'DRAFT' %}
+                        <span class="s-pill s-draft">Draft</span>
+                    {% else %}
+                        <span class="s-pill s-draft">{{ app.get_status_display }}</span>
+                    {% endif %}
+                </td>
+
+                {# ── Actions dropdown ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                            {# ── View ── #}
+                            <li><h6 class="dropdown-header">View</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'fees:scholarship_application_detail' app.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Application
                                 </a>
-                                
-                                <!-- Edit (if draft or submitted) -->
-                                {% if application.status in 'DRAFT,SUBMITTED' %}
-                                    <a class="dropdown-item text-warning" href="{% url 'fees:scholarship_application_edit' application.pk %}">
-                                        <i class="fa fa-edit me-2"></i> Edit
-                                    </a>
-                                {% endif %}
-                                
-                                <!-- Review (if pending) -->
-                                {% if application.status in 'SUBMITTED,UNDER_REVIEW' %}
-                                    <a class="dropdown-item text-primary" href="{% url 'fees:scholarship_application_review' application.pk %}">
-                                        <i class="fa fa-check-circle me-2"></i> Review Application
-                                    </a>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Links -->
-                                <h6 class="dropdown-header">Quick Links</h6>
-                                
-                                <!-- View Student -->
-                                <a class="dropdown-item" href="{% url 'students:student_profile' application.student.pk %}">
-                                    <i class="fa fa-user me-2"></i> View Student
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'students:student_profile' app.student.pk %}">
+                                    <i class="fa fa-user me-2 text-secondary"></i>Student Profile
                                 </a>
-                                
-                                <!-- View Program -->
-                                <a class="dropdown-item" href="{% url 'fees:scholarship_program_detail' application.scholarship_program.pk %}">
-                                    <i class="fa fa-medal me-2"></i> View Program
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:scholarship_application_history_modal' app.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-history me-2 text-secondary"></i>View History
+                                </button>
+                            </li>
+
+                            {# ── Review actions ── #}
+                            {% if app.status in 'SUBMITTED,UNDER_REVIEW' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Review</h6></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:scholarship_application_approve_modal' app.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-check-circle me-2 text-success"></i>Approve
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:scholarship_application_reject_modal' app.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-times-circle me-2 text-danger"></i>Reject
+                                </button>
+                            </li>
+                            {% endif %}
+
+                            {# ── Award scholarship ── #}
+                            {% if app.status == 'APPROVED' and not app.awarded_scholarship %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:student_scholarship_create' %}?application={{ app.pk }}">
+                                    <i class="fa fa-award me-2 text-success"></i>Award Scholarship
                                 </a>
-                                
-                                <!-- View Scholarship (if approved and awarded) -->
-                                {% if application.status == 'APPROVED' and application.awarded_scholarship %}
-                                    <a class="dropdown-item" href="{% url 'fees:student_scholarship_detail' application.awarded_scholarship.pk %}">
-                                        <i class="fa fa-gift me-2"></i> View Scholarship
-                                    </a>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Application Actions -->
-                                <h6 class="dropdown-header">Application Actions</h6>
-                                
-                                <!-- Approve (if under review) -->
-                                {% if application.status == 'UNDER_REVIEW' %}
-                                    <button type="button" class="dropdown-item text-success"
-                                            hx-get="{% url 'fees:scholarship_application_approve_modal' application.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-check-circle me-2"></i> Approve
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Reject (if under review) -->
-                                {% if application.status == 'UNDER_REVIEW' %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'fees:scholarship_application_reject_modal' application.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-times-circle me-2"></i> Reject
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Waitlist (if under review) -->
-                                {% if application.status == 'UNDER_REVIEW' %}
-                                    <button type="button" class="dropdown-item text-info"
-                                            hx-get="{% url 'fees:scholarship_application_waitlist_modal' application.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-clock me-2"></i> Waitlist
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Withdraw (if not withdrawn/approved) -->
-                                {% if application.status not in 'WITHDRAWN,APPROVED' %}
-                                    <button type="button" class="dropdown-item text-warning"
-                                            hx-get="{% url 'fees:scholarship_application_withdraw_modal' application.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-ban me-2"></i> Withdraw
-                                    </button>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action -->
-                                {% if application.status in 'DRAFT,REJECTED,WITHDRAWN' %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'fees:scholarship_application_delete_modal' application.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-trash me-2"></i> Delete
-                                    </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="9" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <h5 class="mt-3">No Applications Found</h5>
-                            <p class="text-muted">Try adjusting your filters or create a new application.</p>
-                            <a href="{% url 'fees:scholarship_application_create' %}" class="btn btn-primary mt-3">
-                                <i class="fa fa-plus me-1"></i> New Application
-                            </a>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
+                            </li>
+                            {% endif %}
+
+                            {# ── Delete ── #}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:scholarship_application_delete_modal' app.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 </div>
 
-<!-- Pagination -->
-{% if applications_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ applications_page.start_index }} - {{ applications_page.end_index }} of {{ applications_page.paginator.count|format_number }} applications
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Application pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if applications_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:scholarship_application_list' %}"
-                                hx-target="#application-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ applications_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
-                    </li>
-                {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in applications_page.paginator.page_range %}
-                    {% if page_num == applications_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > applications_page.number|add:"-3" and page_num < applications_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'fees:scholarship_application_list' %}"
-                                    hx-target="#application-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if applications_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:scholarship_application_list' %}"
-                                hx-target="#application-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ applications_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+{% if applications.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ applications.start_index }}</strong>–<strong>{{ applications.end_index }}</strong>
+        of <strong>{{ applications.paginator.count|intcomma }}</strong> applications
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if applications.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'fees:scholarship_program_applications_partial' program.pk %}"
+                    hx-target="#tab-content" hx-include="#applicationFilterForm"
+                    hx-vals='{"page":"{{ applications.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+
+        {% for p in applications.paginator.page_range %}
+            {% if p == applications.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > applications.number|add:"-3" and p < applications.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'fees:scholarship_program_applications_partial' program.pk %}"
+                            hx-target="#tab-content" hx-include="#applicationFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if applications.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'fees:scholarship_program_applications_partial' program.pk %}"
+                    hx-target="#tab-content" hx-include="#applicationFilterForm"
+                    hx-vals='{"page":"{{ applications.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.stats-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 28px;
-    color: white;
-}
-
-.stats-content {
-    flex: 1;
-}
-
-.stats-label {
-    font-size: 12px;
-    color: #6c757d;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-}
-
-.stats-content h3 {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
-{% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-news-paper"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Applications</div>
-                <h3>{{ stats.total|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-clock"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Under Review</div>
-                <h3>{{ stats.under_review|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Approved</div>
-                <h3>{{ stats.approved|default:0|format_number }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-graph2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Requested</div>
-                <h3>{{ stats.total_requested|default:0|amount_no_decimals }}</h3>
-            </div>
-        </div>
-    </div>
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-file-alt"></i>
+    <p>
+        {% if request.GET.q or request.GET.status %}
+            No applications match your filters.
+        {% else %}
+            No applications for this program yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.status %}
+    <button type="button" onclick="clearApplicationFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <a href="{% url 'fees:scholarship_application_create' %}?program={{ program.pk }}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;border:none;cursor:pointer;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>New Application
+    </a>
+    {% endif %}
 </div>
 {% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

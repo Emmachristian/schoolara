@@ -1,0 +1,113 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Student Scholarships{% endblock %}
+{% block doc_title %}Student Scholarships{% endblock %}
+{% block record_count %}{{ scholarships|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.policy_based|default:0 }}</span>
+        <span class="stat-label">Policy-Based</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.budget_based|default:0 }}</span>
+        <span class="stat-label">Budget-Based</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_awarded|money_short }}</span>
+        <span class="stat-label">Total Awarded</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_used|money_short }}</span>
+        <span class="stat-label">Total Used</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if scholarships %}
+    {% for sch in scholarships %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "amount_awarded,amount_used,remaining_balance" %} class="num"{% endif %}>
+            {% if field == 'student_id' %}
+                <span class="chip-adm">{{ sch.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ sch.student.get_full_name }}
+            {% elif field == 'program' %}
+                {{ sch.scholarship_program.name }}
+            {% elif field == 'program_code' %}
+                <span class="chip-code">{{ sch.scholarship_program.code }}</span>
+            {% elif field == 'program_type' %}
+                {{ sch.scholarship_program.get_program_type_display }}
+            {% elif field == 'discount_mode' %}
+                {% if sch.is_category_specific %}
+                    <span class="badge s-submitted">Category-Specific</span>
+                {% else %}
+                    <span class="badge s-default">Global</span>
+                {% endif %}
+            {% elif field == 'scholarship_kind' %}
+                {% if sch.is_policy_based %}
+                    <span class="badge s-active">Policy-Based</span>
+                {% elif sch.is_budget_based %}
+                    <span class="badge s-partial">Budget-Based</span>
+                {% else %}
+                    <span class="badge s-default">Other</span>
+                {% endif %}
+            {% elif field == 'amount_awarded' %}
+                {% if sch.amount_awarded %}{{ sch.amount_awarded|amount }}{% else %}<span class="text-muted">N/A</span>{% endif %}
+            {% elif field == 'amount_used' %}
+                {% if sch.total_amount_used %}{{ sch.total_amount_used|amount }}{% else %}—{% endif %}
+            {% elif field == 'remaining_balance' %}
+                {% with rem=sch.get_remaining_balance %}
+                    {% if rem is not None %}
+                        {% if rem > 0 %}
+                            <span class="text-success">{{ rem|amount }}</span>
+                        {% elif rem == 0 %}
+                            <span class="text-danger">Exhausted</span>
+                        {% else %}—{% endif %}
+                    {% else %}<span class="text-muted">N/A</span>{% endif %}
+                {% endwith %}
+            {% elif field == 'start_date' %}
+                {% if sch.start_date %}{{ sch.start_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'end_date' %}
+                {% if sch.end_date %}{{ sch.end_date|date:"d M Y" }}{% else %}<span class="text-muted">No end</span>{% endif %}
+            {% elif field == 'distribution' %}
+                {{ sch.get_distribution_method_display }}
+            {% elif field == 'status' %}
+                {% with s=sch.status|lower %}
+                    <span class="badge s-{{ s }}">{{ sch.get_status_display }}</span>
+                {% endwith %}
+            {% elif field == 'is_renewable' %}
+                {% if sch.is_renewable %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'awarded_date' %}
+                {% if sch.awarded_date %}{{ sch.awarded_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'is_exhausted' %}
+                {% if sch.is_exhausted %}<span class="text-danger">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'notes' %}
+                {{ sch.notes|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No scholarships found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

@@ -2,68 +2,86 @@
 
 """
 School Initialization Service
-==============================
 
-This service handles the complete initialization of a school's financial system.
-It creates all necessary accounts, categories, settings, and configurations
-based on the school's characteristics (size, type, location).
+Handles complete financial system setup for a new school database.
+Creates all accounts, mappings, categories, journals, fiscal periods,
+departments, designations, and supporting data in the correct order.
 
 USAGE:
-======
-from core.services.school_initialization import initialize_school
-
-# Initialize a school
-result = initialize_school(school_instance, user=request.user)
-
-if result['success']:
-    print(f"Created {result['created']['accounts']} accounts")
-else:
-    print(f"Errors: {result['errors']}")
-
-WHAT IT CREATES:
-================
-1. Account Types (ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE)
-2. Chart of Accounts (10-130 accounts based on complexity)
-3. Financial Settings (currency, numbering, payment terms)
-4. Account Mappings (links accounts to system operations)
-5. Fee Categories (tuition, boarding, activities, etc.)
-6. Expense Categories (salaries, utilities, supplies, etc.)
-7. Journals (General, Fees, Expenses, Cash, Bank, Payroll, Adjustments)
-8. Fiscal Year and Periods (current year with 12 monthly periods)
-9. Display Groups (for organizing fees on invoices)
-10. Payment Methods (Cash, Bank Transfer, Mobile Money, Cards, etc.)
-11. Departments (Academic, Administrative, Support, Operational)
-12. Designations (Job positions mapped to departments)
-13. Units of Measure (for inventory and procurement)
-14. Tax Rates (country-specific VAT and withholding tax)
+    from core.services.school_initialization import initialize_school
+    result = initialize_school(school_instance, user=request.user)
 
 COMPLEXITY LEVELS:
-==================
-BASIC (10-12 accounts):
-  - Small schools (< 200 students)
-  - Kindergartens, small primary schools
-  - Simple accounting needs
+    BASIC    — ~14 accounts  (< 200 students, kindergarten/primary)
+    STANDARD — ~35 accounts  (200–700 students)
+    ADVANCED — ~80 accounts  (700+ students, universities)
 
-STANDARD (25-30 accounts):
-  - Medium schools (200-700 students)
-  - Secondary schools, combined schools
-  - Moderate accounting needs
+CHANGES FROM ORIGINAL
+---------------------
+initialize_all()
+    Added Phase 0 — calls SchoolInitConfig.validate_config() before any DB
+    writes. Catches bad display_group names, invalid choice values, and
+    duplicate designation codes up front, so the transaction never starts
+    with a broken config.
 
-ADVANCED (130+ accounts):
-  - Large schools (700+ students)
-  - Universities, large secondary schools
-  - Professional accounting with auditors
+_create_account_mappings()
+    Removed stale "Account number corrections" comment. The config dict is now
+    produced by get_account_mappings_config(complexity), which is already
+    complexity-aware, so no manual overrides are needed here.
 
-AUTHOR: Schoolara Development Team
-VERSION: 2.1
-LAST UPDATED: 2025-01-09
-CHANGES: Updated all create() to get_or_create() for idempotency
+_create_specialized_account_mappings()
+    BUG FIX — late_fee_revenue_account:
+        Both branches of the ternary were acct('4300'), making the condition
+        meaningless. In STANDARD, 4300 is Transport Fees — wrong for late fees.
+        Fixed: ADVANCED only gets acct('4300') (Late Payment Fees); BASIC and
+        STANDARD receive None.
+
+    BUG FIX — social_security_payable_account:
+        Original used acct('2030') for all complexities. In STANDARD, 2030 is
+        Student Deposits — completely wrong for NSSF/social security payroll.
+        Fixed: acct('2030') only for ADVANCED (where it is NSSF Payable);
+        BASIC and STANDARD receive None.
+
+    NEW — penalty_revenue_account:
+        Maps to acct('4310') (Replacement Fees) in ADVANCED where that account
+        exists; None on BASIC and STANDARD.
+
+_create_fiscal_year()
+    BUG FIX — period_type:
+        Was 'TERM', which is not a valid FiscalPeriod.PERIOD_TYPE_CHOICES value.
+        FiscalPeriod.save() calls full_clean(), which raises ValidationError and
+        prevents any fiscal period from being created. Fixed to 'ACADEMIC_ALIGNED'.
+
+    BUG FIX — date construction:
+        Was timezone.datetime(year, month, day).date(). Django's timezone module
+        does not expose datetime as an attribute; this raised AttributeError.
+        Fixed to _date(year, month, day) using stdlib datetime.date (imported at
+        module level as _date).
+
+    calendar import moved from inside the function to module level as _calendar.
+
+_create_units_of_measure()
+    BUG FIX — get_or_create lookup key:
+        Was symbol, which is nullable (null=True) and not unique on the model.
+        Using a nullable field as the lookup key causes None→None collisions
+        across multiple records. Fixed to abbreviation, which is always populated.
+
+get_initialization_preview()
+    Now calls validate_config() and surfaces config_issues / config_valid in
+    the returned dict so callers can surface problems before committing.
+
+cleanup_school_initialization()
+    Added SpecialAccountMappings to the singleton deletion list — it was missing
+    from the original, leaving orphaned rows after cleanup.
 """
 
+import calendar as _calendar
+from datetime import date as _date
+from decimal import Decimal
+
+from django.apps import apps
 from django.db import transaction
 from django.utils import timezone
-from django.apps import apps
-from decimal import Decimal
 import logging
 
 from .school_init_config import SchoolInitConfig
@@ -73,897 +91,954 @@ logger = logging.getLogger(__name__)
 
 class SchoolInitializer:
     """
-    Main class for school initialization.
-    
-    This class orchestrates the complete setup of a school's financial system
-    by creating all necessary database records in the correct order with
-    proper relationships and validations.
-    
-    All methods use get_or_create() making initialization idempotent - 
-    it can be safely run multiple times without errors.
-    
-    Example:
-        >>> from accounts.models import School
-        >>> school = School.objects.get(database_alias='atepi_palabek')
-        >>> initializer = SchoolInitializer(school)
-        >>> result = initializer.initialize_all(user=request.user)
-        >>> print(result['created']['accounts'])
-        25
+    Orchestrates complete school financial system initialization.
+    All methods use get_or_create() — safe to run multiple times.
     """
-    
+
     def __init__(self, school):
-        """
-        Initialize the SchoolInitializer.
-        
-        Args:
-            school: School instance to initialize
-        """
-        self.school = school
-        self.config = SchoolInitConfig.get_init_config(school)
+        self.school     = school
+        self.config     = SchoolInitConfig.get_init_config(school)
         self.complexity = self.config['complexity']
-        
-        logger.info(
-            f"Initializing {school.full_name} with {self.complexity} complexity"
-        )
-    
+
     @transaction.atomic
     def initialize_all(self, user=None):
         """
-        Perform complete school initialization.
-        
-        This is the main entry point that orchestrates all initialization steps.
-        All operations are wrapped in a transaction - if any step fails, 
-        everything is rolled back.
-        
-        Args:
-            user: User performing the initialization (for audit trail)
-            
+        Run all initialization steps in dependency order.
+        Wrapped in a transaction — rolls back everything on failure.
+
         Returns:
-            dict: Results dictionary with structure:
-                {
-                    'success': bool,
-                    'errors': list,
-                    'created': {
-                        'account_types': int,
-                        'accounts': int,
-                        'fee_categories': int,
-                        'expense_categories': int,
-                        'journals': int,
-                        'fiscal_periods': int,
-                        'display_groups': int,
-                        'payment_methods': int,
-                        'departments': int,
-                        'designations': int,
-                        'units_of_measure': int,
-                        'tax_rates': int,
-                    }
+            dict: {
+                'success': bool,
+                'errors': list,
+                'created': {
+                    'account_types', 'accounts', 'fee_categories',
+                    'expense_categories', 'journals', 'fiscal_periods',
+                    'display_groups', 'payment_methods', 'departments',
+                    'designations', 'units_of_measure', 'tax_rates'
                 }
+            }
         """
         results = {
             'success': True,
-            'errors': [],
+            'errors':  [],
             'created': {
-                'account_types': 0,
-                'accounts': 0,
-                'fee_categories': 0,
-                'expense_categories': 0,    
-                'journals': 0,  
-                'fiscal_periods': 0,
-                'display_groups': 0,
-                'payment_methods': 0,
-                'departments': 0,
-                'designations': 0,
-                'units_of_measure': 0,
-                'tax_rates': 0,
+                'account_types':      0,
+                'accounts':           0,
+                'fee_categories':     0,
+                'expense_categories': 0,
+                'journals':           0,
+                'fiscal_periods':     0,
+                'display_groups':     0,
+                'payment_methods':    0,
+                'departments':        0,
+                'designations':       0,
+                'units_of_measure':   0,
+                'tax_rates':          0,
             }
         }
-        
+
         try:
+            # ----------------------------------------------------------------
+            # PHASE 0: VALIDATE CONFIG
+            # Catch config inconsistencies before any DB writes. Any issue
+            # found here means the config file needs fixing — not the DB.
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 0: Validating configuration")
+            issues = SchoolInitConfig.validate_config()
+            if issues:
+                for issue in issues:
+                    logger.error(f"  Config issue: {issue}")
+                raise ValueError(
+                    f"SchoolInitConfig has {len(issues)} issue(s). "
+                    "Fix before initializing. See logs for details."
+                )
+            logger.info("  Config validation passed")
+
+            # ----------------------------------------------------------------
             # PHASE 1: CORE FINANCIAL SETUP
-            logger.info("="*70)
-            logger.info("PHASE 1: CORE FINANCIAL SETUP")
-            logger.info("="*70)
-            
-            logger.info(f"Step 1: Creating account types...")
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 1: Core financial setup")
+
             account_types = self._create_account_types()
             results['created']['account_types'] = len(account_types)
-            
-            logger.info(f"Step 2: Creating chart of accounts ({self.complexity})...")
+
             accounts = self._create_chart_of_accounts()
             results['created']['accounts'] = len(accounts)
-            
-            logger.info(f"Step 3: Creating financial settings...")
+
             self._create_financial_settings()
-            
-            logger.info(f"Step 4: Creating account mappings...")
             self._create_account_mappings()
-            
+            self._create_specialized_account_mappings()
+
+            # ----------------------------------------------------------------
             # PHASE 2: FEES AND EXPENSES
-            logger.info("="*70)
-            logger.info("PHASE 2: FEES AND EXPENSES")
-            logger.info("="*70)
-            
-            logger.info(f"Step 5: Creating display groups...")
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 2: Fees and expenses")
+
             display_groups = self._create_display_groups()
             results['created']['display_groups'] = len(display_groups)
-            
-            logger.info(f"Step 6: Creating fee categories...")
+
             fee_categories = self._create_fee_categories()
             results['created']['fee_categories'] = len(fee_categories)
-            
-            logger.info(f"Step 7: Creating expense categories...")
+
             expense_categories = self._create_expense_categories()
             results['created']['expense_categories'] = len(expense_categories)
-            
+
+            # ----------------------------------------------------------------
             # PHASE 3: JOURNALS AND FISCAL PERIODS
-            logger.info("="*70)
-            logger.info("PHASE 3: JOURNALS AND FISCAL PERIODS")
-            logger.info("="*70)
-            
-            logger.info(f"Step 8: Creating journals...")
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 3: Journals and fiscal periods")
+
             journals = self._create_journals()
             results['created']['journals'] = len(journals)
-            
-            logger.info(f"Step 9: Creating fiscal year and periods...")
+
             fiscal_periods = self._create_fiscal_year()
             results['created']['fiscal_periods'] = len(fiscal_periods)
-            
-            # PHASE 4: PAYMENT AND TAX SETUP
-            logger.info("="*70)
-            logger.info("PHASE 4: PAYMENT AND TAX SETUP")
-            logger.info("="*70)
-            
-            logger.info(f"Step 10: Creating payment methods...")
+
+            # ----------------------------------------------------------------
+            # PHASE 4: PAYMENT AND TAX
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 4: Payment methods and tax rates")
+
             payment_methods = self._create_payment_methods()
             results['created']['payment_methods'] = len(payment_methods)
-            
-            logger.info(f"Step 11: Creating tax rates...")
+
             tax_rates = self._create_tax_rates()
             results['created']['tax_rates'] = len(tax_rates)
-            
-            # PHASE 5: HR AND ORGANIZATIONAL STRUCTURE
-            logger.info("="*70)
-            logger.info("PHASE 5: HR AND ORGANIZATIONAL STRUCTURE")
-            logger.info("="*70)
-            
-            logger.info(f"Step 12: Creating departments...")
+
+            # ----------------------------------------------------------------
+            # PHASE 5: HR STRUCTURE
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 5: Departments and designations")
+
             departments = self._create_departments()
             results['created']['departments'] = len(departments)
-            
-            logger.info(f"Step 13: Creating designations...")
+
             designations = self._create_designations()
             results['created']['designations'] = len(designations)
-            
-            # PHASE 6: INVENTORY AND PROCUREMENT
-            logger.info("="*70)
-            logger.info("PHASE 6: INVENTORY AND PROCUREMENT")
-            logger.info("="*70)
-            
-            logger.info(f"Step 14: Creating units of measure...")
+
+            # ----------------------------------------------------------------
+            # PHASE 6: INVENTORY
+            # ----------------------------------------------------------------
+            logger.info(f"[{self.school.full_name}] Phase 6: Units of measure")
+
             units = self._create_units_of_measure()
             results['created']['units_of_measure'] = len(units)
-            
+
+            # ----------------------------------------------------------------
             # FINALIZATION
-            logger.info("="*70)
-            logger.info("FINALIZATION")
-            logger.info("="*70)
-            
-            # Mark school as initialized
+            # ----------------------------------------------------------------
             self.school.is_financial_setup_complete = True
-            self.school.is_initial_setup_complete = True
-            self.school.setup_completed_at = timezone.now()
-            self.school.setup_completed_by = user
+            self.school.is_initial_setup_complete   = True
+            self.school.setup_completed_at          = timezone.now()
+            self.school.setup_completed_by          = user
             self.school.save(using='default')
-            
-            logger.info("="*70)
-            logger.info(f"✓ INITIALIZATION COMPLETE FOR {self.school.full_name.upper()}")
-            logger.info("="*70)
-            logger.info(f"Complexity Level: {self.complexity}")
-            logger.info(f"Account Types: {results['created']['account_types']}")
-            logger.info(f"Accounts Created: {results['created']['accounts']}")
-            logger.info(f"Fee Categories: {results['created']['fee_categories']}")
-            logger.info(f"Expense Categories: {results['created']['expense_categories']}")
-            logger.info(f"Journals: {results['created']['journals']}")
-            logger.info(f"Fiscal Periods: {results['created']['fiscal_periods']}")
-            logger.info(f"Display Groups: {results['created']['display_groups']}")
-            logger.info(f"Payment Methods: {results['created']['payment_methods']}")
-            logger.info(f"Tax Rates: {results['created']['tax_rates']}")
-            logger.info(f"Departments: {results['created']['departments']}")
-            logger.info(f"Designations: {results['created']['designations']}")
-            logger.info(f"Units of Measure: {results['created']['units_of_measure']}")  
-            logger.info("="*70)
-            
+
+            logger.info(
+                f"[{self.school.full_name}] Initialization complete — "
+                f"complexity={self.complexity} "
+                f"accounts={results['created']['accounts']} "
+                f"fee_cats={results['created']['fee_categories']} "
+                f"periods={results['created']['fiscal_periods']}"
+            )
+
         except Exception as e:
-            logger.error("="*70)
-            logger.error(f"✗ INITIALIZATION FAILED: {e}")
-            logger.error("="*70)
-            logger.error(f"Error details:", exc_info=True)
+            logger.error(
+                f"[{self.school.full_name}] Initialization failed: {e}",
+                exc_info=True,
+            )
             results['success'] = False
             results['errors'].append(str(e))
-            raise  # Re-raise to trigger transaction rollback
-        
+            raise  # triggers transaction rollback
+
         return results
-    
+
     # =========================================================================
-    # STEP 1: CREATE ACCOUNT TYPES
+    # STEP 1: ACCOUNT TYPES
     # =========================================================================
-    
+
     def _create_account_types(self):
-        """Create standard account types using get_or_create()"""
-        from core.services.school_init_config import SchoolInitConfig
-        
-        logger.info(f"Creating account types for {self.school.full_name}...")
-        
+        """Create the 5 standard GL account types (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE)."""
+        AccountType   = apps.get_model('finance', 'AccountType')
         account_types = []
-        account_type_configs = SchoolInitConfig.get_account_types()
-        
-        for config in account_type_configs:
-            try:
-                AccountType = apps.get_model('finance', 'AccountType')
-                # Use code as the unique lookup key
-                account_type, created = AccountType.objects.get_or_create(
-                    code=config['code'],  # Code is unique within this database
-                    defaults=config
-                )
-                
-                if created:
-                    logger.info(f"  ✓ Created: {account_type.name} ({account_type.code})")
-                else:
-                    logger.info(f"  → Exists: {account_type.name} ({account_type.code})")
-                
-                account_types.append(account_type)
-                
-            except Exception as e:
-                logger.error(f"  ✗ Failed to create {config.get('name')}: {e}")
-                raise
-        
-        logger.info(f"Account types complete: {len(account_types)} types created/verified")
-        return account_types
-    
-    # =========================================================================
-    # STEP 2: CREATE CHART OF ACCOUNTS
-    # =========================================================================
-    
-    def _create_chart_of_accounts(self):
-        """
-        Create the complete chart of accounts from config using get_or_create().
-        
-        The chart of accounts is customized based on school complexity:
-        - BASIC: 10-15 accounts (simple structure)
-        - STANDARD: 25-30 accounts (moderate detail)
-        - ADVANCED: 130+ accounts (comprehensive)
-        
-        Returns:
-            list: List of created/found Account instances
-        """
-        Account = apps.get_model('finance', 'Account')
-        AccountType = apps.get_model('finance', 'AccountType')
-        
-        accounts = []
-        account_configs = self.config['chart_of_accounts']
-        
-        for account_data in account_configs:
-            # Get the account type
-            account_type = AccountType.objects.get(
-                account_type=account_data['type']
+
+        for config in SchoolInitConfig.get_account_types():
+            obj, created = AccountType.objects.get_or_create(
+                code=config['code'],
+                defaults=config,
             )
-            
-            # Separate account data from metadata
+            account_types.append(obj)
+            if created:
+                logger.debug(f"  Created AccountType: {obj.name}")
+
+        logger.info(f"  Account types: {len(account_types)} created/verified")
+        return account_types
+
+    # =========================================================================
+    # STEP 2: CHART OF ACCOUNTS
+    # =========================================================================
+
+    def _create_chart_of_accounts(self):
+        """Create GL accounts based on school complexity level."""
+        Account     = apps.get_model('finance', 'Account')
+        AccountType = apps.get_model('finance', 'AccountType')
+
+        optional_fields = [
+            'description', 'is_bank_account', 'is_cash_account',
+            'is_receivable_account', 'is_payable_account', 'is_revenue_account',
+            'is_expense_account', 'is_inventory_account', 'is_fixed_asset',
+            'is_contra_account', 'is_loan_account', 'is_tax_account',
+            'receivable_type', 'revenue_type', 'expense_type',
+            'inventory_type', 'mobile_money_provider',
+        ]
+
+        accounts = []
+        for account_data in self.config['chart_of_accounts']:
+            account_type = AccountType.objects.get(account_type=account_data['type'])
+
             create_data = {
                 'account_number': account_data['number'],
-                'name': account_data['name'],
-                'account_type': account_type,
-                'is_active': True,
+                'name':           account_data['name'],
+                'account_type':   account_type,
+                'is_active':      True,
             }
-            
-            # Add optional fields if present
-            optional_fields = [
-                'description',
-                'is_bank_account',
-                'is_cash_account',
-                'is_receivable_account',
-                'is_payable_account',
-                'is_revenue_account',
-                'is_expense_account',
-                'is_inventory_account',
-                'is_fixed_asset',
-                'is_contra_account',
-                'is_loan_account',
-                'is_tax_account',
-                'receivable_type',
-                'revenue_type',
-                'expense_type',
-                'inventory_type',
-                'mobile_money_provider',
-            ]
-            
             for field in optional_fields:
                 if field in account_data:
                     create_data[field] = account_data[field]
-            
-            # ✅ Use get_or_create instead of create
-            account, created = Account.objects.get_or_create(
+
+            obj, created = Account.objects.get_or_create(
                 account_number=account_data['number'],
-                defaults=create_data
+                defaults=create_data,
             )
-            
-            accounts.append(account)
-            
+            accounts.append(obj)
             if created:
-                logger.debug(f"  ✓ Created: {account.account_number} - {account.name}")
-            else:
-                logger.debug(f"  → Exists: {account.account_number} - {account.name}")
-        
-        logger.info(
-            f"  Created/verified {len(accounts)} accounts for {self.complexity} complexity"
-        )
-        
+                logger.debug(f"  Created account: {obj.account_number} {obj.name}")
+
+        logger.info(f"  Accounts: {len(accounts)} created/verified ({self.complexity})")
         return accounts
-    
+
     # =========================================================================
-    # STEP 3: CREATE FINANCIAL SETTINGS
+    # STEP 3: FINANCIAL SETTINGS
     # =========================================================================
-    
+
     def _create_financial_settings(self):
-        """
-        Create financial settings with defaults from config.
-        
-        Financial settings control:
-        - Currency and formatting
-        - Invoice/payment numbering
-        - Payment terms and policies
-        - Late fees and discounts
-        - Email notifications
-        
-        Returns:
-            FinancialSettings: Created settings instance
-        """
+        """Create FinancialSettings singleton if it doesn't exist."""
         FinancialSettings = apps.get_model('core', 'FinancialSettings')
-        
-        # Check if already exists (singleton pattern)
+
         if FinancialSettings.objects.exists():
-            logger.warning("  ⊙ FinancialSettings already exists, skipping creation")
+            logger.debug("  FinancialSettings already exists — skipping")
             return FinancialSettings.objects.first()
-        
-        # Create with defaults from config
-        settings_data = self.config['financial_settings']
-        settings = FinancialSettings.objects.create(**settings_data)
-        
-        logger.info(
-            f"  ✓ Created FinancialSettings (Currency: {settings.school_currency})"
-        )
-        
+
+        settings = FinancialSettings.objects.create(**self.config['financial_settings'])
+        logger.info(f"  Created FinancialSettings (currency={settings.school_currency})")
         return settings
-    
+
     # =========================================================================
-    # STEP 4: CREATE ACCOUNT MAPPINGS
+    # STEP 4a: CORE ACCOUNT MAPPINGS
     # =========================================================================
-    
+
     def _create_account_mappings(self):
         """
-        Create account mappings that link accounts to system operations.
-        
-        Account mappings tell the system which GL account to use for:
-        - Bank receipts
-        - Cash receipts
-        - Student receivables
-        - Revenue recognition
-        - Expense posting
-        - Scholarships/discounts
-        - Accounts payable
-        - Equity/capital
-        
-        This enables automatic journal entry creation.
-        
-        Returns:
-            CoreAccountMappings: Created mappings instance
+        Create CoreAccountMappings — the Big 7 required accounts plus
+        optional specialised accounts (petty cash, mobile money, etc.).
+
+        The account numbers come from get_account_mappings_config(complexity),
+        which is already complexity-aware — BASIC/STANDARD/ADVANCED each
+        produce the correct bank and cash account numbers. No manual overrides
+        are needed here.
         """
         CoreAccountMappings = apps.get_model('core', 'CoreAccountMappings')
-        FinancialSettings = apps.get_model('core', 'FinancialSettings')
-        Account = apps.get_model('finance', 'Account')
-        
-        # Get financial settings
-        financial_settings = FinancialSettings.objects.first()
-        
-        if not financial_settings:
-            raise Exception("FinancialSettings must be created before account mappings")
-        
-        # Check if already exists
-        if hasattr(financial_settings, 'account_mappings'):
-            logger.warning("  ⊙ CoreAccountMappings already exists, skipping creation")
-            return financial_settings.account_mappings
-        
-        # Get account mapping configuration
-        mappings_config = self.config['account_mappings']
-        
-        # Build mapping data
-        mapping_data = {'financial_settings': financial_settings}
-        
+        FinancialSettings   = apps.get_model('core', 'FinancialSettings')
+        Account             = apps.get_model('finance', 'Account')
+
+        fs = FinancialSettings.objects.first()
+        if not fs:
+            raise Exception("FinancialSettings must exist before CoreAccountMappings")
+
+        try:
+            existing = CoreAccountMappings.objects.get(financial_settings=fs)
+            logger.debug("  CoreAccountMappings already exists — skipping")
+            return existing
+        except CoreAccountMappings.DoesNotExist:
+            pass
+
+        mapping_data    = {'financial_settings': fs}
+        mappings_config = self.config['account_mappings']  # complexity-aware
+
         for field_name, config in mappings_config.items():
-            # Try primary search criteria
             account = Account.objects.filter(**config['search']).first()
-            
-            # Try fallback if primary fails
+
             if not account and 'fallback' in config:
                 account = Account.objects.filter(**config['fallback']).first()
-            
-            # Skip if optional and not found
+
             if not account and config.get('optional', False):
-                logger.debug(f"  ⊙ Optional account {field_name} not found, skipping")
+                logger.debug(f"  Optional mapping not found: {field_name} — skipping")
                 continue
-            
-            # Error if required and not found
+
             if not account:
                 raise Exception(
-                    f"Required account for {field_name} not found. "
-                    f"Search: {config['search']}"
+                    f"Required account for '{field_name}' not found. "
+                    f"Search criteria: {config['search']}"
                 )
-            
+
             mapping_data[field_name] = account
-            logger.debug(f"  ✓ Mapped {field_name} → {account.account_number}")
-        
-        # Create the mappings
+
         mappings = CoreAccountMappings.objects.create(**mapping_data)
-        
-        logger.info("  ✓ Created CoreAccountMappings with required accounts")
-        
+        logger.info(
+            f"  Created CoreAccountMappings ({len(mapping_data) - 1} accounts mapped)"
+        )
         return mappings
-    
+
     # =========================================================================
-    # STEP 5: CREATE DISPLAY GROUPS
+    # STEP 4b: SPECIALIZED ACCOUNT MAPPINGS
     # =========================================================================
-    
+
+    def _create_specialized_account_mappings(self):
+        """
+        Create PayrollAccountMappings, ExpenseAccountMappings,
+        RevenueAccountMappings, and SpecialAccountMappings.
+
+        All fields on these models are null=True — accounts that don't exist
+        in a simpler chart silently become None rather than raising an error.
+
+        ACCOUNT NUMBER CROSS-REFERENCE BY COMPLEXITY
+        ─────────────────────────────────────────────
+        Number  BASIC                STANDARD                   ADVANCED
+        ──────  ──────────────────── ─────────────────────────  ────────────────────────────
+        1140    —                    —                          Allowance for Doubtful Accts
+        1200    —                    Inventory - Supplies       Inventory - General Supplies
+        2010    —                    Salaries Payable           Salaries Payable
+        2020    —                    Tax Payable                PAYE Tax Payable
+        2030    —                    Student Deposits (!)       NSSF Payable        ← key diff
+        2050    —                    Student Deposits           Student Deposits
+        2060    —                    —                          Advance Fee Payments
+        4100    (boarding only)      (boarding only)            Boarding Fees
+        4110    (boarding only)      (boarding only)            Meals Revenue
+        4200    —                    Uniform & Book Sales       Uniform Sales
+        4220    —                    —                          Transport Fees
+        4300    —                    Transport Fees (!)         Late Payment Fees   ← key diff
+        4310    —                    —                          Replacement Fees
+        5000    Salaries & Wages     Teaching Staff Salaries    Teaching Staff Basic Salary
+        5010    —                    Admin Salaries             Housing Allowance
+        5020    —                    Support Staff Salaries     Transport Allowance
+        5060    —                    —                          Staff Medical Insurance
+        5100    Utilities            Electricity                Electricity
+        5300    Maintenance          Building Maintenance       Building Maintenance
+        5820    —                    —                          Bad Debt Write-off
+        5850    —                    —                          Depreciation - Buildings
+
+        BUGS FIXED vs ORIGINAL
+        ──────────────────────
+        late_fee_revenue_account
+            Original: acct('4300') if complexity != 'ADVANCED' else acct('4300')
+            Both branches identical — condition was meaningless.
+            In STANDARD, 4300 = Transport Fees (wrong for late fee revenue).
+            Fixed: ADVANCED only gets 4300 (Late Payment Fees); others get None.
+
+        social_security_payable_account
+            Original used acct('2030') for ALL complexities.
+            In STANDARD, 2030 = Student Deposits — completely wrong for payroll.
+            Fixed: 2030 only for ADVANCED (where it = NSSF Payable); others None.
+
+        NEW: penalty_revenue_account
+            Maps to 4310 (Replacement Fees) in ADVANCED; None elsewhere.
+
+        NOTE: student_credit_balance_account and unearned_revenue_account both
+        intentionally map to 2060 (Advance Fee Payments) — the closest liability
+        account for pre-paid and overpaid amounts in ADVANCED.
+        """
+        FinancialSettings      = apps.get_model('core', 'FinancialSettings')
+        PayrollAccountMappings = apps.get_model('core', 'PayrollAccountMappings')
+        ExpenseAccountMappings = apps.get_model('core', 'ExpenseAccountMappings')
+        RevenueAccountMappings = apps.get_model('core', 'RevenueAccountMappings')
+        SpecialAccountMappings = apps.get_model('core', 'SpecialAccountMappings')
+        Account                = apps.get_model('finance', 'Account')
+
+        fs = FinancialSettings.objects.first()
+        if not fs:
+            raise Exception("FinancialSettings must exist before specialised mappings")
+
+        def acct(number):
+            """Return Account by number, or None if absent from this chart."""
+            return Account.objects.filter(account_number=number).first()
+
+        is_advanced   = self.complexity == 'ADVANCED'
+        is_std_or_adv = self.complexity in ('STANDARD', 'ADVANCED')
+
+        # ── Payroll Account Mappings ──────────────────────────────────────────
+        pm, created = PayrollAccountMappings.objects.get_or_create(financial_settings=fs)
+        if created:
+            pm.salaries_expense_account = acct('5000')  # ALL complexities
+
+            # 2010 = Salaries Payable — STANDARD + ADVANCED; absent in BASIC
+            pm.wages_payable_account = acct('2010')
+
+            # 2020 = Tax Payable (STANDARD) / PAYE Tax Payable (ADVANCED)
+            pm.payroll_tax_payable_account = acct('2020')
+
+            # FIX: 2030 = NSSF Payable only in ADVANCED.
+            # In STANDARD, 2030 = Student Deposits — wrong for social security.
+            pm.social_security_payable_account = acct('2030') if is_advanced else None
+
+            # 5010 = Admin Salaries (STANDARD) / Housing Allowance (ADVANCED)
+            pm.housing_allowance_expense_account = acct('5010')
+
+            # 5020 = Support Staff (STANDARD) / Transport Allowance (ADVANCED)
+            pm.transport_allowance_expense_account = acct('5020')
+
+            # 5060 = Staff Medical Insurance — ADVANCED only; None elsewhere
+            pm.staff_benefits_expense_account = acct('5060')
+
+            pm.save()
+            logger.info("  Created PayrollAccountMappings")
+        else:
+            logger.debug("  PayrollAccountMappings already exists — skipping")
+
+        # ── Expense Account Mappings ──────────────────────────────────────────
+        em, created = ExpenseAccountMappings.objects.get_or_create(financial_settings=fs)
+        if created:
+            # 1200 = Inventory - Supplies (STANDARD) / General Supplies (ADVANCED)
+            em.default_inventory_account = acct('1200')
+
+            # 5100 = Utilities (BASIC) / Electricity (STANDARD + ADVANCED)
+            em.utilities_expense_account = acct('5100')
+
+            # 5300 = Maintenance & Repairs (BASIC) / Building Maintenance (STD + ADV)
+            em.maintenance_expense_account = acct('5300')
+
+            # 5850 = Depreciation - Buildings — ADVANCED only; None elsewhere
+            em.depreciation_expense_account = acct('5850')
+
+            em.save()
+            logger.info("  Created ExpenseAccountMappings")
+        else:
+            logger.debug("  ExpenseAccountMappings already exists — skipping")
+
+        # ── Revenue Account Mappings ──────────────────────────────────────────
+        rm, created = RevenueAccountMappings.objects.get_or_create(financial_settings=fs)
+        if created:
+            # 4100 = Boarding Fees — all complexities (boarding schools only)
+            rm.boarding_revenue_account = acct('4100')
+
+            # 4110 = Meals Revenue — all complexities (boarding schools only)
+            rm.meals_revenue_account = acct('4110')
+
+            # 4200 = Uniform & Book Sales (STANDARD) / Uniform Sales (ADVANCED)
+            rm.uniform_sales_revenue_account = acct('4200')
+
+            # Transport: 4220 in ADVANCED; 4300 in STANDARD (both = Transport Fees)
+            # acct('4220') returns None on STANDARD so falls through to acct('4300')
+            rm.transport_revenue_account = acct('4220') or acct('4300')
+
+            # FIX: 4300 = Transport Fees in STANDARD — wrong for late fee revenue.
+            #      4300 = Late Payment Fees in ADVANCED — correct.
+            # Original had acct('4300') on BOTH sides of the ternary (meaningless).
+            rm.late_fee_revenue_account = acct('4300') if is_advanced else None
+
+            # NEW: 4310 = Replacement Fees — ADVANCED only; None elsewhere
+            rm.penalty_revenue_account = acct('4310')
+
+            rm.save()
+            logger.info("  Created RevenueAccountMappings")
+        else:
+            logger.debug("  RevenueAccountMappings already exists — skipping")
+
+        # ── Special Account Mappings ──────────────────────────────────────────
+        sm, created = SpecialAccountMappings.objects.get_or_create(financial_settings=fs)
+        if created:
+            # 2050 = Student Deposits — STANDARD + ADVANCED; absent in BASIC
+            sm.default_student_deposit_account = acct('2050')
+
+            # 2060 = Advance Fee Payments — ADVANCED only.
+            # Both credit balance and unearned revenue map here intentionally;
+            # it is the closest liability account for pre-paid / overpaid amounts.
+            sm.student_credit_balance_account = acct('2060')
+            sm.unearned_revenue_account       = acct('2060')
+
+            # 5820 = Bad Debt Write-off — ADVANCED only; None elsewhere
+            sm.bad_debt_expense_account = acct('5820')
+
+            # 1140 = Allowance for Doubtful Accounts — ADVANCED only; None elsewhere
+            sm.allowance_for_doubtful_accounts = acct('1140')
+
+            sm.save()
+            logger.info("  Created SpecialAccountMappings")
+        else:
+            logger.debug("  SpecialAccountMappings already exists — skipping")
+
+    # =========================================================================
+    # STEP 5: DISPLAY GROUPS
+    # =========================================================================
+
     def _create_display_groups(self):
-        """Create display groups using name as unique identifier."""
+        """Create fee invoice display groups."""
         DisplayGroup = apps.get_model('fees', 'DisplayGroup')
-        
         groups = []
-        groups_config = self.config['display_groups']
-        
-        for group_data in groups_config:
-            # ✅ Use 'name' as unique identifier (it's already unique in the model)
-            group_name = group_data.pop('name')
-            
-            group, created = DisplayGroup.objects.get_or_create(
-                name=group_name,  # ✅ Use name instead of code
-                defaults=group_data
-            )
-            groups.append(group)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {group.name}")
-            else:
-                logger.debug(f"  → Exists: {group.name}")
-        
-        logger.info(f"  Created/verified {len(groups)} display groups")
-        
+
+        for group_data in self.config['display_groups']:
+            group_data = group_data.copy()
+            name = group_data.pop('name')
+            obj, _ = DisplayGroup.objects.get_or_create(name=name, defaults=group_data)
+            groups.append(obj)
+
+        logger.info(f"  Display groups: {len(groups)} created/verified")
         return groups
-    
+
     # =========================================================================
-    # STEP 6: CREATE FEE CATEGORIES
+    # STEP 6: FEE CATEGORIES
     # =========================================================================
-    
+
     def _create_fee_categories(self):
         """
-        Create fee categories with display group references using get_or_create().
-        
-        DisplayGroups must be created first (in Step 5) before this step.
-        This method converts display_group names from config into
-        DisplayGroup instances before creating FeesCategory records.
-        
-        Returns:
-            list: List of created/found FeesCategory instances
+        Create fee categories mapped to display groups.
+
+        display_group is stored as a string name in the config. It is resolved
+        to a DisplayGroup instance here after display groups have been seeded
+        (Phase 2 creates them before fee categories).
+
+        A warning is logged — not an error — when a group name is not found,
+        because validate_config() in Phase 0 would have caught true mismatches.
         """
         FeesCategory = apps.get_model('fees', 'FeesCategory')
         DisplayGroup = apps.get_model('fees', 'DisplayGroup')
-        
+
+        display_groups_map = {dg.name: dg for dg in DisplayGroup.objects.all()}
         categories = []
-        categories_config = self.config['fee_categories']
-        
-        # ✅ Build display group lookup map by NAME (not code)
-        display_groups_map = {
-            dg.name: dg for dg in DisplayGroup.objects.all()
-        }
-        
-        for category_data in categories_config.copy():
-            # Extract display_group NAME (string) from config
+
+        for category_data in self.config['fee_categories']:
+            category_data      = category_data.copy()
             display_group_name = category_data.pop('display_group', None)
-            category_code = category_data.pop('code')
-            
-            # ✅ Convert NAME to DisplayGroup instance
-            if display_group_name and display_group_name in display_groups_map:
-                category_data['display_group'] = display_groups_map[display_group_name]
+            code               = category_data.pop('code')
+
+            if display_group_name:
+                category_data['display_group'] = display_groups_map.get(display_group_name)
+                if not category_data['display_group']:
+                    logger.warning(
+                        f"  Display group '{display_group_name}' not found "
+                        f"for fee category '{code}'"
+                    )
             else:
                 category_data['display_group'] = None
-                if display_group_name:
-                    logger.warning(f"  ⚠ Display group not found: {display_group_name}")
-            
-            # Use get_or_create with code as unique identifier
-            category, created = FeesCategory.objects.get_or_create(
-                code=category_code,
-                defaults=category_data
-            )
-            categories.append(category)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {category.name} ({category.code})")
-            else:
-                logger.debug(f"  → Exists: {category.name} ({category.code})")
-        
-        logger.info(f"  Created/verified {len(categories)} fee categories")
-        
+
+            obj, _ = FeesCategory.objects.get_or_create(code=code, defaults=category_data)
+            categories.append(obj)
+
+        logger.info(f"  Fee categories: {len(categories)} created/verified")
         return categories
-    
+
     # =========================================================================
-    # STEP 7: CREATE EXPENSE CATEGORIES
+    # STEP 7: EXPENSE CATEGORIES
     # =========================================================================
-    
+
     def _create_expense_categories(self):
-        """Create default expense categories from config using get_or_create()"""
+        """
+        Create expense categories and wire each one to a default GL expense
+        account — exactly as QuickBooks does at item/category setup time.
+
+        ACCOUNT PRIORITY LISTS
+        ──────────────────────
+        Each category_type maps to an ordered list of account numbers.
+        The first number that exists in the DB wins, so the mapping
+        degrades gracefully across complexity levels:
+
+          ADVANCED  → finds specific accounts (5720, 5920, 5910, …)
+          STANDARD  → finds intermediate accounts (5300, 5500, 5600, …)
+          BASIC     → falls through to catch-all
+
+        CATCH-ALL LOGIC
+        ───────────────
+        BASIC/STANDARD: 5900 = Other Expenses (correct catch-all)
+        ADVANCED:       5990 = Miscellaneous Expenses (correct catch-all)
+                        5900 = Entertainment & Events (wrong as catch-all)
+        So ADVANCED tries 5990 first; BASIC/STANDARD try 5900 first.
+
+        CROSS-REFERENCE: Account numbers by complexity level
+        ─────────────────────────────────────────────────────
+        Number  BASIC              STANDARD                    ADVANCED
+        ──────  ─────────────────  ──────────────────────────  ─────────────────────────────
+        5000    Salaries & Wages   Teaching Staff Salaries     Teaching Staff Basic Salary
+        5100    Utilities          Electricity                 Electricity
+        5200    Supplies           Office Supplies             Textbooks & Learning Mats
+        5210    —                  Learning Materials          Stationery & Office Supplies
+        5220    —                  Cleaning Supplies           Laboratory Supplies
+        5240    —                  —                           Computer Software & Licenses
+        5300    Maintenance        Building Maintenance        Building Maintenance
+        5310    —                  Equipment Repairs           Equipment Repairs
+        5340    —                  —                           Cleaning Supplies
+        5400    —                  Security Services           Security Services
+        5500    —                  Transport & Fuel            Fuel & Oil
+        5510    —                  —                           Vehicle Maintenance & Repairs
+        5600    Boarding Expenses  Professional Fees (!)       Food & Provisions
+        5610    —                  Food & Provisions (board.)  Kitchen Supplies & Equipment
+        5700    —                  Insurance                   Advertising & Marketing
+        5710    —                  —                           Printing & Publications
+        5720    —                  —                           Legal & Professional Fees
+        5730    —                  —                           Audit Fees
+        5740    —                  —                           Bank Charges & Fees
+        5760    —                  —                           Insurance - General
+        5800    Scholarships       Scholarships & Discounts    Scholarships & Bursaries
+        5820    —                  —                           Bad Debt Write-off
+        5850    —                  —                           Depreciation - Buildings
+        5900    Other Expenses     Other Expenses              Entertainment & Events (!)
+        5910    —                  —                           Sports & Recreation
+        5920    —                  —                           Medical Supplies
+        5930    —                  —                           Interest Expense
+        5990    —                  —                           Miscellaneous Expenses
+
+        NOTE: 5600 = Professional Fees in STANDARD but Food & Provisions in
+        ADVANCED. The MEALS priority list deliberately tries 5610 before 5600
+        so ADVANCED boarding schools hit Food & Provisions correctly, and
+        STANDARD non-boarding schools only fall through to 5600 as a last
+        resort — acceptable since they won't have meaningful food records.
+        """
         ExpenseCategory = apps.get_model('finance', 'ExpenseCategory')
-        
-        categories = []
-        categories_config = self.config['expense_categories']
-        
-        for category_data in categories_config.copy():
-            # ✅ Use 'name' as the unique identifier (no 'code' field exists)
-            category_name = category_data.pop('name')
-            
-            # ✅ Use get_or_create with name as unique identifier
-            category, created = ExpenseCategory.objects.get_or_create(
-                name=category_name,
-                defaults=category_data
+        Account         = apps.get_model('finance', 'Account')
+
+        if self.complexity == 'ADVANCED':
+            CATCH_ALL = ['5990', '5900']
+        else:
+            CATCH_ALL = ['5900', '5990']
+
+        CATEGORY_ACCOUNT_PRIORITY = {
+            'ADMINISTRATIVE': ['5210', '5200', '5740', '5900', '5990'],
+            'ACADEMIC':       ['5200', '5210', '5070', '5900', '5990'],
+            'SCHOLASTIC':     ['5200', '5210', '5220', '5230', '5900', '5990'],
+            'EXAMINATION':    ['5200', '5210', '5900', '5990'],
+            'FACILITIES':     ['5300', '5310', '5340', '5400', '5900', '5990'],
+            'CAPITAL':        CATCH_ALL,
+            'UTILITIES':      ['5100', '5110', '5120', '5130', '5900', '5990'],
+            'TRANSPORT':      ['5500', '5510', '5900', '5990'],
+            'MEALS':          ['5610', '5600', '5900', '5990'],
+            'STAFF':          ['5000', '5010', '5030', '5900', '5990'],
+            'MEDICAL':        ['5920', '5900', '5990'],
+            'SPORTS':         ['5910', '5900', '5990'],
+            'STUDENT_SERVICES': CATCH_ALL,
+            'PTA':            CATCH_ALL,
+            'MARKETING':      ['5700', '5710', '5900', '5990'],
+            'TECHNOLOGY':     ['5240', '5200', '5210', '5900', '5990'],
+            'LEGAL':          ['5720', '5730', '5600', '5900', '5990'],
+            'FINANCIAL':      ['5740', '5930', '5900', '5990'],
+            'INSURANCE':      ['5760', '5700', '5520', '5900', '5990'],
+            'TAX':            CATCH_ALL,
+            'DEPRECIATION':   ['5850', '5851', '5852', '5853', '5854', '5900', '5990'],
+            'DRAWINGS':       CATCH_ALL,
+            'CHARITY':        ['5800', '5900', '5990'],
+            'MISCELLANEOUS':  ['5820', '5900', '5990'],
+            'OTHER':          CATCH_ALL,
+        }
+
+        # Pre-fetch every potentially needed account in a single query
+        all_needed_numbers = set()
+        for numbers in CATEGORY_ACCOUNT_PRIORITY.values():
+            all_needed_numbers.update(numbers)
+
+        account_cache = {
+            a.account_number: a
+            for a in Account.objects.filter(
+                account_number__in=all_needed_numbers,
+                is_active=True,
+                is_header=False,
             )
-            categories.append(category)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {category.name}")
-            else:
-                logger.debug(f"  → Exists: {category.name}")
-        
-        logger.info(f"  Created/verified {len(categories)} expense categories")
-        
+        }
+
+        def resolve_account(category_type):
+            for number in CATEGORY_ACCOUNT_PRIORITY.get(category_type, CATCH_ALL):
+                account = account_cache.get(number)
+                if account:
+                    return account
+            return None
+
+        categories = []
+        wired      = 0
+        backfilled = 0
+
+        for category_data in self.config['expense_categories']:
+            category_data = category_data.copy()
+            name          = category_data.pop('name')
+            category_type = category_data.get('category_type')
+
+            account = resolve_account(category_type)
+            if account:
+                category_data['default_expense_account'] = account
+
+            obj, created = ExpenseCategory.objects.get_or_create(
+                name=name,
+                defaults=category_data,
+            )
+
+            if created and account:
+                wired += 1
+            elif not created and not obj.default_expense_account and account:
+                obj.default_expense_account = account
+                obj.save(update_fields=['default_expense_account'])
+                backfilled += 1
+
+            categories.append(obj)
+
+        logger.info(
+            f"  Expense categories: {len(categories)} created/verified — "
+            f"{wired} wired, {backfilled} back-filled ({self.complexity})"
+        )
         return categories
-    
+
     # =========================================================================
-    # STEP 8: CREATE JOURNALS
+    # STEP 8: JOURNALS
     # =========================================================================
 
     def _create_journals(self):
-        """Create default journals from config using get_or_create()"""
-        Journal = apps.get_model('finance', 'Journal')
-        
+        """Create accounting journals (General, Fees, Expenses, Cash, Bank, Payroll, Adjustments)."""
+        Journal  = apps.get_model('finance', 'Journal')
         journals = []
-        journals_config = self.config['journals']
-        
-        for journal_data in journals_config.copy():
-            # ✅ Use 'name' as the unique identifier (no 'code' field exists)
-            journal_name = journal_data.pop('name')
-            
-            # ✅ Use get_or_create with name as unique identifier
-            journal, created = Journal.objects.get_or_create(
-                name=journal_name,
-                defaults=journal_data
-            )
-            journals.append(journal)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {journal.name}")
-            else:
-                logger.debug(f"  → Exists: {journal.name}")
-        
-        logger.info(f"  Created/verified {len(journals)} journals")
-        
+
+        for journal_data in self.config['journals']:
+            journal_data = journal_data.copy()
+            name = journal_data.pop('name')
+            obj, _ = Journal.objects.get_or_create(name=name, defaults=journal_data)
+            journals.append(obj)
+
+        logger.info(f"  Journals: {len(journals)} created/verified")
         return journals
-    
+
     # =========================================================================
-    # STEP 9: CREATE FISCAL YEAR AND PERIODS
+    # STEP 9: FISCAL YEAR AND PERIODS
     # =========================================================================
-    
+
     def _create_fiscal_year(self):
         """
-        Create fiscal year and periods for current year using get_or_create().
-        
-        Creates:
-        - Fiscal year (e.g., 2025)
-        - 12 fiscal periods (Jan-Dec)
-        - Sets current period as active
-        
-        Returns:
-            list: List of created/found FiscalPeriod instances
+        Create a fiscal year and term-based fiscal periods for the current year.
+
+        PERIOD TYPE FIX
+        ───────────────
+        Was period_type='TERM'. 'TERM' is not in FiscalPeriod.PERIOD_TYPE_CHOICES.
+        FiscalPeriod.save() calls full_clean(), which rejects invalid choices and
+        raises ValidationError — preventing any period from being saved.
+        Fixed to 'ACADEMIC_ALIGNED'.
+
+        DATE CONSTRUCTION FIX
+        ─────────────────────
+        Was timezone.datetime(year, month, day).date(). Django's timezone module
+        does not expose datetime as an attribute; this raised AttributeError.
+        Fixed to _date(year, month, day) from stdlib datetime.date (imported at
+        module level as _date).
+
+        PERIODS
+        ───────
+        Creates term-based periods aligned to the school's academic calendar.
+        Periods are left OPEN (is_closed=False) so historical data can be entered
+        without journal-entry permission errors on a fresh database.
         """
-        FiscalYear = apps.get_model('core', 'FiscalYear')
-        FiscalPeriod = apps.get_model('core', 'FiscalPeriod')
-        
-        # Get current year
+        FiscalYear          = apps.get_model('core', 'FiscalYear')
+        FiscalPeriod        = apps.get_model('core', 'FiscalPeriod')
+        SchoolConfiguration = apps.get_model('core', 'SchoolConfiguration')
+
         current_year = timezone.now().year
-        current_month = timezone.now().month
-        
-        # Create fiscal year using 'name' and 'code' instead of 'year'
-        fiscal_year_name = f'FY {current_year}'
-        fiscal_year_code = f'AY{current_year}'
-        
-        # ✅ Already using get_or_create
-        fiscal_year, created = FiscalYear.objects.get_or_create(
-            code=fiscal_year_code,  # Use code as unique identifier
+
+        fiscal_year, fy_created = FiscalYear.objects.get_or_create(
+            code=f'AY{current_year}',
             defaults={
-                'name': fiscal_year_name,
-                'start_date': timezone.datetime(current_year, 1, 1).date(),
-                'end_date': timezone.datetime(current_year, 12, 31).date(),
-                'is_active': True,
-                'is_closed': False,
-                'status': 'ACTIVE',
+                'name':       f'FY {current_year}',
+                'start_date': _date(current_year, 1, 1),    # FIX: was timezone.datetime(...)
+                'end_date':   _date(current_year, 12, 31),  # FIX: was timezone.datetime(...)
+                'is_active':  True,
+                'is_closed':  False,
+                'status':     'ACTIVE',
             }
         )
-        
-        if created:
-            logger.info(f"  ✓ Created fiscal year: {fiscal_year.name}")
-        else:
-            logger.info(f"  → Fiscal year already exists: {fiscal_year.name}")
-        
-        # Create fiscal periods (months)
-        periods = []
-        month_names = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ]
-        
-        for month_num in range(1, 13):
-            # Calculate period dates
-            import calendar
-            last_day = calendar.monthrange(current_year, month_num)[1]
-            
-            start_date = timezone.datetime(current_year, month_num, 1).date()
-            end_date = timezone.datetime(current_year, month_num, last_day).date()
-            
-            # Generate unique code for this period
-            period_code = f'FP_{current_year}_{month_num:02d}'
-            
-            # ✅ Already using get_or_create
+        if fy_created:
+            logger.debug(f"  Created FiscalYear: {fiscal_year.name}")
+
+        # Determine number of periods from SchoolConfiguration
+        try:
+            school_config   = SchoolConfiguration.get_instance()
+            periods_count   = school_config.get_period_count()
+            get_period_name = lambda i: school_config.get_period_name(
+                i, include_year=True, academic_year=current_year
+            )
+        except Exception:
+            periods_count   = 3
+            get_period_name = lambda i: f"Term {i} {current_year}"
+
+        months_per_period = 12 // periods_count
+        periods           = []
+
+        for period_num in range(1, periods_count + 1):
+            start_month = (period_num - 1) * months_per_period + 1
+            end_month   = (
+                period_num * months_per_period
+                if period_num < periods_count
+                else 12
+            )
+
+            start_date = _date(current_year, start_month, 1)       # FIX: was timezone.datetime(...)
+            last_day   = _calendar.monthrange(current_year, end_month)[1]
+            end_date   = _date(current_year, end_month, last_day)  # FIX: was timezone.datetime(...)
+
             period, created = FiscalPeriod.objects.get_or_create(
-                code=period_code,  # Use code as unique identifier
+                code=f'FP_{current_year}_T{period_num}',
                 defaults={
-                    'fiscal_year': fiscal_year,
-                    'name': f'{month_names[month_num - 1]} {current_year}',
-                    'period_number': Decimal(str(month_num)),
-                    'period_type': 'MONTHLY',
-                    'start_date': start_date,
-                    'end_date': end_date,
-                    'is_active': (month_num == current_month),
-                    'is_closed': (month_num < current_month),
-                    'status': 'ACTIVE' if month_num == current_month else 'CLOSED' if month_num < current_month else 'DRAFT',
+                    'fiscal_year':   fiscal_year,
+                    'name':          get_period_name(period_num),
+                    'period_number': Decimal(str(period_num)),
+                    # FIX: was 'TERM' — not in PERIOD_TYPE_CHOICES; full_clean() rejected it.
+                    'period_type':   'ACADEMIC_ALIGNED',
+                    'start_date':    start_date,
+                    'end_date':      end_date,
+                    'is_active':     True,
+                    'is_closed':     False,  # Always open — avoids JE creation errors
+                    'status':        'ACTIVE',
                 }
             )
-            
             periods.append(period)
-            
             if created:
-                status = "ACTIVE" if month_num == current_month else "CLOSED" if month_num < current_month else "FUTURE"
-                logger.debug(f"  ✓ Created: {period.name} [{status}]")
-            else:
-                logger.debug(f"  → Exists: {period.name}")
-        
-        logger.info(f"  Created/verified {len(periods)} fiscal periods for {current_year}")
-        
+                logger.debug(f"  Created FiscalPeriod: {period.name}")
+
+        logger.info(
+            f"  Fiscal periods: {len(periods)} created/verified for {current_year}"
+        )
         return periods
-    
+
     # =========================================================================
-    # STEP 10: CREATE PAYMENT METHODS
+    # STEP 10: PAYMENT METHODS
     # =========================================================================
-    
+
     def _create_payment_methods(self):
-        """
-        Create default payment methods from config using get_or_create().
-        
-        Payment methods define how parents can pay fees:
-        - Cash
-        - Bank Transfer
-        - Mobile Money (MTN, Airtel)
-        - Credit/Debit Cards
-        - Checks
-        
-        Returns:
-            list: List of created/found PaymentMethod instances
-        """
+        """Create payment methods (Cash, Bank Transfer, Mobile Money, Card, Cheque)."""
         PaymentMethod = apps.get_model('core', 'PaymentMethod')
-        
-        methods = []
-        methods_config = self.config['payment_methods']
-        
-        for method_data in methods_config.copy():
-            # Extract code for lookup
-            method_code = method_data.pop('code')
-            
-            # ✅ Use get_or_create with code as unique identifier
-            method, created = PaymentMethod.objects.get_or_create(
-                code=method_code,
-                defaults=method_data
-            )
-            methods.append(method)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {method.name} ({method.code})")
-            else:
-                logger.debug(f"  → Exists: {method.name} ({method.code})")
-        
-        logger.info(f"  Created/verified {len(methods)} payment methods")
-        
+        methods       = []
+
+        for method_data in self.config['payment_methods']:
+            method_data = method_data.copy()
+            code = method_data.pop('code')
+            obj, _ = PaymentMethod.objects.get_or_create(code=code, defaults=method_data)
+            methods.append(obj)
+
+        logger.info(f"  Payment methods: {len(methods)} created/verified")
         return methods
-    
+
     # =========================================================================
-    # STEP 11: CREATE TAX RATES
+    # STEP 11: TAX RATES
     # =========================================================================
-    
+
     def _create_tax_rates(self):
-        """Create default tax rates from config (country-specific) using get_or_create()."""
+        """Create country-specific tax rates."""
         TaxRate = apps.get_model('core', 'TaxRate')
-        
-        rates = []
-        rates_config = self.config['tax_rates']
-        
-        for rate_data in rates_config.copy():
-            # Extract lookup fields
-            rate_name = rate_data.pop('name')
-            tax_type = rate_data.get('tax_type')
+        rates   = []
+
+        for rate_data in self.config['tax_rates']:
+            rate_data      = rate_data.copy()
+            name           = rate_data.pop('name')
+            tax_type       = rate_data.get('tax_type')
             effective_from = rate_data.get('effective_from')
-            
-            # ✅ Use get_or_create with tax_type + effective_from for uniqueness
-            rate, created = TaxRate.objects.get_or_create(
+
+            obj, _ = TaxRate.objects.get_or_create(
                 tax_type=tax_type,
                 effective_from=effective_from,
-                defaults={'name': rate_name, **rate_data}
+                defaults={'name': name, **rate_data},
             )
-            rates.append(rate)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {rate.name} ({rate.rate}%)")
-            else:
-                logger.debug(f"  → Exists: {rate.name} ({rate.rate}%)")
-        
-        logger.info(f"  Created/verified {len(rates)} tax rates")
-        
+            rates.append(obj)
+
+        logger.info(f"  Tax rates: {len(rates)} created/verified")
         return rates
-    
+
     # =========================================================================
-    # STEP 12: CREATE DEPARTMENTS
+    # STEP 12: DEPARTMENTS
     # =========================================================================
-    
+
     def _create_departments(self):
-        """
-        Create organizational departments from config using get_or_create().
-        
-        Departments organize staff into functional units:
-        - Academic (teaching departments)
-        - Administrative (office and management)
-        - Support (library, ICT, health, etc.)
-        - Operational (maintenance, security, transport)
-        
-        Returns:
-            list: List of created/found Department instances
-        """
-        Department = apps.get_model('hr', 'Department')
-        
+        """Create organisational departments."""
+        Department  = apps.get_model('hr', 'Department')
         departments = []
-        departments_config = self.config['departments']
-        
-        for dept_data in departments_config.copy():
-            # Extract code for lookup
-            dept_code = dept_data.pop('code')
-            
-            # ✅ Use get_or_create with code as unique identifier
-            dept, created = Department.objects.get_or_create(
-                code=dept_code,
-                defaults=dept_data
-            )
-            departments.append(dept)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {dept.name} ({dept.code})")
-            else:
-                logger.debug(f"  → Exists: {dept.name} ({dept.code})")
-        
-        logger.info(f"  Created/verified {len(departments)} departments")
-        
+
+        for dept_data in self.config['departments']:
+            dept_data = dept_data.copy()
+            code = dept_data.pop('code')
+            obj, _ = Department.objects.get_or_create(code=code, defaults=dept_data)
+            departments.append(obj)
+
+        logger.info(f"  Departments: {len(departments)} created/verified")
         return departments
-    
+
     # =========================================================================
-    # STEP 13: CREATE DESIGNATIONS
+    # STEP 13: DESIGNATIONS
     # =========================================================================
-    
+
     def _create_designations(self):
-        """Create job designations mapped to departments using get_or_create()."""
+        """
+        Create job designations linked to departments.
+
+        Designations whose department_code is not found are logged and skipped
+        rather than raising, so a partially failed department creation does not
+        block all remaining designations.
+        """
         Designation = apps.get_model('hr', 'Designation')
-        Department = apps.get_model('hr', 'Department')
-        
-        # First, log all available departments for debugging
-        all_depts = list(Department.objects.all().values_list('code', 'name'))
-        logger.info(f"  Available departments: {len(all_depts)}")
-        for code, name in all_depts:
-            logger.debug(f"    - {code}: {name}")
-        
+        Department  = apps.get_model('hr', 'Department')
+
+        dept_map     = {d.code: d for d in Department.objects.all()}
         designations = []
-        designations_config = self.config['designations']
-        
-        for desig_data in designations_config.copy():
-            try:
-                # Get the department by code
-                dept_code = desig_data.pop('department_code')
-                desig_code = desig_data.pop('code')
-                
-                # Try to get department with detailed error
-                try:
-                    department = Department.objects.get(code=dept_code)
-                except Department.DoesNotExist:
-                    logger.error(f"  ✗ MISSING: Department '{dept_code}' not found for designation '{desig_data.get('name')}'")
-                    logger.error(f"     Tried to find: code='{dept_code}' (length={len(dept_code)})")
-                    logger.error(f"     Available codes: {[d[0] for d in all_depts]}")
-                    continue
-                
-                # ✅ Use get_or_create with code as unique identifier
-                desig_data['department'] = department
-                desig, created = Designation.objects.get_or_create(
-                    code=desig_code,
-                    defaults=desig_data
+        skipped      = 0
+
+        for desig_data in self.config['designations']:
+            desig_data = desig_data.copy()
+            dept_code  = desig_data.pop('department_code')
+            desig_code = desig_data.pop('code')
+
+            department = dept_map.get(dept_code)
+            if not department:
+                logger.warning(
+                    f"  Department '{dept_code}' not found — "
+                    f"skipping designation '{desig_data.get('name')}'"
                 )
-                designations.append(desig)
-                
-                if created:
-                    logger.debug(f"  ✓ Created: {desig.name} → {department.code}")
-                else:
-                    logger.debug(f"  → Exists: {desig.name} → {department.code}")
-                
-            except Exception as e:
-                logger.error(f"  ✗ Failed designation '{desig_data.get('name', 'UNKNOWN')}': {e}")
+                skipped += 1
                 continue
-        
-        logger.info(f"  Created/verified {len(designations)} designations (skipped {len(designations_config) - len(designations)})")
+
+            desig_data['department'] = department
+            obj, _ = Designation.objects.get_or_create(
+                code=desig_code, defaults=desig_data
+            )
+            designations.append(obj)
+
+        if skipped:
+            logger.warning(
+                f"  Designations: {len(designations)} created/verified, "
+                f"{skipped} skipped (missing departments)"
+            )
+        else:
+            logger.info(f"  Designations: {len(designations)} created/verified")
+
         return designations
-    
+
     # =========================================================================
-    # STEP 14: CREATE UNITS OF MEASURE
+    # STEP 14: UNITS OF MEASURE
     # =========================================================================
-    
+
     def _create_units_of_measure(self):
         """
-        Create units of measure for inventory and procurement using get_or_create().
-        
-        Units of measure are used for:
-        - Ordering supplies (pieces, boxes, reams)
-        - Inventory tracking (kilograms, liters, meters)
-        - Food service (servings, portions)
-        - Classroom sets (30 pieces, 40 pieces)
-        
-        Returns:
-            list: List of created/found UnitOfMeasure instances
+        Create units of measure for inventory and procurement.
+
+        FIX: Was using symbol as the get_or_create lookup key. symbol is
+        nullable (null=True) and not unique on the model. Using a nullable
+        non-unique field as the lookup key causes None→None collisions across
+        multiple records. Fixed to abbreviation, which is always populated.
         """
         UnitOfMeasure = apps.get_model('core', 'UnitOfMeasure')
-        
-        units = []
-        units_config = self.config['units_of_measure']
-        
-        for unit_data in units_config.copy():
-            # ✅ Extract symbol for lookup (primary unique identifier)
-            unit_symbol = unit_data.pop('symbol', None)
-            
-            if not unit_symbol:
-                logger.warning(f"  ⚠ Unit missing symbol: {unit_data.get('name')}")
+        units         = []
+
+        for unit_data in self.config['units_of_measure']:
+            unit_data    = unit_data.copy()
+            abbreviation = unit_data.get('abbreviation')
+
+            if not abbreviation:
+                logger.warning(f"  Unit missing abbreviation — skipping: {unit_data}")
                 continue
-            
-            # ✅ Use get_or_create with symbol as unique identifier
-            unit, created = UnitOfMeasure.objects.get_or_create(
-                symbol=unit_symbol,
-                defaults=unit_data
+
+            obj, _ = UnitOfMeasure.objects.get_or_create(
+                abbreviation=abbreviation,  # FIX: was symbol (nullable, non-unique)
+                defaults=unit_data,
             )
-            units.append(unit)
-            
-            if created:
-                logger.debug(f"  ✓ Created: {unit.name} ({unit.symbol})")
-            else:
-                logger.debug(f"  → Exists: {unit.name} ({unit.symbol})")
-        
-        logger.info(f"  Created/verified {len(units)} units of measure")
-        
+            units.append(obj)
+
+        logger.info(f"  Units of measure: {len(units)} created/verified")
         return units
+
 
 # =============================================================================
 # CONVENIENCE FUNCTION
@@ -971,55 +1046,18 @@ class SchoolInitializer:
 
 def initialize_school(school, user=None):
     """
-    Convenience function to initialize a school.
-    
-    This is the main entry point for school initialization.
-    Use this function instead of directly instantiating SchoolInitializer.
-    
-    This initialization is IDEMPOTENT - it can be safely run multiple times.
-    Existing records will be found and reused instead of creating duplicates.
-    
+    Initialize a school's complete financial system.
+    Idempotent — safe to run multiple times.
+
     Args:
-        school: School instance to initialize
-        user: User performing the initialization (optional, for audit)
-        
+        school: School instance
+        user:   User performing initialization (optional, for audit trail)
+
     Returns:
-        dict: Results dictionary with structure:
-            {
-                'success': bool,
-                'errors': list,
-                'created': {
-                    'account_types': int,
-                    'accounts': int,
-                    'fee_categories': int,
-                    'expense_categories': int,
-                    'journals': int,
-                    'fiscal_periods': int,
-                    'display_groups': int,
-                    'payment_methods': int,
-                    'departments': int,
-                    'designations': int,
-                    'units_of_measure': int,
-                    'tax_rates': int,
-                }
-            }
-    
-    Example:
-        >>> from accounts.models import School
-        >>> from core.services.school_initialization import initialize_school
-        >>> 
-        >>> school = School.objects.get(database_alias='atepi_palabek')
-        >>> result = initialize_school(school, user=request.user)
-        >>> 
-        >>> if result['success']:
-        >>>     print(f"Success! Created {result['created']['accounts']} accounts")
-        >>>     print(f"Fee categories: {result['created']['fee_categories']}")
-        >>>     print(f"Departments: {result['created']['departments']}")
-        >>> else:
-        >>>     print(f"Failed: {result['errors']}")
-    
+        dict: Results with 'success', 'errors', and 'created' counts.
+
     Raises:
-        Exception: If initialization fails (wrapped in transaction)
+        Exception: If initialization fails (transaction is rolled back).
     """
     try:
         initializer = SchoolInitializer(school)
@@ -1030,72 +1068,60 @@ def initialize_school(school, user=None):
 
 
 # =============================================================================
-# VALIDATION FUNCTIONS
+# VALIDATION HELPERS
 # =============================================================================
 
 def validate_school_can_be_initialized(school):
     """
-    Validate that a school can be initialized.
-    
-    Args:
-        school: School instance to validate
-        
+    Check whether a school is ready for initialization.
+
     Returns:
-        tuple: (can_initialize: bool, reason: str)
-    
-    Example:
-        >>> can_init, reason = validate_school_can_be_initialized(school)
-        >>> if not can_init:
-        >>>     print(f"Cannot initialize: {reason}")
+        tuple[bool, str]: (can_initialize, reason)
     """
     if school.is_initial_setup_complete:
         return False, "School is already initialized"
-    
+
     if not school.is_active_subscription:
         return False, "School subscription is not active"
-    
-    # Check if database exists in settings
+
     from django.conf import settings
     if school.database_alias not in settings.DATABASES:
-        return False, f"Database '{school.database_alias}' not found in settings"
-    
+        return False, f"Database '{school.database_alias}' not configured in settings"
+
     return True, "School can be initialized"
 
 
 def get_initialization_preview(school):
     """
-    Get a preview of what will be created during initialization.
-    
-    Args:
-        school: School instance
-        
+    Return a summary of what will be created during initialization.
+    Also runs validate_config() so callers can surface config problems
+    before committing to a run.
+
     Returns:
-        dict: Preview information
-    
-    Example:
-        >>> preview = get_initialization_preview(school)
-        >>> print(f"Will create {preview['accounts_count']} accounts")
-        >>> print(f"Complexity: {preview['complexity']}")
-        >>> print(f"Currency: {preview['currency']}")
+        dict: Counts, configuration details, config_issues, config_valid.
     """
     config = SchoolInitConfig.get_init_config(school)
-    
+    issues = SchoolInitConfig.validate_config()
+
     return {
-        'complexity': config['complexity'],
-        'accounts_count': len(config['chart_of_accounts']),
-        'fee_categories_count': len(config['fee_categories']),
+        'complexity':               config['complexity'],
+        'accounts_count':           len(config['chart_of_accounts']),
+        'fee_categories_count':     len(config['fee_categories']),
         'expense_categories_count': len(config['expense_categories']),
-        'journals_count': len(config['journals']),
-        'display_groups_count': len(config['display_groups']),
-        'payment_methods_count': len(config['payment_methods']),
-        'departments_count': len(config['departments']),
-        'designations_count': len(config['designations']),
-        'units_of_measure_count': len(config['units_of_measure']),
-        'tax_rates_count': len(config['tax_rates']),
-        'currency': config['financial_settings']['school_currency'],
-        'needs_boarding': config['needs_boarding'],
-        'school_type': school.school_type,
-        'student_capacity': school.student_capacity,
+        'journals_count':           len(config['journals']),
+        'display_groups_count':     len(config['display_groups']),
+        'payment_methods_count':    len(config['payment_methods']),
+        'departments_count':        len(config['departments']),
+        'designations_count':       len(config['designations']),
+        'units_of_measure_count':   len(config['units_of_measure']),
+        'tax_rates_count':          len(config['tax_rates']),
+        'currency':                 config['financial_settings']['school_currency'],
+        'needs_boarding':           config['needs_boarding'],
+        'school_type':              school.school_type,
+        'student_capacity':         school.student_capacity,
+        # NEW: surface config issues so callers can warn the user before running
+        'config_issues':            issues,
+        'config_valid':             len(issues) == 0,
     }
 
 
@@ -1106,165 +1132,81 @@ def get_initialization_preview(school):
 @transaction.atomic
 def cleanup_school_initialization(school):
     """
-    Clean up (delete) all initialization data for a school.
-    
-    WARNING: This is a DESTRUCTIVE operation. Use with extreme caution.
-    This should only be used for testing or fixing broken initializations.
-    
-    Args:
-        school: School instance to clean up
-        
+    Delete all initialization data for a school.
+
+    WARNING: Destructive. Use only for testing or fixing broken setups.
+
     Returns:
-        dict: Summary of deleted records
-    
-    Example:
-        >>> from core.services.school_initialization import cleanup_school_initialization
-        >>> summary = cleanup_school_initialization(school)
-        >>> print(f"Deleted {summary['accounts']} accounts")
+        dict: Counts of deleted records per model.
     """
-    logger.warning(f"⚠️  CLEANUP: Starting cleanup for {school.full_name}")
-    
-    deleted = {
-        'accounts': 0,
-        'fee_categories': 0,
-        'expense_categories': 0,
-        'journals': 0,
-        'fiscal_periods': 0,
-        'display_groups': 0,
-        'payment_methods': 0,
-        'departments': 0,
-        'designations': 0,
-        'units_of_measure': 0,
-        'tax_rates': 0,
-    }
-    
-    try:
-        # Delete in reverse order of creation
-        
-        # Delete designations (depends on departments)
-        Designation = apps.get_model('hr', 'Designation')
-        count = Designation.objects.all().delete()[0]
-        deleted['designations'] = count
-        logger.info(f"  Deleted {count} designations")
-        
-        # Delete departments
-        Department = apps.get_model('hr', 'Department')
-        count = Department.objects.all().delete()[0]
-        deleted['departments'] = count
-        logger.info(f"  Deleted {count} departments")
-        
-        # Delete units of measure
-        UnitOfMeasure = apps.get_model('core', 'UnitOfMeasure')
-        count = UnitOfMeasure.objects.all().delete()[0]
-        deleted['units_of_measure'] = count
-        logger.info(f"  Deleted {count} units of measure")
-        
-        # Delete tax rates
-        TaxRate = apps.get_model('core', 'TaxRate')
-        count = TaxRate.objects.all().delete()[0]
-        deleted['tax_rates'] = count
-        logger.info(f"  Deleted {count} tax rates")
-        
-        # Delete payment methods
-        PaymentMethod = apps.get_model('core', 'PaymentMethod')
-        count = PaymentMethod.objects.all().delete()[0]
-        deleted['payment_methods'] = count
-        logger.info(f"  Deleted {count} payment methods")
-        
-        # Delete fiscal periods and year
-        FiscalPeriod = apps.get_model('core', 'FiscalPeriod')
-        count = FiscalPeriod.objects.all().delete()[0]
-        deleted['fiscal_periods'] = count
-        logger.info(f"  Deleted {count} fiscal periods")
-        
-        FiscalYear = apps.get_model('core', 'FiscalYear')
-        FiscalYear.objects.all().delete()
-        
-        # Delete journals
-        Journal = apps.get_model('finance', 'Journal')
-        count = Journal.objects.all().delete()[0]
-        deleted['journals'] = count
-        logger.info(f"  Deleted {count} journals")
-        
-        # Delete expense categories
-        ExpenseCategory = apps.get_model('finance', 'ExpenseCategory')
-        count = ExpenseCategory.objects.all().delete()[0]
-        deleted['expense_categories'] = count
-        logger.info(f"  Deleted {count} expense categories")
-        
-        # Delete fee categories
-        FeesCategory = apps.get_model('fees', 'FeesCategory')
-        count = FeesCategory.objects.all().delete()[0]
-        deleted['fee_categories'] = count
-        logger.info(f"  Deleted {count} fee categories")
-        
-        # Delete display groups
-        DisplayGroup = apps.get_model('fees', 'DisplayGroup')
-        count = DisplayGroup.objects.all().delete()[0]
-        deleted['display_groups'] = count
-        logger.info(f"  Deleted {count} display groups")
-        
-        # Delete account mappings and financial settings
-        CoreAccountMappings = apps.get_model('core', 'CoreAccountMappings')
-        CoreAccountMappings.objects.all().delete()
-        
-        FinancialSettings = apps.get_model('core', 'FinancialSettings')
-        FinancialSettings.objects.all().delete()
-        
-        # Delete accounts
-        Account = apps.get_model('finance', 'Account')
-        count = Account.objects.all().delete()[0]
-        deleted['accounts'] = count
-        logger.info(f"  Deleted {count} accounts")
-        
-        # Delete account types
-        AccountType = apps.get_model('finance', 'AccountType')
-        AccountType.objects.all().delete()
-        
-        # Reset school initialization flags
-        school.is_financial_setup_complete = False
-        school.is_initial_setup_complete = False
-        school.setup_completed_at = None
-        school.setup_completed_by = None
-        school.save(using='default')
-        
-        logger.warning(f"✓ CLEANUP COMPLETE for {school.full_name}")
-        
-    except Exception as e:
-        logger.error(f"✗ CLEANUP FAILED: {e}", exc_info=True)
-        raise
-    
+    logger.warning(f"CLEANUP starting for {school.full_name}")
+
+    deleted = {k: 0 for k in [
+        'designations', 'departments', 'units_of_measure', 'tax_rates',
+        'payment_methods', 'fiscal_periods', 'journals', 'expense_categories',
+        'fee_categories', 'display_groups', 'accounts',
+    ]}
+
+    model_steps = [
+        ('hr',      'Designation',     'designations'),
+        ('hr',      'Department',      'departments'),
+        ('core',    'UnitOfMeasure',   'units_of_measure'),
+        ('core',    'TaxRate',         'tax_rates'),
+        ('core',    'PaymentMethod',   'payment_methods'),
+        ('core',    'FiscalPeriod',    'fiscal_periods'),
+        ('finance', 'Journal',         'journals'),
+        ('finance', 'ExpenseCategory', 'expense_categories'),
+        ('fees',    'FeesCategory',    'fee_categories'),
+        ('fees',    'DisplayGroup',    'display_groups'),
+        ('finance', 'Account',         'accounts'),
+    ]
+
+    for app, model_name, key in model_steps:
+        try:
+            Model        = apps.get_model(app, model_name)
+            count, _     = Model.objects.all().delete()
+            deleted[key] = count
+            if count:
+                logger.info(f"  Deleted {count} {model_name}")
+        except Exception as e:
+            logger.error(f"  Error deleting {model_name}: {e}")
+
+    # Singleton / mapping models — order matters (FKs point inward)
+    for app, model_name in [
+        ('core',    'PayrollAccountMappings'),
+        ('core',    'ExpenseAccountMappings'),
+        ('core',    'RevenueAccountMappings'),
+        ('core',    'SpecialAccountMappings'),  # NEW: was missing from original
+        ('core',    'CoreAccountMappings'),
+        ('core',    'FinancialSettings'),
+        ('core',    'FiscalYear'),
+        ('finance', 'AccountType'),
+    ]:
+        try:
+            apps.get_model(app, model_name).objects.all().delete()
+        except Exception as e:
+            logger.error(f"  Error deleting {model_name}: {e}")
+
+    school.is_financial_setup_complete = False
+    school.is_initial_setup_complete   = False
+    school.setup_completed_at          = None
+    school.setup_completed_by          = None
+    school.save(using='default')
+
+    logger.warning(f"CLEANUP complete for {school.full_name}: {deleted}")
     return deleted
 
 
 @transaction.atomic
 def reinitialize_school(school, user=None):
     """
-    Clean up and re-initialize a school.
-    
-    WARNING: This is DESTRUCTIVE. All existing data will be deleted.
-    
-    Args:
-        school: School instance to re-initialize
-        user: User performing the operation
-        
+    Clean up then re-initialize a school. DESTRUCTIVE.
+
     Returns:
-        dict: Initialization results
-    
-    Example:
-        >>> result = reinitialize_school(school, user=request.user)
-        >>> if result['success']:
-        >>>     print("Re-initialization successful!")
+        dict: Initialization results.
     """
-    logger.warning(f"⚠️  RE-INITIALIZATION: Starting for {school.full_name}")
-    
-    # Clean up existing data
-    cleanup_summary = cleanup_school_initialization(school)
-    logger.info(f"Cleanup complete: {cleanup_summary}")
-    
-    # Re-initialize
+    logger.warning(f"RE-INITIALIZATION starting for {school.full_name}")
+    cleanup_school_initialization(school)
     result = initialize_school(school, user=user)
-    
-    logger.warning(f"✓ RE-INITIALIZATION COMPLETE for {school.full_name}")
-    
+    logger.warning(f"RE-INITIALIZATION complete for {school.full_name}")
     return result

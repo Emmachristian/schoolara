@@ -20,8 +20,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Add the 'apps' directory to the Python path to show where apps are located
 sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# =============================================================================
+# SECURITY
+# =============================================================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-f70nbgoweb^5ry54plu30k@_fpt60klja0r)(-t^!1l*xc5mh7'
@@ -31,7 +32,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-# Application definition
+# =============================================================================
+# APPLICATION DEFINITION
+# =============================================================================
 
 INSTALLED_APPS = [
     # Default Django apps
@@ -58,24 +61,14 @@ INSTALLED_APPS = [
     'uniforms',
     'utils',
 
-    # Third-party Apps
+    # Third-party apps
     'django.contrib.humanize',
-    'widget_tweaks',   
+    'widget_tweaks',
 ]
 
-
-# Image Cropping Configuration
-THUMBNAIL_PROCESSORS = (
-    'image_cropping.thumbnail_processors.crop_corners',
-    'easy_thumbnails.processors.colorspace',
-    'easy_thumbnails.processors.autocrop',
-    'easy_thumbnails.processors.scale_and_crop',
-    'easy_thumbnails.processors.filters',
-)
-
-# Optional: Image cropping widget settings
-IMAGE_CROPPING_THUMB_SIZE = (300, 300)
-IMAGE_CROPPING_SIZE_WARNING = True
+# =============================================================================
+# MIDDLEWARE  (ORDER MATTERS)
+# =============================================================================
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -86,68 +79,45 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
-    # ✅ School Management System Middlewares (ORDER MATTERS!)
-    'schoolara.middleware.SchoolDatabaseMiddleware',           # 1️⃣ Sets request.school_timezone
-    'schoolara.timezone_middleware.SchoolTimezoneMiddleware',  # 2️⃣ Activates timezone
-    
-    # ✅ Audit middleware - NOW can capture school timezone
-    'utils.middleware.AuditContextMiddleware',  # 3️⃣ Captures context after timezone is set
+    # 1 — Sets request.school and DB routing context (must be first of ours)
+    'schoolara.middleware.SchoolDatabaseMiddleware',
+
+    # 2 — Activates the school's operational timezone for the request
+    'core.timezone_middleware.SchoolTimezoneMiddleware',
+
+    # 3 — Captures user/IP/session for audit trail (needs timezone active)
+    'utils.middleware.AuditContextMiddleware',
+
+    # 4 — Detects stale exchange rates; triggers async update if needed.
+    #     Never makes HTTP calls inline — queues a Celery task or logs a warning.
+    #     Requires SchoolDatabaseMiddleware to have run first (needs request.school).
+    'core.middleware.ExchangeRateMiddleware',
 ]
 
-# Logging configuration for debugging
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': 'debug.log',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'students': {  # Add this - replace 'students' with your app name
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'django.db.backends': {
-            'handlers': ['console'],
-            'level': 'INFO',  # Changed to DEBUG to see SQL queries
-            'propagate': False,
-        },
-    },
-}
+# =============================================================================
+# IMAGE CROPPING
+# =============================================================================
 
-# Cache configuration (required for middleware)
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
-        'TIMEOUT': 3600,  # 1 hour
-    }
-}
+THUMBNAIL_PROCESSORS = (
+    'image_cropping.thumbnail_processors.crop_corners',
+    'easy_thumbnails.processors.colorspace',
+    'easy_thumbnails.processors.autocrop',
+    'easy_thumbnails.processors.scale_and_crop',
+    'easy_thumbnails.processors.filters',
+)
+
+IMAGE_CROPPING_THUMB_SIZE = (300, 300)
+IMAGE_CROPPING_SIZE_WARNING = True
+
+# =============================================================================
+# URL CONFIGURATION
+# =============================================================================
 
 ROOT_URLCONF = 'schoolara.urls'
+
+# =============================================================================
+# TEMPLATES
+# =============================================================================
 
 TEMPLATES = [
     {
@@ -164,14 +134,14 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
 
-                # ── Branding & user ────────────────────────────────────────
+                # Branding & user
                 'core.context_processors.school_branding',
                 'core.context_processors.user_preferences',
                 'core.context_processors.theme_colors',
                 'core.context_processors.user_security_context',
                 'core.context_processors.navigation_permissions',
 
-                # ── Academic & financial ───────────────────────────────────
+                # Academic & financial
                 'core.context_processors.school_configuration',
                 'core.context_processors.active_academic_session',
                 'core.context_processors.active_fiscal_period',
@@ -190,9 +160,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'schoolara.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# =============================================================================
+# DATABASES
+# =============================================================================
 
 DATABASES = {
     'default': {
@@ -232,53 +202,158 @@ DATABASES = {
 
 DATABASE_ROUTERS = ['schoolara.routers.SchoolRouter']
 
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+# =============================================================================
+# AUTHENTICATION
+# =============================================================================
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Authentication Backends - Custom email authentication
 AUTHENTICATION_BACKENDS = [
-    'accounts.backends.SchoolAuthBackend',        # School-specific authentication
-    'accounts.backends.PermissionBackend',        # Role-based permissions
-    'django.contrib.auth.backends.ModelBackend',  # Fallback
+    'accounts.backends.SchoolAuthBackend',       # School-specific authentication
+    'accounts.backends.PermissionBackend',       # Role-based permissions
+    'django.contrib.auth.backends.ModelBackend', # Fallback
 ]
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
+# =============================================================================
+# INTERNATIONALISATION
+# =============================================================================
 
 LANGUAGE_CODE = 'en-us'
 
+# Server timezone stays UTC — school-local time is handled per-school via
+# SchoolTimezoneMiddleware and SchoolConfiguration.operational_timezone.
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
+USE_TZ   = True
 
-USE_TZ = True
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
+# =============================================================================
+# STATIC FILES
+# =============================================================================
 
 STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [
-    BASE_DIR / 'static',     # ← Project-level static folder
+    BASE_DIR / 'static',
 ]
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
+# =============================================================================
+# DEFAULT PRIMARY KEY
+# =============================================================================
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# =============================================================================
+# CACHE
+# Required by ExchangeRateMiddleware for staleness-check throttling.
+# For production, replace LocMemCache with Redis or Memcached so that
+# the cache is shared across all worker processes/gunicorn workers.
+# =============================================================================
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'schoolara-cache',
+        'TIMEOUT': 3600,  # 1 hour default TTL
+    }
+}
+
+# Production example (Redis):
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+#         'LOCATION': 'redis://127.0.0.1:6379/1',
+#     }
+# }
+
+# =============================================================================
+# EXCHANGE RATE API KEYS
+# Set these in environment variables — never hard-code in source control.
+#
+# ExchangeRate-API: free tier, no key required (tried first).
+# Fixer.io:         free tier requires key — https://fixer.io/
+# OpenExchangeRates: free tier requires key — https://openexchangerates.org/
+#
+# Leave blank to use manual rate entry only.
+# =============================================================================
+
+FIXER_API_KEY        = os.environ.get('FIXER_API_KEY', '')
+OPENEXCHANGE_API_KEY = os.environ.get('OPENEXCHANGE_API_KEY', '')
+
+# =============================================================================
+# CELERY  (optional — remove this section if not using Celery)
+# If Celery is not configured, exchange rates are updated via cron +
+# management command instead:
+#   0 */6 * * *  python manage.py update_exchange_rates >> /var/log/exchange_rates.log 2>&1
+# =============================================================================
+
+# CELERY_BROKER_URL    = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+# CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TIMEZONE = 'UTC'
+#
+# CELERY_BEAT_SCHEDULE = {
+#     'update-exchange-rates': {
+#         'task': 'core.update_exchange_rates',
+#         'schedule': crontab(minute=0, hour='*/6'),  # every 6 hours
+#     },
+# }
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'students': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

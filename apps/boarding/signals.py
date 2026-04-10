@@ -1,4 +1,4 @@
-# boarding/signals.py 
+# boarding/signals.py
 
 from django.db.models.signals import pre_delete, post_save, pre_save
 from django.dispatch import receiver
@@ -11,448 +11,29 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# UPDATED SIGNAL - HANDLES VOID INVOICES
+# ROLL NUMBER GENERATION
 # =============================================================================
-
-@receiver(pre_delete, sender='boarding.BoardingEnrollment')
-def boarding_enrollment_pre_delete(sender, instance, **kwargs):
-    """
-    Handle invoice when boarding enrollment is being deleted.
-    
-    SAFE deletion (removes boarding items from invoice):
-    - Invoice is DRAFT or VOID
-    - No payments made
-    - Journal entry is DRAFT or doesn't exist
-    
-    UNSAFE deletion (blocks deletion):
-    - Invoice is finalized (PENDING, PAID, etc.) but not VOID
-    - Payments have been made
-    - Journal entry is POSTED or REVERSED
-    
-    In unsafe cases, user must:
-    1. Mark enrollment as TERMINATED (don't delete)
-    2. Issue credit note for unused fees
-    3. Process refund if applicable
-    """
-    if not instance.boarding_invoice:
-        # No invoice linked - safe to delete
-        logger.info(f"Deleting boarding enrollment {instance.id} - no invoice linked")
-        return
-    
-    invoice = instance.boarding_invoice
-    
-    # PRIMARY CHECK: Journal Entry Status (highest priority)
-    if invoice.journal_entry:
-        je_status = invoice.journal_entry.status
-        
-        if je_status == 'POSTED':
-            raise ValidationError({
-                'boarding_invoice': (
-                    f"Cannot delete boarding enrollment: Journal entry {invoice.journal_entry.entry_number} already posted\n\n"
-                    f"This boarding enrollment has a posted journal entry.\n\n"
-                    f"To cancel boarding:\n"
-                    f"1. Change enrollment status to 'TERMINATED' (don't delete)\n"
-                    f"2. Issue a credit note for unused boarding fees\n"
-                    f"3. Process refund if applicable\n\n"
-                    f"Contact finance team for assistance."
-                )
-            })
-        
-        elif je_status == 'REVERSED':
-            raise ValidationError({
-                'boarding_invoice': (
-                    f"Cannot delete boarding enrollment: Journal entry {invoice.journal_entry.entry_number} has been reversed\n\n"
-                    f"This boarding enrollment has a reversed journal entry.\n\n"
-                    f"To cancel boarding:\n"
-                    f"1. Change enrollment status to 'TERMINATED' (don't delete)\n"
-                    f"2. Issue a credit note for unused boarding fees\n"
-                    f"3. Process refund if applicable\n\n"
-                    f"Contact finance team for assistance."
-                )
-            })
-    
-    # SECONDARY CHECK: Invoice Status
-    # Allow deletion for DRAFT and VOID invoices
-    if invoice.status not in ['DRAFT', 'VOID']:
-        raise ValidationError({
-            'boarding_invoice': (
-                f"Cannot delete boarding enrollment: Invoice status is {invoice.get_status_display()}\n\n"
-                f"This boarding enrollment has a finalized invoice ({invoice.invoice_number}).\n\n"
-                f"To cancel boarding:\n"
-                f"1. Change enrollment status to 'TERMINATED' (don't delete)\n"
-                f"2. Issue a credit note for unused boarding fees\n"
-                f"3. Process refund if applicable\n\n"
-                f"Contact finance team for assistance."
-            )
-        })
-    
-    # TERTIARY CHECK: Payments
-    if invoice.paid_amount > 0:
-        raise ValidationError({
-            'boarding_invoice': (
-                f"Cannot delete boarding enrollment: Invoice has payments of {invoice.paid_amount}\n\n"
-                f"This boarding enrollment has received payments.\n\n"
-                f"To cancel boarding:\n"
-                f"1. Change enrollment status to 'TERMINATED' (don't delete)\n"
-                f"2. Issue a credit note for unused boarding fees\n"
-                f"3. Process refund if applicable\n\n"
-                f"Contact finance team for assistance."
-            )
-        })
-    
-    # ALL CHECKS PASSED - SAFE TO DELETE
-    # Remove boarding items from DRAFT/VOID invoice
-    logger.info(
-        f"Deleting boarding enrollment {instance.id} - "
-        f"removing boarding items from {invoice.status} invoice {invoice.invoice_number}"
-    )
-    
-    # Get boarding-related items
-    boarding_items = invoice.items.filter(
-        fee_category__category_type__in=['BOARDING', 'LAUNDRY']
-    )
-    
-    deleted_count = boarding_items.count()
-    
-    if deleted_count > 0:
-        # Delete boarding items
-        boarding_items.delete()
-        
-        logger.info(
-            f"✓ Removed {deleted_count} boarding items from invoice {invoice.invoice_number}"
-        )
-        
-        # Delete DRAFT journal entry (will be recreated when invoice finalized)
-        if invoice.journal_entry and invoice.journal_entry.status == 'DRAFT':
-            je_number = invoice.journal_entry.entry_number
-            invoice.journal_entry.delete()
-            invoice.journal_entry = None
-            invoice.save(update_fields=['journal_entry'])
-            logger.info(
-                f"✓ Deleted DRAFT journal entry {je_number} - "
-                f"will be recreated with correct totals when invoice finalized"
-            )
-        
-        # Recalculate invoice totals (only for non-VOID invoices)
-        if invoice.status != 'VOID':
-            invoice.recalculate_totals()
-        
-        # Update invoice notes
-        if invoice.notes:
-            invoice.notes += "\n\n[Boarding enrollment cancelled - boarding fees removed]"
-        else:
-            invoice.notes = "[Boarding enrollment cancelled - boarding fees removed]"
-        invoice.save(update_fields=['notes'])
-        
-        logger.info(
-            f"✅ Successfully removed boarding fees from invoice {invoice.invoice_number}. "
-            f"New total: {invoice.total_amount}"
-        )
-    else:
-        logger.warning(
-            f"No boarding items found on invoice {invoice.invoice_number} to remove"
-        )
-
-# =============================================================================
-# NEW SIGNAL - ADD THIS (handles adding boarding fees when enrollment activated)
-# =============================================================================
-
-@receiver(post_save, sender='boarding.BoardingEnrollment')
-def auto_add_boarding_fees_to_invoice(sender, instance, created, **kwargs):
-    """
-    Automatically add boarding fees when enrollment is created.
-    
-    Behavior:
-    - If student has DRAFT invoice: Add boarding items to it
-    - If student has finalized invoice: Create supplementary invoice
-    - If no invoice exists: Do nothing (will be included when invoice is generated)
-    """
-    # ✅ COMPREHENSIVE LOGGING
-    logger.info(
-        f"[BOARDING SIGNAL] Triggered for enrollment {instance.id}\n"
-        f"  Student: {instance.student.get_full_name()}\n"
-        f"  Status: {instance.status}\n"
-        f"  Created: {created}\n"
-        f"  auto_create_invoice: {instance.auto_create_invoice}"
-    )
-    
-    # Only proceed for NEW enrollments
-    if not created:
-        logger.debug(f"[BOARDING SIGNAL] Skipped - not a new enrollment")
-        return
-    
-    # Only proceed if auto_create_invoice is enabled
-    if not instance.auto_create_invoice:
-        logger.info(f"[BOARDING SIGNAL] Skipped - auto_create_invoice disabled")
-        return
-    
-    # Skip if already has invoice linked
-    if instance.boarding_invoice:
-        logger.info(f"[BOARDING SIGNAL] Skipped - already has invoice")
-        return
-    
-    logger.info(f"[BOARDING SIGNAL] ✅ Processing boarding fees for new enrollment")
-    
-    with transaction.atomic():
-        _add_boarding_fees_to_student_invoice(instance)
-
-
-def _add_boarding_fees_to_student_invoice(boarding_enrollment):
-    """
-    Add boarding fees to student's invoice for the session.
-    
-    Args:
-        boarding_enrollment: BoardingEnrollment instance
-    """
-    from fees.models import FeeInvoice, FeeInvoiceItem, FeesStructure
-    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
-    
-    student = boarding_enrollment.student
-    session = boarding_enrollment.academic_session
-    
-    logger.info(
-        f"Processing boarding fees for {student.get_full_name()} "
-        f"in {session.name}"
-    )
-    
-    # =========================================================================
-    # FIND EXISTING INVOICE
-    # =========================================================================
-    
-    # Look for student's invoice for this session
-    existing_invoice = FeeInvoice.objects.filter(
-        student=student,
-        academic_session=session,
-    ).order_by('-created_at').first()
-    
-    if not existing_invoice:
-        logger.info(
-            f"No existing invoice found for {student.get_full_name()} "
-            f"in {session.name} - boarding fees will be included when invoice is generated"
-        )
-        return
-    
-    logger.info(f"Found existing invoice: {existing_invoice.invoice_number} (Status: {existing_invoice.status})")
-    
-    # =========================================================================
-    # HANDLE BASED ON INVOICE STATUS
-    # =========================================================================
-    
-    if existing_invoice.status == 'DRAFT':
-        # Invoice is still DRAFT - we can add items to it
-        logger.info(f"Invoice {existing_invoice.invoice_number} is DRAFT - adding boarding items")
-        _add_boarding_items_to_draft_invoice(existing_invoice, boarding_enrollment)
-        
-        # Link this invoice to boarding enrollment
-        boarding_enrollment.boarding_invoice = existing_invoice
-        boarding_enrollment.save(update_fields=['boarding_invoice'])
-        
-    elif existing_invoice.status in ['PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE']:
-        # Invoice is finalized - create supplementary invoice for boarding
-        logger.info(
-            f"Invoice {existing_invoice.invoice_number} is {existing_invoice.status} "
-            f"- creating supplementary boarding invoice"
-        )
-        _create_supplementary_boarding_invoice(boarding_enrollment)
-        
-    else:
-        logger.warning(
-            f"Cannot add boarding fees - invoice {existing_invoice.invoice_number} "
-            f"has status {existing_invoice.status}"
-        )
-
-
-def _add_boarding_items_to_draft_invoice(invoice, boarding_enrollment):
-    """
-    Add boarding fee items to an existing DRAFT invoice.
-    
-    Args:
-        invoice: FeeInvoice instance (must be DRAFT)
-        boarding_enrollment: BoardingEnrollment instance
-    """
-    from fees.models import FeeInvoiceItem, FeesStructure
-    
-    # Verify invoice is DRAFT
-    if invoice.status != 'DRAFT':
-        raise ValueError(f"Cannot add items to invoice with status {invoice.status}")
-    
-    # =========================================================================
-    # FIND BOARDING FEE STRUCTURE
-    # =========================================================================
-    
-    boarding_fee_structure = FeesStructure.objects.filter(
-        applicable_sessions=boarding_enrollment.academic_session,
-        boarding_type_filter__in=[
-            boarding_enrollment.boarding_type,
-            'BOARDER_ONLY',
-        ],
-        is_active=True
-    ).order_by('priority').first()
-    
-    if not boarding_fee_structure:
-        logger.warning(
-            f"No boarding fee structure found for "
-            f"{boarding_enrollment.get_boarding_type_display()} "
-            f"in {boarding_enrollment.academic_session.name}"
-        )
-        return
-    
-    logger.info(f"Using boarding fee structure: {boarding_fee_structure.name}")
-    
-    # =========================================================================
-    # ADD BOARDING ITEMS
-    # =========================================================================
-    
-    items_added = 0
-    student = boarding_enrollment.student
-    
-    for structure_item in boarding_fee_structure.items.all().order_by('display_order'):
-        # Check if item applies to this student
-        if not structure_item.is_applicable_to_student(student):
-            logger.debug(f"Skipping non-applicable item: {structure_item.fee_category.name}")
-            continue
-        
-        # Skip if not mandatory (only add required boarding fees)
-        if not structure_item.is_mandatory:
-            logger.debug(f"Skipping optional item: {structure_item.fee_category.name}")
-            continue
-        
-        # Check if this category is already on the invoice
-        if invoice.items.filter(fee_category=structure_item.fee_category).exists():
-            logger.debug(f"Item already exists: {structure_item.fee_category.name}")
-            continue
-        
-        # Get amount
-        amount = structure_item.get_amount_for_student(student)
-        tax_amount = structure_item.calculate_tax_amount(amount)
-        
-        # Create invoice item
-        FeeInvoiceItem.objects.create(
-            invoice=invoice,
-            fee_category=structure_item.fee_category,
-            description=structure_item.get_description(),
-            quantity=Decimal('1.00'),
-            unit_amount=amount,
-            amount=amount,
-            tax_percentage=structure_item.tax_percentage,
-            tax_amount=tax_amount,
-            final_amount=amount + tax_amount,
-            original_amount=amount,
-        )
-        
-        items_added += 1
-        logger.info(f"Added boarding item: {structure_item.fee_category.name} - {amount}")
-    
-    if items_added == 0:
-        logger.warning("No boarding items added to invoice")
-        return
-    
-    # =========================================================================
-    # RECALCULATE INVOICE TOTALS
-    # =========================================================================
-    
-    logger.info(f"Recalculating invoice totals after adding {items_added} boarding items")
-    invoice.recalculate_totals()
-    
-    # Update invoice notes
-    if invoice.notes:
-        invoice.notes += f"\n\n[Boarding fees added - {boarding_enrollment.get_boarding_type_display()}]"
-    else:
-        invoice.notes = f"[Boarding fees added - {boarding_enrollment.get_boarding_type_display()}]"
-    invoice.save(update_fields=['notes'])
-    
-    # Delete DRAFT journal entry if exists (will be recreated with correct totals)
-    if invoice.journal_entry and invoice.journal_entry.status == 'DRAFT':
-        je_number = invoice.journal_entry.entry_number
-        invoice.journal_entry.delete()
-        invoice.journal_entry = None
-        invoice.save(update_fields=['journal_entry'])
-        logger.info(f"Deleted DRAFT journal entry {je_number} - will be recreated when finalized")
-    
-    # Recreate journal entry with new totals
-    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
-    UnifiedStudentInvoiceGenerator._create_journal_entry(invoice)
-    
-    logger.info(
-        f"✅ Added {items_added} boarding items to invoice {invoice.invoice_number}. "
-        f"New total: {invoice.total_amount}"
-    )
-
-
-def _create_supplementary_boarding_invoice(boarding_enrollment):
-    """
-    Create a separate supplementary invoice for boarding fees.
-    
-    Used when the main academic invoice is already finalized.
-    
-    Args:
-        boarding_enrollment: BoardingEnrollment instance
-    """
-    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
-    
-    student = boarding_enrollment.student
-    session = boarding_enrollment.academic_session
-    
-    # Find class enrollment for this session
-    class_enrollment = student.class_enrollments.filter(
-        academic_session=session,
-        is_active=True,
-        completion_status='ONGOING'
-    ).first()
-    
-    if not class_enrollment:
-        logger.error(
-            f"Cannot create boarding invoice: {student.get_full_name()} "
-            f"has no active class enrollment for {session.name}"
-        )
-        return
-    
-    # Generate boarding-only invoice
-    try:
-        invoice = UnifiedStudentInvoiceGenerator.generate(
-            class_enrollment,
-            include_boarding=True,
-            force=True,  # Allow even though enrollment may have invoice
-        )
-        
-        # Mark as supplementary
-        invoice.notes = f"SUPPLEMENTARY INVOICE - Boarding fees added mid-session\n\n{invoice.notes or ''}"
-        invoice.save(update_fields=['notes'])
-        
-        # Link to boarding enrollment
-        boarding_enrollment.boarding_invoice = invoice
-        boarding_enrollment.save(update_fields=['boarding_invoice'])
-        
-        logger.info(
-            f"✅ Created supplementary boarding invoice {invoice.invoice_number} "
-            f"for {student.get_full_name()}"
-        )
-        
-    except Exception as e:
-        logger.error(f"Error creating supplementary boarding invoice: {e}", exc_info=True)
 
 @receiver(pre_save, sender='boarding.BoardingEnrollment')
 def auto_generate_roll_number(sender, instance, **kwargs):
     """
-    Automatically generate roll number when creating a new enrollment.
-    Handles both None and empty string cases.
+    Automatically generate a boarding roll number when a new enrollment is
+    created without one.  Handles both None and empty-string cases.
     """
-    # Check if this is a new enrollment (not yet saved to database)
-    is_new = instance._state.adding
-    
-    # Check if we need to generate a roll number
+    if not instance._state.adding:
+        return
+
     needs_roll_number = (
-        is_new and  # New enrollment (not an update)
-        (not instance.boarding_roll_number or instance.boarding_roll_number.strip() == '')  # No roll number provided
+        not instance.boarding_roll_number or
+        instance.boarding_roll_number.strip() == ''
     )
-    
+
     if needs_roll_number:
         from boarding.utils import generate_boarding_roll_number
-        
         try:
             instance.boarding_roll_number = generate_boarding_roll_number(
                 dormitory=instance.dormitory,
-                academic_session=instance.academic_session
+                academic_session=instance.academic_session,
             )
             logger.info(
                 f"Auto-generated boarding roll number {instance.boarding_roll_number} for "
@@ -462,5 +43,460 @@ def auto_generate_roll_number(sender, instance, **kwargs):
             logger.error(
                 f"Error auto-generating boarding roll number for "
                 f"{instance.student.get_full_name()}: {e}",
-                exc_info=True
+                exc_info=True,
             )
+
+
+# =============================================================================
+# PREVIOUS-STATUS CAPTURE
+# =============================================================================
+
+@receiver(pre_save, sender='boarding.BoardingEnrollment')
+def capture_previous_status(sender, instance, **kwargs):
+    """
+    Stash the current DB status on the instance before it is overwritten so
+    that auto_add_boarding_fees_to_invoice can detect transitions.
+
+    Sets instance._previous_status = None for new records (adding=True).
+    """
+    if instance._state.adding:
+        instance._previous_status = None
+        return
+
+    try:
+        instance._previous_status = (
+            sender.objects.get(pk=instance.pk).status
+        )
+    except sender.DoesNotExist:
+        instance._previous_status = None
+
+
+# =============================================================================
+# FEE ATTACHMENT  —  fires on approval and reverses on suspension/termination
+# =============================================================================
+
+@receiver(post_save, sender='boarding.BoardingEnrollment')
+def auto_add_boarding_fees_to_invoice(sender, instance, created, **kwargs):
+    """
+    Attach or detach boarding fees based on enrollment status transitions.
+
+    ATTACH (→ ACTIVE):
+        Any transition from a non-ACTIVE status to ACTIVE triggers fee
+        attachment.  This covers both:
+          - New enrollments created directly as ACTIVE.
+          - Existing PENDING enrollments that are approved.
+
+    DETACH (ACTIVE →  SUSPENDED / TERMINATED / COMPLETED):
+        When an enrollment leaves ACTIVE status its boarding fee items are
+        removed from the linked invoice (if the invoice is still DRAFT).
+        If the invoice is already finalized the finance team must handle it
+        via credit note — a warning is logged but no exception is raised.
+
+    SKIPPED when auto_create_invoice is False (bulk-created records).
+    """
+    if not instance.auto_create_invoice:
+        logger.debug(
+            f"[BOARDING SIGNAL] Skipped {instance.id} — auto_create_invoice=False"
+        )
+        return
+
+    previous = getattr(instance, '_previous_status', None)
+    current  = instance.status
+
+    logger.info(
+        f"[BOARDING SIGNAL] {instance.id}  "
+        f"prev={previous!r}  current={current!r}  created={created}"
+    )
+
+    # ── Attach on transition TO ACTIVE ──────────────────────────────────────
+    if current == 'ACTIVE' and previous != 'ACTIVE':
+        if instance.boarding_invoice:
+            logger.info(
+                f"[BOARDING SIGNAL] Skipped attach — already has invoice "
+                f"{instance.boarding_invoice.invoice_number}"
+            )
+            return
+        logger.info(
+            f"[BOARDING SIGNAL] {previous!r} → ACTIVE — attaching boarding fees"
+        )
+        with transaction.atomic():
+            _add_boarding_fees_to_student_invoice(instance)
+        return
+
+    # ── Detach on transition FROM ACTIVE ────────────────────────────────────
+    if previous == 'ACTIVE' and current in ('SUSPENDED', 'TERMINATED', 'COMPLETED'):
+        logger.info(
+            f"[BOARDING SIGNAL] ACTIVE → {current!r} — removing boarding fees"
+        )
+        if instance.boarding_invoice:
+            with transaction.atomic():
+                _remove_boarding_fees_from_invoice(instance)
+        else:
+            logger.info(
+                f"[BOARDING SIGNAL] No invoice linked — nothing to remove"
+            )
+        return
+
+    logger.debug(
+        f"[BOARDING SIGNAL] No fee action required for {previous!r} → {current!r}"
+    )
+
+
+# =============================================================================
+# HELPERS  —  ADD
+# =============================================================================
+
+def _add_boarding_fees_to_student_invoice(boarding_enrollment):
+    """
+    Add boarding fees to the student's existing invoice for the session, or
+    create a supplementary invoice when the main one is already finalized.
+    """
+    from fees.models import FeeInvoice
+
+    student = boarding_enrollment.student
+    session = boarding_enrollment.academic_session
+
+    logger.info(
+        f"Processing boarding fees for {student.get_full_name()} "
+        f"in {session.name}"
+    )
+
+    existing_invoice = FeeInvoice.objects.filter(
+        student=student,
+        academic_session=session,
+    ).order_by('-created_at').first()
+
+    if not existing_invoice:
+        logger.info(
+            f"No existing invoice found for {student.get_full_name()} — "
+            f"boarding fees will be included when the academic invoice is generated"
+        )
+        return
+
+    logger.info(
+        f"Found invoice {existing_invoice.invoice_number} "
+        f"(status={existing_invoice.status})"
+    )
+
+    if existing_invoice.status == 'DRAFT':
+        _add_boarding_items_to_draft_invoice(existing_invoice, boarding_enrollment)
+        boarding_enrollment.boarding_invoice = existing_invoice
+        boarding_enrollment.save(update_fields=['boarding_invoice'])
+
+    elif existing_invoice.status in ('PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'):
+        _create_supplementary_boarding_invoice(boarding_enrollment)
+
+    else:
+        logger.warning(
+            f"Cannot add boarding fees — invoice {existing_invoice.invoice_number} "
+            f"has status {existing_invoice.status}"
+        )
+
+
+def _add_boarding_items_to_draft_invoice(invoice, boarding_enrollment):
+    """Add boarding fee line items to an existing DRAFT invoice."""
+    from fees.models import FeeInvoiceItem, FeesStructure
+
+    if invoice.status != 'DRAFT':
+        raise ValueError(
+            f"Cannot add items to invoice with status {invoice.status}"
+        )
+
+    boarding_fee_structure = FeesStructure.objects.filter(
+        applicable_sessions=boarding_enrollment.academic_session,
+        boarding_type_filter__in=[
+            boarding_enrollment.boarding_type,
+            'BOARDER_ONLY',
+        ],
+        is_active=True,
+    ).order_by('priority').first()
+
+    if not boarding_fee_structure:
+        logger.warning(
+            f"No boarding fee structure found for "
+            f"{boarding_enrollment.get_boarding_type_display()} "
+            f"in {boarding_enrollment.academic_session.name}"
+        )
+        return
+
+    logger.info(f"Using fee structure: {boarding_fee_structure.name}")
+
+    student     = boarding_enrollment.student
+    session     = boarding_enrollment.academic_session   # FIX 2: needed for get_amount_for_student
+    items_added = 0
+
+    for item in boarding_fee_structure.items.all().order_by('display_order'):
+        # FIX 1: renamed from is_applicable_to_student() → is_condition_met_for_student()
+        if not item.is_condition_met_for_student(student):
+            continue
+        if not item.is_mandatory:
+            continue
+        if invoice.items.filter(fee_category=item.fee_category).exists():
+            logger.debug(f"Item already exists: {item.fee_category.name}")
+            continue
+
+        # FIX 2: pass session as second arg — required for boarding-type-dependent amounts
+        amount = item.get_amount_for_student(student, session)
+
+        # FIX 3: FeesStructureItem has no calculate_tax_amount() — compute inline
+        if item.is_taxable and item.tax_percentage:
+            tax_amount = (
+                amount * item.tax_percentage / Decimal('100')
+            ).quantize(Decimal('0.01'))
+        else:
+            tax_amount = Decimal('0.00')
+
+        FeeInvoiceItem.objects.create(
+            invoice=invoice,
+            fee_category=item.fee_category,
+            description=item.get_description(),
+            quantity=Decimal('1.00'),
+            unit_amount=amount,
+            amount=amount,
+            tax_percentage=item.tax_percentage,
+            tax_amount=tax_amount,
+            discount_amount=Decimal('0.00'),
+            discount_percentage=Decimal('0.00'),
+            scholarship_discount_amount=Decimal('0.00'),
+            total_discount_amount=Decimal('0.00'),
+            final_amount=amount + tax_amount,
+            original_amount=amount,
+            amount_in_school_currency=amount + tax_amount,
+        )
+        items_added += 1
+        logger.info(f"Added: {item.fee_category.name} — {amount}")
+
+    if items_added == 0:
+        logger.warning("No boarding items added to invoice")
+        return
+
+    invoice.recalculate_totals()
+
+    note = f"[Boarding fees added — {boarding_enrollment.get_boarding_type_display()}]"
+    invoice.notes = (f"{invoice.notes}\n\n{note}" if invoice.notes else note)
+    invoice.save(update_fields=['notes'])
+
+    if invoice.journal_entry and invoice.journal_entry.status == 'DRAFT':
+        je_number = invoice.journal_entry.entry_number
+        invoice.journal_entry.delete()
+        invoice.journal_entry = None
+        invoice.save(update_fields=['journal_entry'])
+        logger.info(f"Deleted DRAFT journal entry {je_number} — will be recreated")
+
+    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
+    UnifiedStudentInvoiceGenerator._create_journal_entry(invoice)
+
+    logger.info(
+        f"✅ Added {items_added} boarding items to {invoice.invoice_number}. "
+        f"New total: {invoice.total_amount}"
+    )
+
+def _create_supplementary_boarding_invoice(boarding_enrollment):
+    """Create a separate supplementary invoice when the main one is finalized."""
+    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
+
+    student = boarding_enrollment.student
+    session = boarding_enrollment.academic_session
+
+    class_enrollment = student.class_enrollments.filter(
+        academic_session=session,
+        is_active=True,
+        completion_status='ONGOING',
+    ).first()
+
+    if not class_enrollment:
+        logger.error(
+            f"Cannot create boarding invoice: {student.get_full_name()} "
+            f"has no active class enrollment for {session.name}"
+        )
+        return
+
+    try:
+        invoice = UnifiedStudentInvoiceGenerator.generate(
+            class_enrollment,
+            include_boarding=True,
+            force=True,
+        )
+        note = "SUPPLEMENTARY INVOICE — Boarding fees added mid-session"
+        invoice.notes = (f"{note}\n\n{invoice.notes}" if invoice.notes else note)
+        invoice.save(update_fields=['notes'])
+
+        boarding_enrollment.boarding_invoice = invoice
+        boarding_enrollment.save(update_fields=['boarding_invoice'])
+
+        logger.info(
+            f"✅ Created supplementary invoice {invoice.invoice_number} "
+            f"for {student.get_full_name()}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Error creating supplementary boarding invoice: {e}",
+            exc_info=True,
+        )
+
+
+# =============================================================================
+# HELPERS  —  REMOVE
+# =============================================================================
+
+def _remove_boarding_fees_from_invoice(boarding_enrollment):
+    """
+    Remove boarding fee line items from the linked invoice when an enrollment
+    leaves ACTIVE status (suspended, terminated, completed).
+
+    Only modifies DRAFT invoices.  If the invoice is already finalized the
+    finance team must issue a credit note — a warning is logged and the
+    linked invoice reference is preserved for the audit trail.
+    """
+    invoice = boarding_enrollment.boarding_invoice
+    if not invoice:
+        return
+
+    if invoice.status not in ('DRAFT', 'VOID'):
+        logger.warning(
+            f"[BOARDING SIGNAL] Invoice {invoice.invoice_number} is "
+            f"{invoice.status} — cannot remove boarding items automatically. "
+            f"Finance team must issue a credit note."
+        )
+        return
+
+    boarding_items = invoice.items.filter(
+        fee_category__category_type__in=['BOARDING', 'LAUNDRY']
+    )
+    removed = boarding_items.count()
+
+    if removed == 0:
+        logger.info(
+            f"[BOARDING SIGNAL] No boarding items on "
+            f"{invoice.invoice_number} to remove"
+        )
+        return
+
+    boarding_items.delete()
+    logger.info(
+        f"[BOARDING SIGNAL] Removed {removed} boarding items from "
+        f"{invoice.invoice_number}"
+    )
+
+    if invoice.status != 'VOID':
+        invoice.recalculate_totals()
+
+    note = f"[Boarding enrollment {boarding_enrollment.get_status_display()} — boarding fees removed]"
+    invoice.notes = (f"{invoice.notes}\n\n{note}" if invoice.notes else note)
+    invoice.save(update_fields=['notes'])
+
+    # Regenerate journal entry with updated totals
+    if invoice.journal_entry and invoice.journal_entry.status == 'DRAFT':
+        je_number = invoice.journal_entry.entry_number
+        invoice.journal_entry.delete()
+        invoice.journal_entry = None
+        invoice.save(update_fields=['journal_entry'])
+        logger.info(f"[BOARDING SIGNAL] Deleted DRAFT journal entry {je_number}")
+
+    from fees.invoice_generators import UnifiedStudentInvoiceGenerator
+    UnifiedStudentInvoiceGenerator._create_journal_entry(invoice)
+
+    logger.info(
+        f"[BOARDING SIGNAL] ✅ Removed boarding fees from "
+        f"{invoice.invoice_number}. New total: {invoice.total_amount}"
+    )
+
+
+# =============================================================================
+# DELETION GUARD
+# =============================================================================
+
+@receiver(pre_delete, sender='boarding.BoardingEnrollment')
+def boarding_enrollment_pre_delete(sender, instance, **kwargs):
+    """
+    Block deletion when the linked invoice cannot be safely modified.
+
+    SAFE (allows deletion, removes boarding items):
+        Invoice is DRAFT or VOID, no payments, journal entry is DRAFT or absent.
+
+    UNSAFE (raises ValidationError, blocks deletion):
+        Invoice is finalized, payments received, or journal entry is posted/reversed.
+        In these cases mark the enrollment TERMINATED instead and issue a credit note.
+    """
+    if not instance.boarding_invoice:
+        logger.info(
+            f"Deleting enrollment {instance.id} — no invoice linked"
+        )
+        return
+
+    invoice = instance.boarding_invoice
+
+    # 1. Journal entry status
+    if invoice.journal_entry:
+        je_status = invoice.journal_entry.status
+        if je_status == 'POSTED':
+            raise ValidationError({
+                'boarding_invoice': (
+                    f"Cannot delete: journal entry {invoice.journal_entry.entry_number} "
+                    f"is already posted. Mark the enrollment as TERMINATED instead "
+                    f"and issue a credit note for unused boarding fees."
+                )
+            })
+        if je_status == 'REVERSED':
+            raise ValidationError({
+                'boarding_invoice': (
+                    f"Cannot delete: journal entry {invoice.journal_entry.entry_number} "
+                    f"has been reversed. Mark the enrollment as TERMINATED instead."
+                )
+            })
+
+    # 2. Invoice status
+    if invoice.status not in ('DRAFT', 'VOID'):
+        raise ValidationError({
+            'boarding_invoice': (
+                f"Cannot delete: invoice {invoice.invoice_number} has status "
+                f"{invoice.get_status_display()}. Mark the enrollment as TERMINATED "
+                f"and issue a credit note for unused boarding fees."
+            )
+        })
+
+    # 3. Payments
+    if invoice.paid_amount > 0:
+        raise ValidationError({
+            'boarding_invoice': (
+                f"Cannot delete: invoice {invoice.invoice_number} has received "
+                f"payments of {invoice.paid_amount}. Mark the enrollment as TERMINATED "
+                f"and process a refund if applicable."
+            )
+        })
+
+    # All checks passed — remove boarding items
+    boarding_items = invoice.items.filter(
+        fee_category__category_type__in=['BOARDING', 'LAUNDRY']
+    )
+    removed = boarding_items.count()
+
+    if removed > 0:
+        boarding_items.delete()
+        logger.info(
+            f"Removed {removed} boarding items from "
+            f"{invoice.status} invoice {invoice.invoice_number}"
+        )
+
+        if invoice.journal_entry and invoice.journal_entry.status == 'DRAFT':
+            je_number = invoice.journal_entry.entry_number
+            invoice.journal_entry.delete()
+            invoice.journal_entry = None
+            invoice.save(update_fields=['journal_entry'])
+            logger.info(f"Deleted DRAFT journal entry {je_number}")
+
+        if invoice.status != 'VOID':
+            invoice.recalculate_totals()
+
+        note = "[Boarding enrollment deleted — boarding fees removed]"
+        invoice.notes = (f"{invoice.notes}\n\n{note}" if invoice.notes else note)
+        invoice.save(update_fields=['notes'])
+
+        logger.info(
+            f"✅ Cleaned up invoice {invoice.invoice_number} after enrollment "
+            f"deletion. New total: {invoice.total_amount}"
+        )
+    else:
+        logger.warning(
+            f"No boarding items found on {invoice.invoice_number} to remove"
+        )

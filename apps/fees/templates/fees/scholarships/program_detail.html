@@ -1,377 +1,121 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 {% load static %}
-{% load fees_tags %}
-{% load currency_filters %}
 {% load humanize %}
+{% load currency_filters %}
 
 {% block extra_css %}
 <style>
-    .program-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 12px;
-        padding: 30px;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    .program-header h2 {
-        color: white;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-    
-    .program-code {
-        display: inline-block;
-        background-color: rgba(255,255,255,0.2);
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-weight: 600;
-        margin-bottom: 15px;
-    }
-    
-    .program-type-badge {
-        display: inline-block;
-        padding: 10px 20px;
-        border-radius: 25px;
-        font-weight: 600;
-        font-size: 0.9rem;
-        margin-right: 10px;
-        margin-bottom: 10px;
-    }
-    
-    .badge-budgeted {
-        background-color: #ffc107;
-        color: #856404;
-    }
-    
-    .badge-policy-based {
-        background-color: #28a745;
-        color: white;
-    }
-    
-    .badge-discretionary {
-        background-color: #6c757d;
-        color: white;
-    }
-    
-    .badge-sponsored {
-        background-color: #007bff;
-        color: white;
-    }
-    
-    .info-card {
-        background-color: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 25px;
-        margin-bottom: 25px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    .info-card h5 {
-        color: #495057;
-        font-weight: 600;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #e9ecef;
-        display: flex;
-        align-items: center;
-    }
-    
-    .info-card h5 i {
-        font-size: 1.3rem;
-        color: #007bff;
-        margin-right: 10px;
-    }
-    
-    .info-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 12px 0;
-        border-bottom: 1px solid #f0f0f0;
-    }
-    
-    .info-row:last-child {
-        border-bottom: none;
-    }
-    
-    .info-label {
-        font-weight: 500;
-        color: #6c757d;
-    }
-    
-    .info-value {
-        font-weight: 600;
-        color: #495057;
-        text-align: right;
-    }
-    
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        margin-bottom: 30px;
-    }
-    
-    .stat-card {
-        background-color: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: transform 0.2s;
-    }
-    
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    
-    .stat-card i {
-        font-size: 2rem;
-        margin-bottom: 10px;
-    }
-    
-    .stat-label {
-        font-size: 0.85rem;
-        color: #6c757d;
-        margin-bottom: 5px;
-    }
-    
-    .stat-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #495057;
-    }
-    
-    .stat-card.primary {
-        border-left: 4px solid #007bff;
-    }
-    
-    .stat-card.primary i {
-        color: #007bff;
-    }
-    
-    .stat-card.success {
-        border-left: 4px solid #28a745;
-    }
-    
-    .stat-card.success i {
-        color: #28a745;
-    }
-    
-    .stat-card.warning {
-        border-left: 4px solid #ffc107;
-    }
-    
-    .stat-card.warning i {
-        color: #ffc107;
-    }
-    
-    .stat-card.info {
-        border-left: 4px solid #17a2b8;
-    }
-    
-    .stat-card.info i {
-        color: #17a2b8;
-    }
-    
-    .budget-progress {
-        margin-top: 15px;
-    }
-    
-    .budget-progress-bar {
-        height: 25px;
-        border-radius: 12px;
-        background-color: #e9ecef;
-        overflow: hidden;
-        position: relative;
-    }
-    
-    .budget-progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 0.85rem;
-        transition: width 0.5s ease;
-    }
-    
-    .budget-progress-fill.warning {
-        background: linear-gradient(90deg, #ffc107 0%, #ff9800 100%);
-    }
-    
-    .budget-progress-fill.danger {
-        background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
-    }
-    
-    .no-budget-alert {
-        background-color: #e7f3ff;
-        border: 2px solid #007bff;
-        border-radius: 8px;
-        padding: 20px;
-        text-align: center;
-    }
-    
-    .no-budget-alert i {
-        font-size: 3rem;
-        color: #007bff;
-        margin-bottom: 10px;
-    }
-    
-    .no-budget-alert h6 {
-        color: #0056b3;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
-    
-    .table-container {
-        background-color: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 25px;
-    }
-    
-    .table-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #e9ecef;
-    }
-    
-    .table-header h5 {
-        margin: 0;
-        color: #495057;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-    }
-    
-    .table-header h5 i {
-        font-size: 1.3rem;
-        color: #007bff;
-        margin-right: 10px;
-    }
-    
-    .custom-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    
-    .custom-table thead th {
-        background-color: #f8f9fa;
-        padding: 12px;
-        font-weight: 600;
-        color: #495057;
-        border-bottom: 2px solid #dee2e6;
-        text-align: left;
-    }
-    
-    .custom-table tbody td {
-        padding: 12px;
-        border-bottom: 1px solid #f0f0f0;
-    }
-    
-    .custom-table tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-    
-    .custom-table tbody tr:last-child td {
-        border-bottom: none;
-    }
-    
-    .status-badge {
-        display: inline-block;
-        padding: 5px 12px;
-        border-radius: 15px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    
-    .status-active {
-        background-color: #d4edda;
-        color: #155724;
-    }
-    
-    .status-pending {
-        background-color: #fff3cd;
-        color: #856404;
-    }
-    
-    .status-suspended {
-        background-color: #f8d7da;
-        color: #721c24;
-    }
-    
-    .status-approved {
-        background-color: #d4edda;
-        color: #155724;
-    }
-    
-    .status-rejected {
-        background-color: #f8d7da;
-        color: #721c24;
-    }
-    
-    .empty-state {
-        text-align: center;
-        padding: 40px;
-        color: #6c757d;
-    }
-    
-    .empty-state i {
-        font-size: 4rem;
-        color: #dee2e6;
-        margin-bottom: 15px;
-    }
-    
-    .action-buttons {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-    
-    .eligibility-criteria {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        margin-top: 15px;
-    }
-    
-    .criteria-item {
-        display: flex;
-        align-items: start;
-        padding: 8px 0;
-    }
-    
-    .criteria-item i {
-        color: #28a745;
-        margin-right: 10px;
-        margin-top: 3px;
-    }
-    
-    .sponsor-info {
-        background-color: #fff3cd;
-        border: 2px solid #ffc107;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 15px;
-    }
-    
-    .sponsor-info h6 {
-        color: #856404;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --border-2:  #cbd5e1;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --radius:    10px;
+}
+
+.pgm-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.hero-name  { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
+.hero-top   { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.hero-code  { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
+              color: var(--accent); background: var(--accent-lt); border: 1px solid #bfdbfe;
+              border-radius: 4px; padding: 3px 9px; }
+.hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.big-label  { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-muted); font-weight: 600; }
+.big-value  { font-size: 32px; font-weight: 900; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+.st-pill      { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; white-space: nowrap; }
+.sp-active    { background: var(--green-lt); color: var(--green);    border: 1px solid #bbf7d0; }
+.sp-inactive  { background: var(--red-lt);   color: var(--red);      border: 1px solid #fecaca; }
+.sp-accepting { background: var(--purple-lt); color: var(--purple);  border: 1px solid #ddd6fe; }
+.sp-closed    { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border-2); }
+.sp-policy    { background: var(--accent-lt); color: var(--accent);  border: 1px solid #bfdbfe; }
+.sp-waiver    { background: var(--green-lt);  color: var(--green);   border: 1px solid #bbf7d0; }
+.sp-cat       { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+
+.stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    display: flex; align-items: center; gap: 14px;
+}
+.stat-icon  { width: 44px; height: 44px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; flex-shrink: 0; }
+.stat-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 2px; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1; }
+
+.budget-track { height: 7px; background: var(--surface-3); border-radius: 6px; overflow: hidden; margin-top: 6px; }
+.budget-fill  { height: 100%; border-radius: 6px; transition: width .6s ease; }
+
+.det-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.det-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.det-card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+
+.tab-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 6px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink-muted); cursor: pointer; transition: all .15s; white-space: nowrap; }
+.tab-btn:hover  { background: var(--surface-3); color: var(--ink); }
+.tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 17px; padding: 0 4px; border-radius: 9px; font-size: 10px; font-weight: 700; background: rgba(255,255,255,.25); }
+.tab-btn:not(.active) .tab-count { background: var(--surface-3); color: var(--ink-muted); }
+
+.filter-bar { padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.filter-bar .form-control,
+.filter-bar .form-select { border-radius: 7px; border-color: var(--border-2); font-size: 13px; }
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.side-head  { background: var(--surface-2); padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+.side-body  { padding: 0 16px; }
+.side-row   { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 8px; }
+.side-row:last-child { border-bottom: none; }
+.s-lbl { color: var(--ink-muted); font-size: 12px; flex-shrink: 0; }
+.s-val { font-weight: 600; color: var(--ink); text-align: right; font-size: 12.5px; }
+.s-val.green  { color: var(--green); }
+.s-val.red    { color: var(--red); }
+.s-val.accent { color: var(--accent); }
+.s-val.muted  { color: var(--ink-muted); font-weight: 500; }
+.s-val.purple { color: var(--purple); }
+
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; padding: 16px; }
+.cat-item  { border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; }
+.cat-name  { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+.cat-disc  { font-size: 13px; font-weight: 700; }
+.disc-pct    { color: var(--accent); }
+.disc-fixed  { color: var(--green); }
+.disc-waiver { color: var(--purple); }
+.disc-none   { color: var(--ink-faint); font-weight: 500; font-size: 12px; }
+
+.desc-block { padding: 12px 20px; font-size: 13px; color: var(--ink-muted); line-height: 1.65; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid var(--border); }
+.dropdown-item { padding: 6px 13px; }
+
+@media (max-width: 768px) {
+    .pgm-hero { grid-template-columns: 1fr; }
+    .hero-right { align-items: flex-start; }
+}
 </style>
 {% endblock %}
 
@@ -384,568 +128,747 @@
                 <i class="pe-7s-medal icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
-                Scholarship Program Details
-                <div class="page-title-subheading">
-                    View complete information about this scholarship program
-                </div>
+                Scholarship Program
+                <div class="page-title-subheading">{{ program.name }}</div>
             </div>
         </div>
         <div class="page-title-actions">
-            <a href="{% url 'fees:scholarship_program_list' %}" class="btn btn-secondary">
-                <i class="fa fa-arrow-left"></i> Back to List
+            <a href="{% url 'fees:scholarship_program_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
             </a>
-            <a href="{% url 'fees:scholarship_program_edit' program.pk %}" class="btn btn-primary">
-                <i class="fa fa-edit"></i> Edit Program
+            <a href="{% url 'fees:scholarship_program_edit' program.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
             </a>
-        </div>
-    </div>
-</div>
-
-<!-- Program Header -->
-<div class="program-header">
-    <div class="program-code">{{ program.code }}</div>
-    <h2>{{ program.name }}</h2>
-    
-    <div class="mb-3">
-        <span class="program-type-badge badge-{{ program.program_type|lower|cut:'_' }}">
-            {{ program.get_program_type_display }}
-        </span>
-        <span class="program-type-badge" style="background-color: rgba(255,255,255,0.2);">
-            {{ program.get_scholarship_type_display }}
-        </span>
-        {% if program.is_active %}
-            <span class="program-type-badge" style="background-color: #28a745;">
-                <i class="fa fa-check-circle"></i> Active
-            </span>
-        {% else %}
-            <span class="program-type-badge" style="background-color: #dc3545;">
-                <i class="fa fa-times-circle"></i> Inactive
-            </span>
-        {% endif %}
-        {% if program.is_accepting_applications %}
-            <span class="program-type-badge" style="background-color: rgba(255,255,255,0.2);">
-                <i class="fa fa-file-alt"></i> Accepting Applications
-            </span>
-        {% endif %}
-    </div>
-    
-    <p class="mb-0" style="font-size: 1.1rem; opacity: 0.95;">
-        {{ program.description }}
-    </p>
-</div>
-
-<!-- Statistics Grid -->
-<div class="stats-grid">
-    <div class="stat-card primary">
-        <i class="fa fa-users"></i>
-        <div class="stat-label">Active Recipients</div>
-        <div class="stat-value">{{ program.current_recipient_count|default:0 }}</div>
-    </div>
-    
-    <div class="stat-card success">
-        <i class="fa fa-file-alt"></i>
-        <div class="stat-label">Total Applications</div>
-        <div class="stat-value">{{ program.applications.count|default:0 }}</div>
-    </div>
-    
-    <div class="stat-card warning">
-        <i class="fa fa-money-bill-wave"></i>
-        <div class="stat-label">Total Disbursed</div>
-        <div class="stat-value">{{ total_disbursed|money }}</div>
-    </div>
-    
-    {% if program.total_budget_amount %}
-    <div class="stat-card info">
-        <i class="fa fa-wallet"></i>
-        <div class="stat-label">Budget Remaining</div>
-        <div class="stat-value">
-            {% if budget_remaining is not None %}
-                {{ budget_remaining|money }}
+            {% if program.is_active %}
+            <button class="btn btn-sm btn-outline-secondary me-1"
+                    hx-get="{% url 'fees:scholarship_program_deactivate_modal' program.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-pause-circle me-1"></i>Deactivate
+            </button>
             {% else %}
-                -
+            <button class="btn btn-sm btn-outline-success me-1"
+                    hx-get="{% url 'fees:scholarship_program_activate_modal' program.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check-circle me-1"></i>Activate
+            </button>
             {% endif %}
+            <button class="btn btn-sm btn-outline-danger"
+                    hx-get="{% url 'fees:scholarship_program_delete_modal' program.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i>Delete
+            </button>
         </div>
     </div>
-    {% else %}
-    <div class="stat-card info">
-        <i class="fa fa-infinity"></i>
-        <div class="stat-label">Budget Limit</div>
-        <div class="stat-value" style="font-size: 1.2rem;">Unlimited</div>
-    </div>
-    {% endif %}
 </div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'fees:dashboard' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-money-bill me-1"></i>Fees
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'fees:scholarship_program_list' %}" style="color:#64748b;text-decoration:none;">
+                Scholarship Programs
+            </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page" style="color:#0f172a;font-weight:600;">
+            {{ program.name }}
+        </li>
+    </ol>
+</nav>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
 
 <div class="row">
-    <!-- Left Column -->
-    <div class="col-lg-8">
-        
-        <!-- Financial Configuration -->
-        <div class="info-card">
-            <h5><i class="pe-7s-cash"></i> Financial Configuration</h5>
-            
-            <div class="info-row">
-                <span class="info-label">Discount Type</span>
-                <span class="info-value">{{ program.get_discount_type_display }}</span>
-            </div>
-            
-            {% if program.discount_type == 'PERCENTAGE' %}
-            <div class="info-row">
-                <span class="info-label">Discount Percentage</span>
-                <span class="info-value text-success">{{ program.discount_percentage }}%</span>
-            </div>
-            {% elif program.discount_type == 'FIXED_AMOUNT' %}
-            <div class="info-row">
-                <span class="info-label">Fixed Discount Amount</span>
-                <span class="info-value text-success">{{ program.fixed_discount_amount|money }}</span>
-            </div>
-            {% endif %}
-            
-            {% if program.maximum_award_amount %}
-            <div class="info-row">
-                <span class="info-label">Maximum Award per Student</span>
-                <span class="info-value">{{ program.maximum_award_amount|money }}</span>
-            </div>
-            {% endif %}
-            
-            {% if program.applicable_fee_categories.exists %}
-            <div class="info-row">
-                <span class="info-label">Applicable Fee Categories</span>
-                <span class="info-value">{{ program.applicable_fee_categories.count }} categories</span>
-            </div>
-            {% else %}
-            <div class="info-row">
-                <span class="info-label">Applicable Fee Categories</span>
-                <span class="info-value text-primary">All Categories</span>
-            </div>
-            {% endif %}
-        </div>
-        
-        <!-- Budget Information -->
-        {% if program.total_budget_amount %}
-        <div class="info-card">
-            <h5><i class="pe-7s-wallet"></i> Budget Information</h5>
-            
-            <div class="info-row">
-                <span class="info-label">Total Budget</span>
-                <span class="info-value">{{ program.total_budget_amount|money }}</span>
-            </div>
-            
-            <div class="info-row">
-                <span class="info-label">Budget Used</span>
-                <span class="info-value text-danger">{{ program.current_budget_used|default:0|money }}</span>
-            </div>
-            
-            <div class="info-row">
-                <span class="info-label">Budget Remaining</span>
-                <span class="info-value text-success">
-                    {% if budget_remaining is not None %}
-                        {{ budget_remaining|money }}
-                    {% else %}
-                        -
-                    {% endif %}
-                </span>
-            </div>
-            
-            {% if program.maximum_recipients %}
-            <div class="info-row">
-                <span class="info-label">Maximum Recipients</span>
-                <span class="info-value">{{ program.maximum_recipients }}</span>
-            </div>
-            {% endif %}
-            
-            <div class="info-row">
-                <span class="info-label">Budget Tracking</span>
-                <span class="info-value">
-                    {% if program.requires_budget_tracking %}
-                        <i class="fa fa-check-circle text-success"></i> Enabled
-                    {% else %}
-                        <i class="fa fa-times-circle text-muted"></i> Disabled
-                    {% endif %}
-                </span>
-            </div>
-            
-            <!-- Budget Progress Bar -->
-            {% if program.total_budget_amount and program.total_budget_amount > 0 %}
-            <div class="budget-progress">
-                {% widthratio program.current_budget_used 1 program.total_budget_amount as percentage %}
-                <div class="budget-progress-bar">
-                    <div class="budget-progress-fill {% if percentage > 90 %}danger{% elif percentage > 75 %}warning{% endif %}" 
-                         style="width: {{ percentage }}%;">
-                        {{ percentage }}% Used
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% else %}
-        <!-- No Budget Alert -->
-        <div class="no-budget-alert">
-            <i class="fa fa-infinity"></i>
-            <h6>{{ program.get_program_type_display }}</h6>
-            <p class="mb-0">
-                {% if program.program_type == 'POLICY_BASED' %}
-                    This program has no budget limit. Awards are automatically granted based on eligibility criteria.
-                {% elif program.program_type == 'DISCRETIONARY' %}
-                    This program operates on a case-by-case basis without a fixed budget limit.
+
+<!-- ════════════ LEFT COLUMN ════════════ -->
+<div class="col-lg-8">
+
+    <!-- ── Hero ── -->
+    <div class="pgm-hero">
+        <div>
+            <div class="hero-top">
+                <span class="hero-name">{{ program.name }}</span>
+                <span class="hero-code">{{ program.code }}</span>
+                {% if program.is_active %}
+                    <span class="st-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
                 {% else %}
-                    This program operates without a predefined budget limit.
+                    <span class="st-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
                 {% endif %}
-            </p>
-        </div>
-        {% endif %}
-        
-        <!-- Eligibility Criteria -->
-        {% if program.minimum_gpa or program.minimum_attendance_percentage or program.family_income_threshold %}
-        <div class="info-card">
-            <h5><i class="pe-7s-check"></i> Eligibility Criteria</h5>
-            
-            <div class="eligibility-criteria">
-                {% if program.minimum_gpa %}
-                <div class="criteria-item">
-                    <i class="fa fa-check-circle"></i>
-                    <div>
-                        <strong>Minimum GPA:</strong> {{ program.minimum_gpa }} / 4.0
-                    </div>
-                </div>
-                {% endif %}
-                
-                {% if program.minimum_attendance_percentage %}
-                <div class="criteria-item">
-                    <i class="fa fa-check-circle"></i>
-                    <div>
-                        <strong>Minimum Attendance:</strong> {{ program.minimum_attendance_percentage }}%
-                    </div>
-                </div>
-                {% endif %}
-                
-                {% if program.family_income_threshold %}
-                <div class="criteria-item">
-                    <i class="fa fa-check-circle"></i>
-                    <div>
-                        <strong>Family Income Threshold:</strong> {{ program.family_income_threshold|money }} or below
-                    </div>
-                </div>
-                {% endif %}
-                
-                {% if program.applicable_levels.exists %}
-                <div class="criteria-item">
-                    <i class="fa fa-check-circle"></i>
-                    <div>
-                        <strong>Applicable Levels:</strong> 
-                        {% for level in program.applicable_levels.all %}
-                            {{ level.name }}{% if not forloop.last %}, {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-                {% else %}
-                <div class="criteria-item">
-                    <i class="fa fa-check-circle"></i>
-                    <div>
-                        <strong>Applicable Levels:</strong> All Academic Levels
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Sponsor Information -->
-        {% if program.sponsor_name or program.external_funding_source %}
-        <div class="info-card">
-            <h5><i class="pe-7s-users"></i> Sponsor Information</h5>
-            
-            <div class="sponsor-info">
-                <h6><i class="fa fa-handshake"></i> Sponsored Program</h6>
-                
-                {% if program.sponsor_name %}
-                <div class="info-row" style="border: none;">
-                    <span class="info-label">Sponsor Name</span>
-                    <span class="info-value">{{ program.sponsor_name }}</span>
-                </div>
-                {% endif %}
-                
-                {% if program.external_funding_source %}
-                <div class="info-row" style="border: none;">
-                    <span class="info-label">Funding Source</span>
-                    <span class="info-value">{{ program.external_funding_source }}</span>
-                </div>
-                {% endif %}
-                
-                {% if program.sponsor_contact %}
-                <div class="mt-2">
-                    <small><strong>Contact:</strong> {{ program.sponsor_contact }}</small>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Active Recipients -->
-        <div class="table-container">
-            <div class="table-header">
-                <h5><i class="pe-7s-users"></i> Active Recipients ({{ recipients|length }})</h5>
-                <a href="{% url 'fees:student_scholarship_list' %}?program={{ program.pk }}" class="btn btn-sm btn-outline-primary">
-                    View All
-                </a>
-            </div>
-            
-            {% if recipients %}
-            <table class="custom-table">
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Admission No.</th>
-                        <th>Amount Awarded</th>
-                        <th>Amount Used</th>
-                        <th>Status</th>
-                        <th>Start Date</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for scholarship in recipients %}
-                    <tr>
-                        <td>
-                            <strong>{{ scholarship.student.get_full_name }}</strong>
-                        </td>
-                        <td>{{ scholarship.student.admission_number }}</td>
-                        <td>{{ scholarship.amount_awarded|money }}</td>
-                        <td class="text-success">{{ scholarship.total_amount_used|money }}</td>
-                        <td>
-                            <span class="status-badge status-{{ scholarship.status|lower }}">
-                                {{ scholarship.get_status_display }}
-                            </span>
-                        </td>
-                        <td>{{ scholarship.start_date }}</td>
-                        <td>
-                            <a href="{% url 'fees:student_scholarship_detail' scholarship.pk %}" 
-                               class="btn btn-sm btn-outline-primary">
-                                <i class="fa fa-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">
-                <i class="fa fa-users"></i>
-                <p class="mb-0">No active recipients yet</p>
-            </div>
-            {% endif %}
-        </div>
-        
-        <!-- Recent Applications -->
-        <div class="table-container">
-            <div class="table-header">
-                <h5><i class="pe-7s-file"></i> Recent Applications ({{ applications|length }})</h5>
-                <a href="{% url 'fees:scholarship_application_list' %}?program={{ program.pk }}" class="btn btn-sm btn-outline-primary">
-                    View All
-                </a>
-            </div>
-            
-            {% if applications %}
-            <table class="custom-table">
-                <thead>
-                    <tr>
-                        <th>Application No.</th>
-                        <th>Student</th>
-                        <th>Requested Amount</th>
-                        <th>Status</th>
-                        <th>Date</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for application in applications %}
-                    <tr>
-                        <td><strong>{{ application.application_number }}</strong></td>
-                        <td>{{ application.student.get_full_name }}</td>
-                        <td>{{ application.requested_amount|money }}</td>
-                        <td>
-                            <span class="status-badge status-{{ application.status|lower }}">
-                                {{ application.get_status_display }}
-                            </span>
-                        </td>
-                        <td>{{ application.application_date }}</td>
-                        <td>
-                            <a href="{% url 'fees:scholarship_application_detail' application.pk %}" 
-                               class="btn btn-sm btn-outline-primary">
-                                <i class="fa fa-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">
-                <i class="fa fa-file-alt"></i>
-                <p class="mb-0">No applications received yet</p>
-            </div>
-            {% endif %}
-        </div>
-        
-    </div>
-    
-    <!-- Right Column -->
-    <div class="col-lg-4">
-        
-        <!-- Quick Actions -->
-        <div class="info-card">
-            <h5><i class="pe-7s-tools"></i> Quick Actions</h5>
-            
-            <div class="action-buttons">
-                <a href="{% url 'fees:scholarship_program_edit' program.pk %}" class="btn btn-primary btn-block">
-                    <i class="fa fa-edit"></i> Edit Program
-                </a>
-                
                 {% if program.is_accepting_applications %}
-                <a href="{% url 'fees:scholarship_application_create' %}?program={{ program.pk }}" 
-                   class="btn btn-success btn-block">
-                    <i class="fa fa-plus"></i> New Application
-                </a>
+                    <span class="st-pill sp-accepting"><i class="fa fa-inbox"></i>Accepting Applications</span>
+                {% else %}
+                    <span class="st-pill sp-closed"><i class="fa fa-lock"></i>Closed</span>
                 {% endif %}
-                
-                <a href="{% url 'fees:student_scholarship_create' %}?program={{ program.pk }}" 
-                   class="btn btn-info btn-block">
-                    <i class="fa fa-award"></i> Award Scholarship
-                </a>
-                
-                <button type="button" class="btn btn-outline-secondary btn-block" 
-                        onclick="window.print()">
-                    <i class="fa fa-print"></i> Print Details
+                {% if program.discount_type == 'CATEGORY_SPECIFIC' %}
+                    <span class="st-pill sp-cat"><i class="fa fa-list-alt"></i>Category-Specific</span>
+                {% elif program.discount_type == 'FULL_WAIVER' %}
+                    <span class="st-pill sp-waiver"><i class="fa fa-star"></i>Full Waiver</span>
+                {% else %}
+                    <span class="st-pill sp-policy"><i class="fa fa-percent"></i>{{ program.get_discount_type_display }}</span>
+                {% endif %}
+            </div>
+            {% if program.description %}
+            <p style="margin:6px 0 0;font-size:13px;color:var(--ink-muted);line-height:1.6;max-width:560px;">
+                {{ program.description|truncatewords:30 }}
+            </p>
+            {% endif %}
+        </div>
+        <!-- Recipients count + capacity bar -->
+        <div class="hero-right">
+            <div style="text-align:right;">
+                <div class="big-label">Recipients</div>
+                <div>
+                    <span class="big-value">{{ stats.active_recipients }}</span>
+                    {% if program.maximum_recipients %}
+                    <span style="font-size:14px;font-weight:500;color:var(--ink-muted);"> / {{ program.maximum_recipients }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if program.maximum_recipients and program.maximum_recipients > 0 %}
+            <div>
+                <div class="budget-track" style="width:110px;">
+                    <div class="budget-fill"
+                         style="width:{% widthratio stats.active_recipients program.maximum_recipients 100 %}%;
+                                background:{% if stats.active_recipients >= program.maximum_recipients %}#dc2626{% else %}#1d4ed8{% endif %};"></div>
+                </div>
+                <div style="text-align:right;font-size:11px;color:var(--ink-muted);margin-top:3px;">
+                    {% widthratio stats.active_recipients program.maximum_recipients 100 %}% capacity
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Stat strip (3 cards — recipients already in hero) ── -->
+    <div class="row mb-4">
+        <div class="col-md-4 col-6 mb-3">
+            <div class="stat-card">
+                <div class="stat-icon" style="background:#7c3aed;"><i class="pe-7s-note2"></i></div>
+                <div>
+                    <div class="stat-label">Applications</div>
+                    <div class="stat-value">
+                        {{ stats.total_applications }}
+                        {% if stats.pending_review > 0 %}
+                        <span style="font-size:11px;font-weight:600;color:#b45309;display:block;">
+                            {{ stats.pending_review }} pending
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-6 mb-3">
+            <div class="stat-card">
+                <div class="stat-icon" style="background:#15803d;"><i class="pe-7s-cash"></i></div>
+                <div>
+                    <div class="stat-label">Total Disbursed</div>
+                    <div class="stat-value" style="font-size:14px;">{{ stats.total_disbursed|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-6 mb-3">
+            {% if program.total_budget_amount %}
+            <div class="stat-card">
+                <div class="stat-icon"
+                     style="background:{% if stats.budget_remaining is not None and stats.budget_remaining <= 0 %}#dc2626{% else %}#15803d{% endif %};">
+                    <i class="pe-7s-wallet"></i>
+                </div>
+                <div>
+                    <div class="stat-label">Budget Remaining</div>
+                    <div class="stat-value" style="font-size:14px;
+                         color:{% if stats.budget_remaining is not None and stats.budget_remaining <= 0 %}#dc2626{% else %}inherit{% endif %};">
+                        {% if stats.budget_remaining is not None %}{{ stats.budget_remaining|money }}{% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="stat-card">
+                <div class="stat-icon" style="background:#0369a1;"><i class="pe-7s-check"></i></div>
+                <div>
+                    <div class="stat-label">Approved</div>
+                    <div class="stat-value" style="color:#15803d;">{{ stats.approved }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Budget progress (budget-based only) ── -->
+    {% if program.total_budget_amount %}
+    <div class="det-card mb-4">
+        <div class="det-card-head">
+            <span class="det-card-title"><i class="fa fa-chart-bar"></i>Budget Utilisation</span>
+            <span style="font-size:12px;font-weight:600;color:var(--ink-muted);">
+                {{ program.current_budget_used|money }} of {{ program.total_budget_amount|money }}
+            </span>
+        </div>
+        <div style="padding:16px 20px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;color:var(--ink-muted);">
+                <span>Used: <strong style="color:var(--ink);">{{ program.current_budget_used|money }}</strong></span>
+                <span>
+                    {% if stats.budget_remaining is not None and stats.budget_remaining > 0 %}
+                        Remaining: <strong style="color:var(--green);">{{ stats.budget_remaining|money }}</strong>
+                    {% elif stats.budget_remaining is not None and stats.budget_remaining <= 0 %}
+                        <strong style="color:var(--red);">Budget Exhausted</strong>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="budget-track">
+                <div class="budget-fill"
+                     style="width:{% widthratio program.current_budget_used program.total_budget_amount 100 %}%;
+                            background:{% if stats.budget_remaining is not None and stats.budget_remaining <= 0 %}#dc2626{% else %}#1d4ed8{% endif %};">
+                </div>
+            </div>
+            <div style="text-align:right;font-size:11px;color:var(--ink-muted);margin-top:4px;">
+                {% widthratio program.current_budget_used program.total_budget_amount 100 %}% utilised
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════════════════════════
+         TABBED CARD
+         ════════════════════════════════════════════════════════ -->
+    <div class="det-card">
+        <div class="det-card-head">
+            <div class="d-flex gap-1 flex-wrap" id="pgm-tabs">
+                <button id="tab-recipients"
+                        class="tab-btn active"
+                        onclick="switchPgmTab('recipients')"
+                        hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+                        hx-target="#tab-content"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-users me-1"></i>Recipients
+                    <span class="tab-count">{{ stats.active_recipients }}</span>
                 </button>
+                <button id="tab-applications"
+                        class="tab-btn"
+                        onclick="switchPgmTab('applications')"
+                        hx-get="{% url 'fees:scholarship_program_applications_partial' program.pk %}"
+                        hx-target="#tab-content"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-file-alt me-1"></i>Applications
+                    <span class="tab-count">{{ stats.total_applications }}</span>
+                    {% if stats.pending_review > 0 %}
+                    <span style="background:#fef3c7;color:#b45309;border-radius:4px;font-size:9.5px;font-weight:700;padding:1px 5px;margin-left:2px;">
+                        {{ stats.pending_review }}
+                    </span>
+                    {% endif %}
+                </button>
+                {% if category_template %}
+                <button id="tab-catdiscount"
+                        class="tab-btn"
+                        onclick="switchPgmTab('catdiscount')">
+                    <i class="fa fa-list-alt me-1"></i>Category Discounts
+                    <span class="tab-count">{{ category_template|length }}</span>
+                </button>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'fees:student_scholarship_create' %}?program={{ program.pk }}"
+                   class="btn btn-sm btn-outline-success">
+                    <i class="fa fa-plus me-1"></i>Award
+                </a>
+                <a href="{% url 'fees:scholarship_application_create' %}?program={{ program.pk }}"
+                   class="btn btn-sm btn-outline-primary">
+                    <i class="fa fa-edit me-1"></i>Apply
+                </a>
             </div>
         </div>
-        
-        <!-- Program Settings -->
-        <div class="info-card">
-            <h5><i class="pe-7s-config"></i> Program Settings</h5>
-            
-            <div class="info-row">
-                <span class="info-label">Renewal Policy</span>
-                <span class="info-value">{{ program.get_renewal_policy_display }}</span>
-            </div>
-            
-            <div class="info-row">
-                <span class="info-label">Maximum Duration</span>
-                <span class="info-value">{{ program.maximum_duration_years }} year{{ program.maximum_duration_years|pluralize }}</span>
-            </div>
-            
-            <div class="info-row">
-                <span class="info-label">Active Status</span>
-                <span class="info-value">
-                    {% if program.is_active %}
-                        <i class="fa fa-check-circle text-success"></i> Active
-                    {% else %}
-                        <i class="fa fa-times-circle text-danger"></i> Inactive
-                    {% endif %}
-                </span>
-            </div>
-            
-            <div class="info-row">
-                <span class="info-label">Accepting Applications</span>
-                <span class="info-value">
-                    {% if program.is_accepting_applications %}
-                        <i class="fa fa-check-circle text-success"></i> Yes
-                    {% else %}
-                        <i class="fa fa-times-circle text-danger"></i> No
-                    {% endif %}
-                </span>
+
+        <!-- ── Recipient filter bar ── -->
+        <div id="tab-filter-recipients" class="filter-bar">
+            <form id="recipientFilterForm"
+                  hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+                  hx-trigger="change, keyup changed delay:400ms from:#recipientFilterForm input[name='q']"
+                  hx-target="#tab-content"
+                  hx-swap="innerHTML">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <input type="text" name="q" class="form-control form-control-sm"
+                               placeholder="Search by name or admission no…">
+                    </div>
+                    <div class="col-md-2">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="ACTIVE">Active</option>
+                            <option value="">All Statuses</option>
+                            <option value="SUSPENDED">Suspended</option>
+                            <option value="TERMINATED">Terminated</option>
+                            <option value="COMPLETED">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="discount_mode" class="form-select form-select-sm">
+                            <option value="">All Modes</option>
+                            <option value="global">Global</option>
+                            <option value="category">Category-Specific</option>
+                        </select>
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="clearRecipientFilters()">
+                            <i class="fa fa-times me-1"></i>Clear
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- ── Application filter bar ── -->
+        <div id="tab-filter-applications" class="filter-bar" style="display:none;">
+            <form id="applicationFilterForm"
+                  hx-get="{% url 'fees:scholarship_program_applications_partial' program.pk %}"
+                  hx-trigger="change, keyup changed delay:400ms from:#applicationFilterForm input[name='q']"
+                  hx-target="#tab-content"
+                  hx-swap="innerHTML">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <input type="text" name="q" class="form-control form-control-sm"
+                               placeholder="Name, admission no. or application no…">
+                    </div>
+                    <div class="col-md-2">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">All Statuses</option>
+                            <option value="SUBMITTED">Submitted</option>
+                            <option value="UNDER_REVIEW">Under Review</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="REJECTED">Rejected</option>
+                            <option value="WAITLISTED">Waitlisted</option>
+                        </select>
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="clearApplicationFilters()">
+                            <i class="fa fa-times me-1"></i>Clear
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- placeholder so JS can find it -->
+        {% if category_template %}<div id="tab-filter-catdiscount" style="display:none;"></div>{% endif %}
+
+        <!-- ── HTMX swap target ── -->
+        <div id="tab-content"
+             hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+            <div style="padding:40px;text-align:center;color:#94a3b8;">
+                <i class="fa fa-spinner fa-spin fa-2x"></i>
             </div>
         </div>
-        
-        <!-- Application Period -->
-        {% if program.application_start_date or program.application_end_date %}
-        <div class="info-card">
-            <h5><i class="pe-7s-date"></i> Application Period</h5>
-            
-            {% if program.application_start_date %}
-            <div class="info-row">
-                <span class="info-label">Start Date</span>
-                <span class="info-value">{{ program.application_start_date }}</span>
+
+        <!-- ── Category discount panel — inline, toggled by JS ── -->
+        {% if category_template %}
+        <div id="panel-catdiscount" style="display:none;">
+            {% if program.category_discount_description %}
+            <div class="desc-block">
+                <i class="fa fa-info-circle me-2 text-primary" style="font-size:11px;"></i>
+                {{ program.category_discount_description }}
             </div>
             {% endif %}
-            
-            {% if program.application_end_date %}
-            <div class="info-row">
-                <span class="info-label">End Date</span>
-                <span class="info-value">{{ program.application_end_date }}</span>
+            <div class="cat-grid">
+                {% for category in all_categories %}
+                {% with code=category.category_type|default:category.code %}
+                {% for cat_code, cat_conf in category_template.items %}
+                {% if cat_code == code %}
+                <div class="cat-item">
+                    <div class="cat-name">{{ category.name }}</div>
+                    {% if cat_conf.type == 'full_waiver' %}
+                        <div class="cat-disc disc-waiver">
+                            <i class="fa fa-star me-1" style="font-size:10px;"></i>100% Waiver
+                        </div>
+                    {% elif cat_conf.type == 'percentage' %}
+                        <div class="cat-disc disc-pct">
+                            <i class="fa fa-percent me-1" style="font-size:10px;"></i>{{ cat_conf.value }}% Discount
+                        </div>
+                    {% elif cat_conf.type == 'fixed_amount' %}
+                        <div class="cat-disc disc-fixed">
+                            <i class="fa fa-minus me-1" style="font-size:10px;"></i>{{ cat_conf.value|floatformat:0|intcomma }} Fixed
+                        </div>
+                    {% else %}
+                        <div class="cat-disc disc-none">Not covered</div>
+                    {% endif %}
+                    {% if cat_conf.description %}
+                    <div style="font-size:10.5px;color:var(--ink-faint);margin-top:5px;">{{ cat_conf.description }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% endwith %}
+                {% endfor %}
             </div>
-            {% endif %}
-            
-            {% if program.award_announcement_date %}
-            <div class="info-row">
-                <span class="info-label">Announcement Date</span>
-                <span class="info-value">{{ program.award_announcement_date }}</span>
+            <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--ink-muted);">
+                {% if program.allows_category_customization %}
+                    <i class="fa fa-check-circle me-1 text-success"></i>Officers can customise these per-student when awarding.
+                {% else %}
+                    <i class="fa fa-lock me-1 text-warning"></i>Template is enforced — per-student customisation is disabled.
+                {% endif %}
             </div>
-            {% endif %}
         </div>
         {% endif %}
-        
-        <!-- Valid Sessions -->
-        <div class="info-card">
-            <h5><i class="pe-7s-calendar"></i> Valid Sessions</h5>
-            
-            {% if program.valid_sessions.exists %}
-                {% for session in program.valid_sessions.all %}
-                <div class="info-row">
-                    <span class="info-label">{{ session.name }}</span>
-                    <span class="info-value">
-                        {% if session.is_active %}
-                            <i class="fa fa-check-circle text-success"></i>
-                        {% endif %}
-                    </span>
-                </div>
-                {% endfor %}
-            {% else %}
-            <div class="alert alert-info mb-0">
-                <i class="fa fa-info-circle"></i>
-                Available in <strong>all sessions</strong>
+
+    </div><!-- /det-card -->
+
+</div><!-- /col-lg-8 -->
+
+<!-- ════════════ RIGHT COLUMN ════════════ -->
+<div class="col-lg-4">
+
+    <!-- ── Discount Configuration ── -->
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-percent"></i>Discount Configuration</div>
+        <div class="side-body">
+            {% if program.discount_type == 'PERCENTAGE' and program.discount_percentage %}
+            <div class="side-row">
+                <span class="s-lbl">Global Discount</span>
+                <span class="s-val" style="font-size:20px;color:var(--accent);">{{ program.discount_percentage }}%</span>
+            </div>
+            {% elif program.discount_type == 'FIXED_AMOUNT' and program.fixed_discount_amount %}
+            <div class="side-row">
+                <span class="s-lbl">Fixed Amount</span>
+                <span class="s-val green">{{ program.fixed_discount_amount|money }}</span>
+            </div>
+            {% elif program.discount_type == 'FULL_WAIVER' %}
+            <div class="side-row">
+                <span class="s-lbl">Coverage</span>
+                <span class="s-val purple">100% Full Waiver</span>
+            </div>
+            {% elif program.discount_type == 'CATEGORY_SPECIFIC' %}
+            <div class="side-row">
+                <span class="s-lbl">Categories Covered</span>
+                <span class="s-val accent">
+                    {% if category_template %}{{ category_template|length }} categories{% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="side-row">
+                <span class="s-lbl">Per-Student Customisation</span>
+                <span class="s-val {% if program.allows_category_customization %}green{% else %}muted{% endif %}">
+                    {% if program.allows_category_customization %}Allowed{% else %}Locked{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            {% if program.maximum_award_amount %}
+            <div class="side-row">
+                <span class="s-lbl">Max Award / Student</span>
+                <span class="s-val">{{ program.maximum_award_amount|money }}</span>
             </div>
             {% endif %}
         </div>
-        
-        <!-- System Information -->
-        <div class="info-card">
-            <h5><i class="pe-7s-info"></i> System Information</h5>
-            
-            <div class="info-row">
-                <span class="info-label">Created</span>
-                <span class="info-value">{{ program.created_at|date:"M d, Y" }}</span>
+    </div>
+
+    <!-- ── Program Details ── -->
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-info-circle"></i>Program Details</div>
+        <div class="side-body">
+            <div class="side-row">
+                <span class="s-lbl">Type</span>
+                <span class="s-val">{{ program.get_scholarship_type_display }}</span>
             </div>
-            
-            <div class="info-row">
-                <span class="info-label">Last Updated</span>
-                <span class="info-value">{{ program.updated_at|date:"M d, Y" }}</span>
+            <div class="side-row">
+                <span class="s-lbl">Program</span>
+                <span class="s-val">{{ program.get_program_type_display }}</span>
             </div>
-            
-            <div class="info-row">
-                <span class="info-label">Program ID</span>
-                <span class="info-value" style="font-size: 0.75rem;">{{ program.pk }}</span>
+            <div class="side-row">
+                <span class="s-lbl">Renewal</span>
+                <span class="s-val">{{ program.get_renewal_policy_display }}</span>
+            </div>
+            <div class="side-row">
+                <span class="s-lbl">Max Duration</span>
+                <span class="s-val">{{ program.maximum_duration_years }} yr{{ program.maximum_duration_years|pluralize }}</span>
+            </div>
+            {% if program.total_budget_amount %}
+            <div class="side-row">
+                <span class="s-lbl">Total Budget</span>
+                <span class="s-val">{{ program.total_budget_amount|money }}</span>
+            </div>
+            {% endif %}
+            <!-- Max recipients already shown in hero right — only show if no hero right -->
+            {% if not program.maximum_recipients %}
+            <div class="side-row">
+                <span class="s-lbl">Max Recipients</span>
+                <span class="s-val muted">Unlimited</span>
+            </div>
+            {% endif %}
+            <div class="side-row">
+                <span class="s-lbl">Applications</span>
+                <span class="s-val">
+                    <span class="{% if stats.pending_review > 0 %}red{% else %}green{% endif %}">
+                        {{ stats.approved }} approved
+                    </span>
+                    {% if stats.pending_review > 0 %}
+                    &nbsp;·&nbsp;<span style="color:var(--amber);">{{ stats.pending_review }} pending</span>
+                    {% endif %}
+                    {% if stats.rejected > 0 %}
+                    &nbsp;·&nbsp;<span style="color:var(--ink-muted);">{{ stats.rejected }} rejected</span>
+                    {% endif %}
+                </span>
             </div>
         </div>
-        
     </div>
-</div>
+
+    <!-- ── Eligibility ── -->
+    {% if program.minimum_gpa or program.minimum_attendance_percentage or program.family_income_threshold or program.applicable_levels.exists %}
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-check-double"></i>Eligibility Criteria</div>
+        <div class="side-body">
+            {% if program.minimum_gpa %}
+            <div class="side-row">
+                <span class="s-lbl">Min. GPA</span>
+                <span class="s-val">{{ program.minimum_gpa }}</span>
+            </div>
+            {% endif %}
+            {% if program.minimum_attendance_percentage %}
+            <div class="side-row">
+                <span class="s-lbl">Min. Attendance</span>
+                <span class="s-val">{{ program.minimum_attendance_percentage }}%</span>
+            </div>
+            {% endif %}
+            {% if program.family_income_threshold %}
+            <div class="side-row">
+                <span class="s-lbl">Income Threshold</span>
+                <span class="s-val">{{ program.family_income_threshold|money }}</span>
+            </div>
+            {% endif %}
+            {% if program.applicable_levels.exists %}
+            <div class="side-row">
+                <span class="s-lbl">Academic Levels</span>
+                <span class="s-val" style="font-size:11.5px;text-align:right;max-width:160px;">
+                    {% for lvl in program.applicable_levels.all %}{{ lvl.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Important Dates ── -->
+    {% if program.application_start_date or program.application_end_date or program.award_announcement_date %}
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-calendar-alt"></i>Important Dates</div>
+        <div class="side-body">
+            {% if program.application_start_date %}
+            <div class="side-row">
+                <span class="s-lbl">Applications Open</span>
+                <span class="s-val">{{ program.application_start_date|date:"M d, Y" }}</span>
+            </div>
+            {% endif %}
+            {% if program.application_end_date %}
+            <div class="side-row">
+                <span class="s-lbl">Applications Close</span>
+                <span class="s-val {% if program.application_end_date < today %}red{% endif %}">
+                    {{ program.application_end_date|date:"M d, Y" }}
+                </span>
+            </div>
+            {% endif %}
+            {% if program.award_announcement_date %}
+            <div class="side-row">
+                <span class="s-lbl">Award Announcement</span>
+                <span class="s-val">{{ program.award_announcement_date|date:"M d, Y" }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Valid Sessions ── -->
+    {% if program.valid_sessions.exists %}
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-calendar-check"></i>Valid Sessions</div>
+        <div class="side-body">
+            {% for session in program.valid_sessions.all %}
+            <div class="side-row">
+                <span class="s-lbl" style="font-size:12px;">{{ session.name }}</span>
+                {% if session.is_current %}
+                <span style="font-size:10.5px;background:var(--purple-lt);color:var(--purple);padding:1px 7px;border-radius:10px;font-weight:600;">Current</span>
+                {% else %}
+                <span class="s-val muted" style="font-size:11px;">{{ session.start_date|date:"Y" }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Sponsor ── -->
+    {% if program.sponsor_name %}
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-handshake"></i>Sponsor</div>
+        <div class="side-body">
+            <div class="side-row">
+                <span class="s-lbl">Name</span>
+                <span class="s-val">{{ program.sponsor_name }}</span>
+            </div>
+            {% if program.external_funding_source %}
+            <div class="side-row">
+                <span class="s-lbl">Funding Source</span>
+                <span class="s-val" style="font-size:12px;">{{ program.external_funding_source }}</span>
+            </div>
+            {% endif %}
+            {% if program.sponsor_contact %}
+            <div style="padding:10px 0;font-size:12px;color:var(--ink-muted);border-top:1px solid var(--border);">
+                {{ program.sponsor_contact|linebreaksbr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Quick Actions ── -->
+    <div class="side-card">
+        <div class="side-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
+            <a href="{% url 'fees:student_scholarship_create' %}?program={{ program.pk }}"
+               class="btn btn-sm btn-outline-success w-100 text-start">
+                <i class="fa fa-user-plus me-2"></i>Award Scholarship
+            </a>
+            <a href="{% url 'fees:scholarship_application_create' %}?program={{ program.pk }}"
+               class="btn btn-sm btn-outline-primary w-100 text-start">
+                <i class="fa fa-file-plus me-2"></i>New Application
+            </a>
+            <a href="{% url 'fees:student_scholarship_list' %}?scholarship_program={{ program.pk }}"
+               class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-list me-2"></i>All Scholarships
+            </a>
+            <a href="{% url 'fees:scholarship_application_list' %}?scholarship_program={{ program.pk }}"
+               class="btn btn-sm btn-outline-secondary w-100 text-start">
+                <i class="fa fa-file-alt me-2"></i>All Applications
+            </a>
+            {% if program.is_active %}
+            <form method="post" action="{% url 'fees:scholarship_toggle_accepting' program.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    {% if program.is_accepting_applications %}
+                        <i class="fa fa-lock me-2"></i>Close Applications
+                    {% else %}
+                        <i class="fa fa-inbox me-2"></i>Open Applications
+                    {% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+</div><!-- /col-lg-4 -->
+</div><!-- /row -->
+
+<div id="modal-container"></div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-$(document).ready(function() {
-    console.log('Scholarship Program Detail Page Loaded');
-    console.log('Program: {{ program.name }}');
-    console.log('Type: {{ program.program_type }}');
-    
-    // Print functionality
-    window.addEventListener('beforeprint', function() {
-        console.log('Preparing to print...');
+let currentModal = null;
+
+function switchPgmTab(tab) {
+    document.querySelectorAll('#pgm-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+
+    ['recipients', 'applications', 'catdiscount'].forEach(function(t) {
+        var bar = document.getElementById('tab-filter-' + t);
+        if (bar) bar.style.display = (t === tab) ? '' : 'none';
     });
-    
-    window.addEventListener('afterprint', function() {
-        console.log('Print dialog closed');
+
+    if (tab === 'catdiscount') {
+        document.getElementById('tab-content').style.display = 'none';
+        var panel = document.getElementById('panel-catdiscount');
+        if (panel) panel.style.display = '';
+    } else {
+        document.getElementById('tab-content').style.display = '';
+        var panel = document.getElementById('panel-catdiscount');
+        if (panel) panel.style.display = 'none';
+
+        var inactiveForm = (tab === 'recipients') ? 'applicationFilterForm' : 'recipientFilterForm';
+        var form = document.getElementById(inactiveForm);
+        if (form) {
+            form.querySelectorAll('input[type="text"]').forEach(function(el) { el.value = ''; });
+            form.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
+        }
+    }
+}
+
+function clearRecipientFilters() {
+    var form = document.getElementById('recipientFilterForm');
+    form.querySelectorAll('input[type="text"]').forEach(function(el) { el.value = ''; });
+    form.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
+    htmx.trigger(form, 'change');
+}
+
+function clearApplicationFilters() {
+    var form = document.getElementById('applicationFilterForm');
+    form.querySelectorAll('input[type="text"]').forEach(function(el) { el.value = ''; });
+    form.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
+    htmx.trigger(form, 'change');
+}
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    var dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    var wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function() {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function(e) {
+    var xhr      = e.detail.xhr;
+    var message  = xhr.getResponseHeader('HX-Alert-Message');
+    var type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    var title    = xhr.getResponseHeader('HX-Alert-Title');
+    var close    = xhr.getResponseHeader('HX-Close-Modal');
+    var redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(function() {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(function() {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
     });
 });
 </script>

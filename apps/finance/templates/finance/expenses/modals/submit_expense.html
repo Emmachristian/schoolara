@@ -1,0 +1,90 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa fa-send" style="color:#1565c0;font-size:15px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">
+                        Submit for Approval
+                    </h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;">{{ expense.expense_number }}</div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <!-- EXPENSE SUMMARY -->
+        <div style="background:#fff;border-bottom:1px solid #e9ecef;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:13px;font-weight:600;color:#1a1a2e;">{{ expense.description }}</div>
+                <div style="font-size:12px;color:#6c757d;margin-top:2px;">
+                    <span class="me-3"><i class="fa fa-tag me-1"></i>{{ expense.category.name }}</span>
+                    <span><i class="fa fa-calendar me-1"></i>{{ expense.expense_date|date:"d M Y" }}</span>
+                </div>
+                {% if expense.lines.count > 0 %}
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px;">
+                    <i class="fa fa-list me-1"></i>{{ expense.lines.count }} line item{{ expense.lines.count|pluralize }}
+                </div>
+                {% endif %}
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:.4px;">Total</div>
+                <div style="font-size:20px;font-weight:800;color:#1a1a2e;">{{ expense.total_amount|money }}</div>
+            </div>
+        </div>
+
+        <!-- VALIDATION ERRORS -->
+        {% if validation_errors %}
+        <div style="background:#fff3cd;border-bottom:1px solid #ffc107;padding:14px 20px;">
+            <div style="font-size:12px;font-weight:700;color:#856404;margin-bottom:8px;">
+                <i class="fa fa-exclamation-triangle me-1"></i>Please fix the following before submitting:
+            </div>
+            <ul style="margin:0;padding-left:18px;font-size:12.5px;color:#856404;">
+                {% for error in validation_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- INFO (when can submit) -->
+        {% if can_submit %}
+        <div style="background:#e3f2fd;border-bottom:1px solid #bbdefb;padding:12px 20px;display:flex;align-items:flex-start;gap:10px;font-size:12.5px;color:#1565c0;">
+            <i class="fa fa-info-circle mt-1" style="flex-shrink:0;"></i>
+            <div>
+                Submitting will send this expense to the approver queue.
+                You will not be able to edit it until it is reviewed.
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- FOOTER -->
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:14px 20px;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </button>
+            {% if can_submit %}
+            <form method="post"
+                  action="{% url 'finance:expense_submit' expense.pk %}"
+                  hx-post="{% url 'finance:expense_submit' expense.pk %}"
+                  hx-target="body" hx-swap="none" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm" style="min-width:150px;">
+                    <i class="fa fa-send me-1"></i> Submit for Approval
+                </button>
+            </form>
+            {% else %}
+            <button class="btn btn-secondary btn-sm" disabled>
+                <i class="fa fa-send me-1"></i> Cannot Submit
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

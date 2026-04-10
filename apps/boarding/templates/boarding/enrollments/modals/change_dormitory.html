@@ -1,0 +1,110 @@
+<div class="modal-dialog modal-md">
+<div class="modal-content">
+
+    <div class="modal-header"
+         style="background:#eff6ff; border-bottom:1px solid #bfdbfe; padding:16px 22px;">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:40px; height:40px; border-radius:10px; background:#dbeafe; border:1px solid #bfdbfe; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class="fa fa-exchange-alt" style="color:#1d4ed8; font-size:1rem;"></i>
+            </div>
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700; font-size:16px; color:#1e3a5f;">
+                    Change Dormitory
+                </h5>
+                <div style="font-size:11.5px; color:#3b82f6; margin-top:3px;">
+                    {{ enrollment.student.get_full_name }} &middot; Currently in {{ enrollment.dormitory.name }}
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+
+    <form method="POST"
+          hx-post="{% url 'boarding:enrollment_change_dormitory' enrollment.pk %}"
+          hx-target="#modal-container"
+          hx-swap="innerHTML">
+        {% csrf_token %}
+
+        <div class="modal-body" style="padding:22px; max-height:65vh; overflow-y:auto;">
+
+            {% if form.non_field_errors %}
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #ef4444; border-radius:0 7px 7px 0; margin-bottom:18px;">
+                <i class="fa fa-times-circle" style="color:#dc2626; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#991b1b;">
+                    {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #1d4ed8; border-radius:0 8px 8px 0; margin-bottom:20px;">
+                <i class="fa fa-info-circle" style="color:#1d4ed8; margin-top:2px; flex-shrink:0;"></i>
+                <div style="font-size:13px; color:#1e3a5f;">
+                    The student will be moved to the new dormitory and assigned a new roll number.
+                    Only dormitories with available capacity and gender compatibility are shown.
+                </div>
+            </div>
+
+            {# Available dormitories list #}
+            {% if available_dormitories %}
+            <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94a3b8; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #f1f5f9;">
+                Available Dormitories
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+                {% for dorm in available_dormitories %}
+                <label style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; transition:all .15s;"
+                       onmouseover="this.style.borderColor='#93c5fd'; this.style.background='#eff6ff';"
+                       onmouseout="this.style.borderColor='#e2e8f0'; this.style.background='#f8fafc';">
+                    <input type="radio" name="new_dormitory" value="{{ dorm.pk }}"
+                           style="accent-color:#1d4ed8; flex-shrink:0;"
+                           {% if dorm == enrollment.dormitory %}disabled{% endif %}>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:600; font-size:13px; color:#0f172a;">
+                            {{ dorm.name }}
+                            {% if dorm == enrollment.dormitory %}
+                                <span style="background:#f1f5f9; color:#64748b; border-radius:4px; font-size:10px; font-weight:700; padding:1px 6px; margin-left:4px;">Current</span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
+                            {{ dorm.get_dormitory_type_display }}
+                        </div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                        <div style="font-weight:700; font-size:13px; color:{% if dorm.get_available_capacity == 0 %}#dc2626{% else %}#15803d{% endif %};">
+                            {{ dorm.get_available_capacity }}
+                        </div>
+                        <div style="font-size:10.5px; color:#94a3b8;">available</div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div style="text-align:center; padding:24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; color:#94a3b8; font-size:13px; margin-bottom:16px;">
+                <i class="fa fa-home" style="font-size:1.5rem; display:block; margin-bottom:8px; opacity:.4;"></i>
+                No other dormitories are available for this student.
+            </div>
+            {% endif %}
+
+            <div>
+                <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64748b; display:block; margin-bottom:4px;">
+                    Reason for Transfer
+                    <span style="font-size:10px; color:#94a3b8; font-weight:400; text-transform:none;">(optional)</span>
+                </label>
+                {{ form.reason }}
+            </div>
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:12px 22px; justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+            {% if available_dormitories %}
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="fa fa-exchange-alt me-1"></i>Transfer Student
+            </button>
+            {% endif %}
+        </div>
+
+    </form>
+</div>
+</div>

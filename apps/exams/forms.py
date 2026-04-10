@@ -1,50 +1,52 @@
-# exams/forms.py
+"""
+exams/forms.py
+==============
+Forms for the Examinations app.
 
+Layout
+------
+  1. Imports
+  2. ExamCategory forms
+  3. GradingSystem → GradingRange forms + inline formset
+  4. ClassGradingSystem forms
+  5. Examination forms
+  6. StudentExamResult forms
+  7. Action / workflow forms (lock, unlock, publish)
+  8. Filter forms
+  9. Filter utility helpers
 """
-Examination management forms with timezone support.
-All date validations use school timezone for consistency.
-"""
+
+from __future__ import annotations
+
+import logging
+from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
-from django.utils import timezone
+from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.db.models import Q
-from django.forms import inlineformset_factory
-from decimal import Decimal
-import logging
 
-# Import base form utilities with timezone support
 from utils.forms import (
     BootstrapFormMixin,
     DateRangeFormMixin,
     RequiredFieldsMixin,
-    MoneyFieldsMixin,
     DatePickerInput,
-    DateTimePickerInput,
     SearchInput,
     SelectWithDefault,
-    MoneyField,
-    PercentageField,
-    validate_future_date,
-    validate_past_date,
-    validate_date_not_before,
-    validate_date_not_after,
-    validate_positive_amount,
-    validate_percentage,
 )
 
+from academics.models import AcademicLevel, AcademicSession, Class, ClassRoom, Subject
+from hr.models import Staff
+from students.models import Student
+
 from .models import (
-    ExamCategory,
-    GradingSystem,
-    GradingRange,
     ClassGradingSystem,
+    ExamCategory,
     Examination,
-    ExamRegistration,
+    GradingRange,
+    GradingSystem,
     StudentExamResult,
 )
-from students.models import Student
-from academics.models import Class, Subject, AcademicLevel, AcademicSession, ClassRoom
-from hr.models import Staff
 
 logger = logging.getLogger(__name__)
 
@@ -54,61 +56,92 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 class ExamCategoryForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing exam categories"""
-    
+    """Create / edit an exam category."""
+
     class Meta:
-        model = ExamCategory
+        model  = ExamCategory
         fields = [
             'name', 'abbreviation', 'code', 'description',
             'category_type', 'applicable_levels', 'applicable_subject_types',
             'curriculum_compatibility', 'frequency', 'weight_percentage',
             'required_payment_percentage', 'consider_all_outstanding_balances',
-            'requires_registration', 'registration_deadline_days',
             'allows_retakes', 'max_retakes',
             'includes_in_report_cards', 'public_results', 'results_publication_days',
             'is_active', 'effective_date', 'valid_sessions',
         ]
         widgets = {
-            'name': forms.TextInput(attrs={'placeholder': 'e.g., Mid-Term Examination'}),
-            'abbreviation': forms.TextInput(attrs={'placeholder': 'e.g., MTE'}),
-            'code': forms.TextInput(attrs={'placeholder': 'e.g., EXAM-MID'}),
-            'description': forms.Textarea(attrs={'rows': 3}),
-            'category_type': forms.Select(attrs={'class': 'form-select'}),
-            'applicable_levels': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'curriculum_compatibility': forms.Select(attrs={'class': 'form-select'}),
-            'frequency': forms.Select(attrs={'class': 'form-select'}),
-            'weight_percentage': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100'}),
-            'required_payment_percentage': forms.NumberInput(attrs={'min': '0', 'max': '100'}),
-            'registration_deadline_days': forms.NumberInput(attrs={'min': '0'}),
-            'max_retakes': forms.NumberInput(attrs={'min': '0', 'max': '10'}),
-            'results_publication_days': forms.NumberInput(attrs={'min': '0'}),
-            'effective_date': DatePickerInput(),
-            'valid_sessions': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '4'}),
+            'name':                       forms.TextInput(attrs={'placeholder': 'e.g., Mid-Term Examination'}),
+            'abbreviation':               forms.TextInput(attrs={'placeholder': 'e.g., MTE'}),
+            'code':                       forms.TextInput(attrs={'placeholder': 'e.g., EXAM-MID'}),
+            'description':                forms.Textarea(attrs={'rows': 3}),
+            'category_type':              forms.Select(attrs={'class': 'form-select'}),
+            'applicable_levels':          forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'curriculum_compatibility':   forms.Select(attrs={'class': 'form-select'}),
+            'frequency':                  forms.Select(attrs={'class': 'form-select'}),
+            'weight_percentage':          forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100'}),
+            'required_payment_percentage':forms.NumberInput(attrs={'min': '0', 'max': '100'}),
+            'max_retakes':                forms.NumberInput(attrs={'min': '0', 'max': '10'}),
+            'results_publication_days':   forms.NumberInput(attrs={'min': '0'}),
+            'effective_date':             DatePickerInput(),
+            'valid_sessions':             forms.SelectMultiple(attrs={'class': 'form-select', 'size': '4'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['applicable_levels'].queryset = AcademicLevel.objects.filter(
-                is_active=True
-            ).order_by('order')
-            
-            self.fields['valid_sessions'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Set help texts
-        self.fields['weight_percentage'].help_text = "Percentage contribution to overall grade (0-100)"
-        self.fields['required_payment_percentage'].help_text = "Minimum % of fees paid to participate (0-100)"
-        
-        # Set default effective date using school timezone
+
+        self.fields['applicable_levels'].queryset = AcademicLevel.objects.filter(
+            is_active=True
+        ).order_by('order')
+
+        self.fields['valid_sessions'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        ).order_by('-start_date')
+
+        self.fields['weight_percentage'].help_text = (
+            "Percentage contribution to overall grade (0–100)."
+        )
+        self.fields['required_payment_percentage'].help_text = (
+            "Minimum percentage of fees paid before a student may sit this exam (0–100)."
+        )
+
         if not self.instance.pk:
             from core.utils import get_school_today
             self.fields['effective_date'].initial = get_school_today()
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if cleaned_data.get('allows_retakes') and not cleaned_data.get('max_retakes'):
+            self.add_error('max_retakes', 'Specify the maximum retakes allowed.')
+
+        if not cleaned_data.get('allows_retakes'):
+            cleaned_data['max_retakes'] = 0
+
+        return cleaned_data
+
+
+class ExamCategoryFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter / search form for the exam-category list view."""
+
+    q = forms.CharField(
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name or code…'}),
+    )
+    category_type = forms.ChoiceField(
+        label='Category Type', required=False,
+        choices=[('', 'All Types')] + list(ExamCategory.CATEGORY_TYPES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    frequency = forms.ChoiceField(
+        label='Frequency', required=False,
+        choices=[('', 'All Frequencies')] + list(ExamCategory.FREQUENCY_CHOICES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_active = forms.ChoiceField(
+        label='Status', required=False,
+        choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
 
 
 # =============================================================================
@@ -116,10 +149,10 @@ class ExamCategoryForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm)
 # =============================================================================
 
 class GradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing grading systems"""
-    
+    """Create / edit a grading system."""
+
     class Meta:
-        model = GradingSystem
+        model  = GradingSystem
         fields = [
             'name', 'code', 'description',
             'grading_type', 'scale_type',
@@ -134,291 +167,272 @@ class GradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm
             'include_positions', 'calculate_average', 'calculate_totals',
             'round_to_nearest', 'display_format',
             'applicable_levels', 'applicable_subjects',
-            'curriculum_compatibility', 'subject_type_specific', 'applicable_subject_types',
+            'curriculum_compatibility',
+            'subject_type_specific', 'applicable_subject_types',
             'is_active', 'is_default', 'effective_date', 'expiry_date',
         ]
         widgets = {
-            'name': forms.TextInput(attrs={'placeholder': 'e.g., Cambridge IGCSE Grading'}),
-            'code': forms.TextInput(attrs={'placeholder': 'e.g., IGCSE-GRADE'}),
-            'description': forms.Textarea(attrs={'rows': 3}),
-            'grading_type': forms.Select(attrs={'class': 'form-select'}),
-            'scale_type': forms.Select(attrs={'class': 'form-select'}),
-            'minimum_score': forms.NumberInput(attrs={'step': '0.01'}),
-            'maximum_score': forms.NumberInput(attrs={'step': '0.01'}),
-            'pass_mark': forms.NumberInput(attrs={'step': '0.01'}),
-            'minimum_subjects_required': forms.NumberInput(attrs={'min': '1'}),
+            'name':                        forms.TextInput(attrs={'placeholder': 'e.g., Cambridge IGCSE Grading'}),
+            'code':                        forms.TextInput(attrs={'placeholder': 'e.g., IGCSE-GRADE'}),
+            'description':                 forms.Textarea(attrs={'rows': 3}),
+            'grading_type':                forms.Select(attrs={'class': 'form-select'}),
+            'scale_type':                  forms.Select(attrs={'class': 'form-select'}),
+            'minimum_score':               forms.NumberInput(attrs={'step': '0.01'}),
+            'maximum_score':               forms.NumberInput(attrs={'step': '0.01'}),
+            'pass_mark':                   forms.NumberInput(attrs={'step': '0.01'}),
+            'minimum_subjects_required':   forms.NumberInput(attrs={'min': '1'}),
             'maximum_subjects_considered': forms.NumberInput(attrs={'min': '1'}),
-            'subject_selection_method': forms.Select(attrs={'class': 'form-select'}),
-            'mandatory_subjects': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'optional_subjects': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'aggregate_calculation_method': forms.Select(attrs={'class': 'form-select'}),
-            'maximum_failures_allowed': forms.NumberInput(attrs={'min': '0'}),
-            'round_to_nearest': forms.NumberInput(attrs={'step': '0.01'}),
-            'display_format': forms.TextInput(attrs={'placeholder': '{grade} ({score})'}),
-            'applicable_levels': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'applicable_subjects': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'curriculum_compatibility': forms.Select(attrs={'class': 'form-select'}),
-            'effective_date': DatePickerInput(),
-            'expiry_date': DatePickerInput(),
+            'subject_selection_method':    forms.Select(attrs={'class': 'form-select'}),
+            'mandatory_subjects':          forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'optional_subjects':           forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'aggregate_calculation_method':forms.Select(attrs={'class': 'form-select'}),
+            'maximum_failures_allowed':    forms.NumberInput(attrs={'min': '0'}),
+            'round_to_nearest':            forms.NumberInput(attrs={'step': '0.01'}),
+            'display_format':              forms.TextInput(attrs={'placeholder': '{grade} ({score})'}),
+            'applicable_levels':           forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'applicable_subjects':         forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'curriculum_compatibility':    forms.Select(attrs={'class': 'form-select'}),
+            'effective_date':              DatePickerInput(),
+            'expiry_date':                 DatePickerInput(),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['applicable_levels'].queryset = AcademicLevel.objects.filter(
-                is_active=True
-            ).order_by('order')
-            
-            self.fields['applicable_subjects'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['mandatory_subjects'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['optional_subjects'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Set default effective date using school timezone
+
+        active_subjects = Subject.objects.filter(is_active=True).order_by('name')
+
+        self.fields['applicable_levels'].queryset = AcademicLevel.objects.filter(
+            is_active=True
+        ).order_by('order')
+
+        for field_name in ('applicable_subjects', 'mandatory_subjects', 'optional_subjects'):
+            self.fields[field_name].queryset = active_subjects
+
+        self.fields['maximum_subjects_considered'].required = False
+        self.fields['maximum_failures_allowed'].required    = False
+        self.fields['expiry_date'].required                 = False
+
         if not self.instance.pk:
             from core.utils import get_school_today
             self.fields['effective_date'].initial = get_school_today()
-    
+
     def clean(self):
-        """Validate grading system configuration"""
-        cleaned_data = super().clean()
-        
+        cleaned_data  = super().clean()
         minimum_score = cleaned_data.get('minimum_score')
         maximum_score = cleaned_data.get('maximum_score')
-        pass_mark = cleaned_data.get('pass_mark')
-        effective_date = cleaned_data.get('effective_date')
-        expiry_date = cleaned_data.get('expiry_date')
-        
-        # Validate score ranges
-        if minimum_score and maximum_score:
+        pass_mark     = cleaned_data.get('pass_mark')
+        effective_date= cleaned_data.get('effective_date')
+        expiry_date   = cleaned_data.get('expiry_date')
+
+        if minimum_score is not None and maximum_score is not None:
             if minimum_score >= maximum_score:
-                raise ValidationError({
-                    'maximum_score': 'Maximum score must be greater than minimum score.'
-                })
-        
-        # Validate pass mark
-        if pass_mark and minimum_score and maximum_score:
-            if pass_mark < minimum_score or pass_mark > maximum_score:
-                raise ValidationError({
-                    'pass_mark': 'Pass mark must be between minimum and maximum scores.'
-                })
-        
-        # Validate date range
-        if effective_date and expiry_date:
-            if expiry_date <= effective_date:
-                raise ValidationError({
-                    'expiry_date': 'Expiry date must be after effective date.'
-                })
-        
+                self.add_error('maximum_score', 'Maximum score must be greater than minimum score.')
+
+        if pass_mark is not None and minimum_score is not None and maximum_score is not None:
+            if not (minimum_score <= pass_mark <= maximum_score):
+                self.add_error('pass_mark', 'Pass mark must be between minimum and maximum scores.')
+
+        if effective_date and expiry_date and expiry_date <= effective_date:
+            self.add_error('expiry_date', 'Expiry date must be after effective date.')
+
         return cleaned_data
 
 
+# =============================================================================
+# GRADING RANGE FORM + INLINE FORMSET
+# =============================================================================
+
 class GradingRangeForm(BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing grading ranges (used in formset)"""
-    
+    """
+    Form for a single grading range row.
+
+    Note: ``grading_system`` is intentionally excluded — it is supplied by the
+    inline formset's parent relationship.
+    """
+
     class Meta:
-        model = GradingRange
+        model  = GradingRange
         fields = [
-            # NOTE: 'grading_system' is NOT included - handled by formset
             'grade', 'grade_name',
-            'min_score', 'max_score', 'aggregate',
-            'gpa_points', 'quality_points',
+            'min_score', 'max_score',
+            'aggregate', 'gpa_points', 'quality_points',
             'color_code', 'text_color',
-            'comments', 'description', 'performance_level',
+            'comments', 'performance_level',
             'is_passing_grade', 'display_order',
         ]
         widgets = {
-            'grade': forms.TextInput(attrs={'placeholder': 'e.g., A, B+, D1', 'class': 'form-control'}),
-            'grade_name': forms.TextInput(attrs={'placeholder': 'e.g., Excellent, Good', 'class': 'form-control'}),
-            'min_score': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
-            'max_score': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
-            'aggregate': forms.TextInput(attrs={'placeholder': 'e.g., D1, C6', 'class': 'form-control'}),
-            'gpa_points': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
-            'quality_points': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
-            'color_code': forms.TextInput(attrs={
-                'type': 'color',
-                'placeholder': '#00FF00',
-                'class': 'form-control form-control-color'
+            'grade':             forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': 'e.g., A, B+, D1',
             }),
-            'text_color': forms.TextInput(attrs={
-                'type': 'color',
-                'placeholder': '#FFFFFF',
-                'class': 'form-control form-control-color'
+            'grade_name':        forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': 'e.g., Excellent',
             }),
-            'comments': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
-            'description': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
-            'performance_level': forms.Select(attrs={'class': 'form-select'}),
-            'display_order': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
+            'min_score':         forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01',
+            }),
+            'max_score':         forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01',
+            }),
+            'aggregate':         forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': 'e.g., D1, C6',
+            }),
+            'gpa_points':        forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01',
+            }),
+            'quality_points':    forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01',
+            }),
+            'color_code':        forms.TextInput(attrs={
+                'type': 'color',
+                'class': 'form-control form-control-color form-control-sm',
+            }),
+            'text_color':        forms.TextInput(attrs={
+                'type': 'color',
+                'class': 'form-control form-control-color form-control-sm',
+            }),
+            'comments':          forms.Textarea(attrs={
+                'class': 'form-control form-control-sm', 'rows': 2,
+            }),
+            'performance_level': forms.Select(attrs={'class': 'form-select form-select-sm'}),
+            'display_order':     forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'min': '0',
+            }),
         }
-    
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # These sub-fields are optional / auto-derived
+        for f in ('grade_name', 'aggregate', 'gpa_points', 'quality_points',
+                  'color_code', 'text_color', 'comments', 'performance_level',
+                  'display_order'):
+            self.fields[f].required = False
+
     def clean(self):
-        """Basic validation for individual grading range"""
         cleaned_data = super().clean()
-        
-        min_score = cleaned_data.get('min_score')
-        max_score = cleaned_data.get('max_score')
-        
-        # Validate score range
+        min_score    = cleaned_data.get('min_score')
+        max_score    = cleaned_data.get('max_score')
+
         if min_score is not None and max_score is not None:
             if min_score >= max_score:
-                raise ValidationError({
-                    'max_score': 'Maximum score must be greater than minimum score.'
-                })
-        
-        # Note: System bounds and overlap validation happens in formset.clean()
+                self.add_error(
+                    'max_score',
+                    'Maximum score must be greater than minimum score.',
+                )
+
         return cleaned_data
 
 
-# =============================================================================
-# GRADING RANGE INLINE FORMSET
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Custom base formset — keeps cross-form validation separate from the factory
+# ---------------------------------------------------------------------------
 
-# Base formset factory
-BaseGradingRangeFormSet = inlineformset_factory(
-    GradingSystem,                     # Parent model
-    GradingRange,                       # Child model
-    form=GradingRangeForm,             # Use our custom form
-    extra=5,                            # Show 5 empty forms by default
-    min_num=1,                          # Require at least 1 grade range
-    validate_min=True,
-    can_delete=True,                    # Allow deletion of existing ranges
-    can_delete_extra=True,              # Allow deletion of extra empty forms
-)
-
-
-class GradingRangeFormSet(BaseGradingRangeFormSet):
+class _GradingRangeBaseFormSet(BaseInlineFormSet):
     """
-    Enhanced formset for grading ranges with comprehensive validation.
-    
-    Validates:
-    - No overlapping score ranges
-    - Complete coverage of grading system min-max spectrum
-    - No gaps in score coverage
-    - Proper ordering of ranges
+    Validates the complete set of grade ranges for a GradingSystem.
+
+    Cross-form rules:
+      1. No two ranges may overlap.
+      2. Ranges must start at ``GradingSystem.minimum_score``.
+      3. Ranges must reach ``GradingSystem.maximum_score``.
+      4. No score gaps are allowed between consecutive ranges.
+      5. Grade labels must be unique within the set.
     """
-    
+
     def clean(self):
-        """
-        Enhanced validation across all forms in the formset.
-        Checks for overlapping ranges and gaps in score coverage.
-        """
-        if any(self.errors):
-            # Don't proceed with formset validation if individual forms have errors
-            return
-        
         super().clean()
-        
-        # Get all valid forms (not deleted, not empty)
-        valid_forms = [
-            form for form in self.forms
-            if form.cleaned_data and not form.cleaned_data.get('DELETE', False)
+
+        # Skip if individual forms already have errors
+        if any(self.errors):
+            return
+
+        live_forms = [
+            f for f in self.forms
+            if f.cleaned_data and not f.cleaned_data.get('DELETE', False)
         ]
-        
-        if not valid_forms:
-            raise ValidationError("At least one grade range is required.")
-        
-        # Extract score ranges with form reference
-        ranges = []
-        for form in valid_forms:
-            data = form.cleaned_data
-            min_score = data.get('min_score')
-            max_score = data.get('max_score')
-            
-            if min_score is not None and max_score is not None:
-                ranges.append({
-                    'min': min_score,
-                    'max': max_score,
-                    'grade': data.get('grade', ''),
-                    'form': form
-                })
-        
+
+        if not live_forms:
+            raise ValidationError('At least one grade range is required.')
+
+        # Collect ranges that have both scores present
+        ranges: list[dict] = []
+        for form in live_forms:
+            min_s = form.cleaned_data.get('min_score')
+            max_s = form.cleaned_data.get('max_score')
+            grade = form.cleaned_data.get('grade', '')
+            if min_s is not None and max_s is not None:
+                ranges.append({'min': min_s, 'max': max_s, 'grade': grade})
+
         if not ranges:
-            raise ValidationError("At least one complete grade range (with min and max scores) is required.")
-        
-        # Sort ranges by min_score for easier validation
-        ranges.sort(key=lambda x: x['min'])
-        
-        # =====================================================================
-        # VALIDATION 1: Check for overlapping ranges
-        # =====================================================================
+            raise ValidationError(
+                'At least one complete grade range (min score and max score) is required.'
+            )
+
+        ranges.sort(key=lambda r: r['min'])
+
+        # ── 1. Duplicate grade labels ────────────────────────────────────────
+        grades = [r['grade'] for r in ranges if r['grade']]
+        duplicates = [g for g in set(grades) if grades.count(g) > 1]
+        if duplicates:
+            raise ValidationError(
+                f"Duplicate grade label(s): {', '.join(duplicates)}. "
+                "Each grade must be unique within a grading system."
+            )
+
+        # ── 2. Overlapping ranges ────────────────────────────────────────────
         for i in range(len(ranges) - 1):
-            current = ranges[i]
-            next_range = ranges[i + 1]
-            
-            # Check if current range's max overlaps with next range's min
-            if current['max'] >= next_range['min']:
+            curr = ranges[i]
+            nxt  = ranges[i + 1]
+            if curr['max'] >= nxt['min']:
                 raise ValidationError(
-                    f"Grade ranges overlap: '{current['grade']}' "
-                    f"({current['min']}-{current['max']}) overlaps with "
-                    f"'{next_range['grade']}' ({next_range['min']}-{next_range['max']}). "
-                    f"Ranges must not overlap."
+                    f"Ranges overlap: '{curr['grade']}' ({curr['min']}–{curr['max']}) "
+                    f"and '{nxt['grade']}' ({nxt['min']}–{nxt['max']}). "
+                    "Ranges must not overlap."
                 )
-        
-        # =====================================================================
-        # VALIDATION 2: Check coverage against grading system bounds
-        # =====================================================================
-        grading_system = self.instance
-        
-        if grading_system and grading_system.minimum_score is not None and grading_system.maximum_score is not None:
-            system_min = grading_system.minimum_score
-            system_max = grading_system.maximum_score
-            
-            # Check if ranges start at system minimum
-            if ranges[0]['min'] > system_min:
+
+        # ── 3 & 4. Coverage against GradingSystem bounds + gap check ─────────
+        gs = self.instance  # GradingSystem instance set by inlineformset_factory
+        if gs and gs.pk and gs.minimum_score is not None and gs.maximum_score is not None:
+            sys_min = gs.minimum_score
+            sys_max = gs.maximum_score
+
+            if ranges[0]['min'] > sys_min:
                 raise ValidationError(
-                    f"Grade ranges don't start at system minimum ({system_min}). "
-                    f"First range ('{ranges[0]['grade']}') starts at {ranges[0]['min']}. "
-                    f"Please add a range covering scores from {system_min}."
+                    f"Ranges don't start at the system minimum ({sys_min}). "
+                    f"First range ('{ranges[0]['grade']}') begins at {ranges[0]['min']}."
                 )
-            
-            # Check if ranges reach system maximum
-            if ranges[-1]['max'] < system_max:
+
+            if ranges[-1]['max'] < sys_max:
                 raise ValidationError(
-                    f"Grade ranges don't reach system maximum ({system_max}). "
-                    f"Last range ('{ranges[-1]['grade']}') ends at {ranges[-1]['max']}. "
-                    f"Please add a range covering scores up to {system_max}."
+                    f"Ranges don't reach the system maximum ({sys_max}). "
+                    f"Last range ('{ranges[-1]['grade']}') ends at {ranges[-1]['max']}."
                 )
-            
-            # ================================================================
-            # VALIDATION 3: Check for gaps between consecutive ranges
-            # ================================================================
+
             for i in range(len(ranges) - 1):
-                current = ranges[i]
-                next_range = ranges[i + 1]
-                
-                # Check if there's a gap between current max and next min
-                # Allow for small floating point differences (0.01)
-                gap = next_range['min'] - current['max']
+                gap = ranges[i + 1]['min'] - ranges[i]['max']
                 if gap > Decimal('0.01'):
                     raise ValidationError(
-                        f"Gap detected in grade ranges: '{current['grade']}' ends at {current['max']}, "
-                        f"but '{next_range['grade']}' starts at {next_range['min']}. "
-                        f"There is a gap of {gap} points. Please ensure complete coverage."
+                        f"Score gap between '{ranges[i]['grade']}' (ends {ranges[i]['max']}) "
+                        f"and '{ranges[i + 1]['grade']}' (starts {ranges[i + 1]['min']}): "
+                        f"{gap} point(s) uncovered."
                     )
-        
-        # =====================================================================
-        # VALIDATION 4: Check for duplicate grades
-        # =====================================================================
-        grades = [r['grade'] for r in ranges if r['grade']]
-        if len(grades) != len(set(grades)):
-            duplicates = [grade for grade in set(grades) if grades.count(grade) > 1]
-            raise ValidationError(
-                f"Duplicate grade(s) found: {', '.join(duplicates)}. "
-                f"Each grade must be unique within a grading system."
-            )
-        
-        return self.cleaned_data
+
+
+# Inline formset: GradingSystem ──< GradingRange
+GradingRangeInlineFormSet = inlineformset_factory(
+    GradingSystem,
+    GradingRange,
+    form=GradingRangeForm,
+    formset=_GradingRangeBaseFormSet,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+    can_delete=True,
+    can_delete_extra=True,
+)
 
 
 # =============================================================================
@@ -426,98 +440,177 @@ class GradingRangeFormSet(BaseGradingRangeFormSet):
 # =============================================================================
 
 class ClassGradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for assigning grading systems to classes"""
-    
+    """Assign a grading system to a class for a specific session."""
+
     class Meta:
-        model = ClassGradingSystem
+        model  = ClassGradingSystem
         fields = [
             'class_instance', 'grading_system', 'academic_session', 'subject',
-            'effective_date', 'end_date', 'priority', 'is_active', 'is_default_for_class',
-            'assignment_reason', 'custom_pass_mark', 'custom_maximum_score',
-            'curriculum_override', 'include_in_report_cards', 'show_grade_breakdown',
+            'effective_date', 'end_date',
+            'priority', 'is_active', 'is_default_for_class',
+            'assignment_reason',
+            'custom_pass_mark', 'custom_maximum_score',
+            'curriculum_override',
+            'include_in_report_cards', 'show_grade_breakdown',
         ]
         widgets = {
-            'class_instance': forms.Select(attrs={'class': 'form-select'}),
-            'grading_system': forms.Select(attrs={'class': 'form-select'}),
-            'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'subject': forms.Select(attrs={'class': 'form-select'}),
-            'effective_date': DatePickerInput(),
-            'end_date': DatePickerInput(),
-            'priority': forms.NumberInput(attrs={'min': '1'}),
-            'assignment_reason': forms.Textarea(attrs={'rows': 2}),
-            'custom_pass_mark': forms.NumberInput(attrs={'step': '0.01'}),
-            'custom_maximum_score': forms.NumberInput(attrs={'step': '0.01'}),
-            'curriculum_override': forms.TextInput(attrs={'placeholder': 'Optional'}),
+            'class_instance':      forms.Select(attrs={'class': 'form-select'}),
+            'grading_system':      forms.Select(attrs={'class': 'form-select'}),
+            'academic_session':    forms.Select(attrs={'class': 'form-select'}),
+            'subject':             forms.Select(attrs={'class': 'form-select'}),
+            'effective_date':      DatePickerInput(),
+            'end_date':            DatePickerInput(),
+            'priority':            forms.NumberInput(attrs={'min': '1'}),
+            'assignment_reason':   forms.Textarea(attrs={'rows': 2}),
+            'custom_pass_mark':    forms.NumberInput(attrs={'step': '0.01'}),
+            'custom_maximum_score':forms.NumberInput(attrs={'step': '0.01'}),
+            'curriculum_override': forms.TextInput(attrs={'placeholder': 'Optional override'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['class_instance'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level').order_by('academic_level__order', 'name')
-            
-            self.fields['grading_system'].queryset = GradingSystem.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['subject'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Make subject optional
-        self.fields['subject'].required = False
-        self.fields['subject'].help_text = "Leave blank for class-wide assignment"
-        
-        # Set default dates using school timezone
+
+        self.fields['class_instance'].queryset = Class.objects.filter(
+            is_active=True
+        ).select_related('academic_level').order_by('academic_level__order', 'name')
+
+        self.fields['grading_system'].queryset = GradingSystem.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['academic_session'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        ).order_by('-start_date')
+
+        self.fields['subject'].queryset = Subject.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['subject'].required          = False
+        self.fields['subject'].help_text         = "Leave blank for a class-wide assignment."
+        self.fields['end_date'].required         = False
+        self.fields['custom_pass_mark'].required    = False
+        self.fields['custom_maximum_score'].required= False
+        self.fields['curriculum_override'].required = False
+
         if not self.instance.pk:
             from core.utils import get_school_today
             self.fields['effective_date'].initial = get_school_today()
-    
+
     def clean(self):
-        """Validate class grading system assignment"""
-        cleaned_data = super().clean()
-        
-        effective_date = cleaned_data.get('effective_date')
-        end_date = cleaned_data.get('end_date')
+        cleaned_data     = super().clean()
+        effective_date   = cleaned_data.get('effective_date')
+        end_date         = cleaned_data.get('end_date')
         academic_session = cleaned_data.get('academic_session')
-        class_instance = cleaned_data.get('class_instance')
-        
-        # Validate date range
-        if effective_date and end_date:
-            if end_date <= effective_date:
-                raise ValidationError({
-                    'end_date': 'End date must be after effective date.'
-                })
-        
-        # Validate dates within session
+        class_instance   = cleaned_data.get('class_instance')
+
+        if effective_date and end_date and end_date <= effective_date:
+            self.add_error('end_date', 'End date must be after effective date.')
+
         if academic_session and effective_date:
             if effective_date < academic_session.start_date:
-                raise ValidationError({
-                    'effective_date': 'Effective date cannot be before session start.'
-                })
-            
+                self.add_error(
+                    'effective_date',
+                    'Effective date cannot be before the session start date.',
+                )
             if end_date and end_date > academic_session.end_date:
-                raise ValidationError({
-                    'end_date': 'End date cannot be after session end.'
-                })
-        
-        # Validate class belongs to the selected session
+                self.add_error(
+                    'end_date',
+                    'End date cannot be after the session end date.',
+                )
+
         if class_instance and academic_session:
-            if class_instance.academic_session != academic_session:
-                raise ValidationError({
-                    'class_instance': f'Selected class belongs to {class_instance.academic_session}, not {academic_session}.'
-                })
-        
+            if class_instance.academic_session_id != academic_session.pk:
+                self.add_error(
+                    'class_instance',
+                    f"'{class_instance}' belongs to '{class_instance.academic_session}', "
+                    f"not the selected session '{academic_session}'.",
+                )
+
         return cleaned_data
+
+
+class GradingSystemFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter / search form for the grading-system list view."""
+
+    q = forms.CharField(
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name or code…'}),
+    )
+    grading_type = forms.ChoiceField(
+        label='Grading Type', required=False,
+        choices=[('', 'All Types')] + list(GradingSystem.GRADING_TYPES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    scale_type = forms.ChoiceField(
+        label='Scale Type', required=False,
+        choices=[('', 'All Scales')] + list(GradingSystem.SCALE_TYPES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_active = forms.ChoiceField(
+        label='Status', required=False,
+        choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_default = forms.ChoiceField(
+        label='Default System', required=False,
+        choices=[('', 'All'), ('true', 'Default Only'), ('false', 'Non-Default')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+
+class ClassGradingSystemFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter / search form for class grading-system assignments."""
+
+    q = forms.CharField(
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by class or system…'}),
+    )
+    academic_session = forms.ModelChoiceField(
+        label='Academic Session', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Sessions'),
+    )
+    class_instance = forms.ModelChoiceField(
+        label='Class', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Classes'),
+    )
+    grading_system = forms.ModelChoiceField(
+        label='Grading System', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Systems'),
+    )
+    subject = forms.ModelChoiceField(
+        label='Subject', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Subjects'),
+    )
+    is_active = forms.ChoiceField(
+        label='Status', required=False,
+        choices=[('', 'All'), ('true', 'Active'), ('false', 'Inactive')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_default_for_class = forms.ChoiceField(
+        label='Default Assignment', required=False,
+        choices=[('', 'All'), ('true', 'Default'), ('false', 'Not Default')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields['academic_session'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        ).order_by('-start_date')
+
+        self.fields['class_instance'].queryset = Class.objects.filter(
+            is_active=True
+        ).select_related('academic_level').order_by('academic_level__order', 'section')
+
+        self.fields['grading_system'].queryset = GradingSystem.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['subject'].queryset = Subject.objects.filter(
+            is_active=True
+        ).order_by('name')
 
 
 # =============================================================================
@@ -525,10 +618,10 @@ class ClassGradingSystemForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Mode
 # =============================================================================
 
 class ExaminationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for creating/editing examinations"""
-    
+    """Create / edit an examination."""
+
     class Meta:
-        model = Examination
+        model  = Examination
         fields = [
             'name', 'code', 'description',
             'exam_category', 'exam_mode',
@@ -538,235 +631,191 @@ class ExaminationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
             'exam_date', 'start_time', 'end_time', 'duration_minutes',
             'total_marks', 'pass_marks',
             'instructions', 'materials_allowed', 'special_requirements',
-            'examination_venue', 'classroom', 
+            'examination_venue', 'classroom',
             'auto_submit', 'show_results_immediately', 'allow_review',
             'invigilators', 'status', 'notes',
         ]
         widgets = {
-            'name': forms.TextInput(attrs={'placeholder': 'e.g., Mathematics Mid-Term Exam'}),
-            'code': forms.TextInput(attrs={'placeholder': 'e.g., MATH-MTE-2024'}),
-            'description': forms.Textarea(attrs={'rows': 3}),
-            'exam_category': forms.Select(attrs={'class': 'form-select'}),
-            'exam_mode': forms.Select(attrs={'class': 'form-select'}),
-            'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'subject': forms.Select(attrs={'class': 'form-select'}),
-            'target_classes': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
-            'curriculum_type': forms.Select(attrs={'class': 'form-select'}),
+            'name':                forms.TextInput(attrs={'placeholder': 'e.g., Mathematics Mid-Term Exam'}),
+            'code':                forms.TextInput(attrs={'placeholder': 'Auto-generated if left blank'}),
+            'description':         forms.Textarea(attrs={'rows': 3}),
+            'exam_category':       forms.Select(attrs={'class': 'form-select'}),
+            'exam_mode':           forms.Select(attrs={'class': 'form-select'}),
+            'academic_session':    forms.Select(attrs={'class': 'form-select'}),
+            'subject':             forms.Select(attrs={'class': 'form-select'}),
+            'target_classes':      forms.SelectMultiple(attrs={'class': 'form-select', 'size': '6'}),
+            'curriculum_type':     forms.Select(attrs={'class': 'form-select'}),
             'subject_type_weight': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'grading_system': forms.Select(attrs={'class': 'form-select'}),
-            'exam_date': DatePickerInput(),
-            'start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
-            'end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
-            'duration_minutes': forms.NumberInput(attrs={'min': '1'}),
-            'total_marks': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'pass_marks': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'instructions': forms.Textarea(attrs={'rows': 4}),
-            'materials_allowed': forms.Textarea(attrs={'rows': 2}),
-            'special_requirements': forms.Textarea(attrs={'rows': 2}),
-            'examination_venue': forms.TextInput(attrs={'placeholder': 'e.g., Main Hall'}),
-            'classroom': forms.Select(attrs={'class': 'form-select'}),
-            'status': forms.Select(attrs={'class': 'form-select'}),
-            'invigilators': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '4'}),
-            'notes': forms.Textarea(attrs={'rows': 3}),
+            'grading_system':      forms.Select(attrs={'class': 'form-select'}),
+            'exam_date':           DatePickerInput(),
+            'start_time':          forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'end_time':            forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'duration_minutes':    forms.NumberInput(attrs={'min': '1'}),
+            'total_marks':         forms.NumberInput(attrs={'step': '0.01', 'min': '0.01'}),
+            'pass_marks':          forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'instructions':        forms.Textarea(attrs={'rows': 4}),
+            'materials_allowed':   forms.Textarea(attrs={'rows': 2}),
+            'special_requirements':forms.Textarea(attrs={'rows': 2}),
+            'examination_venue':   forms.TextInput(attrs={'placeholder': 'e.g., Main Hall'}),
+            'classroom':           forms.Select(attrs={'class': 'form-select'}),
+            'status':              forms.Select(attrs={'class': 'form-select'}),
+            'invigilators':        forms.SelectMultiple(attrs={'class': 'form-select', 'size': '4'}),
+            'notes':               forms.Textarea(attrs={'rows': 3}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['exam_category'].queryset = ExamCategory.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['subject'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['target_classes'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level').order_by('academic_level__order', 'name')
-            
-            self.fields['grading_system'].queryset = GradingSystem.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['classroom'].queryset = ClassRoom.objects.filter(
-                is_active=True
-            ).order_by('building', 'floor', 'room_number')
-            
-            self.fields['invigilators'].queryset = Staff.objects.filter(
-                is_active=True
-            ).order_by('first_name', 'last_name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Make some fields optional
-        self.fields['grading_system'].required = False
-        self.fields['grading_system'].help_text = "Leave blank to use class default"
-        self.fields['classroom'].required = False
-        
-        # Set help texts
-        self.fields['duration_minutes'].help_text = "Duration in minutes"
-        self.fields['total_marks'].help_text = "Total marks for this examination"
-        self.fields['pass_marks'].help_text = "Minimum marks to pass"
-    
+
+        self.fields['exam_category'].queryset = ExamCategory.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['academic_session'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        ).order_by('-start_date')
+
+        self.fields['subject'].queryset = Subject.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['target_classes'].queryset = Class.objects.filter(
+            is_active=True
+        ).select_related('academic_level').order_by('academic_level__order', 'name')
+
+        self.fields['grading_system'].queryset = GradingSystem.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['classroom'].queryset = ClassRoom.objects.filter(
+            is_active=True
+        ).order_by('building', 'floor', 'room_number')
+
+        self.fields['invigilators'].queryset = Staff.objects.filter(
+            is_active=True
+        ).order_by('first_name', 'last_name')
+
+        # Optional fields
+        self.fields['code'].required            = False
+        self.fields['grading_system'].required  = False
+        self.fields['classroom'].required       = False
+        self.fields['invigilators'].required    = False
+        self.fields['duration_minutes'].required= False
+
+        self.fields['grading_system'].help_text  = "Leave blank to inherit from class assignment."
+        self.fields['duration_minutes'].help_text = "Derived automatically from start/end times if left blank."
+
     def clean(self):
-        """Validate examination data using school timezone"""
-        cleaned_data = super().clean()
-        
-        exam_date = cleaned_data.get('exam_date')
-        start_time = cleaned_data.get('start_time')
-        end_time = cleaned_data.get('end_time')
+        cleaned_data     = super().clean()
+        exam_date        = cleaned_data.get('exam_date')
+        start_time       = cleaned_data.get('start_time')
+        end_time         = cleaned_data.get('end_time')
         duration_minutes = cleaned_data.get('duration_minutes')
-        total_marks = cleaned_data.get('total_marks')
-        pass_marks = cleaned_data.get('pass_marks')
+        total_marks      = cleaned_data.get('total_marks')
+        pass_marks       = cleaned_data.get('pass_marks')
         academic_session = cleaned_data.get('academic_session')
-        
+
         from core.utils import get_school_today
         today = get_school_today()
-        
-        # Validate exam date for new exams
-        if not self.instance.pk and exam_date:
-            if exam_date < today:
-                raise ValidationError({
-                    'exam_date': 'Examination date cannot be in the past.'
-                })
-        
-        # Validate exam date within academic session
+
+        # New examinations cannot be in the past
+        if not self.instance.pk and exam_date and exam_date < today:
+            self.add_error('exam_date', 'Examination date cannot be in the past.')
+
+        # Date must fall within the academic session
         if exam_date and academic_session:
-            if exam_date < academic_session.start_date or exam_date > academic_session.end_date:
-                raise ValidationError({
-                    'exam_date': f'Examination date must be within the academic session period ({academic_session.start_date} to {academic_session.end_date}).'
-                })
-        
-        # Validate time range
+            if not (academic_session.start_date <= exam_date <= academic_session.end_date):
+                self.add_error(
+                    'exam_date',
+                    f"Date must be within the session period "
+                    f"({academic_session.start_date} – {academic_session.end_date}).",
+                )
+
+        # Time range consistency
         if start_time and end_time:
             if start_time >= end_time:
-                raise ValidationError({
-                    'end_time': 'End time must be after start time.'
-                })
-            
-            # Calculate duration if not provided
-            if not duration_minutes:
+                self.add_error('end_time', 'End time must be after start time.')
+            elif not duration_minutes and exam_date:
                 from datetime import datetime
-                start_dt = datetime.combine(exam_date or today, start_time)
-                end_dt = datetime.combine(exam_date or today, end_time)
-                duration = end_dt - start_dt
-                cleaned_data['duration_minutes'] = int(duration.total_seconds() / 60)
-        
-        # Validate pass marks
-        if total_marks and pass_marks:
-            if pass_marks > total_marks:
-                raise ValidationError({
-                    'pass_marks': 'Pass marks cannot exceed total marks.'
-                })
-            
+                start_dt = datetime.combine(exam_date, start_time)
+                end_dt   = datetime.combine(exam_date, end_time)
+                cleaned_data['duration_minutes'] = int(
+                    (end_dt - start_dt).total_seconds() / 60
+                )
+
+        # Pass marks vs total marks
+        if total_marks is not None and total_marks <= 0:
+            self.add_error('total_marks', 'Total marks must be greater than zero.')
+
+        if total_marks and pass_marks is not None:
             if pass_marks < 0:
-                raise ValidationError({
-                    'pass_marks': 'Pass marks must be a positive value.'
-                })
-        
-        # Validate total marks is positive
-        if total_marks and total_marks <= 0:
-            raise ValidationError({
-                'total_marks': 'Total marks must be greater than zero.'
-            })
-        
+                self.add_error('pass_marks', 'Pass marks cannot be negative.')
+            elif pass_marks > total_marks:
+                self.add_error('pass_marks', 'Pass marks cannot exceed total marks.')
+
         return cleaned_data
 
 
-# =============================================================================
-# EXAM REGISTRATION FORMS
-# =============================================================================
+class ExaminationFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
+    """Filter / search form for the examination list view."""
 
-class ExamRegistrationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for exam registration"""
-    
-    class Meta:
-        model = ExamRegistration
-        fields = [
-            'student', 'examination',
-            'special_accommodations', 'requires_assistance',
-            'notes',
-        ]
-        widgets = {
-            'student': forms.Select(attrs={'class': 'form-select'}),
-            'examination': forms.Select(attrs={'class': 'form-select'}),
-            'special_accommodations': forms.Textarea(attrs={'rows': 3}),
-            'notes': forms.Textarea(attrs={'rows': 2}),
-        }
-    
+    q = forms.CharField(
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Search by name or code…'}),
+    )
+    academic_session = forms.ModelChoiceField(
+        label='Academic Session', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Sessions'),
+    )
+    exam_category = forms.ModelChoiceField(
+        label='Category', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Categories'),
+    )
+    subject = forms.ModelChoiceField(
+        label='Subject', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Subjects'),
+    )
+    status = forms.ChoiceField(
+        label='Status', required=False,
+        choices=[('', 'All Statuses')] + list(Examination.EXAM_STATUS_CHOICES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    exam_mode = forms.ChoiceField(
+        label='Mode', required=False,
+        choices=[('', 'All Modes')] + list(Examination.EXAM_MODES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    exam_date_from = forms.DateField(
+        label='From Date', required=False,
+        widget=DatePickerInput(),
+    )
+    exam_date_to = forms.DateField(
+        label='To Date', required=False,
+        widget=DatePickerInput(),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['student'].queryset = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).order_by('first_name', 'last_name')
-            
-            self.fields['examination'].queryset = Examination.objects.filter(
-                status__in=['PLANNED', 'SCHEDULED']
-            ).select_related('subject', 'academic_session').order_by('-exam_date')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
+
+        self.fields['academic_session'].queryset = AcademicSession.objects.filter(
+            is_active=True
+        ).order_by('-start_date')
+
+        self.fields['exam_category'].queryset = ExamCategory.objects.filter(
+            is_active=True
+        ).order_by('name')
+
+        self.fields['subject'].queryset = Subject.objects.filter(
+            is_active=True
+        ).order_by('name')
 
     def clean(self):
-        cleaned_data = super().clean()
-        student = cleaned_data.get('student')
-        examination = cleaned_data.get('examination')
-        
-        if student and examination:
-            # Check for existing registration
-            existing = ExamRegistration.objects.filter(
-                student=student,
-                examination=examination
-            ).exclude(pk=self.instance.pk if self.instance.pk else None)
-            
-            if existing.exists():
-                raise ValidationError({
-                    'student': f'{student.get_full_name()} is already registered for this examination.'
-                })
-            
-            # Check if student is in target classes
-            from students.models import StudentClassEnrollment
-            
-            student_classes = StudentClassEnrollment.objects.filter(
-                student=student,
-                academic_session=examination.academic_session,
-                is_active=True,
-                completion_status='ONGOING'
-            ).values_list('class_instance', flat=True)
-            
-            exam_target_classes = examination.target_classes.values_list('id', flat=True)
-            
-            if not any(cls in exam_target_classes for cls in student_classes):
-                raise ValidationError({
-                    'student': f'{student.get_full_name()} is not enrolled in any of the target classes for this examination.'
-                })
-            
-            # Check exam category registration requirements
-            if examination.exam_category and examination.exam_category.requires_registration:
-                # Check registration deadline
-                if examination.exam_category.registration_deadline_days:
-                    from core.utils import get_school_today
-                    from datetime import timedelta
-                    
-                    today = get_school_today()
-                    deadline = examination.exam_date - timedelta(
-                        days=examination.exam_category.registration_deadline_days
-                    )
-                    
-                    if today > deadline:
-                        raise ValidationError(
-                            f'Registration deadline has passed. Deadline was {deadline}.'
-                        )
-        
+        cleaned_data   = super().clean()
+        date_from      = cleaned_data.get('exam_date_from')
+        date_to        = cleaned_data.get('exam_date_to')
+
+        if date_from and date_to and date_from > date_to:
+            self.add_error('exam_date_to', 'End date must be on or after start date.')
+
         return cleaned_data
 
 
@@ -774,773 +823,330 @@ class ExamRegistrationForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelF
 # STUDENT EXAM RESULT FORMS
 # =============================================================================
 
-class StudentExamResultForm(RequiredFieldsMixin, BootstrapFormMixin, MoneyFieldsMixin, forms.ModelForm):
-    """Form for entering/editing exam results"""
-    
+class StudentExamResultForm(RequiredFieldsMixin, BootstrapFormMixin, forms.ModelForm):
+    """Create or edit a single StudentExamResult."""
+
     class Meta:
-        model = StudentExamResult
+        model  = StudentExamResult
         fields = [
             'student', 'examination', 'score', 'status',
             'correct_answers', 'incorrect_answers', 'unanswered',
             'teacher_comments', 'examiner_comments',
         ]
         widgets = {
-            'student': forms.Select(attrs={'class': 'form-select'}),
-            'examination': forms.Select(attrs={'class': 'form-select'}),
-            'score': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'status': forms.Select(attrs={'class': 'form-select'}),
-            'correct_answers': forms.NumberInput(attrs={'min': '0'}),
+            'student':           forms.Select(attrs={'class': 'form-select'}),
+            'examination':       forms.Select(attrs={'class': 'form-select'}),
+            'score':             forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'status':            forms.Select(attrs={'class': 'form-select'}),
+            'correct_answers':   forms.NumberInput(attrs={'min': '0'}),
             'incorrect_answers': forms.NumberInput(attrs={'min': '0'}),
-            'unanswered': forms.NumberInput(attrs={'min': '0'}),
-            'teacher_comments': forms.Textarea(attrs={'rows': 3}),
+            'unanswered':        forms.NumberInput(attrs={'min': '0'}),
+            'teacher_comments':  forms.Textarea(attrs={'rows': 3}),
             'examiner_comments': forms.Textarea(attrs={'rows': 3}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set querysets
-        try:
-            self.fields['student'].queryset = Student.objects.filter(
-                enrollment_status='ACTIVE'
-            ).order_by('first_name', 'last_name')
-            
-            self.fields['examination'].queryset = Examination.objects.filter(
-                status__in=['ONGOING', 'COMPLETED']
-            ).select_related('subject').order_by('-exam_date')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Disable grade fields (auto-calculated)
-        if 'grade' in self.fields:
-            self.fields['grade'].disabled = True
-        if 'percentage' in self.fields:
-            self.fields['percentage'].disabled = True
-    
+
+        self.fields['student'].queryset = Student.objects.filter(
+            enrollment_status='ACTIVE'
+        ).order_by('last_name', 'first_name')
+
+        self.fields['examination'].queryset = Examination.objects.filter(
+            status__in=['ONGOING', 'COMPLETED']
+        ).select_related('subject', 'academic_session').order_by('-exam_date')
+
+        for f in ('correct_answers', 'incorrect_answers', 'unanswered',
+                  'teacher_comments', 'examiner_comments'):
+            self.fields[f].required = False
+
     def clean_score(self):
-        """Validate score against examination total marks"""
-        score = self.cleaned_data.get('score')
-        examination = self.cleaned_data.get('examination') or self.instance.examination
-        
+        score       = self.cleaned_data.get('score')
+        examination = self.cleaned_data.get('examination') or (
+            self.instance.examination if self.instance.pk else None
+        )
+
         if score is not None and examination:
-            if score > examination.total_marks:
-                raise ValidationError(
-                    f'Score cannot exceed total marks ({examination.total_marks}).'
-                )
             if score < 0:
                 raise ValidationError('Score cannot be negative.')
-        
+            if score > examination.total_marks:
+                raise ValidationError(
+                    f"Score {score} exceeds total marks ({examination.total_marks})."
+                )
+
         return score
-    
+
     def clean(self):
         cleaned_data = super().clean()
-        student = cleaned_data.get('student')
-        examination = cleaned_data.get('examination')
-        
+        student      = cleaned_data.get('student')
+        examination  = cleaned_data.get('examination')
+
+        if examination and examination.is_grade_locked if hasattr(examination, 'is_grade_locked') else False:
+            raise ValidationError(
+                "This examination's results are locked. Contact an administrator."
+            )
+
+        # Verify the student belongs to one of the exam's target classes
         if student and examination:
-            # Check if student is enrolled in one of the exam's target classes
-            from students.models import StudentClassEnrollment
-            
-            student_classes = StudentClassEnrollment.objects.filter(
-                student=student,
-                academic_session=examination.academic_session,
-                is_active=True,
-                completion_status='ONGOING'
-            ).values_list('class_instance', flat=True)
-            
-            exam_target_classes = examination.target_classes.values_list('id', flat=True)
-            
-            if not any(cls in exam_target_classes for cls in student_classes):
-                raise ValidationError({
-                    'student': f'{student.get_full_name()} is not enrolled in any of the target classes for this examination.'
-                })
-        
+            target_class_ids = set(
+                examination.target_classes.values_list('id', flat=True)
+            )
+            student_class_ids = set(
+                student.class_enrollments.filter(
+                    is_active=True,
+                    academic_session=examination.academic_session,
+                ).values_list('class_instance_id', flat=True)
+            )
+            if not (target_class_ids & student_class_ids):
+                self.add_error(
+                    'student',
+                    f"{student.get_full_name()} is not enrolled in any of the "
+                    "target classes for this examination.",
+                )
+
+        return cleaned_data
+
+
+
+class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
+    """Filter / search form for the student-result list view."""
+
+    q = forms.CharField(
+        label='Search', required=False,
+        widget=SearchInput(attrs={'placeholder': 'Student name or admission no.…'}),
+    )
+    examination = forms.ModelChoiceField(
+        label='Examination', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Examinations'),
+    )
+    class_instance = forms.ModelChoiceField(
+        label='Class', queryset=None, required=False,
+        widget=SelectWithDefault(default_label='All Classes'),
+    )
+    status = forms.ChoiceField(
+        label='Status', required=False,
+        choices=[('', 'All Statuses')] + list(StudentExamResult.RESULT_STATUS_CHOICES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_published = forms.ChoiceField(
+        label='Published', required=False,
+        choices=[('', 'All'), ('true', 'Published'), ('false', 'Unpublished')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_grade_locked = forms.ChoiceField(
+        label='Grade Locked', required=False,
+        choices=[('', 'All'), ('true', 'Locked'), ('false', 'Unlocked')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    is_pass = forms.ChoiceField(
+        label='Pass / Fail', required=False,
+        choices=[('', 'All'), ('true', 'Pass'), ('false', 'Fail')],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    min_score = forms.DecimalField(
+        label='Min Score', required=False, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control', 'step': '0.01', 'placeholder': '0',
+        }),
+    )
+    max_score = forms.DecimalField(
+        label='Max Score', required=False, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control', 'step': '0.01', 'placeholder': '100',
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields['examination'].queryset = Examination.objects.all().select_related(
+            'subject', 'academic_session'
+        ).order_by('-exam_date')
+
+        self.fields['class_instance'].queryset = Class.objects.filter(
+            is_active=True
+        ).select_related('academic_level').order_by('academic_level__order', 'section')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        min_score    = cleaned_data.get('min_score')
+        max_score    = cleaned_data.get('max_score')
+
+        if min_score is not None and min_score < 0:
+            self.add_error('min_score', 'Minimum score cannot be negative.')
+
+        if min_score is not None and max_score is not None and min_score > max_score:
+            self.add_error('max_score', 'Maximum score must be greater than minimum score.')
+
         return cleaned_data
 
 
 # =============================================================================
-# GRADE LOCKING FORMS
+# ACTION / WORKFLOW FORMS
 # =============================================================================
 
 class GradeLockForm(BootstrapFormMixin, forms.Form):
-    """Form for locking exam grades"""
-    
+    """Confirm locking of exam grade(s)."""
+
     lock_reason = forms.CharField(
         label='Reason for Locking',
         required=True,
         widget=forms.Textarea(attrs={
             'rows': 3,
-            'placeholder': 'Provide a reason for locking these grades...'
+            'placeholder': 'e.g., Results verified and approved by HOD.',
         }),
-        help_text='This action will prevent future grade changes'
+        help_text='Stored in the audit trail for each locked result.',
     )
-    
     confirm = forms.BooleanField(
-        label='I confirm locking these grades',
+        label='I confirm locking these grade(s) — this cannot be undone without admin access.',
         required=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )
 
 
 class GradeUnlockForm(BootstrapFormMixin, forms.Form):
-    """Form for unlocking exam grades"""
-    
+    """Confirm unlocking of exam grade(s). Requires elevated permission."""
+
     unlock_reason = forms.CharField(
         label='Reason for Unlocking',
         required=True,
         widget=forms.Textarea(attrs={
             'rows': 3,
-            'placeholder': 'Provide a reason for unlocking these grades...'
+            'placeholder': 'e.g., Data entry error in original score.',
         }),
-        help_text='This will allow grades to be recalculated based on current grading system'
+        help_text='Unlocking allows the grade to be recalculated from the current grading system.',
     )
-    
     confirm = forms.BooleanField(
-        label='I understand this will allow grade modifications',
+        label='I understand that unlocking will allow score modifications.',
         required=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )
 
 
 class ResultPublishForm(BootstrapFormMixin, forms.Form):
-    """Form for publishing exam results"""
-    
+    """Confirm publication of examination results."""
+
     auto_lock_grades = forms.BooleanField(
-        label='Automatically lock grades after publication',
+        label='Lock grades automatically after publication',
         initial=True,
         required=False,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text='Locked grades cannot be changed without explicit unlocking'
+        help_text='Recommended — locked grades cannot be altered without an explicit unlock.',
     )
-    
     notes = forms.CharField(
         label='Publication Notes',
         required=False,
         widget=forms.Textarea(attrs={
             'rows': 3,
-            'placeholder': 'Optional notes about this publication...'
-        })
+            'placeholder': 'Optional notes visible to administrators.',
+        }),
     )
-    
     confirm = forms.BooleanField(
-        label='I confirm publishing these results',
+        label='I confirm publishing these results — they will become visible to authorised users.',
         required=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )
 
 
 # =============================================================================
-# FILTER FORMS
+# FILTER UTILITY HELPERS
 # =============================================================================
 
-class ExaminationFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """Filter form for examinations using school timezone"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'})
-    )
-    
-    academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
-    )
-    
-    exam_category = forms.ModelChoiceField(
-        label='Category',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Categories")
-    )
-    
-    subject = forms.ModelChoiceField(
-        label='Subject',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Subjects")
-    )
-    
-    status = forms.ChoiceField(
-        label='Status',
-        choices=[('', 'All Statuses')] + list(Examination.EXAM_STATUS_CHOICES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    exam_date_from = forms.DateField(
-        label='From Date',
-        required=False,
-        widget=DatePickerInput()
-    )
-    
-    exam_date_to = forms.DateField(
-        label='To Date',
-        required=False,
-        widget=DatePickerInput()
-    )
-    
-    exam_mode = forms.ChoiceField(
-        label='Exam Mode',
-        choices=[('', 'All Modes')] + list(Examination.EXAM_MODES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        try:
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['exam_category'].queryset = ExamCategory.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['subject'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-    
-    def clean(self):
-        """Validate filter form data"""
-        cleaned_data = super().clean()
-        
-        exam_date_from = cleaned_data.get('exam_date_from')
-        exam_date_to = cleaned_data.get('exam_date_to')
-        
-        # Validate date range
-        if exam_date_from and exam_date_to:
-            if exam_date_from > exam_date_to:
-                raise ValidationError({
-                    'exam_date_to': 'End date must be after start date.'
-                })
-        
-        return cleaned_data
-
-
-class StudentExamResultFilterForm(BootstrapFormMixin, forms.Form):
-    """Filter form for student exam results"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by student name...'})
-    )
-    
-    examination = forms.ModelChoiceField(
-        label='Examination',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Examinations")
-    )
-    
-    status = forms.ChoiceField(
-        label='Status',
-        choices=[('', 'All Statuses')] + list(StudentExamResult.RESULT_STATUS_CHOICES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_published = forms.ChoiceField(
-        label='Published',
-        choices=[
-            ('', 'All'),
-            ('true', 'Published'),
-            ('false', 'Unpublished')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_grade_locked = forms.ChoiceField(
-        label='Grade Locked',
-        choices=[
-            ('', 'All'),
-            ('true', 'Locked'),
-            ('false', 'Unlocked')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_pass = forms.ChoiceField(
-        label='Pass/Fail',
-        choices=[
-            ('', 'All'),
-            ('true', 'Pass'),
-            ('false', 'Fail')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    min_score = forms.DecimalField(
-        label='Minimum Score',
-        required=False,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Min score',
-            'step': '0.01'
-        })
-    )
-    
-    max_score = forms.DecimalField(
-        label='Maximum Score',
-        required=False,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Max score',
-            'step': '0.01'
-        })
-    )
-    
-    class_instance = forms.ModelChoiceField(
-        label='Class',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Classes")
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        try:
-            self.fields['examination'].queryset = Examination.objects.all().select_related(
-                'subject', 'academic_session'
-            ).order_by('-exam_date')
-            
-            from academics.models import Class
-            self.fields['class_instance'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level').order_by('academic_level__order', 'section')
-            
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-    
-    def clean(self):
-        """Validate filter form data"""
-        cleaned_data = super().clean()
-        
-        min_score = cleaned_data.get('min_score')
-        max_score = cleaned_data.get('max_score')
-        
-        # Validate score range
-        if min_score is not None and max_score is not None:
-            if min_score > max_score:
-                raise ValidationError({
-                    'max_score': 'Maximum score must be greater than minimum score.'
-                })
-        
-        # Validate min_score is not negative
-        if min_score is not None and min_score < 0:
-            raise ValidationError({
-                'min_score': 'Minimum score cannot be negative.'
-            })
-        
-        return cleaned_data
-
-
-class ExamCategoryFilterForm(BootstrapFormMixin, forms.Form):
-    """Filter form for exam categories"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'})
-    )
-    
-    category_type = forms.ChoiceField(
-        label='Category Type',
-        choices=[('', 'All Types')] + list(ExamCategory.CATEGORY_TYPES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    frequency = forms.ChoiceField(
-        label='Frequency',
-        choices=[('', 'All Frequencies')] + list(ExamCategory.FREQUENCY_CHOICES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_active = forms.ChoiceField(
-        label='Status',
-        choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    requires_registration = forms.ChoiceField(
-        label='Requires Registration',
-        choices=[
-            ('', 'All'),
-            ('true', 'Yes'),
-            ('false', 'No')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-
-
-class GradingSystemFilterForm(BootstrapFormMixin, forms.Form):
-    """Filter form for grading systems"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by name, code...'})
-    )
-    
-    grading_type = forms.ChoiceField(
-        label='Grading Type',
-        choices=[('', 'All Types')] + list(GradingSystem.GRADING_TYPES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    scale_type = forms.ChoiceField(
-        label='Scale Type',
-        choices=[('', 'All Scales')] + list(GradingSystem.SCALE_TYPES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_active = forms.ChoiceField(
-        label='Status',
-        choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_default = forms.ChoiceField(
-        label='Default System',
-        choices=[
-            ('', 'All'),
-            ('true', 'Default'),
-            ('false', 'Not Default')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-
-
-class ExamRegistrationFilterForm(BootstrapFormMixin, forms.Form):
-    """Filter form for exam registrations"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by student name...'})
-    )
-    
-    examination = forms.ModelChoiceField(
-        label='Examination',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Examinations")
-    )
-    
-    registration_status = forms.ChoiceField(
-        label='Registration Status',
-        choices=[('', 'All')] + list(ExamRegistration.REGISTRATION_STATUS_CHOICES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    requires_assistance = forms.ChoiceField(
-        label='Requires Assistance',
-        choices=[
-            ('', 'All'),
-            ('true', 'Yes'),
-            ('false', 'No')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    payment_verified = forms.ChoiceField(
-        label='Payment Verified',
-        choices=[
-            ('', 'All'),
-            ('true', 'Verified'),
-            ('false', 'Not Verified')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        try:
-            self.fields['examination'].queryset = Examination.objects.filter(
-                status__in=['PLANNED', 'SCHEDULED', 'ONGOING']
-            ).select_related('subject', 'academic_session').order_by('-exam_date')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-
-
-class ClassGradingSystemFilterForm(BootstrapFormMixin, forms.Form):
-    """Filter form for class grading system assignments"""
-    
-    q = forms.CharField(
-        label='Search',
-        required=False,
-        widget=SearchInput(attrs={'placeholder': 'Search by class, system...'})
-    )
-    
-    academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Sessions")
-    )
-    
-    class_instance = forms.ModelChoiceField(
-        label='Class',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Classes")
-    )
-    
-    grading_system = forms.ModelChoiceField(
-        label='Grading System',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Systems")
-    )
-    
-    subject = forms.ModelChoiceField(
-        label='Subject',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Subjects")
-    )
-    
-    is_active = forms.ChoiceField(
-        label='Status',
-        choices=[
-            ('', 'All'),
-            ('true', 'Active'),
-            ('false', 'Inactive')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    is_default_for_class = forms.ChoiceField(
-        label='Default Assignment',
-        choices=[
-            ('', 'All'),
-            ('true', 'Default'),
-            ('false', 'Not Default')
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        try:
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['class_instance'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level').order_by('academic_level__order', 'section')
-            
-            self.fields['grading_system'].queryset = GradingSystem.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['subject'].queryset = Subject.objects.filter(
-                is_active=True
-            ).order_by('name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-
-
-# =============================================================================
-# BULK OPERATIONS FORMS
-# =============================================================================
-
-class BulkResultEntryForm(BootstrapFormMixin, forms.Form):
-    """Form for bulk result entry configuration"""
-    
-    examination = forms.ModelChoiceField(
-        label='Examination',
-        queryset=None,
-        required=True,
-        widget=forms.Select(attrs={'class': 'form-select'}),
-        help_text='Select the examination to enter results for'
-    )
-    
-    target_class = forms.ModelChoiceField(
-        label='Class',
-        queryset=None,
-        required=False,
-        widget=SelectWithDefault(default_label="All Classes"),
-        help_text='Optional: Filter students by class'
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        try:
-            self.fields['examination'].queryset = Examination.objects.filter(
-                status__in=['ONGOING', 'COMPLETED']
-            ).select_related('subject', 'academic_session').order_by('-exam_date')
-            
-            self.fields['target_class'].queryset = Class.objects.filter(
-                is_active=True
-            ).select_related('academic_level').order_by('academic_level__order', 'name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-
-
-# =============================================================================
-# UTILITY FUNCTIONS FOR FILTERS
-# =============================================================================
-
-def apply_examination_filters(queryset, form):
+def apply_examination_filters(queryset, form: ExaminationFilterForm):
     """
-    Apply filters from ExaminationFilterForm to a queryset.
-    
-    Usage in views:
-        form = ExaminationFilterForm(request.GET)
-        if form.is_valid():
-            exams = apply_examination_filters(Examination.objects.all(), form)
+    Apply validated filter fields from ``ExaminationFilterForm`` to a queryset.
+
+    Args:
+        queryset: ``Examination`` queryset
+        form:     Bound and validated ``ExaminationFilterForm``
+
+    Returns:
+        Filtered queryset (unchanged if form is invalid)
     """
     if not form.is_valid():
         return queryset
-    
-    # Search query
-    q = form.cleaned_data.get('q')
-    if q:
-        from django.db.models import Q
+
+    cd = form.cleaned_data
+
+    if cd.get('q'):
         queryset = queryset.filter(
-            Q(name__icontains=q) |
-            Q(code__icontains=q) |
-            Q(description__icontains=q)
+            Q(name__icontains=cd['q']) |
+            Q(code__icontains=cd['q']) |
+            Q(description__icontains=cd['q'])
         )
-    
-    # Academic session filter
-    academic_session = form.cleaned_data.get('academic_session')
-    if academic_session:
-        queryset = queryset.filter(academic_session=academic_session)
-    
-    # Exam category filter
-    exam_category = form.cleaned_data.get('exam_category')
-    if exam_category:
-        queryset = queryset.filter(exam_category=exam_category)
-    
-    # Subject filter
-    subject = form.cleaned_data.get('subject')
-    if subject:
-        queryset = queryset.filter(subject=subject)
-    
-    # Status filter
-    status = form.cleaned_data.get('status')
-    if status:
-        queryset = queryset.filter(status=status)
-    
-    # Exam mode filter
-    exam_mode = form.cleaned_data.get('exam_mode')
-    if exam_mode:
-        queryset = queryset.filter(exam_mode=exam_mode)
-    
-    # Date range filters
-    exam_date_from = form.cleaned_data.get('exam_date_from')
-    if exam_date_from:
-        queryset = queryset.filter(exam_date__gte=exam_date_from)
-    
-    exam_date_to = form.cleaned_data.get('exam_date_to')
-    if exam_date_to:
-        queryset = queryset.filter(exam_date__lte=exam_date_to)
-    
+
+    if cd.get('academic_session'):
+        queryset = queryset.filter(academic_session=cd['academic_session'])
+
+    if cd.get('exam_category'):
+        queryset = queryset.filter(exam_category=cd['exam_category'])
+
+    if cd.get('subject'):
+        queryset = queryset.filter(subject=cd['subject'])
+
+    if cd.get('status'):
+        queryset = queryset.filter(status=cd['status'])
+
+    if cd.get('exam_mode'):
+        queryset = queryset.filter(exam_mode=cd['exam_mode'])
+
+    if cd.get('exam_date_from'):
+        queryset = queryset.filter(exam_date__gte=cd['exam_date_from'])
+
+    if cd.get('exam_date_to'):
+        queryset = queryset.filter(exam_date__lte=cd['exam_date_to'])
+
     return queryset
 
 
-def apply_result_filters(queryset, form):
+def apply_result_filters(queryset, form: StudentExamResultFilterForm):
     """
-    Apply filters from StudentExamResultFilterForm to a queryset.
+    Apply validated filter fields from ``StudentExamResultFilterForm`` to a queryset.
+
+    Args:
+        queryset: ``StudentExamResult`` queryset
+        form:     Bound and validated ``StudentExamResultFilterForm``
+
+    Returns:
+        Filtered queryset (unchanged if form is invalid)
     """
     if not form.is_valid():
         return queryset
-    
-    from django.db.models import Q
-    
-    # Search query
-    q = form.cleaned_data.get('q')
-    if q:
+
+    cd = form.cleaned_data
+
+    if cd.get('q'):
         queryset = queryset.filter(
-            Q(student__first_name__icontains=q) |
-            Q(student__last_name__icontains=q) |
-            Q(student__admission_number__icontains=q)
+            Q(student__first_name__icontains=cd['q']) |
+            Q(student__last_name__icontains=cd['q'])  |
+            Q(student__admission_number__icontains=cd['q'])
         )
-    
-    # Examination filter
-    examination = form.cleaned_data.get('examination')
-    if examination:
-        queryset = queryset.filter(examination=examination)
-    
-    # Status filter
-    status = form.cleaned_data.get('status')
-    if status:
-        queryset = queryset.filter(status=status)
-    
-    # Boolean filters
-    is_published = form.cleaned_data.get('is_published')
-    if is_published == 'true':
-        queryset = queryset.filter(is_published=True)
-    elif is_published == 'false':
-        queryset = queryset.filter(is_published=False)
-    
-    is_grade_locked = form.cleaned_data.get('is_grade_locked')
-    if is_grade_locked == 'true':
-        queryset = queryset.filter(is_grade_locked=True)
-    elif is_grade_locked == 'false':
-        queryset = queryset.filter(is_grade_locked=False)
-    
-    is_pass = form.cleaned_data.get('is_pass')
-    if is_pass == 'true':
-        queryset = queryset.filter(is_pass=True)
-    elif is_pass == 'false':
-        queryset = queryset.filter(is_pass=False)
-    
-    # Score range filters
-    min_score = form.cleaned_data.get('min_score')
-    if min_score is not None:
-        queryset = queryset.filter(score__gte=min_score)
-    
-    max_score = form.cleaned_data.get('max_score')
-    if max_score is not None:
-        queryset = queryset.filter(score__lte=max_score)
-    
-    # Class filter
-    class_instance = form.cleaned_data.get('class_instance')
-    if class_instance:
+
+    if cd.get('examination'):
+        queryset = queryset.filter(examination=cd['examination'])
+
+    if cd.get('status'):
+        queryset = queryset.filter(status=cd['status'])
+
+    if cd.get('is_published') in ('true', 'false'):
+        queryset = queryset.filter(is_published=cd['is_published'] == 'true')
+
+    if cd.get('is_grade_locked') in ('true', 'false'):
+        queryset = queryset.filter(is_grade_locked=cd['is_grade_locked'] == 'true')
+
+    if cd.get('is_pass') in ('true', 'false'):
+        queryset = queryset.filter(is_pass=cd['is_pass'] == 'true')
+
+    if cd.get('min_score') is not None:
+        queryset = queryset.filter(score__gte=cd['min_score'])
+
+    if cd.get('max_score') is not None:
+        queryset = queryset.filter(score__lte=cd['max_score'])
+
+    if cd.get('class_instance'):
         queryset = queryset.filter(
-            student__class_enrollments__class_instance=class_instance,
-            student__class_enrollments__is_active=True
-        )
-    
+            student__class_enrollments__class_instance=cd['class_instance'],
+            student__class_enrollments__is_active=True,
+        ).distinct()
+
     return queryset

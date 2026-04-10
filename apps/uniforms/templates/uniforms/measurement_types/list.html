@@ -1,605 +1,352 @@
-<!-- uniforms/templates/uniforms/items/list.html -->
-
 {% extends 'base.html' %}
 {% load static %}
-{% load widget_tweaks %}
+{% load currency_filters %}
 
 {% block extra_css %}
 <style>
-/* ============================================================================
-   STATUS BADGE STYLING
-   ============================================================================ */
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid;
-    display: inline-block;
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --radius:    10px;
 }
 
-.status-badge.active {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
+.settings-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.settings-card-head {
+    background: var(--surface-2);
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.settings-card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
 }
 
-.status-badge.inactive {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
+/* ── Category group header ── */
+.category-group-head {
+    background: var(--surface-3);
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .7px; color: var(--ink-muted);
+    display: flex; align-items: center; gap: 6px;
 }
 
-/* ============================================================================
-   ITEM TYPE BADGES
-   ============================================================================ */
-
-.category-type-badge {
-    padding: 3px 10px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    display: inline-block;
+/* ── Table ── */
+.mt-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mt-tbl thead th {
+    background: var(--surface-2); padding: 10px 16px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .55px; color: var(--ink-muted);
+    border-bottom: 2px solid var(--border); white-space: nowrap;
 }
-
-.category-type-badge.uniform {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
+.mt-tbl tbody td {
+    padding: 11px 16px; border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle; color: var(--ink);
 }
+.mt-tbl tbody tr:last-child td { border-bottom: none; }
+.mt-tbl tbody tr:hover td { background: #fafbff; }
+.mt-tbl tbody tr.row-inactive td { color: var(--ink-faint); }
+.mt-tbl tbody tr.row-inactive:hover td { background: var(--surface-2); }
 
-.category-type-badge.sports {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
+/* ── Name + code ── */
+.mt-name { font-weight: 600; font-size: 13px; color: var(--ink); }
+.mt-code { font-family: 'Courier New', monospace; font-size: 11px; color: var(--ink-muted); margin-top: 1px; }
+.mt-desc { font-size: 11.5px; color: var(--ink-muted); margin-top: 2px; }
 
-.category-type-badge.pe {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
-}
+/* ── Range display ── */
+.range-text { font-size: 12.5px; font-weight: 600; }
+.range-unit { font-size: 11px; color: var(--ink-faint); margin-left: 3px; }
 
-.category-type-badge.accessory {
-    background-color: #cce5ff;
-    color: #004085;
-    border: 1px solid #b8daff;
-}
+/* ── Pills ── */
+.s-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sp-active   { background: var(--green-lt); color: var(--green); border: 1px solid #bbf7d0; }
+.sp-inactive { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border); }
+.sp-required { background: var(--accent-lt); color: var(--accent); border: 1px solid #bfdbfe; }
+.sp-optional { background: var(--surface-3); color: var(--ink-faint); border: 1px solid var(--border); }
 
-.category-type-badge.shoes {
-    background-color: #e2e3e5;
-    color: #383d41;
-    border: 1px solid #d6d8db;
-}
+.tbl-empty { text-align: center; padding: 48px 20px; color: var(--ink-faint); }
+.tbl-empty i { font-size: 2.6rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
 
-.category-type-badge.bag {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
-
-.category-type-badge.other {
-    background-color: #e9ecef;
-    color: #495057;
-    border: 1px solid #dee2e6;
-}
-
-/* ============================================================================
-   FILTERS & SEARCH SECTION
-   ============================================================================ */
-
-.item-filters {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 25px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.filter-header {
-    margin-bottom: 20px;
-}
-
-.filter-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.card-animate {
-    animation: fadeInUp 0.5s ease-out;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* ============================================================================
-   STATISTICS SUMMARY
-   ============================================================================ */
-
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    transition: transform 0.2s;
-}
-
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.stats-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 28px;
-    color: white;
-}
-
-.stats-content h3 {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
-}
-
-.stats-label {
-    font-size: 12px;
-    color: #6c757d;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-}
-
-/* ============================================================================
-   TABLE STYLING
-   ============================================================================ */
-
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.table thead th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    color: #495057;
-    padding: 15px 12px;
-}
-
-.table tbody td {
-    vertical-align: middle;
-    padding: 12px;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* ============================================================================
-   ITEM SPECIFIC STYLING
-   ============================================================================ */
-
-.category-code {
-    font-family: 'Courier New', monospace;
-    background-color: #f8f9fa;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    border: 1px solid #dee2e6;
-}
-
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
-
-.empty-state {
-    text-align: center;
-    padding: 80px 30px;
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 15px;
-    margin: 30px 0;
-    border: 2px dashed #dee2e6;
-}
-
-.empty-state-icon {
-    font-size: 5rem;
-    color: #dee2e6;
-    margin-bottom: 25px;
-    animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-}
-
-/* ============================================================================
-   PAGINATION
-   ============================================================================ */
-
-.pagination {
-    margin: 20px 0;
-}
-
-.page-link {
-    color: #667eea;
-    border: 1px solid #dee2e6;
-    padding: 0.5rem 0.75rem;
-}
-
-.page-link:hover {
-    background-color: #667eea;
-    color: white;
-    border-color: #667eea;
-}
-
-.page-item.active .page-link {
-    background-color: #667eea;
-    border-color: #667eea;
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
-@media (max-width: 768px) {
-    .item-filters {
-        padding: 15px;
-    }
-    
-    .stats-card {
-        padding: 15px;
-    }
-    
-    .stats-icon {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
-    }
-}
-
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid var(--border); border-radius: 8px; }
+.dropdown-item  { padding: 6px 14px; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
             <div class="page-title-icon">
-                <i class="pe-7s-box2 icon-gradient bg-happy-itmeo"></i>
+                <i class="pe-7s-tools icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
-                Uniform Items
+                Measurement Types
                 <div class="page-title-subheading">
-                    Manage uniform inventory items, pricing, sizes, and stock levels
+                    Configure measurement categories used for student sizing
                 </div>
             </div>
         </div>
         <div class="page-title-actions">
-            <div class="btn-group" role="group">
-                <a href="{% url 'uniforms:uniform_item_create' %}" class="btn btn-primary">
-                    <i class="fa fa-plus me-1"></i>Create Item
-                </a>
-                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-                    <i class="fa fa-print me-1"></i>Print
-                </button>
-                <a href="{% url 'uniforms:export_uniform_items_excel' %}" class="btn btn-outline-success">
-                    <i class="fa fa-file-excel me-1"></i>Export Excel
-                </a>
-            </div>
+            <a href="{% url 'uniforms:measurement_type_create' %}" class="btn btn-sm btn-primary">
+                <i class="fa fa-plus me-1"></i>Add Measurement Type
+            </a>
         </div>
     </div>
 </div>
 
-<!-- Statistics Cards -->
-<div class="row mb-2" id="stats-cards">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-box2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Items</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
-        </div>
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+<div class="settings-card">
+    <div class="settings-card-head">
+        <span class="settings-card-title">
+            <i class="fa fa-ruler text-primary"></i>
+            Measurement Types
+            <span style="font-size:11px;font-weight:500;color:var(--ink-faint);">
+                {{ measurement_types.count }} configured
+            </span>
+        </span>
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Items</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
-        </div>
+
+    {% if measurement_types %}
+
+    {# ── Group by category ── #}
+    {% regroup measurement_types by category as category_groups %}
+
+    {% for group in category_groups %}
+    <div class="category-group-head">
+        <i class="fa fa-layer-group" style="font-size:10px;"></i>
+        {{ group.grouper|default:"General" }}
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-attention"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Low Stock</div>
-                <h3>{{ stats.low_stock|default:0 }}</h3>
-            </div>
-        </div>
+
+    <table class="mt-tbl">
+        {% if forloop.first %}
+        <thead>
+            <tr>
+                <th style="width:32px;">#</th>
+                <th>Name</th>
+                <th>Unit</th>
+                <th class="text-center">Valid Range</th>
+                <th class="text-center">Required</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:60px;">Actions</th>
+            </tr>
+        </thead>
+        {% endif %}
+        <tbody>
+            {% for mt in group.list %}
+            <tr class="{% if not mt.is_active %}row-inactive{% endif %}">
+
+                <td style="color:var(--ink-faint);font-size:12px;">{{ mt.display_order }}</td>
+
+                <td>
+                    <div class="mt-name">
+                        <a href="{% url 'uniforms:measurement_type_detail' mt.pk %}"
+                           style="color:inherit;text-decoration:none;">
+                            {{ mt.name }}
+                        </a>
+                    </div>
+                    <div class="mt-code">{{ mt.code }}</div>
+                    {% if mt.description %}
+                    <div class="mt-desc">{{ mt.description|truncatechars:60 }}</div>
+                    {% endif %}
+                </td>
+
+                <td>
+                    {% if mt.unit %}
+                    <span style="font-size:13px;font-weight:600;">{{ mt.unit.abbreviation }}</span>
+                    <div style="font-size:11px;color:var(--ink-faint);">{{ mt.unit.name }}</div>
+                    {% else %}
+                    <span style="color:var(--ink-faint);">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if mt.min_value is not None or mt.max_value is not None %}
+                    <span class="range-text">
+                        {{ mt.min_value|default:"—" }} – {{ mt.max_value|default:"∞" }}
+                    </span>
+                    {% if mt.unit %}
+                    <span class="range-unit">{{ mt.unit.abbreviation }}</span>
+                    {% endif %}
+                    {% else %}
+                    <span style="color:var(--ink-faint);font-size:12px;">No limits</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if mt.is_required %}
+                    <span class="s-pill sp-required">
+                        <i class="fa fa-star" style="font-size:8px;"></i>Required
+                    </span>
+                    {% else %}
+                    <span class="s-pill sp-optional">Optional</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if mt.is_active %}
+                    <span class="s-pill sp-active">
+                        <i class="fa fa-check-circle" style="font-size:9px;"></i>Active
+                    </span>
+                    {% else %}
+                    <span class="s-pill sp-inactive">
+                        <i class="fa fa-pause-circle" style="font-size:9px;"></i>Inactive
+                    </span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:measurement_type_detail' mt.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:measurement_type_edit' mt.pk %}">
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Edit
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:measurement_type_toggle_active_modal' mt.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-{% if mt.is_active %}pause{% else %}play{% endif %} me-2 text-warning"></i>
+                                    {% if mt.is_active %}Deactivate{% else %}Activate{% endif %}
+                                </button>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:measurement_type_print_detail' mt.pk %}"
+                                   target="_blank">
+                                    <i class="fa fa-print me-2"></i>Print
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:measurement_type_delete_modal' mt.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endfor %}
+
+    {% else %}
+    <div class="tbl-empty">
+        <i class="fa fa-ruler"></i>
+        <p>No measurement types configured yet.</p>
+        <a href="{% url 'uniforms:measurement_type_create' %}"
+           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                  font-size:13px;font-weight:600;border-radius:6px;
+                  background:#1d4ed8;color:#fff;text-decoration:none;">
+            <i class="fa fa-plus" style="font-size:11px;"></i>Add First Type
+        </a>
     </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-cash"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Value</div>
-                <h3>{{ stats.total_value|floatformat:0|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
+    {% endif %}
 </div>
 
-<!-- Main Content Section -->
-<section class="section">
-    <div class="row">
-        <div class="col-lg-12">
-            <!-- Results Card -->
-            <div class="main-card mb-3 card card-animate">
-                <div class="card-body">
-                    
-                    <!-- Filter Header -->
-                    <div class="filter-header">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                            <h5 class="card-title mb-0">
-                                <i class="pe-7s-box2 me-2 text-primary"></i>
-                                Uniform Items Inventory
-                            </h5>
-                            <div class="filter-actions">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
-                                    <i class="fa fa-times me-1"></i>Reset Filters
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-info" onclick="window.location.reload()">
-                                    <i class="fa fa-refresh me-1"></i>Refresh
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Search & Filters with HTMX -->
-                    <div class="item-filters">
-                        <form id="searchForm" 
-                            class="row g-3"
-                            hx-get="{% url 'uniforms:uniform_item_list' %}"
-                            hx-trigger="change, keyup changed delay:500ms from:input[name='q']"
-                            hx-target="#item-results"
-                            hx-swap="innerHTML">
-                            
-                            <!-- Search Input -->
-                            <div class="col-md-4">
-                                <label for="{{ filter_form.q.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Search Items
-                                </label>
-                                {% render_field filter_form.q class="form-control" placeholder="Search by name, code, SKU..." %}
-                            </div>
-                            
-                            <!-- Item Type Filter -->
-                            <div class="col-md-3">
-                                <label for="{{ filter_form.item_type.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Item Type
-                                </label>
-                                {% render_field filter_form.item_type class="form-select" %}
-                            </div>
-
-                            <!-- Gender Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.gender.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Gender
-                                </label>
-                                {% render_field filter_form.gender class="form-select" %}
-                            </div>
-                            
-                            <!-- Stock Status Filter -->
-                            <div class="col-md-3">
-                                <label for="{{ filter_form.stock_status.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Stock Status
-                                </label>
-                                {% render_field filter_form.stock_status class="form-select" %}
-                            </div>
-
-                            <!-- Category Filter -->
-                            <div class="col-md-3">
-                                <label for="{{ filter_form.category.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Category
-                                </label>
-                                {% render_field filter_form.category class="form-control" placeholder="Filter by category..." %}
-                            </div>
-
-                            <!-- Active Status Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.is_active.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Status
-                                </label>
-                                {% render_field filter_form.is_active class="form-select" %}
-                            </div>
-
-                            <!-- Mandatory Filter -->
-                            <div class="col-md-2">
-                                <label for="{{ filter_form.is_mandatory.id_for_label }}" class="form-label small text-muted mb-1">
-                                    Mandatory
-                                </label>
-                                {% render_field filter_form.is_mandatory class="form-select" %}
-                            </div>
-
-                            <!-- Reset Button -->
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
-                                    <i class="fa fa-times me-1"></i>Reset
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Results Container -->
-                    <div id="item-results">
-                        {% include 'uniforms/items/partials/_item_results.html' %}
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ========================================== -->
-<!-- DYNAMIC MODAL CONTAINER (For HTMX Modals) -->
-<!-- ========================================== -->
-<div id="modal-container" style="display: none;">
-    <!-- Modal content loaded here via HTMX -->
-</div>
+<div id="modal-container"></div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// PAGE-SPECIFIC HTMX MODAL HANDLER
-// ============================================================================
-
 let currentModal = null;
 
-// Show modal after HTMX loads content into #modal-container
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'modal-container') {
-        const modalContainer = document.getElementById('modal-container');
-        const modalDialog = modalContainer.querySelector('.modal-dialog');
-        
-        if (modalDialog) {
-            // Create a proper Bootstrap modal structure
-            let modalWrapper = document.getElementById('dynamicModalWrapper');
-            
-            // Remove existing modal wrapper if it exists
-            if (modalWrapper) {
-                const existingModal = bootstrap.Modal.getInstance(modalWrapper);
-                if (existingModal) {
-                    existingModal.dispose();
-                }
-                modalWrapper.remove();
-            }
-            
-            // Create new modal wrapper
-            modalWrapper = document.createElement('div');
-            modalWrapper.className = 'modal fade';
-            modalWrapper.id = 'dynamicModalWrapper';
-            modalWrapper.setAttribute('tabindex', '-1');
-            modalWrapper.setAttribute('aria-hidden', 'true');
-            
-            // Move the modal-dialog into the wrapper
-            modalWrapper.appendChild(modalDialog);
-            
-            // Append to body (outside app-container)
-            document.body.appendChild(modalWrapper);
-            
-            // Initialize and show modal
-            currentModal = new bootstrap.Modal(modalWrapper, {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
-            
-            currentModal.show();
-            
-            // Clean up when hidden
-            modalWrapper.addEventListener('hidden.bs.modal', function() {
-                modalWrapper.remove();
-                modalContainer.innerHTML = '';
-                currentModal = null;
-            });
-        }
-    }
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
 });
 
-// Handle alerts from response headers
-document.body.addEventListener('htmx:beforeSwap', function(event) {
-    const xhr = event.detail.xhr;
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
     const message = xhr.getResponseHeader('HX-Alert-Message');
-    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
-    const title = xhr.getResponseHeader('HX-Alert-Title');
-    
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
     if (message && typeof Swal !== 'undefined') {
         setTimeout(() => {
             Swal.fire({
                 icon: type,
-                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                title: type.charAt(0).toUpperCase() + type.slice(1),
                 text: message,
-                confirmButtonText: 'OK',
-                confirmButtonColor: type === 'success' ? '#28a745' : 
-                                   type === 'error' ? '#dc3545' : 
-                                   type === 'warning' ? '#ffc107' : '#17a2b8',
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
                 timer: type === 'success' ? 3000 : null,
-                timerProgressBar: type === 'success'
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
             });
         }, 300);
     }
-    
-    // Close modal if instructed
-    const closeModal = xhr.getResponseHeader('HX-Close-Modal');
-    if (closeModal === 'true') {
-        if (currentModal) {
-            currentModal.hide();
-        }
-    }
 });
 
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-function resetFilters() {
-    window.location.href = "{% url 'uniforms:uniform_item_list' %}";
-}
-
-// Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, {
+            popperConfig: d => Object.assign({}, d, { strategy: 'fixed' })
+        });
     });
 });
 </script>

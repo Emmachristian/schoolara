@@ -1,0 +1,614 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% now "Y-m-d" as today %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0; --border-2:#cbd5e1;
+    --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2;
+    --purple:#6d28d9; --purple-lt:#ede9fe;
+    --radius:10px;
+}
+
+/* ── Hero ── */
+.hol-hero {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:26px 30px 22px;
+    margin-bottom:24px;
+    display:grid; grid-template-columns:auto 1fr auto; gap:22px; align-items:start;
+}
+.hero-icon { width:60px; height:60px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; }
+.hero-icon-public { background:var(--accent-lt); border:1px solid #bfdbfe; }
+.hero-icon-break  { background:var(--purple-lt); border:1px solid #ddd6fe; }
+.hero-icon-school { background:var(--green-lt);  border:1px solid #bbf7d0; }
+.hero-icon-other  { background:var(--surface-3); border:1px solid var(--border); }
+
+.hero-tag   { font-size:11px; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; color:var(--ink-muted); margin-bottom:5px; display:block; }
+.hero-name  { font-size:22px; font-weight:800; color:var(--ink); letter-spacing:-.3px; margin:0 0 8px; }
+.hero-meta  { display:flex; flex-wrap:wrap; gap:18px; margin-top:12px; }
+.hero-meta-item { display:flex; flex-direction:column; gap:1px; }
+.hero-meta-label{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value{ font-size:13px; font-weight:600; color:var(--ink); }
+.hero-right { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+
+/* ── Status pills ── */
+.stat-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; white-space:nowrap; }
+.sp-upcoming { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.sp-ongoing  { background:var(--green-lt);  color:var(--green);  border:1px solid #bbf7d0; }
+.sp-past     { background:var(--surface-3); color:var(--ink-muted); border:1px solid var(--border-2); }
+
+/* ── Type chips ── */
+.type-chip { display:inline-flex; align-items:center; gap:4px; border-radius:4px; font-size:11px; font-weight:700; padding:3px 9px; white-space:nowrap; }
+.tc-public { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.tc-break  { background:var(--purple-lt); color:var(--purple); border:1px solid #ddd6fe; }
+.tc-school { background:var(--green-lt);  color:var(--green);  border:1px solid #bbf7d0; }
+.tc-other  { background:var(--surface-3); color:var(--ink-muted); border:1px solid var(--border-2); }
+
+.break-chip { display:inline-flex; align-items:center; border-radius:4px; font-size:10.5px; font-weight:700; padding:2px 7px; white-space:nowrap; }
+.bk-mid  { background:var(--amber-lt); color:var(--amber); border:1px solid #fde68a; }
+.bk-term { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.bk-seas { background:var(--accent-lt);color:var(--accent);border:1px solid #bfdbfe; }
+
+/* ── Duration pill ── */
+.dur-pill { background:var(--accent); color:#fff; border-radius:8px; padding:10px 18px; text-align:right; }
+.dur-num  { font-size:28px; font-weight:900; line-height:1; }
+.dur-lbl  { font-size:11px; text-transform:uppercase; letter-spacing:.7px; font-weight:600; opacity:.85; margin-top:2px; }
+
+/* ── Cards ── */
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
+.det-card-body { padding:20px 22px; }
+
+/* ── Info grid ── */
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; }
+.info-cell { padding:11px 0; border-bottom:1px solid var(--border); }
+.info-cell:nth-child(odd)  { padding-right:24px; }
+.info-cell:nth-child(even) { padding-left:24px; border-left:1px solid var(--border); }
+.info-cell:last-child, .info-cell:nth-last-child(2) { border-bottom:none; }
+.info-cell.full-width { grid-column:span 2; padding-right:0; border-left:none; }
+.info-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-faint); margin-bottom:3px; }
+.info-val { font-size:13.5px; font-weight:600; color:var(--ink); }
+.info-val small { display:block; font-size:11px; font-weight:500; color:var(--ink-muted); margin-top:1px; }
+
+/* ── Calendar block ── */
+.cal-block { display:flex; align-items:center; gap:16px; padding:14px 18px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border); }
+.cal-date-box { width:56px; flex-shrink:0; text-align:center; background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.cal-date-month { background:var(--accent); color:#fff; font-size:10px; font-weight:700; text-transform:uppercase; padding:3px 0; letter-spacing:.5px; }
+.cal-date-day   { font-size:24px; font-weight:900; color:var(--ink); line-height:1; padding:4px 0; }
+.cal-date-year  { font-size:10px; color:var(--ink-muted); padding-bottom:3px; }
+.cal-arrow      { font-size:18px; color:var(--ink-faint); }
+
+/* ── Session cards in detail ── */
+.sess-link-card { border-radius:8px; padding:12px 16px; border:1.5px solid; }
+.slc-prev { background:var(--amber-lt); border-color:#fde68a; }
+.slc-next { background:var(--green-lt); border-color:#bbf7d0; }
+.slc-main { background:var(--accent-lt);border-color:#bfdbfe; }
+.slc-title  { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-bottom:3px; }
+.slc-name   { font-size:13px; font-weight:700; color:var(--ink); }
+.slc-sub    { font-size:11px; color:var(--ink-muted); margin-top:1px; }
+
+/* ── Timeline ── */
+.timeline { position:relative; padding-left:28px; }
+.timeline::before { content:''; position:absolute; left:9px; top:0; bottom:0; width:2px; background:var(--border); }
+.tl-item { position:relative; padding-bottom:16px; }
+.tl-item:last-child { padding-bottom:0; }
+.tl-dot { position:absolute; left:-24px; top:2px; width:14px; height:14px; border-radius:50%; border:2px solid #fff; background:#94a3b8; box-shadow:0 0 0 2px #94a3b8; }
+.tl-dot.success { background:var(--green);  box-shadow:0 0 0 2px var(--green); }
+.tl-dot.info    { background:var(--accent); box-shadow:0 0 0 2px var(--accent); }
+.tl-dot.warning { background:var(--amber);  box-shadow:0 0 0 2px var(--amber); }
+.tl-dot.danger  { background:var(--red);    box-shadow:0 0 0 2px var(--red); }
+.tl-content { background:var(--surface-2); border-radius:8px; padding:9px 13px; }
+.tl-title   { font-weight:700; font-size:13px; color:var(--ink); }
+.tl-date    { font-size:11px; color:var(--ink-muted); margin-top:2px; }
+.tl-note    { font-size:12px; color:#475569; margin-top:5px; font-style:italic; }
+
+/* ── Sidebar ── */
+.side-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:18px; overflow:hidden; }
+.side-card-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.side-card-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.side-row .s-label { color:var(--ink-muted); font-size:12.5px; }
+.side-row .s-value { font-weight:700; color:var(--ink); }
+.side-row .s-value.green { color:var(--green); }
+.side-row .s-value.blue  { color:var(--accent); }
+.side-row .s-value.muted { color:var(--ink-muted); font-weight:500; }
+
+/* ── Alert banners ── */
+.alert-banner { border-radius:0 8px 8px 0; padding:12px 16px; font-size:13px; margin-bottom:18px; display:flex; align-items:center; gap:12px; }
+.banner-ongoing  { background:var(--green-lt); border:1px solid #bbf7d0; border-left:4px solid var(--green); color:#14532d; }
+.banner-upcoming { background:var(--accent-lt);border:1px solid #bfdbfe;  border-left:4px solid var(--accent);color:#1e3a5f; }
+
+@media (max-width:992px) {
+    .hol-hero { grid-template-columns:auto 1fr; }
+    .hero-right { grid-column:span 2; flex-direction:row; align-items:center; }
+    .info-grid { grid-template-columns:1fr; }
+    .info-cell:nth-child(even) { border-left:none; padding-left:0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-date icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Holiday Detail
+                <div class="page-title-subheading">{{ holiday.name }}</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'academics:holiday_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i> Back
+            </a>
+            <a href="{% url 'academics:holiday_update' holiday.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i> Edit
+            </a>
+            <button class="btn btn-sm btn-outline-danger"
+                    hx-get="{% url 'academics:holiday_delete_modal' holiday.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-trash me-1"></i> Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+<script>
+{% for message in messages %}
+    {% if 'sweetalert' in message.tags %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+        {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+        {% else %}showInfo('{{ message|escapejs }}');{% endif %}
+    {% endif %}
+{% endfor %}
+</script>
+{% endif %}
+
+{# ── Status banners ── #}
+{% if holiday.start_date|date:"Y-m-d" <= today and holiday.end_date|date:"Y-m-d" >= today %}
+<div class="alert-banner banner-ongoing">
+    <i class="fa fa-play-circle fa-lg"></i>
+    <div><strong>Currently Ongoing</strong> — {{ holiday.name }} is in progress today.</div>
+</div>
+{% elif holiday.start_date|date:"Y-m-d" > today %}
+<div class="alert-banner banner-upcoming">
+    <i class="fa fa-clock fa-lg"></i>
+    <div><strong>Upcoming</strong> — Starts {{ holiday.start_date|date:"d M Y" }}{% if holiday.start_date|timeuntil %}, in {{ holiday.start_date|timeuntil }}.{% endif %}</div>
+</div>
+{% endif %}
+
+{# ── Hero ── #}
+<div class="hol-hero">
+    <div class="hero-icon hero-icon-{{ holiday.holiday_type|lower|default:'other' }}">
+        {% if holiday.holiday_type == 'PUBLIC' %}🏛️
+        {% elif holiday.holiday_type == 'BREAK' %}🌴
+        {% elif holiday.holiday_type == 'SCHOOL' %}🎓
+        {% else %}📅{% endif %}
+    </div>
+
+    <div>
+        <span class="hero-tag">
+            {% if holiday.holiday_type == 'BREAK' %}Term Break{% else %}Holiday{% endif %}
+        </span>
+        <h1 class="hero-name">{{ holiday.name }}</h1>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            {# Type chip #}
+            {% if holiday.holiday_type == 'PUBLIC' %}
+                <span class="type-chip tc-public"><i class="fa fa-landmark" style="font-size:9px;"></i> Public</span>
+            {% elif holiday.holiday_type == 'BREAK' %}
+                <span class="type-chip tc-break"><i class="fa fa-umbrella-beach" style="font-size:9px;"></i> Break</span>
+            {% elif holiday.holiday_type == 'SCHOOL' %}
+                <span class="type-chip tc-school"><i class="fa fa-school" style="font-size:9px;"></i> School</span>
+            {% else %}
+                <span class="type-chip tc-other">{{ holiday.get_holiday_type_display }}</span>
+            {% endif %}
+
+            {# Break sub-type #}
+            {% if holiday.holiday_type == 'BREAK' and holiday.break_type %}
+            <span class="break-chip
+                {% if 'MID' in holiday.break_type %}bk-mid
+                {% elif 'TERM' in holiday.break_type %}bk-term
+                {% else %}bk-seas{% endif %}">
+                {{ holiday.get_break_type_display }}
+            </span>
+            {% endif %}
+
+            {# Status #}
+            {% if holiday.start_date|date:"Y-m-d" > today %}
+                <span class="stat-pill sp-upcoming"><i class="fa fa-clock" style="font-size:8px;"></i> Upcoming</span>
+            {% elif holiday.end_date and holiday.end_date|date:"Y-m-d" < today %}
+                <span class="stat-pill sp-past"><i class="fa fa-check" style="font-size:8px;"></i> Past</span>
+            {% else %}
+                <span class="stat-pill sp-ongoing"><i class="fa fa-play" style="font-size:8px;"></i> Ongoing</span>
+            {% endif %}
+        </div>
+
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Start Date</span>
+                <span class="hero-meta-value">{{ holiday.start_date|date:"d M Y" }}</span>
+            </div>
+            {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">End Date</span>
+                <span class="hero-meta-value">{{ holiday.end_date|date:"d M Y" }}</span>
+            </div>
+            {% endif %}
+            {% if holiday.academic_session %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Session</span>
+                <span class="hero-meta-value">{{ holiday.academic_session.year_name }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="hero-right">
+        <div class="dur-pill">
+            {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                <div class="dur-num">{{ holiday.duration }}</div>
+                <div class="dur-lbl">Day{{ holiday.duration|pluralize }}</div>
+            {% else %}
+                <div class="dur-num">1</div>
+                <div class="dur-lbl">Day</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+
+    {# ── MAIN COLUMN ── #}
+    <div class="col-lg-8">
+
+        {# DATE RANGE VISUAL #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-calendar text-primary"></i> Date Range</span>
+            </div>
+            <div class="det-card-body">
+                <div class="cal-block">
+                    <div class="cal-date-box">
+                        <div class="cal-date-month">{{ holiday.start_date|date:"M" }}</div>
+                        <div class="cal-date-day">{{ holiday.start_date|date:"d" }}</div>
+                        <div class="cal-date-year">{{ holiday.start_date|date:"Y" }}</div>
+                    </div>
+                    {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                    <div class="cal-arrow">→</div>
+                    <div class="cal-date-box">
+                        <div class="cal-date-month">{{ holiday.end_date|date:"M" }}</div>
+                        <div class="cal-date-day">{{ holiday.end_date|date:"d" }}</div>
+                        <div class="cal-date-year">{{ holiday.end_date|date:"Y" }}</div>
+                    </div>
+                    <div style="font-size:13px;color:var(--ink-muted);">
+                        <strong style="color:var(--ink);">{{ holiday.duration }} day{{ holiday.duration|pluralize }}</strong> total
+                    </div>
+                    {% else %}
+                    <div style="font-size:13px;color:var(--ink-muted);">
+                        <strong style="color:var(--ink);">Single day</strong> holiday
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# DETAILS #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-info-circle text-info"></i> Details</span>
+                <a href="{% url 'academics:holiday_update' holiday.pk %}" class="btn btn-sm btn-outline-warning">
+                    <i class="fa fa-edit me-1"></i> Edit
+                </a>
+            </div>
+            <div class="det-card-body" style="padding:0 22px;">
+                <div class="info-grid">
+                    <div class="info-cell">
+                        <div class="info-lbl">Holiday Name</div>
+                        <div class="info-val">{{ holiday.name }}</div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="info-lbl">Type</div>
+                        <div class="info-val">{{ holiday.get_holiday_type_display }}</div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="info-lbl">Start Date</div>
+                        <div class="info-val">{{ holiday.start_date|date:"l, d M Y" }}</div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="info-lbl">End Date</div>
+                        <div class="info-val">
+                            {% if holiday.end_date %}
+                                {{ holiday.end_date|date:"l, d M Y" }}
+                            {% else %}
+                                <span style="color:var(--ink-faint);">Same as start</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="info-lbl">Duration</div>
+                        <div class="info-val">
+                            {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                                {{ holiday.duration }} day{{ holiday.duration|pluralize }}
+                            {% else %}
+                                1 day
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="info-lbl">Break Type</div>
+                        <div class="info-val">
+                            {% if holiday.break_type %}{{ holiday.get_break_type_display }}{% else %}<span style="color:var(--ink-faint);">—</span>{% endif %}
+                        </div>
+                    </div>
+                    {% if holiday.description %}
+                    <div class="info-cell full-width" style="border-bottom:none;padding-top:8px;">
+                        <div class="info-lbl">Description</div>
+                        <div class="info-val" style="font-weight:500;line-height:1.7;">{{ holiday.description }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# SESSION LINKS #}
+        {% if holiday.academic_session or holiday.previous_session or holiday.next_session %}
+        <div class="det-card">
+            <div class="det-card-head">
+                <span class="det-card-title"><i class="fa fa-graduation-cap text-success"></i> Session Links</span>
+            </div>
+            <div class="det-card-body">
+                <div class="row g-3">
+                    {% if holiday.previous_session %}
+                    <div class="col-md-{% if holiday.next_session %}6{% else %}12{% endif %}">
+                        <div class="sess-link-card slc-prev">
+                            <div class="slc-title"><i class="fa fa-arrow-left me-1"></i> Previous Session</div>
+                            <div class="slc-name">
+                                <a href="{% url 'academics:session_detail' holiday.previous_session.pk %}" class="text-decoration-none" style="color:inherit;">
+                                    {{ holiday.previous_session.name }}
+                                </a>
+                            </div>
+                            <div class="slc-sub">{{ holiday.previous_session.term_name }} &middot; {{ holiday.previous_session.year_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if holiday.next_session %}
+                    <div class="col-md-{% if holiday.previous_session %}6{% else %}12{% endif %}">
+                        <div class="sess-link-card slc-next">
+                            <div class="slc-title"><i class="fa fa-arrow-right me-1"></i> Next Session</div>
+                            <div class="slc-name">
+                                <a href="{% url 'academics:session_detail' holiday.next_session.pk %}" class="text-decoration-none" style="color:inherit;">
+                                    {{ holiday.next_session.name }}
+                                </a>
+                            </div>
+                            <div class="slc-sub">{{ holiday.next_session.term_name }} &middot; {{ holiday.next_session.year_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if holiday.academic_session %}
+                    <div class="col-md-12">
+                        <div class="sess-link-card slc-main">
+                            <div class="slc-title"><i class="fa fa-graduation-cap me-1"></i> Academic Session</div>
+                            <div class="slc-name">
+                                <a href="{% url 'academics:session_detail' holiday.academic_session.pk %}" class="text-decoration-none" style="color:inherit;">
+                                    {{ holiday.academic_session.name }}
+                                </a>
+                            </div>
+                            <div class="slc-sub">{{ holiday.academic_session.term_name }} &middot; {{ holiday.academic_session.year_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# /col-lg-8 #}
+
+    {# ── SIDEBAR ── #}
+    <div class="col-lg-4">
+
+        {# SUMMARY #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-chart-bar text-primary"></i> Summary</div>
+            <div class="side-card-body">
+                <div class="side-row" style="padding-top:0;">
+                    <span class="s-label">Type</span>
+                    <span class="s-value muted">{{ holiday.get_holiday_type_display }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Duration</span>
+                    <span class="s-value blue">
+                        {% if holiday.end_date and holiday.end_date != holiday.start_date %}{{ holiday.duration }} day{{ holiday.duration|pluralize }}{% else %}1 day{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Status</span>
+                    <span class="s-value
+                        {% if holiday.start_date|date:'Y-m-d' > today %}blue
+                        {% elif holiday.end_date and holiday.end_date|date:'Y-m-d' < today %}muted
+                        {% else %}green{% endif %}">
+                        {% if holiday.start_date|date:"Y-m-d" > today %}Upcoming
+                        {% elif holiday.end_date and holiday.end_date|date:"Y-m-d" < today %}Past
+                        {% else %}Ongoing{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Session Linked</span>
+                    <span class="s-value {% if holiday.academic_session %}green{% else %}muted{% endif %}">
+                        {% if holiday.academic_session %}Yes{% else %}No{% endif %}
+                    </span>
+                </div>
+                {% if holiday.break_type %}
+                <div class="side-row">
+                    <span class="s-label">Break Type</span>
+                    <span class="s-value muted">{{ holiday.get_break_type_display }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# TIMELINE #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-history text-secondary"></i> Timeline</div>
+            <div class="side-card-body">
+                <div class="timeline">
+                    <div class="tl-item">
+                        <div class="tl-dot info"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Record Created</div>
+                            <div class="tl-date">{{ holiday.created_at|date:"d M Y, H:i" }}</div>
+                        </div>
+                    </div>
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Holiday Starts</div>
+                            <div class="tl-date">{{ holiday.start_date|date:"l, d M Y" }}</div>
+                        </div>
+                    </div>
+                    {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                    <div class="tl-item">
+                        <div class="tl-dot warning"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">Holiday Ends</div>
+                            <div class="tl-date">{{ holiday.end_date|date:"l, d M Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if holiday.next_session %}
+                    <div class="tl-item">
+                        <div class="tl-dot success"></div>
+                        <div class="tl-content">
+                            <div class="tl-title">{{ holiday.next_session.term_name }} Begins</div>
+                            <div class="tl-note">{{ holiday.next_session.year_name }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# QUICK ACTIONS #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-bolt text-warning"></i> Quick Actions</div>
+            <div class="side-card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'academics:holiday_update' holiday.pk %}"
+                       class="btn btn-outline-warning btn-sm">
+                        <i class="fa fa-edit me-1"></i> Edit Holiday
+                    </a>
+                    {% if holiday.academic_session %}
+                    <a href="{% url 'academics:session_detail' holiday.academic_session.pk %}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-graduation-cap me-1"></i> View Session
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'academics:holiday_list' %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-list me-1"></i> All Holidays
+                    </a>
+                    <a href="{% url 'academics:holiday_create' %}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="fa fa-plus me-1"></i> Add Another
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm"
+                            hx-get="{% url 'academics:holiday_delete_modal' holiday.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-trash me-1"></i> Delete Holiday
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {# RECORD INFO #}
+        <div class="side-card">
+            <div class="side-card-head"><i class="fa fa-clock text-secondary"></i> Record Info</div>
+            <div class="side-card-body">
+                <div class="side-row" style="padding-top:0;">
+                    <span class="s-label">Created</span>
+                    <span class="s-value muted" style="font-size:12px;">{{ holiday.created_at|date:"d M Y, H:i" }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Last Updated</span>
+                    <span class="s-value muted" style="font-size:12px;">{{ holiday.updated_at|date:"d M Y, H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>{# /col-lg-4 #}
+
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade';
+    wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function() {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function(e) {
+    const xhr = e.detail.xhr;
+    const message  = xhr.getResponseHeader('HX-Alert-Message');
+    const type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title    = xhr.getResponseHeader('HX-Alert-Title');
+    const close    = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect = xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

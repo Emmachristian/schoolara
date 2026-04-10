@@ -1,0 +1,518 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block page_title %}Report Card{% endblock %} — {{ school_name|default:"School" }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink:        #111827;
+            --ink-mid:    #374151;
+            --ink-soft:   #6b7280;
+            --ink-faint:  #d1d5db;
+            --accent:     #1e3a5f;
+            --accent-bg:  #eef2f7;
+            --stripe:     #f9fafb;
+            --white:      #ffffff;
+            --success:    #16a34a;
+            --warning:    #b45309;
+            --danger:     #b91c1c;
+            --radius:     4px;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background: #e5e7eb;
+            line-height: 1.5;
+        }
+
+        /* ── Screen toolbar ────────────────────────────────────────────── */
+        .rc-toolbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--accent);
+            color: #fff;
+            padding: 11px 24px;
+            gap: 12px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 10px rgba(0,0,0,.2);
+        }
+        .rc-toolbar-left { display: flex; align-items: center; gap: 14px; }
+        .rc-toolbar-title {
+            font-size: 14px;
+            font-weight: 700;
+            opacity: 1;
+        }
+        .rc-toolbar-sub {
+            font-size: 12px;
+            opacity: .75;
+        }
+        .rc-toolbar-actions { display: flex; gap: 8px; }
+        .btn-rc-print {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 18px; border-radius: var(--radius);
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            border: none; background: #fff; color: var(--accent);
+            text-decoration: none; transition: opacity .15s;
+        }
+        .btn-rc-close {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 14px; border-radius: var(--radius);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            border: 1px solid rgba(255,255,255,.3);
+            background: transparent; color: #fff;
+            text-decoration: none; transition: opacity .15s;
+        }
+        .btn-rc-print:hover, .btn-rc-close:hover { opacity: .85; }
+
+        /* ── Page wrapper ───────────────────────────────────────────────── */
+        .rc-page-wrap {
+            padding: 80px 24px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
+        /* ── Single card shell ──────────────────────────────────────────── */
+        .rc-card {
+            background: #fff;
+            width: 210mm;
+            padding: 12mm 14mm 10mm;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Screen: shadow + spacing between cards */
+        @media screen {
+            .rc-card {
+                box-shadow: 0 2px 20px rgba(0,0,0,.12);
+                margin-bottom: 28px;
+                border-radius: 4px;
+            }
+            .rc-page-wrap { max-width: 960px; margin: 0 auto; }
+        }
+
+        /* ── Card header ────────────────────────────────────────────────── */
+        .rc-card-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border: none;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* School logo/placeholder */
+        .rc-header-logo {
+            width: 72px;
+            height: 72px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            border: none;
+        }
+        .rc-header-logo img {
+            width: 72px; height: 72px;
+            object-fit: contain;
+        }
+        .rc-header-logo-placeholder {
+            font-family: 'DM Serif Display', serif;
+            font-size: 2rem;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* School info — centre */
+        .rc-header-school {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            text-align: center;
+            border: none;
+        }
+        .rc-header-school h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.35rem;
+            color: var(--accent);
+            line-height: 1.2;
+            margin-bottom: 3px;
+        }
+        .rc-header-school p {
+            font-size: 8.5pt;
+            color: var(--ink-soft);
+            line-height: 1.5;
+        }
+        .rc-header-card-type {
+            display: inline-block;
+            margin-top: 6px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 8pt;
+            font-weight: 700;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            padding: 2px 10px;
+            border-radius: 3px;
+        }
+
+        /* Student photo — right */
+        .rc-header-photo {
+            width: 72px;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: #f3f4f6;
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: none;
+        }
+        .rc-header-photo img {
+            width: 72px;
+            height: 72px;
+            object-fit: cover;
+        }
+        .rc-header-photo-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            font-size: 7.5pt;
+            color: var(--ink-faint);
+            gap: 3px;
+            padding: 8px;
+            text-align: center;
+        }
+        .rc-header-photo-placeholder svg {
+            width: 26px; height: 26px;
+            opacity: .3;
+        }
+
+        /* ── Student info panel ─────────────────────────────────────────── */
+        .rc-student-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .rc-sp-cell {
+            padding: 6px 11px;
+            border-right: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .rc-sp-cell:nth-child(3n)        { border-right: none; }
+        .rc-sp-cell:nth-last-child(-n+3) { border-bottom: none; }
+        .rc-sp-label {
+            font-size: 6.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            color: var(--ink-soft);
+            margin-bottom: 2px;
+        }
+        .rc-sp-value {
+            font-size: 10pt;
+            font-weight: 600;
+            color: var(--ink);
+            line-height: 1.3;
+        }
+        .rc-sp-value.accent { color: var(--accent); }
+        .rc-sp-value.mono   { font-family: monospace; font-size: 9pt; }
+
+        /* ── Section label ──────────────────────────────────────────────── */
+        .rc-section-label {
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: var(--ink-soft);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .rc-section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--ink-faint);
+        }
+
+        /* ── Shared table styles (for results) ──────────────────────────── */
+        .rc-cat-wrap { margin-bottom: 8px; }
+        .rc-cat-head {
+            background: var(--accent);
+            color: #fff;
+            padding: 4px 10px;
+            font-size: 8.5pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+        .rc-cat-head-right { font-size: 7.5pt; font-weight: 400; opacity: .85; }
+        .rc-results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5pt;
+            border: 1px solid var(--ink-faint);
+            border-top: none;
+        }
+        .rc-results-table thead tr { background: var(--accent-bg); }
+        .rc-results-table thead th {
+            padding: 4px 8px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--accent);
+            border-bottom: 1.5px solid var(--accent);
+            text-align: left;
+            white-space: nowrap;
+        }
+        .rc-results-table thead th.ctr { text-align: center; }
+        .rc-results-table thead th.num { text-align: right; }
+        .rc-results-table tbody td {
+            padding: 5px 8px;
+            border-bottom: 1px solid var(--ink-faint);
+            vertical-align: middle;
+            color: var(--ink-mid);
+        }
+        .rc-results-table tbody tr:last-child td { border-bottom: none; }
+        .rc-results-table tbody tr:nth-child(even) { background: var(--stripe); }
+        .rc-results-table td.ctr { text-align: center; }
+        .rc-results-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .rc-results-table tfoot td {
+            padding: 5px 8px;
+            background: var(--accent-bg);
+            border-top: 1.5px solid var(--accent);
+            font-weight: 700;
+            font-size: 9pt;
+            color: var(--accent);
+        }
+        .rc-results-table tfoot td.num { text-align: right; }
+        .rc-results-table tfoot td.ctr { text-align: center; }
+
+        /* ── Grade badges ───────────────────────────────────────────────── */
+        .grade-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            min-width: 24px;
+            text-align: center;
+        }
+        .gA { background: #dcfce7; color: #15803d; }
+        .gB { background: #dbeafe; color: #1d4ed8; }
+        .gC { background: #fef9c3; color: #92400e; }
+        .gD { background: #fde8d8; color: #c2410c; }
+        .gE { background: #fee2e2; color: #b91c1c; }
+        .gF { background: #fee2e2; color: #b91c1c; }
+        .gX { background: #f3f4f6; color: #6b7280; }
+        .pass-pill {
+            font-size: 7.5pt;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+        .pill-pass { background: #dcfce7; color: #15803d; }
+        .pill-fail { background: #fee2e2; color: #b91c1c; }
+        .pill-na   { background: #f3f4f6; color: #9ca3af; }
+
+        /* ── Division/Aggregate summary ─────────────────────────────────── */
+        .rc-division-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 9px 14px;
+            background: var(--accent-bg);
+            border: 1.5px solid var(--accent);
+            border-radius: var(--radius);
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .rc-division-item-label {
+            font-size: 6.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--ink-soft);
+            display: block;
+            margin-bottom: 1px;
+        }
+        .rc-division-item-val {
+            font-size: 15pt;
+            font-weight: 800;
+            color: var(--accent);
+            font-family: 'DM Serif Display', serif;
+        }
+
+        /* ── Grade scale ────────────────────────────────────────────────── */
+        .rc-grade-scale {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .rc-gs-label {
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--ink-soft);
+            margin-right: 2px;
+        }
+        .rc-gs-item {
+            font-size: 7.5pt;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+            border: 1px solid var(--ink-faint);
+            background: var(--stripe);
+            white-space: nowrap;
+        }
+
+        /* ── Comments grid ──────────────────────────────────────────────── */
+        .rc-comments-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+            margin-bottom: 10px;
+        }
+        .rc-comment-box {
+            border: 1px solid var(--ink-faint);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .rc-comment-head {
+            background: var(--accent-bg);
+            padding: 4px 9px;
+            font-size: 7pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--accent);
+            border-bottom: 1px solid var(--ink-faint);
+        }
+        .rc-comment-body {
+            padding: 6px 9px;
+            font-size: 9pt;
+            color: var(--ink-soft);
+            min-height: 64px;
+            line-height: 1.6;
+            font-style: italic;
+        }
+
+        /* ── Signatures ─────────────────────────────────────────────────── */
+        .rc-sigs {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+            margin-top: 24px;
+        }
+        .rc-sig-box {
+            border-top: 1.5px solid var(--ink);
+            padding-top: 4px;
+            text-align: center;
+            font-size: 8pt;
+            color: var(--ink-soft);
+        }
+        .rc-sig-box strong {
+            display: block;
+            color: var(--ink);
+            font-size: 7.5pt;
+            margin-top: 2px;
+        }
+
+        /* ── Card footer ────────────────────────────────────────────────── */
+        .rc-card-footer {
+            margin-top: auto;
+            padding-top: 8px;
+            border-top: 1px solid var(--ink-faint);
+            display: flex;
+            justify-content: space-between;
+            font-size: 7.5pt;
+            color: var(--ink-soft);
+        }
+
+        /* ── "Not valid without stamp" note ─────────────────────────────── */
+        .rc-stamp-note {
+            text-align: center;
+            font-size: 8pt;
+            color: var(--ink-soft);
+            font-style: italic;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed var(--ink-faint);
+        }
+
+        /* ── Print ───────────────────────────────────────────────────────── */
+        @media print {
+            @page { size: A4 portrait; margin: 8mm; }
+            body { background: white; }
+            .rc-toolbar { display: none !important; }
+            .no-print   { display: none !important; }
+            .rc-page-wrap { padding: 0; gap: 0; }
+            .rc-card {
+                width: 100%;
+                padding: 0;
+                box-shadow: none;
+                border-radius: 0;
+                margin-bottom: 0;
+                page-break-after: always;
+                page-break-inside: avoid;
+            }
+            .rc-card:last-child { page-break-after: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Screen toolbar ─────────────────────────────────────────────────────── -->
+<div class="rc-toolbar">
+    <div class="rc-toolbar-left">
+        <div>
+            <div class="rc-toolbar-title">{% block toolbar_title %}Report Card{% endblock %}</div>
+            <div class="rc-toolbar-sub">{% block toolbar_sub %}{{ school_name|default:"School" }}{% endblock %}</div>
+        </div>
+    </div>
+    <div class="rc-toolbar-actions">
+        <button class="btn-rc-print" onclick="window.print()">🖨 Print / Save PDF</button>
+        <button class="btn-rc-close" onclick="window.close()">✕ Close</button>
+    </div>
+</div>
+
+<!-- ── Content ────────────────────────────────────────────────────────────── -->
+<div class="rc-page-wrap">
+    {% block cards %}{% endblock %}
+</div>
+
+</body>
+</html>

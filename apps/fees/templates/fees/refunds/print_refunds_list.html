@@ -1,0 +1,99 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Refund List{% endblock %}
+{% block doc_title %}Refund List{% endblock %}
+{% block record_count %}{{ refunds|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.requested|default:0 }}</span>
+        <span class="stat-label">Requested</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.approved|default:0 }}</span>
+        <span class="stat-label">Approved</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.completed|default:0 }}</span>
+        <span class="stat-label">Completed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_amount|money_short }}</span>
+        <span class="stat-label">Total Requested</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_approved|money_short }}</span>
+        <span class="stat-label">Total Approved</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if refunds %}
+    {% for refund in refunds %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "amount,approved_amount" %} class="num"{% endif %}>
+            {% if field == 'refund_number' %}
+                <span class="chip-code">{{ refund.refund_number }}</span>
+            {% elif field == 'requested_date' %}
+                {% if refund.requested_date %}{{ refund.requested_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'student_id' %}
+                <span class="chip-adm">{{ refund.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ refund.student.get_full_name }}
+            {% elif field == 'refund_type' %}
+                {{ refund.get_refund_type_display }}
+            {% elif field == 'amount' %}
+                {{ refund.amount|amount }}
+            {% elif field == 'approved_amount' %}
+                {% if refund.approved_amount %}<span class="text-success">{{ refund.approved_amount|amount }}</span>{% else %}—{% endif %}
+            {% elif field == 'invoice' %}
+                {% if refund.invoice %}<span class="chip-code">{{ refund.invoice.invoice_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'payment' %}
+                {% if refund.payment %}<span class="chip-code">{{ refund.payment.payment_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'academic_session' %}
+                {{ refund.academic_session.name|default:"—" }}
+            {% elif field == 'fiscal_period' %}
+                {{ refund.fiscal_period.name|default:"—" }}
+            {% elif field == 'payment_method' %}
+                {{ refund.payment_method.name|default:"—" }}
+            {% elif field == 'transaction_id' %}
+                {{ refund.transaction_id|default:"—" }}
+            {% elif field == 'status' %}
+                {% with s=refund.status|lower %}
+                    {% if s == 'completed' %}<span class="badge s-active">{{ refund.get_status_display }}</span>
+                    {% elif s == 'approved' %}<span class="badge s-approved">{{ refund.get_status_display }}</span>
+                    {% elif s == 'requested' %}<span class="badge s-pending">{{ refund.get_status_display }}</span>
+                    {% elif s == 'processing' %}<span class="badge s-processing">{{ refund.get_status_display }}</span>
+                    {% elif s == 'rejected' %}<span class="badge s-rejected">{{ refund.get_status_display }}</span>
+                    {% else %}<span class="badge s-default">{{ refund.get_status_display }}</span>
+                    {% endif %}
+                {% endwith %}
+            {% elif field == 'approval_date' %}
+                {% if refund.approval_date %}{{ refund.approval_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'processed_date' %}
+                {% if refund.payment_date %}{{ refund.payment_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'reason' %}
+                {{ refund.reason|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No refunds found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

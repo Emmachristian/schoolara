@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Discount &amp; Refund Report — {{ school_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a;--ink-2:#334155;--ink-muted:#64748b;--ink-faint:#94a3b8;
+    --surface:#ffffff;--surface-2:#f8fafc;--surface-3:#f1f5f9;--border:#e2e8f0;
+    --accent:#1d4ed8;--accent-lt:#eff6ff;--accent-bd:#bfdbfe;
+    --green:#15803d;--green-lt:#f0fdf4;--amber:#b45309;--amber-lt:#fffbeb;
+    --red:#dc2626;--red-lt:#fef2f2;--purple:#7c3aed;--purple-lt:#f5f3ff;
+    --teal:#0f766e;--teal-lt:#f0fdfa;--radius:10px;
+}
+.kpi-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 18px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);transition:box-shadow .2s,transform .15s;height:100%; }
+.kpi-card:hover { box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
+.kpi-badge { position:absolute;top:18px;right:18px;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff; }
+.kpi-teal   .kpi-badge { background:var(--teal);  box-shadow:0 4px 12px rgba(15,118,110,.25); }
+.kpi-amber  .kpi-badge { background:var(--amber); box-shadow:0 4px 12px rgba(180,83,9,.25); }
+.kpi-red    .kpi-badge { background:var(--red);   box-shadow:0 4px 12px rgba(220,38,38,.25); }
+.kpi-accent .kpi-badge { background:var(--accent);box-shadow:0 4px 12px rgba(29,78,216,.25); }
+.kpi-label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);margin-bottom:10px;padding-right:54px; }
+.kpi-value { font-size:26px;font-weight:800;color:var(--ink);line-height:1.1;margin-bottom:6px;font-family:'Poppins',sans-serif;font-variant-numeric:tabular-nums; }
+.kpi-sub   { font-size:11.5px;color:var(--ink-faint); }
+.dash-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.dash-head { padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between; }
+.dash-title { font-size:12.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px; }
+.dash-body  { padding:16px 18px; }
+.dt { width:100%;border-collapse:collapse;font-size:12.5px; }
+.dt thead th { background:var(--surface-2);padding:10px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);border-bottom:1px solid var(--border);white-space:nowrap; }
+.dt tbody td { padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle; }
+.dt tbody tr:last-child td { border-bottom:none; }
+.dt tbody tr:hover td { background:#f8faff; }
+.dt tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--teal); }
+.dt tfoot td { padding:10px 14px;border-top:2px solid var(--border);font-weight:700;font-size:12.5px;background:var(--surface-2); }
+.mono { font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px; }
+.prog-outer { background:var(--surface-3);border-radius:4px;height:6px;overflow:hidden; }
+.prog-inner { height:100%;border-radius:4px;transition:width .6s ease; }
+.sec-heading { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin:24px 0 14px;display:flex;align-items:center;gap:10px; }
+.sec-heading::after { content:'';flex:1;height:1px;background:var(--border); }
+.stat-row { display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px; }
+.stat-row:last-child { border-bottom:none; }
+.stat-label { color:var(--ink-2); }
+.stat-val   { font-weight:700;font-family:'Poppins',sans-serif; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% currency_info as curr %}
+
+<!-- Page Header -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-ticket icon-gradient bg-warm-flame"></i>
+            </div>
+            <div>
+                Discount &amp; Refund Report
+                <div class="page-title-subheading">Policy utilisation, applied discounts &amp; refund analysis</div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2">
+            <a href="{% url 'fees:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i>Dashboard
+            </a>
+            <a href="{% url 'fees:discount_list' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-tags me-1"></i>Manage Discounts
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+{% with ds=discount_stats rs=refund_stats %}
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-tags"></i></div>
+            <div class="kpi-label">Total Discounted</div>
+            <div class="kpi-value">{{ ds.applications.total_discount_value|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ ds.applications.total_applications|default:0|format_number }} discount applications</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-badge"><i class="fa fa-users"></i></div>
+            <div class="kpi-label">Students with Discounts</div>
+            <div class="kpi-value">{{ ds.student_discount_awards.active|default:0|format_number }}</div>
+            <div class="kpi-sub">{{ ds.active_policies|default:0 }} active policies</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-badge"><i class="fa fa-undo"></i></div>
+            <div class="kpi-label">Total Refunded</div>
+            <div class="kpi-value">{{ rs.financial_totals.total_refunded|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ rs.total_refunds|default:0|format_number }} refund transactions</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-red">
+            <div class="kpi-badge"><i class="fa fa-exchange-alt"></i></div>
+            <div class="kpi-label">Last 30 Days</div>
+            <div class="kpi-value">{{ rs.recent_activity.amount_last_30_days|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ rs.recent_activity.refunds_last_30_days|default:0 }} refunds this month</div>
+        </div>
+    </div>
+</div>
+
+<!-- Discount breakdown + Refund breakdown -->
+<div class="row g-3 mb-3">
+
+    <!-- Discount details -->
+    <div class="col-xl-6">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-percent" style="color:var(--teal);"></i>
+                    Discount Summary
+                </span>
+            </div>
+            <div class="dash-body">
+                <div class="stat-row">
+                    <span class="stat-label">Active Discount Policies</span>
+                    <span class="stat-val">{{ ds.active_policies|default:0 }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Active Awards (Students)</span>
+                    <span class="stat-val" style="color:var(--teal);">{{ ds.student_discount_awards.active|default:0 }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Applications (All Time)</span>
+                    <span class="stat-val">{{ ds.applications.total_applications|default:0|format_number }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Reversed Applications</span>
+                    <span class="stat-val" style="color:var(--amber);">{{ ds.applications.reversed_applications|default:0 }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Discount Value Applied</span>
+                    <span class="stat-val" style="color:var(--teal);">{{ ds.applications.total_discount_value|default:0|money_short }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Discount as % of Fees Billed</span>
+                    <span class="stat-val" style="color:var(--teal);">{{ ds.applications.discount_percentage|default:0|floatformat:1 }}%</span>
+                </div>
+
+                {% if ds.by_category %}
+                <div style="margin-top:16px;">
+                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:10px;">By Category</div>
+                    {% for cat in ds.by_category %}
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+                        <div>
+                            <span style="font-size:12.5px;font-weight:600;">{{ cat.category }}</span>
+                            <span style="font-size:10.5px;color:var(--ink-faint);margin-left:6px;">{{ cat.student_count }} students</span>
+                        </div>
+                        <span class="mono" style="color:var(--teal);">{{ cat.total_value|money_short }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Refund details -->
+    <div class="col-xl-6">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-undo-alt" style="color:var(--amber);"></i>
+                    Refund &amp; Reversal Summary
+                </span>
+            </div>
+            <div class="dash-body">
+
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:10px;">Refunds</div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Refund Amount</span>
+                    <span class="stat-val" style="color:var(--amber);">{{ rs.financial_totals.total_refunded|default:0|money_short }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Number of Refunds</span>
+                    <span class="stat-val">{{ rs.total_refunds|default:0|format_number }}</span>
+                </div>
+                {% if rs.by_method %}
+                {% for m in rs.by_method %}
+                <div class="stat-row">
+                    <span class="stat-label" style="padding-left:12px;">— {{ m.refund_method }}</span>
+                    <span style="font-size:12.5px;">{{ m.total|money_short }} ({{ m.count }})</span>
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin:16px 0 10px;">Reversals</div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Reversed Amount</span>
+                    <span class="stat-val" style="color:var(--red);">{{ rs.financial_totals.total_refunded|default:0|money_short }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Number of Reversals</span>
+                    <span class="stat-val">{{ rs.total_refunds|default:0|format_number }}</span>
+                </div>
+
+                <div style="margin-top:16px;padding:14px;background:var(--surface-3);border-radius:8px;">
+                    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:8px;">Combined impact on revenue</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:12.5px;font-weight:700;color:var(--ink);">Total Adjustments</span>
+                        <span style="font-size:15px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--red);">
+                            — {{ rs.financial_totals.total_refunded|default:0|money_short }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Active discount awards table -->
+{% if discount_stats.active_awards %}
+<div class="sec-heading">Active Discount Awards</div>
+<div class="dash-card mb-3">
+    <div class="dash-head">
+        <span class="dash-title">
+            <i class="fa fa-award" style="color:var(--teal);"></i>
+            Students Currently Receiving Discounts
+        </span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="dt">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Policy</th>
+                <th>Category</th>
+                <th class="text-end">Value Applied</th>
+                <th class="text-center">Valid Until</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for award in discount_stats.active_awards %}
+            <tr>
+                <td style="font-weight:600;font-size:12.5px;">{{ award.student.get_full_name }}</td>
+                <td style="font-size:12px;color:var(--ink-muted);">{{ award.policy.name }}</td>
+                <td>
+                    <span style="font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--teal-lt);color:var(--teal);">
+                        {{ award.policy.get_category_display }}
+                    </span>
+                </td>
+                <td class="text-end mono" style="color:var(--teal);">
+                    {% with total=discount_stats.applications|get_item:award.id %}
+                        {{ total|default:0|money_short }}
+                    {% endwith %}
+                </td>
+                <td class="text-center" style="font-size:11.5px;color:var(--ink-muted);">
+                    {{ award.end_date|date:"d M Y"|default:"No expiry" }}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--ink-faint);">No active awards data</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endif %}
+
+{% endwith %}
+
+<div style="font-size:11px;color:var(--ink-faint);text-align:right;padding:4px 0 16px;">
+    Generated {{ generated_at }} by {{ generated_by }}
+</div>
+{% endblock %}

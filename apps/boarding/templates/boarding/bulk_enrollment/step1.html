@@ -1,279 +1,73 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
+{% load widget_tweaks %}
 
 {% block extra_css %}
 <style>
-/* ============================================================================
-   WIZARD STYLING
-   ============================================================================ */
-
-.wizard-steps {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 30px;
-    padding: 20px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --radius:    10px;
 }
 
-.wizard-step {
-    display: flex;
-    align-items: center;
-    flex: 1;
-    max-width: 300px;
+.step-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 24px;
+    margin-bottom: 20px; display: flex; align-items: center;
 }
+.step-item { display: flex; align-items: center; gap: 10px; }
+.step-pip  { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.step-pip.active { background: var(--accent); color: #fff; }
+.step-pip.idle   { background: #e2e8f0;       color: #94a3b8; }
+.step-text  { display: flex; flex-direction: column; }
+.step-label { font-size: 12.5px; font-weight: 700; }
+.step-label.active { color: var(--accent); }
+.step-label.idle   { color: var(--ink-muted); }
+.step-sub   { font-size: 11px; color: var(--ink-faint); }
+.step-connector { flex: 1; height: 2px; background: #e2e8f0; margin: 0 20px; }
 
-.step-number {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #e9ecef;
-    color: #6c757d;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    margin-right: 10px;
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 20px; transition: box-shadow .2s; }
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; flex-shrink: 0; }
+.stat-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 2px; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1; }
+
+.list-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 120px; }
+.list-card-head { padding: 14px 22px; border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; }
+.list-card-title { font-size: 13px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+
+.filter-bar { padding: 18px 22px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%); }
+.filter-bar .form-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px; display: block; }
+.filter-bar .form-control,
+.filter-bar .form-select { border-radius: 8px; border-color: #dee2e6; font-size: 13px; }
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+
+.context-note { padding: 10px 22px; background: #fffbeb; border-bottom: 1px solid #fde68a; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #92400e; }
+
+.bulk-footer {
+    position: fixed; bottom: 0;
+    left: var(--sidebar-width, 280px); right: 0;
+    background: #fff; border-top: 2px solid var(--border);
+    padding: 14px 30px; display: flex; align-items: center;
+    justify-content: space-between; z-index: 1050;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08);
 }
-
-.wizard-step.active .step-number {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.wizard-step.completed .step-number {
-    background: #28a745;
-    color: white;
-}
-
-.step-text {
-    flex: 1;
-}
-
-.step-title {
-    font-weight: 600;
-    color: #495057;
-    margin: 0;
-}
-
-.step-description {
-    font-size: 0.875rem;
-    color: #6c757d;
-    margin: 0;
-}
-
-.wizard-step.active .step-title {
-    color: #667eea;
-}
-
-.step-connector {
-    height: 2px;
-    flex: 1;
-    background: #e9ecef;
-    margin: 0 15px;
-}
-
-.wizard-step.completed + .step-connector {
-    background: #28a745;
-}
-
-/* ============================================================================
-   FILTER SECTION
-   ============================================================================ */
-
-.filter-section {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 25px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.filter-header {
-    margin-bottom: 20px;
-}
-
-/* ============================================================================
-   STUDENT SELECTION TABLE
-   ============================================================================ */
-
-.selection-table-wrapper {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.table-header-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-.selection-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.student-checkbox {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-.student-row {
-    transition: background-color 0.2s;
-}
-
-.student-row:hover {
-    background-color: #f8f9fa;
-}
-
-.student-row.selected {
-    background-color: #e7f3ff !important;
-}
-
-.student-avatar {
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 12px;
-}
-
-/* ============================================================================
-   SELECTION SUMMARY
-   ============================================================================ */
-
-.selection-summary {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    border-top: 2px solid #667eea;
-    padding: 15px;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-    z-index: 1000;
-    display: none;
-}
-
-.selection-summary.active {
-    display: block;
-}
-
-.summary-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.summary-info {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.summary-count {
-    background: #667eea;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: bold;
-}
-
-/* ============================================================================
-   INFO BOXES
-   ============================================================================ */
-
-.info-box {
-    background: #e7f3ff;
-    border-left: 4px solid #0066cc;
-    padding: 15px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-
-.info-box.warning {
-    background: #fff3cd;
-    border-left-color: #ffc107;
-}
-
-.info-box i {
-    margin-right: 10px;
-}
-
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
-
-.empty-state {
-    text-align: center;
-    padding: 60px 30px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin: 20px 0;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: #dee2e6;
-    margin-bottom: 20px;
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
-@media (max-width: 768px) {
-    .wizard-steps {
-        flex-direction: column;
-    }
-    
-    .wizard-step {
-        max-width: 100%;
-        margin-bottom: 10px;
-    }
-    
-    .step-connector {
-        display: none;
-    }
-    
-    .filter-section {
-        padding: 15px;
-    }
-    
-    .summary-content {
-        flex-direction: column;
-        gap: 10px;
-    }
-    
-    .summary-info {
-        flex-direction: column;
-        gap: 10px;
-    }
-}
+.selected-badge { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-lt); color: var(--accent); border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 16px; font-weight: 700; font-size: 14px; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
@@ -281,384 +75,303 @@
                 <i class="pe-7s-home icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
-                Bulk Boarding Enrollment - Select Students
-                <div class="page-title-subheading">
-                    Step 1 of 2: Choose students for boarding enrollment
-                </div>
+                Bulk Boarding Enrollment
+                <div class="page-title-subheading">Step 1 — Select students to enroll</div>
             </div>
         </div>
         <div class="page-title-actions">
-            <a href="{% url 'boarding:enrollment_list' %}" class="btn btn-outline-secondary">
-                <i class="fa fa-arrow-left me-1"></i> Back to Enrollments
+            <a href="{% url 'boarding:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-times me-1"></i>Cancel
             </a>
         </div>
     </div>
 </div>
 
-<!-- Wizard Progress -->
-<div class="wizard-steps">
-    <div class="wizard-step active">
-        <div class="step-number">1</div>
+{# ── Step bar ── #}
+<div class="step-bar">
+    <div class="step-item">
+        <div class="step-pip active">1</div>
         <div class="step-text">
-            <div class="step-title">Select Students</div>
-            <div class="step-description">Choose students to enroll</div>
+            <span class="step-label active">Select Students</span>
+            <span class="step-sub">Search, filter &amp; tick</span>
         </div>
     </div>
     <div class="step-connector"></div>
-    <div class="wizard-step">
-        <div class="step-number">2</div>
+    <div class="step-item">
+        <div class="step-pip idle">2</div>
         <div class="step-text">
-            <div class="step-title">Configure & Confirm</div>
-            <div class="step-description">Set boarding details</div>
+            <span class="step-label idle">Confirm &amp; Enroll</span>
+            <span class="step-sub">Dormitory, type, dates</span>
         </div>
     </div>
 </div>
 
-<!-- Main Section -->
-<section class="section">
-    <div class="row">
-        <div class="col-lg-12">
-            
-            <!-- Information Box -->
-            <div class="info-box">
-                <i class="fa fa-lightbulb"></i>
-                <strong>How it works:</strong> 
-                Select students from the list below using checkboxes. You can filter students by gender, level, status, or search by name. 
-                Then proceed to Step 2 to configure boarding enrollment details for all selected students.
+{# ── Stat cards ── #}
+<div class="row mb-0">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#1d4ed8;"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Students Found</div>
+                <div class="stat-value">{{ total_count|intcomma }}</div>
             </div>
-            
-            {% if target_dormitory %}
-            <div class="info-box warning">
-                <i class="fa fa-info-circle"></i>
-                <strong>Target Dormitory:</strong> {{ target_dormitory.name }} ({{ target_dormitory.get_dormitory_type_display }})
-                - Available Capacity: {{ target_dormitory.get_available_capacity }} beds
-            </div>
-            {% endif %}
-
-            <!-- Filter Section -->
-            <div class="filter-section">
-                <div class="filter-header">
-                    <h5 class="mb-0">
-                        <i class="fa fa-filter me-2"></i>Student Filters
-                    </h5>
-                </div>
-                
-                <form id="filterForm" class="row g-3"
-                      hx-get="{% url 'boarding:bulk_enrollment_step1' %}"
-                      hx-target="#student-selection-results"
-                      hx-trigger="input changed delay:500ms from:#{{ form.search.id_for_label }}, change from:select"
-                      hx-include="[name='dormitory_id'], [name='session_id']">
-                    
-                    <!-- Hidden inputs for dormitory and session -->
-                    {% if request.GET.dormitory_id %}
-                    <input type="hidden" name="dormitory_id" value="{{ request.GET.dormitory_id }}">
-                    {% endif %}
-                    {% if request.GET.session_id %}
-                    <input type="hidden" name="session_id" value="{{ request.GET.session_id }}">
-                    {% endif %}
-                    
-                    <!-- Search -->
-                    <div class="col-md-4">
-                        <label for="{{ form.search.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.search.label }}
-                        </label>
-                        {{ form.search }}
-                    </div>
-                    
-                    <!-- Current Level -->
-                    <div class="col-md-3">
-                        <label for="{{ form.current_level.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.current_level.label }}
-                        </label>
-                        {{ form.current_level }}
-                    </div>
-                    
-                    <!-- Gender -->
-                    <div class="col-md-2">
-                        <label for="{{ form.gender.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.gender.label }}
-                        </label>
-                        {{ form.gender }}
-                    </div>
-                    
-                    <!-- Enrollment Status -->
-                    <div class="col-md-3">
-                        <label for="{{ form.enrollment_status.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.enrollment_status.label }}
-                        </label>
-                        {{ form.enrollment_status }}
-                    </div>
-                    
-                    <!-- Second Row -->
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            {{ form.exclude_already_enrolled }}
-                            <label class="form-check-label" for="{{ form.exclude_already_enrolled.id_for_label }}">
-                                {{ form.exclude_already_enrolled.label }}
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            {{ form.show_only_eligible }}
-                            <label class="form-check-label" for="{{ form.show_only_eligible.id_for_label }}">
-                                {{ form.show_only_eligible.label }}
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Sort By -->
-                    <div class="col-md-4">
-                        <label for="{{ form.sort_by.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.sort_by.label }}
-                        </label>
-                        {{ form.sort_by }}
-                    </div>
-                </form>
-            </div>
-
-            <!-- Student Selection Table -->
-            <div class="selection-table-wrapper">
-                <div class="table-header-actions">
-                    <h6 class="mb-0">
-                        <i class="fa fa-users me-2"></i>Available Students
-                    </h6>
-                    <div class="selection-controls">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
-                            <i class="fa fa-check-double me-1"></i> Select All
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
-                            <i class="fa fa-times me-1"></i> Clear Selection
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Results Container -->
-                <div id="student-selection-results"
-                     hx-get="{% url 'boarding:bulk_enrollment_step1' %}"
-                     hx-trigger="load"
-                     hx-vals='{"dormitory_id": "{{ request.GET.dormitory_id }}", "session_id": "{{ request.GET.session_id }}", "enrollment_status": "ACTIVE", "exclude_already_enrolled": "true"}'
-                     hx-swap="innerHTML">
-                    <!-- Initial loading state -->
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary mb-3" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mb-0">Loading eligible students...</p>
-                    </div>
-                </div>
-            </div>
-            
         </div>
     </div>
-</section>
-
-<!-- Selection Summary Bar (Fixed Bottom) -->
-<div class="selection-summary" id="selectionSummary">
-    <div class="summary-content">
-        <div class="summary-info">
-            <div class="summary-count">
-                <i class="fa fa-users me-2"></i>
-                <span id="selectedCount">0</span> students selected
-            </div>
-            <div class="text-muted small" id="selectedNames">
-                No students selected
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#7c3aed;"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Selected</div>
+                <div class="stat-value" id="stat-selected-count">0</div>
             </div>
         </div>
-        <div>
-            <button type="button" class="btn btn-secondary me-2" onclick="clearSelection()">
-                <i class="fa fa-times me-1"></i> Clear
-            </button>
-            <button type="button" class="btn btn-primary btn-lg" onclick="proceedToStep2()" id="proceedBtn" disabled>
-                <i class="fa fa-arrow-right me-1"></i> Proceed to Step 2
-            </button>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0f766e;"><i class="pe-7s-home"></i></div>
+            <div>
+                <div class="stat-label">Target Dormitory</div>
+                <div class="stat-value" style="font-size:13px;font-weight:600;line-height:1.3;">
+                    {% if target_dormitory %}{{ target_dormitory.name }}{% else %}<span style="color:#94a3b8;font-size:12px;">Choose in step 2</span>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0891b2;"><i class="pe-7s-date"></i></div>
+            <div>
+                <div class="stat-label">Session</div>
+                <div class="stat-value" style="font-size:13px;font-weight:600;line-height:1.3;">
+                    {% if target_session %}{{ target_session.name }}{% else %}<span style="color:#94a3b8;font-size:12px;">Choose in step 2</span>{% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Add bottom padding to prevent content from being hidden by fixed summary bar -->
-<div style="height: 100px;"></div>
+{# ── Main list card ── #}
+<div class="list-card">
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-users text-primary"></i> Students
+        </span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="selectAllVisible()">
+                <i class="fa fa-check-square me-1"></i>Select page
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+                <i class="fa fa-times me-1"></i>Reset filters
+            </button>
+        </div>
+    </div>
+
+    {# ── Filter bar ── #}
+    <div class="filter-bar">
+        <form id="filterForm"
+              hx-get="{% url 'boarding:bulk_enrollment_step1' %}"
+              hx-target="#student-results"
+              hx-trigger="change, keyup changed delay:400ms from:input[name='search']">
+
+            {% if target_dormitory %}<input type="hidden" name="dormitory_id" value="{{ target_dormitory.pk }}">{% endif %}
+            {% if target_session  %}<input type="hidden" name="session_id"   value="{{ target_session.pk }}">{% endif %}
+
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">{{ form.search.label }}</label>
+                    {{ form.search|add_class:"form-control form-control-sm"|attr:"placeholder:Name or admission number…" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ form.current_level.label }}</label>
+                    {{ form.current_level|add_class:"form-select form-select-sm" }}
+                </div>
+                {# Hide gender + dormitory_type filters when a target dormitory
+                   is set — gender is already enforced in the view as a hard constraint #}
+                {% if not target_dormitory %}
+                <div class="col-md-1">
+                    <label class="form-label">{{ form.gender.label }}</label>
+                    {{ form.gender|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ form.dormitory_type.label }}</label>
+                    {{ form.dormitory_type|add_class:"form-select form-select-sm" }}
+                </div>
+                {% endif %}
+                <div class="col-md-2">
+                    <label class="form-label">{{ form.sort_by.label }}</label>
+                    {{ form.sort_by|add_class:"form-select form-select-sm" }}
+                </div>
+                <div class="col-md-1 d-flex align-items-end pb-1">
+                    <div class="form-check">
+                        {{ form.exclude_already_enrolled|add_class:"form-check-input" }}
+                        <label class="form-check-label" for="{{ form.exclude_already_enrolled.id_for_label }}"
+                               style="font-size:12px;">Hide boarders</label>
+                    </div>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="clearFilters()" title="Reset filters">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if target_dormitory %}
+    <div class="context-note">
+        <i class="fa fa-info-circle" style="flex-shrink:0;"></i>
+        <span>
+            Enrolling into <strong>{{ target_dormitory.name }}</strong>
+            ({{ target_dormitory.get_dormitory_type_display }},
+            {{ target_dormitory.get_available_capacity }} bed{{ target_dormitory.get_available_capacity|pluralize }} available).
+            {% if target_dormitory.dormitory_type == 'BOYS' %}Only male students are shown.
+            {% elif target_dormitory.dormitory_type == 'GIRLS' %}Only female students are shown.{% endif %}
+            Students already boarded in this session are hidden by default.
+        </span>
+    </div>
+    {% endif %}
+
+    {# ── Results — loaded by HTMX ── #}
+    <div id="student-results"
+         hx-get="{% url 'boarding:bulk_enrollment_step1' %}{% if target_dormitory %}?dormitory_id={{ target_dormitory.pk }}{% endif %}{% if target_session %}&session_id={{ target_session.pk }}{% endif %}&exclude_already_enrolled=true"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div style="padding:60px;text-align:center;color:#94a3b8;">
+            <i class="fa fa-spinner fa-spin fa-2x"></i>
+        </div>
+    </div>
+
+</div>
+
+{# ── Sticky footer ── #}
+<div class="bulk-footer">
+    <div class="d-flex align-items-center gap-3">
+        <div class="selected-badge">
+            <i class="fa fa-check-square"></i>
+            <span id="footer-selected-count">0</span> students selected
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                onclick="clearAllSelections()">
+            <i class="fa fa-times me-1"></i>Clear
+        </button>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'boarding:dashboard' %}" class="btn btn-outline-secondary">
+            <i class="fa fa-arrow-left me-1"></i>Back
+        </a>
+        <button type="button" class="btn btn-primary" id="next-btn"
+                disabled onclick="proceedToStep2()">
+            Next: Confirm Enrollment <i class="fa fa-arrow-right ms-1"></i>
+        </button>
+    </div>
+</div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// STUDENT SELECTION MANAGEMENT
-// ============================================================================
+const selectedStudents = new Map();
 
-let selectedStudents = new Set();
-
-// This function is called by checkboxes in the partial template
-function updateSelectedCount() {
-    updateSelection();
-}
-
-function updateSelection() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
-    selectedStudents.clear();
-    
-    checkboxes.forEach(checkbox => {
-        if (checkbox.checked) {
-            selectedStudents.add({
-                id: checkbox.value,
-                name: checkbox.getAttribute('data-name') || 'Unknown Student',
-                gender: checkbox.getAttribute('data-gender') || ''
-            });
-        }
-    });
-    
-    updateSummaryBar();
-}
-
-function updateSummaryBar() {
-    const summary = document.getElementById('selectionSummary');
-    const countElement = document.getElementById('selectedCount');
-    const namesElement = document.getElementById('selectedNames');
-    const proceedBtn = document.getElementById('proceedBtn');
-    
-    const count = selectedStudents.size;
-    countElement.textContent = count;
-    
-    if (count > 0) {
-        summary.classList.add('active');
-        proceedBtn.disabled = false;
-        
-        if (count <= 5) {
-            const names = Array.from(selectedStudents).map(s => s.name).join(', ');
-            namesElement.textContent = names;
-        } else {
-            const firstFive = Array.from(selectedStudents).slice(0, 5).map(s => s.name).join(', ');
-            namesElement.textContent = `${firstFive} and ${count - 5} more`;
-        }
-    } else {
-        summary.classList.remove('active');
-        proceedBtn.disabled = true;
-        namesElement.textContent = 'No students selected';
-    }
-}
-
-function selectAll() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = true;
-        checkbox.closest('tr').classList.add('selected');
-    });
-    updateSelection();
-}
-
-function clearSelection() {
-    const checkboxes = document.querySelectorAll('.student-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = false;
-        checkbox.closest('tr').classList.remove('selected');
-    });
-    selectedStudents.clear();
-    updateSummaryBar();
+function updateCounters() {
+    const n = selectedStudents.size;
+    document.getElementById('footer-selected-count').textContent = n;
+    document.getElementById('stat-selected-count').textContent   = n;
+    document.getElementById('next-btn').disabled = n === 0;
 }
 
 function toggleStudentRow(checkbox) {
     const row = checkbox.closest('tr');
     if (checkbox.checked) {
-        row.classList.add('selected');
+        selectedStudents.set(checkbox.value, checkbox.dataset.name || checkbox.value);
+        row?.classList.add('selected');
     } else {
-        row.classList.remove('selected');
+        selectedStudents.delete(checkbox.value);
+        row?.classList.remove('selected');
     }
-    updateSelection();
+    updateCounters();
+    syncLocalDisplay();
 }
 
-function proceedToStep2() {
-    if (selectedStudents.size === 0) {
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                icon: 'warning',
-                title: 'No Students Selected',
-                text: 'Please select at least one student to continue.',
-                confirmButtonColor: '#ffc107'
-            });
-        } else {
-            alert('Please select at least one student to continue.');
-        }
-        return;
-    }
-    
-    const studentIds = Array.from(selectedStudents).map(s => s.id).join(',');
-    const dormitoryId = '{{ request.GET.dormitory_id }}';
-    const sessionId = '{{ request.GET.session_id }}';
-    
-    let url = "{% url 'boarding:bulk_enrollment_step2' %}?student_ids=" + studentIds;
-    
-    if (dormitoryId) {
-        url += "&dormitory_id=" + dormitoryId;
-    }
-    if (sessionId) {
-        url += "&session_id=" + sessionId;
-    }
-    
-    window.location.href = url;
-}
-
-// ============================================================================
-// HTMX EVENT LISTENERS
-// ============================================================================
-
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'student-selection-results') {
-        // Reapply selection state after HTMX swap
-        const checkboxes = document.querySelectorAll('.student-checkbox');
-        checkboxes.forEach(checkbox => {
-            const studentId = checkbox.value;
-            const isSelected = Array.from(selectedStudents).some(s => s.id === studentId);
-            
-            if (isSelected) {
-                checkbox.checked = true;
-                checkbox.closest('tr').classList.add('selected');
-            }
-            
-            // Add event listener
-            checkbox.addEventListener('change', function() {
-                toggleStudentRow(this);
-            });
-        });
-        
-        // Re-initialize tooltips
-        initializeTooltips();
-    }
-});
-
-// ============================================================================
-// TOOLTIP INITIALIZATION
-// ============================================================================
-
-function initializeTooltips() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+function selectAllVisible() {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        if (!cb.checked) { cb.checked = true; toggleStudentRow(cb); }
     });
 }
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initializeTooltips();
+function clearAllSelections() {
+    selectedStudents.clear();
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        cb.checked = false;
+        cb.closest('tr')?.classList.remove('selected');
+    });
+    updateCounters();
+    syncLocalDisplay();
+}
+
+function handleSelectAllCheckbox(master) {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        cb.checked = master.checked;
+        toggleStudentRow(cb);
+    });
+}
+
+function clearFilters() {
+    const form = document.getElementById('filterForm');
+    form.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+    form.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+    const excl = form.querySelector('input[name="exclude_already_enrolled"]');
+    if (excl) excl.checked = true;
+    htmx.trigger(form, 'change');
+}
+
+function restoreCheckboxState() {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        if (selectedStudents.has(cb.value)) {
+            cb.checked = true;
+            cb.closest('tr')?.classList.add('selected');
+        }
+    });
+    syncLocalDisplay();
+}
+
+function syncLocalDisplay() {
+    const checked = document.querySelectorAll('.student-checkbox:checked').length;
+    const total   = document.querySelectorAll('.student-checkbox').length;
+    const el      = document.getElementById('selectedCountDisplay');
+    if (el) el.textContent = checked;
+    const master = document.getElementById('selectAllStudents');
+    if (master && total > 0) {
+        master.checked       = checked === total;
+        master.indeterminate = checked > 0 && checked < total;
+    }
+}
+
+function proceedToStep2() {
+    if (selectedStudents.size === 0) return;
+    const ids = Array.from(selectedStudents.keys()).join(',');
+    const url = new URL("{% url 'boarding:bulk_enrollment_step2' %}", window.location.origin);
+    url.searchParams.set('student_ids', ids);
+    {% if target_dormitory %}url.searchParams.set('dormitory_id', '{{ target_dormitory.pk }}');{% endif %}
+    {% if target_session  %}url.searchParams.set('session_id',   '{{ target_session.pk }}');{% endif %}
+    window.location.href = url.toString();
+}
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id === 'student-results') {
+        restoreCheckboxState();
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            var ex = bootstrap.Tooltip.getInstance(el);
+            if (ex) ex.dispose();
+            new bootstrap.Tooltip(el);
+        });
+    }
 });
 
-// ============================================================================
-// KEYBOARD SHORTCUTS
-// ============================================================================
-
-document.addEventListener('keydown', function(event) {
-    // Ctrl/Cmd + A to select all (when not in input field)
-    if ((event.ctrlKey || event.metaKey) && event.key === 'a' && 
-        !['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
-        event.preventDefault();
-        selectAll();
-    }
-    
-    // Escape to clear selection
-    if (event.key === 'Escape') {
-        clearSelection();
-    }
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+        el => new bootstrap.Tooltip(el)
+    );
 });
 </script>
 {% endblock %}

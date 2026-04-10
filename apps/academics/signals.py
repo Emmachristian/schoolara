@@ -1,10 +1,40 @@
 # academics/signals.py
 """
-Signal handlers for academics app
-Handles automatic operations when models are created, updated, or deleted
+Signal handlers for the academics app.
+
+RESPONSIBILITY BOUNDARIES
+─────────────────────────
+Invoice creation
+    Handled EXPLICITLY by:
+      • enrollment_create view (single enrolment)
+      • BulkEnrollmentService._create_invoices() (bulk enrolment)
+    The auto_create_invoice field is read directly by those callers.
+    NO signal here creates invoices.
+
+Roll-number generation
+    auto_generate_roll_number (pre_save) fires only for NEW enrolment records
+    (_state.adding == True).  reset_class_roll_numbers() in utils.py updates
+    existing records via save(update_fields=['roll_number']) and intentionally
+    bypasses this signal — see the IMPORTANT note in that function.
+
+Validation
+    Business-rule validation lives in model clean() methods, not here.
+    Pre-save stubs in this file do only what a signal uniquely enables
+    (e.g. reading the pre-save DB state to detect field changes).
+
+Session deduplication
+    AcademicSession.save() already calls
+        AcademicSession.objects.filter(is_current=True).exclude(pk=self.pk).update(is_current=False)
+    ensure_only_one_current_session() (bottom of file) is a repair utility for
+    management commands / data-migration use; it additionally sorts by start_date
+    to pick the most recent session when multiple are flagged.  The two approaches
+    are intentionally slightly different — if the model's behaviour changes,
+    update this utility accordingly.
 """
 
-from django.db.models.signals import post_save, pre_save, post_delete, m2m_changed, pre_delete
+from django.db.models.signals import (
+    post_save, pre_save, post_delete, m2m_changed, pre_delete,
+)
 from django.db.models import Q
 from django.dispatch import receiver
 from django.utils import timezone
@@ -19,64 +49,40 @@ logger = logging.getLogger(__name__)
 # ACADEMIC SESSION SIGNALS
 # =============================================================================
 
-@receiver(pre_save, sender='academics.AcademicSession')
-def academic_session_pre_save(sender, instance, **kwargs):
-    """
-    Handle pre-save operations for AcademicSession.
-    - Ensure only one current session
-    - Auto-generate period_type and term_name for regular sessions
-    """
-    # This is now handled in the model's save() method
-    # But we can add additional logic here if needed
-    pass
-
-
 @receiver(post_save, sender='academics.AcademicSession')
 def academic_session_post_save(sender, instance, created, **kwargs):
     """
-    Handle post-save operations for AcademicSession.
-    - Log session creation/updates
-    - Auto-create fiscal period if enabled
+    Post-save handler for AcademicSession.
+
+    On creation of a regular (non-special) session, attempt to auto-create a
+    FiscalPeriod aligned with the session dates.  Failures are logged but do not
+    propagate — the session is already saved at this point.
     """
     if created:
         logger.info(
             f"New academic session created: {instance.name} "
             f"({'Special' if instance.is_special_session else 'Regular'})"
         )
-        
-        # Auto-create fiscal period if configured
-        try:
-            from core.models import FiscalPeriod
-            from core.models import SchoolConfiguration
-            
-            # Check if auto-creation is enabled in settings
-            # This would be a school-wide setting
-            auto_create_fiscal = True  # Could be from settings
-            
-            if auto_create_fiscal and not instance.is_special_session:
-                # Create fiscal period aligned with this session
+
+        if not instance.is_special_session:
+            try:
+                from core.models import FiscalPeriod
                 fiscal_period = FiscalPeriod.create_for_academic_session(
                     academic_session=instance,
-                    grace_days=60  # Could be from settings
+                    grace_days=60,
                 )
                 logger.info(f"Auto-created fiscal period: {fiscal_period}")
-                
-        except ImportError:
-            logger.debug("FiscalPeriod model not available")
-        except Exception as e:
-            logger.error(f"Error auto-creating fiscal period: {e}")
-    
+            except ImportError:
+                logger.debug("FiscalPeriod model not available")
+            except Exception as e:
+                logger.error(f"Error auto-creating fiscal period: {e}")
     else:
         logger.info(f"Academic session updated: {instance.name}")
 
 
 @receiver(post_delete, sender='academics.AcademicSession')
 def academic_session_post_delete(sender, instance, **kwargs):
-    """
-    Handle post-delete operations for AcademicSession.
-    - Log session deletion
-    - Clean up related data if necessary
-    """
+    """Log academic session deletion."""
     logger.warning(f"Academic session deleted: {instance.name}")
 
 
@@ -87,59 +93,49 @@ def academic_session_post_delete(sender, instance, **kwargs):
 @receiver(post_save, sender='academics.Class')
 def class_post_save(sender, instance, created, **kwargs):
     """
-    Handle post-save operations for Class.
-    - Log class creation
-    - Initialize class subjects for new classes
-    """
-    if created:
-        logger.info(
-            f"New class created: {instance.get_display_name()} "
-            f"for session {instance.academic_session.name}"
-        )
-        
-        # Auto-create class subjects for compulsory subjects
-        try:
-            from .models import Subject, ClassSubject
-            
-            # Get compulsory subjects for this level
-            compulsory_subjects = Subject.objects.filter(
-                is_compulsory=True,
-                is_active=True
-            ).filter(
-                Q(applicable_levels__isnull=True) |
-                Q(applicable_levels=instance.academic_level)
-            ).distinct()
-            
-            for subject in compulsory_subjects:
-                ClassSubject.objects.get_or_create(
-                    class_instance=instance,
-                    subject=subject,
-                    defaults={
-                        'is_optional': False,
-                        'hours_per_week': 3,  # Default
-                    }
-                )
-            
-            if compulsory_subjects.exists():
-                logger.info(
-                    f"Auto-created {compulsory_subjects.count()} compulsory subjects "
-                    f"for class {instance.get_display_name()}"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error auto-creating class subjects: {e}")
+    Post-save handler for Class.
 
+    On creation, auto-assign every compulsory subject that is applicable to this
+    class's academic level.  Uses get_or_create so re-saving a class never
+    produces duplicate assignments.
+    """
+    if not created:
+        return
 
-@receiver(pre_save, sender='academics.Class')
-def class_pre_save(sender, instance, **kwargs):
-    """
-    Handle pre-save operations for Class.
-    - Validate section requirements
-    - Check classroom conflicts
-    """
-    # Validation is handled in model's clean() method
-    # Additional pre-save logic can go here
-    pass
+    logger.info(
+        f"New class created: {instance.get_display_name()} "
+        f"for session {instance.academic_session.name}"
+    )
+
+    try:
+        from .models import Subject, ClassSubject
+
+        compulsory_subjects = Subject.objects.filter(
+            is_compulsory=True,
+            is_active=True,
+        ).filter(
+            Q(applicable_levels__isnull=True) |
+            Q(applicable_levels=instance.academic_level)
+        ).distinct()
+
+        for subject in compulsory_subjects:
+            ClassSubject.objects.get_or_create(
+                class_instance=instance,
+                subject=subject,
+                defaults={
+                    'is_optional':    False,
+                    'hours_per_week': 3,
+                },
+            )
+
+        if compulsory_subjects.exists():
+            logger.info(
+                f"Auto-assigned {compulsory_subjects.count()} compulsory "
+                f"subject(s) to {instance.get_display_name()}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error auto-assigning class subjects: {e}")
 
 
 # =============================================================================
@@ -148,26 +144,12 @@ def class_pre_save(sender, instance, **kwargs):
 
 @receiver(post_save, sender='academics.ClassSubject')
 def class_subject_post_save(sender, instance, created, **kwargs):
-    """
-    Handle post-save operations for ClassSubject.
-    - Log subject assignment
-    """
+    """Log subject assignment to a class."""
     if created:
         logger.info(
             f"Subject assigned: {instance.subject.name} to "
             f"{instance.class_instance.get_display_name()}"
         )
-
-
-@receiver(pre_save, sender='academics.ClassSubject')
-def class_subject_pre_save(sender, instance, **kwargs):
-    """
-    Handle pre-save operations for ClassSubject.
-    - Validate assessment weights
-    - Check subject applicability
-    """
-    # Validation is handled in model's clean() method
-    pass
 
 
 # =============================================================================
@@ -177,21 +159,23 @@ def class_subject_pre_save(sender, instance, **kwargs):
 @receiver(post_save, sender='academics.Holiday')
 def holiday_post_save(sender, instance, created, **kwargs):
     """
-    Handle post-save operations for Holiday.
-    - Log holiday creation
-    - Send notifications if enabled
+    Post-save handler for Holiday.
+
+    Queues a notification when the holiday is first created and either
+    notify_parents or notify_staff is set.  The actual notification dispatch
+    is a stub — wire this into your notification system when ready.
     """
-    if created:
-        logger.info(f"New holiday created: {instance.name} ({instance.start_date})")
-        
-        # Send notifications if enabled
-        if instance.notify_parents or instance.notify_staff:
-            try:
-                # Trigger notification task
-                # This would integrate with your notification system
-                logger.info(f"Holiday notification queued for: {instance.name}")
-            except Exception as e:
-                logger.error(f"Error sending holiday notification: {e}")
+    if not created:
+        return
+
+    logger.info(f"New holiday created: {instance.name} ({instance.start_date})")
+
+    if instance.notify_parents or instance.notify_staff:
+        try:
+            # TODO: replace with actual notification dispatch
+            logger.info(f"Holiday notification queued for: {instance.name}")
+        except Exception as e:
+            logger.error(f"Error queuing holiday notification: {e}")
 
 
 # =============================================================================
@@ -201,29 +185,32 @@ def holiday_post_save(sender, instance, created, **kwargs):
 @receiver(m2m_changed, sender=Subject.prerequisites.through)
 def subject_prerequisites_changed(sender, instance, action, **kwargs):
     """
-    Handle changes to subject prerequisites.
-    - Validate no circular dependencies
+    Detect and log circular prerequisite dependencies whenever the
+    prerequisites M2M relation changes.
+
+    Only logs a warning — it does not raise.  The academic_level_pre_save
+    signal (below) uses the same pattern for level progression.
     """
-    if action in ['post_add', 'post_remove']:
-        # Check for circular dependencies
-        try:
-            visited = set()
-            stack = [instance]
-            
-            while stack:
-                current = stack.pop()
-                if current.id in visited:
-                    # Circular dependency detected
-                    logger.warning(
-                        f"Potential circular dependency detected for subject: {instance.name}"
-                    )
-                    break
-                
-                visited.add(current.id)
-                stack.extend(current.prerequisites.all())
-                
-        except Exception as e:
-            logger.error(f"Error checking prerequisites: {e}")
+    if action not in ('post_add', 'post_remove'):
+        return
+
+    try:
+        visited = set()
+        stack   = [instance]
+
+        while stack:
+            current = stack.pop()
+            if current.id in visited:
+                logger.warning(
+                    f"Circular prerequisite dependency detected "
+                    f"for subject: {instance.name}"
+                )
+                break
+            visited.add(current.id)
+            stack.extend(current.prerequisites.all())
+
+    except Exception as e:
+        logger.error(f"Error checking subject prerequisites: {e}")
 
 
 # =============================================================================
@@ -233,24 +220,27 @@ def subject_prerequisites_changed(sender, instance, action, **kwargs):
 @receiver(pre_save, sender='academics.AcademicLevel')
 def academic_level_pre_save(sender, instance, **kwargs):
     """
-    Handle pre-save operations for AcademicLevel.
-    - Validate progression chain
+    Guard against circular chains in the level progression before saving.
+
+    Raises ValidationError if next_level eventually leads back to instance,
+    preventing an infinite loop in get_level_progression_path().
     """
-    # Check for circular progression
-    if instance.next_level:
-        current = instance.next_level
-        visited = {instance.id}
-        max_iterations = 20
-        iterations = 0
-        
-        while current and iterations < max_iterations:
-            if current.id in visited:
-                raise ValidationError(
-                    "Circular progression detected in level progression chain"
-                )
-            visited.add(current.id)
-            current = current.next_level if hasattr(current, 'next_level') else None
-            iterations += 1
+    if not instance.next_level:
+        return
+
+    current    = instance.next_level
+    visited    = {instance.id}
+    max_iter   = 20
+    iterations = 0
+
+    while current and iterations < max_iter:
+        if current.id in visited:
+            raise ValidationError(
+                "Circular progression detected in level progression chain"
+            )
+        visited.add(current.id)
+        current    = getattr(current, 'next_level', None)
+        iterations += 1
 
 
 # =============================================================================
@@ -259,273 +249,282 @@ def academic_level_pre_save(sender, instance, **kwargs):
 
 @receiver(post_save, sender='academics.ClassRoom')
 def classroom_post_save(sender, instance, created, **kwargs):
-    """
-    Handle post-save operations for ClassRoom.
-    - Log classroom creation
-    """
+    """Log classroom creation."""
     if created:
         logger.info(
-            f"New classroom created: {instance.room_number} - {instance.name} "
+            f"New classroom created: {instance.room_number} — {instance.name} "
             f"(Type: {instance.get_room_type_display()})"
         )
 
 
 # =============================================================================
-# STUDENT CLASS ENROLLMENT SIGNALS
+# STUDENT CLASS ENROLMENT — PRE-SAVE SIGNALS
+# (Two separate receivers on the same sender.  Django fires all pre_save
+#  receivers before the INSERT/UPDATE, in registration order.)
 # =============================================================================
 
 @receiver(pre_save, sender='academics.StudentClassEnrollment')
 def auto_generate_roll_number(sender, instance, **kwargs):
     """
-    Automatically generate roll number when creating a new enrollment.
-    Handles both None and empty string cases.
+    Automatically generate a roll number for NEW enrolments that do not
+    already have one.
+
+    NEW RECORDS ONLY — _state.adding == True.
+    Existing records updated via reset_class_roll_numbers() in utils.py bypass
+    this signal intentionally (those calls use save(update_fields=['roll_number'])
+    on already-persisted instances).  If this signal ever needs to cover updates
+    as well, revise reset_class_roll_numbers() accordingly.
     """
-    # Check if this is a new enrollment (not yet saved to database)
-    is_new = instance._state.adding
-    
-    # Check if we need to generate a roll number
+    is_new           = instance._state.adding
     needs_roll_number = (
-        is_new and  # New enrollment (not an update)
-        (not instance.roll_number or instance.roll_number.strip() == '')  # No roll number provided
+        is_new and
+        (not instance.roll_number or instance.roll_number.strip() == '')
     )
-    
-    if needs_roll_number:
-        from academics.utils import generate_class_roll_number
-        
-        try:
-            instance.roll_number = generate_class_roll_number(
-                class_instance=instance.class_instance,
-                academic_session=instance.academic_session
-            )
-            
-            logger.info(
-                f"Auto-generated roll number {instance.roll_number} for "
-                f"{instance.student.get_full_name()} in {instance.class_instance.get_display_name()}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Error auto-generating roll number for "
-                f"{instance.student.get_full_name()}: {e}",
-                exc_info=True
-            )
 
+    if not needs_roll_number:
+        return
 
-@receiver(post_save, sender='academics.StudentClassEnrollment')
-def enrollment_post_save(sender, instance, created, **kwargs):
-    """
-    Handle post-save operations for StudentClassEnrollment.
-    - Auto-create AcademicProgress record
-    - Update student's current academic level
-    """
-    if created:
-        logger.info(
-            f"New enrollment: {instance.student.get_full_name()} enrolled in "
-            f"{instance.class_instance} for {instance.academic_session}"
+    from academics.utils import generate_class_roll_number
+
+    try:
+        instance.roll_number = generate_class_roll_number(
+            class_instance=instance.class_instance,
+            academic_session=instance.academic_session,
         )
-        
-        # Auto-create AcademicProgress record
-        try:
-            from academics.models import AcademicProgress
-            
-            progress, progress_created = AcademicProgress.objects.get_or_create(
-                student=instance.student,
-                academic_session=instance.academic_session,
-                defaults={
-                    'class_enrollment': instance,
-                    'total_subjects': instance.class_instance.subjects.filter(
-                        is_active=True
-                    ).count(),
-                }
-            )
-            
-            if progress_created:
-                logger.info(
-                    f"Auto-created AcademicProgress for {instance.student} - "
-                    f"{instance.academic_session}"
-                )
-            else:
-                # Update the class_enrollment reference if progress already exists
-                progress.class_enrollment = instance
-                progress.save()
-                logger.debug(
-                    f"Updated existing AcademicProgress for {instance.student}"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error creating AcademicProgress: {e}")
-        
-        # Update student's current academic level if this is an active enrollment
-        if instance.is_active and instance.completion_status == 'ONGOING':
-            try:
-                instance.student.current_academic_level = instance.class_instance.academic_level
-                instance.student.save(update_fields=['current_academic_level'])
-                logger.debug(
-                    f"Updated {instance.student}'s current level to "
-                    f"{instance.class_instance.academic_level}"
-                )
-            except Exception as e:
-                logger.error(f"Error updating student current level: {e}")
+        logger.info(
+            f"Auto-generated roll number {instance.roll_number} for "
+            f"{instance.student.get_full_name()} in "
+            f"{instance.class_instance.get_display_name()}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Error auto-generating roll number for "
+            f"{instance.student.get_full_name()}: {e}",
+            exc_info=True,
+        )
 
 
 @receiver(pre_save, sender='academics.StudentClassEnrollment')
 def enrollment_status_change_handler(sender, instance, **kwargs):
     """
-    Handle enrollment status changes.
-    - Track when enrollment is completed/dropped/transferred
-    - Update completion_date automatically
+    React to completion_status changes on existing enrolment records.
+
+    • Auto-sets completion_date when status moves to a terminal state
+      (COMPLETED, DROPPED, TRANSFERRED, WITHDRAWN) and none is set yet.
+    • Marks the enrolment inactive whenever it is no longer ONGOING.
+
+    Skipped entirely for new records (no prior state to compare against).
     """
-    if instance.pk:  # Only for existing records
-        try:
-            old_instance = sender.objects.get(pk=instance.pk)
-            
-            # Check if completion_status changed
-            if old_instance.completion_status != instance.completion_status:
-                logger.info(
-                    f"Enrollment status changed for {instance.student}: "
-                    f"{old_instance.completion_status} → {instance.completion_status}"
-                )
-                
-                # Auto-set completion_date if status changed to a completed state
-                if instance.completion_status in ['COMPLETED', 'DROPPED', 'TRANSFERRED', 'WITHDRAWN']:
-                    if not instance.completion_date:
-                        instance.completion_date = timezone.now().date()
-                        logger.debug(
-                            f"Auto-set completion_date to {instance.completion_date}"
-                        )
-                
-                # Mark as inactive if not ongoing
-                if instance.completion_status != 'ONGOING':
-                    instance.is_active = False
-                    
-        except sender.DoesNotExist:
-            pass
-        except Exception as e:
-            logger.error(f"Error in enrollment status change handler: {e}")
+    if not instance.pk:
+        return
+
+    try:
+        old = sender.objects.get(pk=instance.pk)
+    except sender.DoesNotExist:
+        return
+    except Exception as e:
+        logger.error(f"Error in enrollment_status_change_handler: {e}")
+        return
+
+    if old.completion_status == instance.completion_status:
+        return
+
+    logger.info(
+        f"Enrolment status changed for {instance.student}: "
+        f"{old.completion_status} → {instance.completion_status}"
+    )
+
+    if instance.completion_status in ('COMPLETED', 'DROPPED', 'TRANSFERRED', 'WITHDRAWN'):
+        if not instance.completion_date:
+            instance.completion_date = timezone.now().date()
+            logger.debug(f"Auto-set completion_date to {instance.completion_date}")
+
+    if instance.completion_status != 'ONGOING':
+        instance.is_active = False
 
 
 # =============================================================================
-# CLASS ENROLLMENT DELETION - INVOICE HANDLING ⭐ NEW
+# STUDENT CLASS ENROLMENT — POST-SAVE SIGNAL
+# =============================================================================
+
+@receiver(post_save, sender='academics.StudentClassEnrollment')
+def enrollment_post_save(sender, instance, created, **kwargs):
+    """
+    Post-save handler for StudentClassEnrollment.
+
+    INVOICE CREATION IS NOT DONE HERE.  It is handled explicitly by:
+      • enrollment_create view (single enrolment)
+      • BulkEnrollmentService._create_invoices() (bulk enrolment)
+    The auto_create_invoice field is read directly by those callers.
+
+    This signal handles:
+      1. Auto-creating the AcademicProgress record for the student / session pair.
+      2. Updating the student's current_academic_level to reflect the new enrolment.
+    """
+    if not created:
+        return
+
+    logger.info(
+        f"New enrolment: {instance.student.get_full_name()} enrolled in "
+        f"{instance.class_instance} for {instance.academic_session}"
+    )
+
+    # ── 1. AcademicProgress ────────────────────────────────────────────────
+    try:
+        from academics.models import AcademicProgress
+
+        progress, progress_created = AcademicProgress.objects.get_or_create(
+            student=instance.student,
+            academic_session=instance.academic_session,
+            defaults={
+                'class_enrollment': instance,
+                'total_subjects':   instance.class_instance.subjects.filter(
+                    is_active=True
+                ).count(),
+            },
+        )
+
+        if progress_created:
+            logger.info(
+                f"Auto-created AcademicProgress for {instance.student} — "
+                f"{instance.academic_session}"
+            )
+        else:
+            # Progress record already existed (e.g. from a previous enrolment
+            # attempt that was rolled back).  Update the enrolment link only.
+            progress.class_enrollment = instance
+            progress.save(update_fields=['class_enrollment'])
+            logger.debug(
+                f"Updated class_enrollment on existing AcademicProgress "
+                f"for {instance.student}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error creating/updating AcademicProgress: {e}")
+
+    # ── 2. Student current academic level ──────────────────────────────────
+    if instance.is_active and instance.completion_status == 'ONGOING':
+        try:
+            instance.student.current_academic_level = (
+                instance.class_instance.academic_level
+            )
+            instance.student.save(update_fields=['current_academic_level'])
+            logger.debug(
+                f"Updated {instance.student}'s current level to "
+                f"{instance.class_instance.academic_level}"
+            )
+        except Exception as e:
+            logger.error(f"Error updating student current level: {e}")
+
+
+# =============================================================================
+# STUDENT CLASS ENROLMENT — DELETION SIGNALS
 # =============================================================================
 
 @receiver(pre_delete, sender='academics.StudentClassEnrollment')
 def class_enrollment_pre_delete(sender, instance, **kwargs):
-    """Handle invoice when class enrollment is being deleted."""
-    
-    # Add extensive logging
-    logger.info("=" * 80)
-    logger.info(f"🔍 PRE_DELETE SIGNAL FIRED for enrollment {instance.id}")
-    logger.info(f"   Student: {instance.student.get_full_name()}")
-    logger.info(f"   Class: {instance.class_instance}")
-    logger.info(f"   Session: {instance.academic_session}")
-    
+    """
+    Guard enrolment deletion against invoices that cannot be safely removed.
+
+    Decision matrix:
+      No invoice linked                              → allow deletion
+      Invoice is VOID or CANCELLED                   → delete invoice, then allow
+      Invoice is DRAFT with no payments              → delete invoice, then allow
+      Invoice is finalised / has payments            → raise ValidationError (block)
+    """
+    logger.info(
+        f"pre_delete fired for enrolment {instance.id} — "
+        f"{instance.student.get_full_name()} / "
+        f"{instance.class_instance} / {instance.academic_session}"
+    )
+
     if not instance.academic_invoice:
-        logger.info("   ✅ No invoice linked - allowing deletion")
-        logger.info("=" * 80)
+        logger.info("No invoice linked — allowing deletion")
         return
-    
-    invoice = instance.academic_invoice
+
+    invoice        = instance.academic_invoice
     invoice_number = invoice.invoice_number
     invoice_status = invoice.status
-    
-    logger.info(f"   📄 Invoice found: {invoice_number}")
-    logger.info(f"   📊 Invoice status: {invoice_status}")
-    logger.info(f"   💰 Paid amount: {invoice.paid_amount}")
-    
-    if hasattr(invoice, 'journal_entry') and invoice.journal_entry:
-        logger.info(f"   📖 Journal entry: {invoice.journal_entry.entry_number}")
-        logger.info(f"   📖 JE status: {invoice.journal_entry.status}")
-    else:
-        logger.info("   📖 No journal entry linked")
-    
-    # =========================================================================
-    # ✅ ALLOW DELETION IF INVOICE IS VOID OR CANCELLED
-    # =========================================================================
-    if invoice.status in ['VOID', 'CANCELLED']:
-        logger.info(f"   ✅ Invoice is {invoice_status} - safe to delete")
-        
+
+    logger.info(
+        f"Invoice found: {invoice_number} "
+        f"(status={invoice_status}, paid={invoice.paid_amount})"
+    )
+
+    # VOID or CANCELLED — safe to delete alongside the enrolment
+    if invoice_status in ('VOID', 'CANCELLED'):
         try:
-            # Delete the invoice explicitly
-            logger.info(f"   🗑️  Attempting to delete invoice {invoice_number}...")
             invoice.delete()
-            logger.info(f"   ✅ Successfully deleted {invoice_status} invoice {invoice_number}")
-            logger.info("=" * 80)
-            return
+            logger.info(
+                f"Deleted {invoice_status} invoice {invoice_number} "
+                f"alongside enrolment"
+            )
         except Exception as e:
-            logger.error(f"   ❌ ERROR deleting invoice: {e}", exc_info=True)
-            logger.info("=" * 80)
+            logger.error(
+                f"Error deleting {invoice_status} invoice: {e}", exc_info=True
+            )
             raise
-    
-    # =========================================================================
-    # CHECK IF INVOICE CAN BE SAFELY DELETED (DRAFT)
-    # =========================================================================
-    logger.info("   🔍 Checking if DRAFT invoice can be safely deleted...")
+        return
+
+    # DRAFT with no payments — safe to delete
     can_modify, reason = invoice.can_be_safely_modified()
-    logger.info(f"   📋 Can modify: {can_modify}")
-    if not can_modify:
-        logger.info(f"   📋 Reason: {reason}")
-    
     if can_modify:
-        logger.info(f"   ✅ Invoice can be modified - safe to delete")
-        
         try:
-            logger.info(f"   🗑️  Attempting to delete DRAFT invoice {invoice_number}...")
             invoice.delete()
-            logger.info(f"   ✅ Successfully deleted DRAFT invoice {invoice_number}")
-            logger.info("=" * 80)
-            return
+            logger.info(
+                f"Deleted DRAFT invoice {invoice_number} alongside enrolment"
+            )
         except Exception as e:
-            logger.error(f"   ❌ ERROR deleting invoice: {e}", exc_info=True)
-            logger.info("=" * 80)
+            logger.error(f"Error deleting DRAFT invoice: {e}", exc_info=True)
             raise
-    else:
-        # Block deletion
-        error_message = (
-            f"Cannot delete class enrollment: {reason}\n\n"
-            f"This enrollment has a finalized invoice ({invoice_number}).\n\n"
-            f"Before deleting this enrollment, you must:\n"
-            f"1. Cancel/void the invoice\n"
-            f"2. Process any necessary refunds\n"
-            f"3. Update student financial records\n\n"
-            f"Contact finance team for assistance."
-        )
-        
-        logger.error(f"   ❌ BLOCKING DELETION: {reason}")
-        logger.info("=" * 80)
-        
-        raise ValidationError({
-            '__all__': error_message
-        })
-    
+        return
+
+    # Finalised invoice with payments — block deletion
+    logger.error(
+        f"Blocking deletion of enrolment {instance.id}: {reason}"
+    )
+    raise ValidationError(
+        f"Cannot delete this enrolment because it has a finalised invoice "
+        f"({invoice_number}). {reason}\n\n"
+        f"Please cancel or void the invoice and process any necessary refunds "
+        f"before removing the enrolment."
+    )
+
+
 @receiver(post_delete, sender='academics.StudentClassEnrollment')
 def enrollment_post_delete(sender, instance, **kwargs):
-    """
-    Handle post-delete operations for StudentClassEnrollment.
-    - Log deletion
-    - Clean up orphaned AcademicProgress records (optional)
-    """
+    """Log enrolment deletion."""
     logger.warning(
-        f"Enrollment deleted: {instance.student.get_full_name()} from "
+        f"Enrolment deleted: {instance.student.get_full_name()} from "
         f"{instance.class_instance} ({instance.academic_session})"
     )
 
 
 # =============================================================================
-# HELPER FUNCTIONS FOR SIGNALS
+# HELPER UTILITIES
 # =============================================================================
 
 def ensure_only_one_current_session():
     """
-    Ensure only one session is marked as current.
-    Called by session save signal.
+    Repair utility — ensure exactly one session is flagged is_current=True.
+
+    Intended for use in management commands or data-migration scripts when
+    a data-integrity issue has left multiple sessions marked as current.
+
+    NOTE ON ORDERING:
+        This function retains the session with the most recent start_date.
+        AcademicSession.save() uses a different strategy — it un-flags all
+        *other* sessions without sorting, preserving whichever was already
+        current before the save.  If you change the model's behaviour,
+        update this function to match.
     """
     from .models import AcademicSession
-    
+
     current_sessions = AcademicSession.objects.filter(is_current=True)
-    
+
     if current_sessions.count() > 1:
-        # Keep the most recent one
         latest = current_sessions.order_by('-start_date').first()
         current_sessions.exclude(pk=latest.pk).update(is_current=False)
         logger.warning(
-            f"Multiple current sessions found. Kept only: {latest.name}"
+            f"Multiple current sessions found. Retained only: {latest.name}"
         )

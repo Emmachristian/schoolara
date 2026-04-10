@@ -1,0 +1,535 @@
+{# fees/templates/fees/scholarships/partials/_application_list_results.html #}
+{% load humanize %}
+{% load currency_filters %}
+
+<style>
+/* ============================================================
+   TABLE CORE
+   ============================================================ */
+.app-list-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.app-list-tbl thead th {
+    background: #f8fafc;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.app-list-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.app-list-tbl tbody tr:last-child td { border-bottom: none; }
+.app-list-tbl tbody tr:hover td     { background: #fafbff !important; }
+
+/* Row tinting by status */
+.app-list-tbl tbody tr.row-rejected td       { color: #94a3b8; background: #fff5f5; }
+.app-list-tbl tbody tr.row-rejected:hover td { background: #fee2e2 !important; }
+.app-list-tbl tbody tr.row-withdrawn td       { color: #94a3b8; background: #fafafa; }
+.app-list-tbl tbody tr.row-withdrawn:hover td { background: #f1f5f9 !important; }
+
+/* ============================================================
+   STUDENT CELL
+   ============================================================ */
+.stu-initials {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #f5f3ff; color: #7c3aed; border: 2px solid #ddd6fe;
+    font-size: .8rem; font-weight: 700;
+}
+.stu-name {
+    font-weight: 600; font-size: 13px; color: #0f172a;
+    text-decoration: none; display: block; line-height: 1.3;
+}
+.stu-name:hover { color: #1d4ed8; }
+.stu-adm {
+    font-family: 'Courier New', monospace; font-size: 11px;
+    color: #64748b; display: block; margin-top: 1px;
+}
+.app-num {
+    font-family: 'Courier New', monospace; font-size: 11px;
+    color: #94a3b8; display: block; margin-top: 1px;
+}
+
+/* ============================================================
+   PROGRAM CELL
+   ============================================================ */
+.pgm-link {
+    font-weight: 600; font-size: 12.5px; color: #1d4ed8;
+    text-decoration: none; display: block; line-height: 1.3;
+}
+.pgm-link:hover { text-decoration: underline; }
+.pgm-code {
+    font-family: 'Courier New', monospace; font-size: 10.5px;
+    color: #94a3b8; display: block; margin-top: 2px;
+}
+
+/* ============================================================
+   STATUS PILLS
+   ============================================================ */
+.s-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 20px; font-size: 11px;
+    font-weight: 700; white-space: nowrap; color: #fff;
+}
+.sp-submitted   { background: #3b82f6; }
+.sp-review      { background: #f59e0b; }
+.sp-approved    { background: #22c55e; }
+.sp-rejected    { background: #ef4444; }
+.sp-waitlisted  { background: #8b5cf6; }
+.sp-withdrawn   { background: #94a3b8; }
+.sp-draft       { background: #e2e8f0; color: #475569; }
+
+/* ============================================================
+   NEEDS REVIEW BADGE
+   ============================================================ */
+.needs-review {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px; border-radius: 4px; font-size: 9.5px;
+    font-weight: 700; background: #fffbeb; color: #b45309;
+    border: 1px solid #fde68a; margin-left: 5px;
+    vertical-align: middle;
+}
+
+/* ============================================================
+   GPA CHIP + ATTENDANCE BAR
+   ============================================================ */
+.gpa-chip {
+    font-family: 'Courier New', monospace; font-size: 12px;
+    font-weight: 700; background: #eff6ff; color: #1d4ed8;
+    border: 1px solid #bfdbfe; border-radius: 4px;
+    padding: 1px 7px; display: inline-block;
+}
+.att-track {
+    height: 5px; background: #e2e8f0; border-radius: 5px;
+    overflow: hidden; width: 70px; margin-top: 4px;
+}
+.att-fill { height: 100%; border-radius: 5px; }
+
+/* ============================================================
+   AMOUNT
+   ============================================================ */
+.amt-requested { font-weight: 600; font-size: 12.5px; color: #0f172a; }
+.amt-approved  { font-weight: 700; font-size: 12.5px; color: #15803d; }
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ============================================================
+   PAGINATION BAR
+   ============================================================ */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: #64748b;
+}
+.pag-bar .page-link { color: #1d4ed8; border-color: #e2e8f0; font-size: 12.5px; padding: 4px 10px; }
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
+
+/* ============================================================
+   DROPDOWN
+   ============================================================ */
+.dropdown-menu   { font-size: .84rem; min-width: 200px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: .68rem; padding: 6px 14px 2px; }
+
+/* ============================================================
+   OOB STAT CARDS
+   ============================================================ */
+.stat-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 18px 22px; display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px; transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon  { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; }
+.stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 3px; }
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="app-list-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Applicant</th>
+            <th>Program</th>
+            <th>Session</th>
+            <th class="text-right">Requested</th>
+            <th class="text-right">Approved</th>
+            <th class="text-center">GPA / Attendance</th>
+            <th class="text-center">Applied</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:60px;"></th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if applications_page %}
+        {% for app in applications_page %}
+        <tr class="{% if app.status == 'REJECTED' %}row-rejected{% elif app.status == 'WITHDRAWN' %}row-withdrawn{% endif %}">
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ applications_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Applicant -->
+            <td>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stu-initials">
+                        {{ app.student.first_name|first }}{{ app.student.last_name|first }}
+                    </div>
+                    <div>
+                        <a href="{% url 'students:student_profile' app.student.pk %}" class="stu-name">
+                            {{ app.student.get_full_name }}
+                            {% if app.status in 'SUBMITTED,UNDER_REVIEW' %}
+                                <span class="needs-review">
+                                    <i class="fa fa-clock" style="font-size:8px;"></i>Review
+                                </span>
+                            {% endif %}
+                        </a>
+                        <span class="stu-adm">{{ app.student.admission_number }}</span>
+                        <span class="app-num">{{ app.application_number }}</span>
+                    </div>
+                </div>
+            </td>
+
+            <!-- Program -->
+            <td>
+                <a href="{% url 'fees:scholarship_program_detail' app.scholarship_program.pk %}"
+                   class="pgm-link">
+                    {{ app.scholarship_program.name }}
+                </a>
+                <span class="pgm-code">{{ app.scholarship_program.code }}</span>
+            </td>
+
+            <!-- Session -->
+            <td style="font-size:12.5px;color:#64748b;white-space:nowrap;">
+                {% if app.academic_session %}{{ app.academic_session.name }}{% else %}—{% endif %}
+            </td>
+
+            <!-- Requested -->
+            <td class="text-right">
+                {% if app.requested_amount %}
+                    <span class="amt-requested">{{ app.requested_amount|money }}</span>
+                {% else %}
+                    <span style="color:#94a3b8;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Approved -->
+            <td class="text-right">
+                {% if app.approved_amount %}
+                    <span class="amt-approved">{{ app.approved_amount|money }}</span>
+                {% else %}
+                    <span style="color:#94a3b8;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- GPA / Attendance -->
+            <td class="text-center">
+                {% if app.current_gpa %}
+                    <span class="gpa-chip">{{ app.current_gpa|floatformat:2 }}</span>
+                {% endif %}
+                {% if app.attendance_percentage %}
+                <div style="margin-top:4px;">
+                    <div style="font-size:10.5px;color:#64748b;margin-bottom:2px;">
+                        {{ app.attendance_percentage|floatformat:0 }}%
+                    </div>
+                    <div class="att-track">
+                        <div class="att-fill"
+                             style="width:{{ app.attendance_percentage|floatformat:0 }}%;
+                                    background:{% if app.attendance_percentage >= 80 %}#15803d{% elif app.attendance_percentage >= 60 %}#b45309{% else %}#dc2626{% endif %};"></div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if not app.current_gpa and not app.attendance_percentage %}
+                    <span style="color:#94a3b8;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Applied date -->
+            <td class="text-center" style="white-space:nowrap;">
+                <div style="font-weight:600;color:#334155;font-size:13px;">
+                    {{ app.application_date|date:"d M Y" }}
+                </div>
+            </td>
+
+            <!-- Status -->
+            <td class="text-center">
+                {% if app.status == 'SUBMITTED' %}
+                    <span class="s-pill sp-submitted">
+                        <i class="fa fa-inbox" style="font-size:8px;"></i>Submitted
+                    </span>
+                {% elif app.status == 'UNDER_REVIEW' %}
+                    <span class="s-pill sp-review">
+                        <i class="fa fa-search" style="font-size:8px;"></i>In Review
+                    </span>
+                {% elif app.status == 'APPROVED' %}
+                    <span class="s-pill sp-approved">
+                        <i class="fa fa-check" style="font-size:8px;"></i>Approved
+                    </span>
+                {% elif app.status == 'REJECTED' %}
+                    <span class="s-pill sp-rejected">
+                        <i class="fa fa-times" style="font-size:8px;"></i>Rejected
+                    </span>
+                {% elif app.status == 'WAITLISTED' %}
+                    <span class="s-pill sp-waitlisted">
+                        <i class="fa fa-clock" style="font-size:8px;"></i>Waitlisted
+                    </span>
+                {% elif app.status == 'WITHDRAWN' %}
+                    <span class="s-pill sp-withdrawn">Withdrawn</span>
+                {% elif app.status == 'DRAFT' %}
+                    <span class="s-pill sp-draft">Draft</span>
+                {% else %}
+                    <span class="s-pill sp-draft">{{ app.get_status_display }}</span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:scholarship_application_detail' app.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Application
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'students:student_profile' app.student.pk %}">
+                                <i class="fa fa-user me-2 text-secondary"></i>Student Profile
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:scholarship_program_detail' app.scholarship_program.pk %}">
+                                <i class="fa fa-medal me-2 text-warning"></i>Program Detail
+                            </a>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:scholarship_application_history_modal' app.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-history me-2 text-secondary"></i>View History
+                            </button>
+                        </li>
+
+                        {% if app.status in 'SUBMITTED,UNDER_REVIEW' %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Review</h6></li>
+                        <li>
+                            <button class="dropdown-item text-success"
+                                    hx-get="{% url 'fees:scholarship_application_approve_modal' app.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-check-circle me-2"></i>Approve
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'fees:scholarship_application_reject_modal' app.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-times-circle me-2"></i>Reject
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if app.status == 'APPROVED' and not app.awarded_scholarship %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-success"
+                               href="{% url 'fees:student_scholarship_create' %}?application={{ app.pk }}">
+                                <i class="fa fa-award me-2"></i>Award Scholarship
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'fees:scholarship_application_delete_modal' app.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="10">
+                <div class="tbl-empty">
+                    <i class="pe-7s-news-paper"></i>
+                    <p>
+                        {% if request.GET %}
+                            No applications match your current filters.
+                        {% else %}
+                            No scholarship applications have been submitted yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'fees:scholarship_application_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:600;border-radius:6px;
+                                  background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>New Application
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'fees:scholarship_application_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:500;border-radius:6px;background:#fff;
+                                  color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
+</div>
+
+<!-- Pagination -->
+{% if applications_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ applications_page.start_index }}</strong>–<strong>{{ applications_page.end_index }}</strong>
+        of <strong>{{ applications_page.paginator.count|intcomma }}</strong>
+        application{{ applications_page.paginator.count|pluralize }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+
+            {% if applications_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:scholarship_application_list' %}"
+                        hx-target="#application-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ applications_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in applications_page.paginator.page_range %}
+                {% if p == applications_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > applications_page.number|add:"-3" and p < applications_page.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:scholarship_application_list' %}"
+                                hx-target="#application-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if applications_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:scholarship_application_list' %}"
+                        hx-target="#application-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ applications_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+<!-- OOB stats refresh (HTMX only) -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-news-paper"></i></div>
+            <div>
+                <div class="stat-label">Total Applications</div>
+                <div class="stat-value">{{ stats.total|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-clock"></i></div>
+            <div>
+                <div class="stat-label">Pending Review</div>
+                <div class="stat-value">{{ stats.under_review|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Approved</div>
+                <div class="stat-value">{{ stats.approved|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-graph2"></i></div>
+            <div>
+                <div class="stat-label">Total Requested</div>
+                <div class="stat-value">{{ stats.total_requested|default:0|money_short }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Re-init Bootstrap after every HTMX swap -->
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

@@ -34,14 +34,14 @@ python manage.py migrate_schools finance --only atepi_palabek --fake-initial
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.conf import settings
-from django.db import connections
 import logging
 
 logger = logging.getLogger(__name__)
 
-# List of apps that belong to "school" databases
+
+# Apps whose data lives in school databases.
+# 'accounts' is intentionally excluded — User rows live in `default`.
 SCHOOL_APPS = [
-    'accounts',
     'students',
     'academics',
     'exams',
@@ -51,7 +51,20 @@ SCHOOL_APPS = [
     'inventory',
     'uniforms',
     'core',
-    'utils'
+    'boarding',
+    'discipline',
+    'documents',
+    'utils',
+]
+
+# Apps that need their table *structure* in every database (default + school DBs)
+# so that FK joins from school models to auth.User do not fail at query time.
+# The actual rows for these apps always live in `default` — school DBs only
+# need the empty table definitions.
+SHARED_STRUCTURE_APPS = [
+    'auth',
+    'contenttypes',
+    'sessions',
 ]
 
 
@@ -81,68 +94,120 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--school-apps-only', action='store_true',
-            help='Only migrate apps that belong to school databases'
+            help=(
+                'Only migrate school apps. '
+                'Shared structure apps (auth, contenttypes, sessions) are '
+                'always included so FK joins work correctly.'
+            )
         )
         parser.add_argument(
             '--only', type=str, default=None,
             help='Comma-separated list of school database names to migrate'
         )
+        parser.add_argument(
+            '--skip-shared', action='store_true',
+            help=(
+                'Skip shared structure apps (auth, contenttypes, sessions). '
+                'Only use this if you are certain those tables already exist '
+                'in the target school databases.'
+            )
+        )
 
     def handle(self, *args, **options):
-        # Determine databases to migrate
+        # ── Determine target databases ─────────────────────────────────────────
+
         if options['only']:
             school_databases = [db.strip() for db in options['only'].split(',')]
         else:
-            # Default: all databases starting with 'school_' in settings
             school_databases = [
                 db for db in settings.DATABASES.keys()
-                if db != 'default'  # everything else is a school DB
+                if db != 'default'
             ]
 
         if not school_databases:
             self.stdout.write(self.style.WARNING('No school databases found.'))
             return
 
-        # Determine apps to migrate
-        app_label = options['app_label']
-        if options['school_apps_only'] and app_label is None:
-            # Migrate all school apps
-            apps_to_migrate = SCHOOL_APPS
-        elif app_label:
-            apps_to_migrate = [app_label]
-        else:
-            apps_to_migrate = None  # All apps
+        # ── Determine apps to migrate ──────────────────────────────────────────
 
-        # Prepare migration command options
+        app_label = options['app_label']
+        migration_name = options['migration_name']
+
+        if app_label:
+            # Explicit app requested — migrate only that one
+            apps_to_migrate = [app_label]
+            shared_apps_to_migrate = []
+        elif options['school_apps_only']:
+            # School apps + shared structure (unless explicitly skipped)
+            apps_to_migrate = list(SCHOOL_APPS)
+            shared_apps_to_migrate = [] if options['skip_shared'] else list(SHARED_STRUCTURE_APPS)
+        else:
+            # Migrate everything — let the router decide per-app
+            apps_to_migrate = None
+            shared_apps_to_migrate = []
+
+        # ── Build base options for call_command ───────────────────────────────
+
         cmd_options = {
-            'verbosity': options.get('verbosity', 1),
-            'fake': options['fake'],
-            'plan': options['plan'],
+            'verbosity':    options.get('verbosity', 1),
+            'fake':         options['fake'],
+            'plan':         options['plan'],
             'fake_initial': options['fake_initial'],
         }
 
-        # Loop through each school database
+        # ── Run migrations ─────────────────────────────────────────────────────
+
         for db in school_databases:
             if db not in settings.DATABASES:
-                self.stderr.write(self.style.ERROR(f"Database '{db}' not found in settings"))
+                self.stderr.write(
+                    self.style.ERROR(f"Database '{db}' not found in settings — skipping.")
+                )
                 continue
 
-            self.stdout.write(self.style.MIGRATE_HEADING(f"\nMigrating database: {db}"))
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(f"\n{'='*60}\nMigrating database: {db}\n{'='*60}")
+            )
 
-            cmd_options['database'] = db
+            db_options = {**cmd_options, 'database': db}
 
             try:
-                if apps_to_migrate:
-                    for app in apps_to_migrate:
-                        call_command(
-                            'migrate', 
-                            app, 
-                            *([options['migration_name']] if options['migration_name'] else []), 
-                            **cmd_options
-                        )
+                if apps_to_migrate is None:
+                    # Migrate all apps at once — router controls what lands where
+                    self.stdout.write(self.style.MIGRATE_LABEL('  Migrating all apps…'))
+                    call_command('migrate', **db_options)
+
                 else:
-                    # Migrate all apps
-                    call_command('migrate', **cmd_options)
+                    # 1. Shared structure first (auth, contenttypes, sessions)
+                    #    These must exist before school app tables that FK to them.
+                    for app in shared_apps_to_migrate:
+                        self.stdout.write(
+                            self.style.MIGRATE_LABEL(f'  [{app}] shared structure…')
+                        )
+                        try:
+                            call_command('migrate', app, **db_options)
+                        except Exception as e:
+                            self.stderr.write(
+                                self.style.ERROR(f'  Error migrating {app} on {db}: {e}')
+                            )
+
+                    # 2. Then school apps
+                    for app in apps_to_migrate:
+                        self.stdout.write(
+                            self.style.MIGRATE_LABEL(f'  [{app}]…')
+                        )
+                        args_list = [app]
+                        if migration_name:
+                            args_list.append(migration_name)
+                        try:
+                            call_command('migrate', *args_list, **db_options)
+                        except Exception as e:
+                            self.stderr.write(
+                                self.style.ERROR(f'  Error migrating {app} on {db}: {e}')
+                            )
 
             except Exception as e:
-                self.stderr.write(self.style.ERROR(f"Error migrating {db}: {str(e)}"))
+                self.stderr.write(
+                    self.style.ERROR(f"Fatal error migrating {db}: {e}")
+                )
+
+        self.stdout.write(self.style.SUCCESS('\nDone.'))

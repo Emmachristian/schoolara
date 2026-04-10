@@ -1,0 +1,159 @@
+{# fees/templates/fees/invoices/partials/_student_preview_list.html #}
+{% load humanize %}
+
+{% if error %}
+<div class="tbl-empty">
+    <i class="fa fa-exclamation-circle"></i>
+    <p style="color:#dc2626;">{{ error }}</p>
+</div>
+
+{% elif students %}
+<div style="overflow-x:auto;">
+    <table class="stu-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Student</th>
+                <th>Class</th>
+                <th>Est. Fee</th>
+                <th class="text-center" style="width:60px;">Detail</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for enrollment in students %}
+            <tr class="student-item" data-enrollment-id="{{ enrollment.pk }}">
+
+                <td style="color:#94a3b8;font-size:12px;">{{ students.start_index|add:forloop.counter0 }}</td>
+
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-wrapper">
+                            <div class="stu-avatar">
+                                {{ enrollment.student.first_name|first }}{{ enrollment.student.last_name|first }}
+                            </div>
+                            <span class="status-dot {% if enrollment.academic_invoice %}dot-invoice{% else %}dot-plain{% endif %}"
+                                  data-bs-toggle="tooltip"
+                                  title="{% if enrollment.academic_invoice %}Invoice exists{% else %}No invoice{% endif %}">
+                            </span>
+                        </div>
+                        <div>
+                            <span class="stu-name">{{ enrollment.student.get_full_name }}</span>
+                            <span class="stu-adm">{{ enrollment.student.admission_number }}</span>
+                        </div>
+                    </div>
+                </td>
+
+                <td>
+                    <span class="stu-badge stu-class">{{ enrollment.class_instance }}</span>
+                    {% if enrollment.has_boarding %}
+                    <span class="stu-badge stu-sch" style="margin-top:3px;display:inline-block;">Boarding</span>
+                    {% endif %}
+                </td>
+
+                <td>
+                    <div class="fee-display" style="text-align:left;min-width:0;">
+                        <div class="fee-loading">
+                            <span class="spinner-border spinner-border-sm" style="width:12px;height:12px;" role="status"></span>
+                        </div>
+                    </div>
+                </td>
+
+                <td class="text-center">
+                    <button type="button"
+                            class="btn btn-xs btn-outline-secondary"
+                            style="font-size:10.5px;padding:3px 8px;"
+                            data-bs-toggle="modal"
+                            data-bs-target="#feeBreakdownModal"
+                            data-enrollment-id="{{ enrollment.pk }}"
+                            data-student-name="{{ enrollment.student.get_full_name|escapejs }}"
+                            data-issue-date="{{ issue_date }}">
+                        <i class="fa fa-calculator me-1" style="font-size:9px;"></i>Fees
+                    </button>
+                </td>
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if students.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ students.start_index }}</strong>–<strong>{{ students.end_index }}</strong>
+        of <strong>{{ students.paginator.count|intcomma }}</strong> students
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+
+            {% if students.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:invoice_bulk_preview_search' %}"
+                        hx-target="#student-list-container"
+                        hx-include="[name='student-search'],[name='filter-class'],[name='page-size'],[name='session-id'],[name='target-students'],[name='academic-level-ids'],[name='class-ids'],[name='enrollment-types'],[name='boarding-types'],[name='skip-with-invoice'],[name='skip-with-pending'],[name='auto-scholarships'],[name='auto-discounts'],[name='issue-date']"
+                        hx-vals='{"page":"{{ students.previous_page_number }}"}'
+                        hx-indicator="#search-spinner">«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in students.paginator.page_range %}
+                {% if p == students.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > students.number|add:"-4" and p < students.number|add:"4" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:invoice_bulk_preview_search' %}"
+                                hx-target="#student-list-container"
+                                hx-include="[name='student-search'],[name='filter-class'],[name='page-size'],[name='session-id'],[name='target-students'],[name='academic-level-ids'],[name='class-ids'],[name='enrollment-types'],[name='boarding-types'],[name='skip-with-invoice'],[name='skip-with-pending'],[name='auto-scholarships'],[name='auto-discounts'],[name='issue-date']"
+                                hx-vals='{"page":"{{ p }}"}'
+                                hx-indicator="#search-spinner">{{ p }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if students.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:invoice_bulk_preview_search' %}"
+                        hx-target="#student-list-container"
+                        hx-include="[name='student-search'],[name='filter-class'],[name='page-size'],[name='session-id'],[name='target-students'],[name='academic-level-ids'],[name='class-ids'],[name='enrollment-types'],[name='boarding-types'],[name='skip-with-invoice'],[name='skip-with-pending'],[name='auto-scholarships'],[name='auto-discounts'],[name='issue-date']"
+                        hx-vals='{"page":"{{ students.next_page_number }}"}'
+                        hx-indicator="#search-spinner">»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        bootstrap.Tooltip.getInstance(el)?.dispose();
+        new bootstrap.Tooltip(el);
+    });
+})();
+</script>
+
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-users"></i>
+    <p>
+        {% if is_filtered %}
+            No students match your filters.
+        {% else %}
+            No students found for the selected criteria.
+        {% endif %}
+    </p>
+    <button type="button" onclick="clearStudentFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+</div>
+{% endif %}

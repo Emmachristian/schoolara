@@ -1,0 +1,177 @@
+{# exams/templates/exams/categories/partials/_exam_results.html #}
+{# No <script> blocks — parent detail.html owns all JS. #}
+
+{% load static %}
+
+<style>
+.exam-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.exam-tbl thead th {
+    background: var(--surface-2, #f8fafc);
+    padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--ink-muted, #64748b);
+    border-bottom: 2px solid var(--border, #e2e8f0);
+    white-space: nowrap;
+}
+.exam-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border, #e2e8f0); vertical-align: middle; color: var(--ink, #0f172a); }
+.exam-tbl tbody tr:last-child td { border-bottom: none; }
+.exam-tbl tbody tr:hover td { background: #fafbff; }
+
+.exam-status { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.es-planned   { background: #f1f5f9; color: #475569; }
+.es-scheduled { background: #e0f2fe; color: #0369a1; }
+.es-ongoing   { background: var(--amber-lt, #fffbeb); color: var(--amber, #b45309); }
+.es-completed { background: var(--green-lt, #f0fdf4); color: var(--green, #15803d); }
+.es-cancelled { background: var(--red-lt, #fef2f2); color: var(--red, #dc2626); }
+.es-postponed { background: #f3e8ff; color: #6d28d9; }
+
+.tbl-empty { text-align: center; padding: 48px 20px; color: var(--ink-faint, #94a3b8); }
+.tbl-empty i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.pag-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border, #e2e8f0);
+    background: var(--surface-2, #f8fafc);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+    font-size: 12.5px; color: var(--ink-muted, #64748b);
+}
+
+.marks-chip {
+    display: inline-flex; align-items: center;
+    background: var(--surface-2, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 4px; font-size: 11.5px; font-weight: 700;
+    padding: 1px 8px; color: var(--ink, #0f172a);
+}
+</style>
+
+{% if examinations %}
+<div style="overflow-x:auto;">
+    <table class="exam-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Examination</th>
+                <th>Subject</th>
+                <th>Session</th>
+                <th>Date</th>
+                <th class="text-center">Marks</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for exam in examinations %}
+            <tr>
+                <td style="color:var(--ink-faint,#94a3b8);font-size:12px;">
+                    {{ forloop.counter }}
+                </td>
+                <td>
+                    <div style="font-weight:600;color:var(--ink,#0f172a);text-decoration:none;">{{ exam.name }}</div>
+                    <div style="font-size:11px;color:var(--ink-muted,#64748b);font-family:monospace;">{{ exam.code }}</div>
+                </td>
+                <td style="font-size:13px;">{{ exam.subject.name }}</td>
+                <td style="font-size:12.5px;color:var(--ink-muted,#64748b);">{{ exam.academic_session.name }}</td>
+                <td style="white-space:nowrap;font-size:13px;">{{ exam.exam_date|date:"d M Y" }}</td>
+                <td class="text-center">
+                    <span class="marks-chip">{{ exam.total_marks|floatformat:0 }}</span>
+                </td>
+                <td class="text-center">
+                    <span class="exam-status es-{{ exam.status|lower }}">
+                        {{ exam.get_status_display }}
+                    </span>
+                </td>
+
+                {# _exam_results.html — view button #}
+                <td class="text-center">
+                    <button class="btn btn-xs btn-outline-primary"
+                            hx-get="{% url 'exams:examination_quick_view_modal' exam.pk %}"
+                            hx-target="#modal-container"
+                            hx-swap="innerHTML"
+                            data-bs-toggle="tooltip" title="Quick view">
+                        <i class="fa fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# Pagination #}
+{% if examinations.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ examinations.start_index }}</strong>–<strong>{{ examinations.end_index }}</strong>
+        of <strong>{{ examinations.paginator.count }}</strong> examinations
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if examinations.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'exams:category_examinations_partial' category.pk %}"
+                        hx-target="#exam-results"
+                        hx-include="#examFilterForm"
+                        hx-vals='{"page":"{{ examinations.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in examinations.paginator.page_range %}
+                {% if p == examinations.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > examinations.number|add:"-3" and p < examinations.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'exams:category_examinations_partial' category.pk %}"
+                                hx-target="#exam-results"
+                                hx-include="#examFilterForm"
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if examinations.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'exams:category_examinations_partial' category.pk %}"
+                        hx-target="#exam-results"
+                        hx-include="#examFilterForm"
+                        hx-vals='{"page":"{{ examinations.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-file"></i>
+    <p>
+        {% if request.GET.q or request.GET.status or request.GET.subject or request.GET.session %}
+            No examinations match your filters.
+        {% else %}
+            No examinations created under this category yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.status or request.GET.subject or request.GET.session %}
+    <button type="button"
+            onclick="clearExamFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <a href="{% url 'exams:examination_create' %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Create Examination
+    </a>
+    {% endif %}
+</div>
+{% endif %}

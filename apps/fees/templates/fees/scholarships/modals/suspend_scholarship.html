@@ -1,84 +1,64 @@
-{# fees/templates/fees/scholarships/modals/suspend_scholarship.html #}
-<div class="modal-dialog">
+{% load currency_filters %}
+<div class="modal-dialog modal-sm">
     <div class="modal-content">
-        <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title">
-                <i class="fa fa-pause-circle me-2"></i>Suspend Scholarship
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body py-4">
-            {% if can_suspend %}
-                <div class="text-center mb-4">
-                    <i class="fa fa-pause-circle text-warning" style="font-size: 4rem;"></i>
-                </div>
-                <h4 class="text-center mb-3">Suspend Scholarship</h4>
-                <p class="text-muted text-center mb-3">
-                    You are about to suspend this scholarship:
-                </p>
-                
-                <!-- Scholarship Details -->
-                <div class="alert alert-info">
-                    <strong>{{ scholarship.student.get_full_name }}</strong><br>
-                    <small>Program: {{ scholarship.scholarship_program.name }}</small><br>
-                    <small>Award Amount: {{ scholarship.award_amount|money }}</small><br>
-                    <small>Start Date: {{ scholarship.start_date|date:"M d, Y" }}</small><br>
-                    <small>Current Status: <span class="badge bg-success">Active</span></small>
-                </div>
-                
-                <!-- Suspension Reason -->
-                <div class="mb-3">
-                    <label for="suspension_reason" class="form-label">
-                        <strong>Reason for Suspension <span class="text-danger">*</span></strong>
-                    </label>
-                    <textarea class="form-control" 
-                              id="suspension_reason" 
-                              name="reason" 
-                              rows="3" 
-                              required
-                              placeholder="Please provide a reason for suspending this scholarship..."></textarea>
-                </div>
-                
-                <div class="alert alert-warning">
-                    <strong><i class="fa fa-info-circle me-2"></i>Note:</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>The scholarship can be reactivated later</li>
-                        <li>No new benefits will be applied while suspended</li>
-                        <li>Existing benefits remain unchanged</li>
-                    </ul>
-                </div>
-            {% else %}
-                <div class="text-center mb-3">
-                    <i class="fa fa-ban text-danger" style="font-size: 4rem;"></i>
-                </div>
-                <h4 class="text-center mb-3 text-danger">Cannot Suspend Scholarship</h4>
-                <div class="alert alert-danger">
-                    <i class="fa fa-exclamation-circle me-2"></i>
-                    This scholarship cannot be suspended. Current status: {{ scholarship.get_status_display }}
-                </div>
-            {% endif %}
-        </div>
-        {% if can_suspend %}
-            <form hx-post="{% url 'fees:student_scholarship_suspend' scholarship.pk %}"
-                  hx-target="#scholarship-list"
-                  hx-swap="innerHTML">
-                {% csrf_token %}
-                <input type="hidden" name="reason" id="hidden_suspension_reason">
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fa fa-times me-1"></i>Cancel
-                    </button>
-                    <button type="submit" class="btn btn-warning" onclick="document.getElementById('hidden_suspension_reason').value = document.getElementById('suspension_reason').value;">
-                        <i class="fa fa-pause-circle me-1"></i>Suspend Scholarship
-                    </button>
-                </div>
-            </form>
-        {% else %}
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fa fa-times me-1"></i>Close
-                </button>
+
+        <div class="modal-header" style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#92400e;">
+                    <i class="fa fa-pause-circle me-2" style="color:#b45309;"></i>Suspend Scholarship
+                </h5>
+                <div style="font-size:11.5px;color:#b45309;margin-top:3px;">{{ scholarship.student.get_full_name }}</div>
             </div>
-        {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form method="POST" hx-post="{% url 'fees:student_scholarship_suspend' scholarship.pk %}" hx-target="body" hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:22px;">
+
+                {% if not can_suspend %}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:0 7px 7px 0;margin-bottom:0;">
+                    <i class="fa fa-ban" style="color:#dc2626;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#7f1d1d;line-height:1.6;">
+                        Only <strong>ACTIVE</strong> scholarships can be suspended. Current status: <strong>{{ scholarship.get_status_display }}</strong>.
+                    </div>
+                </div>
+                {% else %}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #f97316;border-radius:0 7px 7px 0;margin-bottom:18px;">
+                    <i class="fa fa-exclamation-triangle" style="color:#f97316;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#9a3412;line-height:1.6;">
+                        Suspending will stop discounts from being applied to new invoices.
+                        The scholarship can be reactivated at any time.
+                    </div>
+                </div>
+                <div class="mb-0">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                        Reason <span style="color:#ef4444;">*</span>
+                    </label>
+                    <textarea name="suspension_reason" rows="3" class="form-control form-control-sm"
+                              placeholder="Reason for suspending this scholarship..." required></textarea>
+                </div>
+                {% endif %}
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i> Cancel
+                </button>
+                {% if can_suspend %}
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="fa fa-pause-circle me-1"></i> Suspend
+                </button>
+                {% else %}
+                <button class="btn btn-warning btn-sm" disabled>
+                    <i class="fa fa-ban me-1"></i> Cannot Suspend
+                </button>
+                {% endif %}
+            </div>
+
+        </form>
+
     </div>
 </div>

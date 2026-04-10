@@ -1,0 +1,300 @@
+{# uniforms/templates/uniforms/items/partials/_stock_tab.html #}
+{% load currency_filters %}
+
+<style>
+.stk-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.stk-tbl thead th {
+    background:#f8fafc; padding:10px 14px;
+    font-size:10.5px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.55px; color:#64748b;
+    border-bottom:2px solid #e2e8f0; white-space:nowrap;
+}
+.stk-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color:#0f172a; }
+.stk-tbl tbody tr:last-child td { border-bottom:none; }
+.stk-tbl tbody tr:hover td { background:#fafbff !important; }
+
+.size-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:42px; height:30px; padding:0 10px;
+    background:#eff6ff; border:1px solid #bfdbfe;
+    border-radius:6px; font-size:13px; font-weight:700; color:#1d4ed8;
+}
+.no-size-badge {
+    display:inline-flex; align-items:center; gap:3px; padding:3px 8px;
+    border-radius:5px; background:#f8fafc; border:1px solid #e2e8f0;
+    font-size:11.5px; font-weight:600; color:#64748b;
+}
+
+.qty-value {
+    font-size:20px; font-weight:800; line-height:1;
+    font-variant-numeric:tabular-nums;
+}
+.qty-ok    { color:#15803d; }
+.qty-low   { color:#b45309; }
+.qty-empty { color:#dc2626; }
+
+.qty-meta { font-size:10.5px; color:#94a3b8; margin-top:2px; }
+.reserved-chip {
+    display:inline-flex; align-items:center; gap:3px; padding:1px 6px;
+    border-radius:3px; font-size:10.5px; font-weight:700;
+    background:#fef9c3; color:#854d0e; border:1px solid #fde047;
+}
+
+.val-cell { font-size:12.5px; font-weight:600; color:#0f172a; }
+.val-sub  { font-size:10.5px; color:#94a3b8; margin-top:1px; }
+
+.loc-text { font-size:12.5px; color:#64748b; }
+.loc-bin  { font-family:'Courier New',monospace; font-size:11px; color:#94a3b8; margin-top:1px; }
+
+/* ── Missing banner ── */
+.missing-banner {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 16px;
+    background:#fffbeb; border-bottom:1px solid #fde68a;
+    font-size:13px; color:#92400e;
+    flex-wrap:wrap; gap:8px;
+}
+.missing-sizes { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.missing-size-chip {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:36px; height:26px; padding:0 8px;
+    background:#fff; border:1px dashed #fbbf24;
+    border-radius:4px; font-size:11.5px; font-weight:700; color:#b45309;
+}
+
+.pag-bar {
+    padding:12px 16px; border-top:1px solid #e2e8f0; background:#f8fafc;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:8px; font-size:12.5px; color:#64748b;
+}
+
+.tbl-empty { text-align:center; padding:48px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.6rem; display:block; margin-bottom:12px; opacity:.35; }
+.tbl-empty p { font-size:13px; margin:0 0 14px; }
+
+.dropdown-menu { font-size:.85rem; min-width:185px; border:1px solid #e2e8f0; border-radius:8px; }
+.dropdown-item { padding:6px 14px; }
+</style>
+
+{# ── Missing stock records banner ── #}
+{% if missing_size_stock %}
+<div class="missing-banner">
+    <div>
+        <i class="fa fa-exclamation-triangle me-1" style="font-size:11px;"></i>
+        <strong>{{ missing_size_stock|length }} size{{ missing_size_stock|length|pluralize }}</strong>
+        ha{{ missing_size_stock|length|pluralize:"s,ve" }} no stock record yet.
+        <div class="missing-sizes">
+            {% for size in missing_size_stock %}
+            <span class="missing-size-chip">{{ size.name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    <a href="{% url 'uniforms:uniform_stock_create' %}?item={{ item.pk }}"
+       class="btn btn-sm btn-warning" style="font-size:12px;padding:4px 12px;white-space:nowrap;">
+        <i class="fa fa-plus me-1" style="font-size:11px;"></i>Create Missing Records
+    </a>
+</div>
+{% endif %}
+
+{% if stock_page %}
+<div style="overflow-x:auto;">
+    <table class="stk-tbl">
+        <thead>
+            <tr>
+                <th>Size</th>
+                <th class="text-center">Quantity</th>
+                <th class="text-center">Reserved</th>
+                <th class="text-center">Available</th>
+                <th class="text-center">Value (cost)</th>
+                <th>Location</th>
+                <th class="text-center" style="width:60px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stock in stock_page %}
+            <tr>
+                <td>
+                    {% if stock.size %}
+                        <span class="size-badge">{{ stock.size.name }}</span>
+                        {% if stock.size.code != stock.size.name %}
+                        <span style="font-family:monospace;font-size:11px;color:#94a3b8;margin-left:4px;">
+                            {{ stock.size.code }}
+                        </span>
+                        {% endif %}
+                    {% else %}
+                        <span class="no-size-badge"><i class="fa fa-minus" style="font-size:9px;"></i>Unsized</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if stock.quantity == 0 %}
+                        <div class="qty-value qty-empty">0</div>
+                        <div class="qty-meta">Out of stock</div>
+                    {% elif stock.quantity <= item.reorder_level %}
+                        <div class="qty-value qty-low">{{ stock.quantity }}</div>
+                        <div class="qty-meta">Low stock</div>
+                    {% else %}
+                        <div class="qty-value qty-ok">{{ stock.quantity }}</div>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if stock.reserved_quantity > 0 %}
+                        <span class="reserved-chip">
+                            <i class="fa fa-lock" style="font-size:9px;"></i>
+                            {{ stock.reserved_quantity }}
+                        </span>
+                    {% else %}
+                        <span style="color:#94a3b8;font-size:13px;">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <span style="font-size:14px;font-weight:700;
+                                 color:{% if stock.available_quantity == 0 %}#dc2626{% elif stock.available_quantity <= item.reorder_level %}#b45309{% else %}#15803d{% endif %};">
+                        {{ stock.available_quantity }}
+                    </span>
+                </td>
+
+                <td class="text-center">
+                    <div class="val-cell">{{ stock.total_cost_value|money }}</div>
+                    <div class="val-sub">sell {{ stock.total_selling_value|money }}</div>
+                </td>
+
+                <td>
+                    {% if stock.location %}
+                        <div class="loc-text">{{ stock.location }}</div>
+                    {% endif %}
+                    {% if stock.bin_number %}
+                        <div class="loc-bin">Bin: {{ stock.bin_number }}</div>
+                    {% endif %}
+                    {% if not stock.location and not stock.bin_number %}
+                        <span style="color:#94a3b8;font-size:12px;">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:uniform_stock_detail' stock.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:uniform_stock_edit' stock.pk %}">
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Edit
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:stock_receive_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-plus-circle me-2 text-success"></i>Receive Stock
+                                </button>
+                            </li>
+                            {% if item.requires_sizing %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:stock_transfer_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-exchange-alt me-2 text-info"></i>Transfer
+                                </button>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:uniform_stock_delete_modal' stock.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if stock_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ stock_page.start_index }}</strong>–<strong>{{ stock_page.end_index }}</strong>
+        of <strong>{{ stock_page.paginator.count }}</strong> record{{ stock_page.paginator.count|pluralize }}
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if stock_page.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_item_stock_partial' item.pk %}"
+                    hx-target="#tab-content" hx-include="#stockFilterForm"
+                    hx-vals='{"page":"{{ stock_page.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+        {% for p in stock_page.paginator.page_range %}
+            {% if p == stock_page.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > stock_page.number|add:"-3" and p < stock_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'uniforms:uniform_item_stock_partial' item.pk %}"
+                            hx-target="#tab-content" hx-include="#stockFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+        {% if stock_page.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:uniform_item_stock_partial' item.pk %}"
+                    hx-target="#tab-content" hx-include="#stockFilterForm"
+                    hx-vals='{"page":"{{ stock_page.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-warehouse"></i>
+    <p>
+        {% if request.GET.q or request.GET.has_quantity %}
+            No stock records match your filters.
+        {% else %}
+            No stock records yet for this item.
+        {% endif %}
+    </p>
+    {% if not request.GET.q and not request.GET.has_quantity %}
+    <a href="{% url 'uniforms:uniform_stock_create' %}?item={{ item.pk }}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:600;border-radius:6px;
+              background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Create Stock Record
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

@@ -12,54 +12,47 @@ Handles HTMX modal operations:
 - Payment Method, Tax Rate, Unit of Measure modals
 
 All successful mutations return HX-Redirect so the full page reloads cleanly.
+
+CORRECTIONS vs previous version
+---------------------------------
+1. Delete-guard queries now use fees.models.Payment and fees.models.FeeInvoice
+   (not finance.models which does not have those models).
+2. All _hx_redirect() calls replaced with view_helpers.htmx_redirect().
+3. fiscal_year_delete_modal and fiscal_period_delete_modal no longer import
+   finance.Invoice — they check fees.FeeInvoice instead.
 """
 
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.http import JsonResponse, HttpResponse
-from django.urls import reverse
-from django.db import transaction
-from django.db.models import Q, Count
-from django.views.decorators.http import require_http_methods
-from django.core.exceptions import ValidationError
+import math
 import logging
 
-from .utils import (
-    get_school_today,
-    get_school_current_time,
-)
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Q
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 
 from .models import (
-    SchoolConfiguration,
-    FinancialSettings,
-    FiscalYear,
     FiscalPeriod,
+    FiscalYear,
     PaymentMethod,
     TaxRate,
     UnitOfMeasure,
 )
-
 from .forms import (
-    FiscalYearForm,
     FiscalPeriodForm,
+    FiscalYearForm,
     PaymentMethodForm,
     TaxRateForm,
     UnitOfMeasureForm,
 )
+from .utils import get_school_today
+from .view_helpers import htmx_redirect
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Internal helper
-# ---------------------------------------------------------------------------
-
-def _hx_redirect(url_name, **kwargs):
-    """Return a bare HttpResponse carrying an HX-Redirect header."""
-    response = HttpResponse()
-    response['HX-Redirect'] = reverse(url_name, **kwargs)
-    return response
 
 
 # =============================================================================
@@ -79,7 +72,7 @@ def fiscal_year_modal_form(request, pk=None):
 
     if is_edit and fiscal_year.is_locked:
         messages.warning(request, 'Cannot edit a locked fiscal year.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     if request.method == 'POST':
         form = FiscalYearForm(request.POST, instance=fiscal_year)
@@ -87,9 +80,12 @@ def fiscal_year_modal_form(request, pk=None):
             try:
                 with transaction.atomic():
                     fiscal_year = form.save()
-                    action = 'updated' if is_edit else 'created'
-                    messages.success(request, f'Fiscal year "{fiscal_year.name}" {action} successfully!')
-                    return _hx_redirect('core:fiscal_management')
+                    action      = 'updated' if is_edit else 'created'
+                    messages.success(
+                        request,
+                        f'Fiscal year "{fiscal_year.name}" {action} successfully!'
+                    )
+                    return htmx_redirect(reverse('core:fiscal_management'))
             except ValidationError as e:
                 form.add_error(None, str(e))
             except Exception as e:
@@ -99,14 +95,18 @@ def fiscal_year_modal_form(request, pk=None):
             logger.warning(f"FiscalYearForm errors: {form.errors}")
 
         return render(request, 'core/fiscal_years/_modal_form.html', {
-            'form': form, 'fiscal_year': fiscal_year,
-            'is_edit': is_edit, 'modal_title': modal_title,
+            'form':        form,
+            'fiscal_year': fiscal_year,
+            'is_edit':     is_edit,
+            'modal_title': modal_title,
         })
 
     form = FiscalYearForm(instance=fiscal_year)
     return render(request, 'core/fiscal_years/_modal_form.html', {
-        'form': form, 'fiscal_year': fiscal_year,
-        'is_edit': is_edit, 'modal_title': modal_title,
+        'form':        form,
+        'fiscal_year': fiscal_year,
+        'is_edit':     is_edit,
+        'modal_title': modal_title,
     })
 
 
@@ -130,7 +130,10 @@ def fiscal_year_quick_action(request, pk, action):
 
             today = get_school_today()
             if today > fiscal_year.end_date:
-                messages.warning(request, 'Warning: activating a fiscal year that has already ended.')
+                messages.warning(
+                    request,
+                    'Warning: activating a fiscal year that has already ended.'
+                )
 
             with transaction.atomic():
                 FiscalYear.objects.exclude(pk=pk).filter(is_active=True).update(
@@ -139,7 +142,10 @@ def fiscal_year_quick_action(request, pk, action):
                 fiscal_year.is_active = True
                 fiscal_year.save()
 
-            messages.success(request, f'"{fiscal_year.name}" is now the active fiscal year.')
+            messages.success(
+                request,
+                f'"{fiscal_year.name}" is now the active fiscal year.'
+            )
 
         elif action == 'close':
             if fiscal_year.is_closed:
@@ -150,18 +156,27 @@ def fiscal_year_quick_action(request, pk, action):
             with transaction.atomic():
                 fiscal_year.close_fiscal_year(user=request.user)
 
-            messages.success(request, f'Fiscal year "{fiscal_year.name}" closed. All periods have been closed.')
+            messages.success(
+                request,
+                f'Fiscal year "{fiscal_year.name}" closed. '
+                f'All periods have been closed.'
+            )
 
         elif action == 'lock':
             if not fiscal_year.is_closed:
-                raise ValidationError('Fiscal year must be closed before it can be locked.')
+                raise ValidationError(
+                    'Fiscal year must be closed before it can be locked.'
+                )
             if fiscal_year.is_locked:
                 raise ValidationError('Fiscal year is already locked.')
 
             with transaction.atomic():
                 fiscal_year.lock_fiscal_year()
 
-            messages.warning(request, f'Fiscal year "{fiscal_year.name}" locked for audit compliance.')
+            messages.warning(
+                request,
+                f'Fiscal year "{fiscal_year.name}" locked for audit compliance.'
+            )
 
         elif action == 'unlock':
             if not fiscal_year.is_locked:
@@ -170,10 +185,15 @@ def fiscal_year_quick_action(request, pk, action):
             with transaction.atomic():
                 fiscal_year.unlock_fiscal_year()
 
-            messages.warning(request, f'Fiscal year "{fiscal_year.name}" unlocked. Use with caution.')
+            messages.warning(
+                request,
+                f'Fiscal year "{fiscal_year.name}" unlocked. Use with caution.'
+            )
 
         else:
-            return JsonResponse({'success': False, 'error': f'Invalid action: {action}'}, status=400)
+            return JsonResponse(
+                {'success': False, 'error': f'Invalid action: {action}'}, status=400
+            )
 
     except ValidationError as e:
         messages.error(request, str(e))
@@ -181,7 +201,7 @@ def fiscal_year_quick_action(request, pk, action):
         logger.error(f"Error in fiscal year quick action '{action}': {e}")
         messages.error(request, f'Error performing action: {str(e)}')
 
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
@@ -207,13 +227,18 @@ def fiscal_year_delete_modal(request, pk):
         can_delete = False
         errors.append(f'Fiscal year has {period_count} fiscal period(s).')
 
+    # Check for financial transactions — Payment and FeeInvoice live in fees
     try:
-        from finance.models import Invoice, Payment
-        invoice_count = Invoice.objects.filter(fiscal_year=fiscal_year).count()
+        from fees.models import FeeInvoice, Payment
+        invoice_count = FeeInvoice.objects.filter(
+            fiscal_period__fiscal_year=fiscal_year
+        ).count()
         if invoice_count > 0:
             can_delete = False
             errors.append(f'{invoice_count} invoice(s) belong to this fiscal year.')
-        payment_count = Payment.objects.filter(fiscal_period__fiscal_year=fiscal_year).count()
+        payment_count = Payment.objects.filter(
+            fiscal_period__fiscal_year=fiscal_year
+        ).count()
         if payment_count > 0:
             can_delete = False
             errors.append(f'{payment_count} payment(s) belong to this fiscal year.')
@@ -234,13 +259,16 @@ def fiscal_year_delete_modal(request, pk):
             except Exception as e:
                 logger.error(f"Error deleting fiscal year: {e}")
                 messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     return render(request, 'core/modals/delete_confirmation.html', {
-        'object': fiscal_year, 'object_name': 'Fiscal Year',
+        'object':       fiscal_year,
+        'object_name':  'Fiscal Year',
         'object_title': fiscal_year.name,
-        'can_delete': can_delete, 'warnings': warnings, 'errors': errors,
-        'delete_url': 'core:fiscal_year_delete_modal',
+        'can_delete':   can_delete,
+        'warnings':     warnings,
+        'errors':       errors,
+        'delete_url':   'core:fiscal_year_delete_modal',
     })
 
 
@@ -252,13 +280,13 @@ def fiscal_year_delete(request, pk):
 
     if fiscal_year.is_locked:
         messages.error(request, 'Cannot delete a locked fiscal year.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
     if fiscal_year.is_active:
         messages.error(request, 'Cannot delete the active fiscal year.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
     if fiscal_year.fiscal_periods.exists():
         messages.error(request, 'Cannot delete a fiscal year that has periods.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     try:
         name = fiscal_year.name
@@ -268,11 +296,11 @@ def fiscal_year_delete(request, pk):
         logger.error(f"Error deleting fiscal year: {e}")
         messages.error(request, f'Error: {str(e)}')
 
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
-# FISCAL YEAR — legacy modals (kept for backward-compat URL entries)
+# FISCAL YEAR — legacy modal views (backward-compat URL entries)
 # =============================================================================
 
 @login_required
@@ -292,8 +320,10 @@ def fiscal_year_set_active_modal(request, pk):
         warnings.append("Cannot activate a locked fiscal year.")
 
     return render(request, 'core/modals/set_active_fiscal_year.html', {
-        'fiscal_year': fiscal_year, 'can_set_active': can_set_active,
-        'warnings': warnings, 'today': today,
+        'fiscal_year':    fiscal_year,
+        'can_set_active': can_set_active,
+        'warnings':       warnings,
+        'today':          today,
     })
 
 
@@ -307,11 +337,13 @@ def fiscal_year_set_active(request, pk):
         )
         fiscal_year.is_active = True
         fiscal_year.save()
-        messages.success(request, f'"{fiscal_year.name}" is now the active fiscal year.')
+        messages.success(
+            request, f'"{fiscal_year.name}" is now the active fiscal year.'
+        )
     except Exception as e:
         logger.error(f"Error setting active fiscal year: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 @login_required
@@ -330,8 +362,11 @@ def fiscal_year_close_modal(request, pk):
         info.append(f'Total periods: {fiscal_year.get_period_count()}')
 
     return render(request, 'core/modals/close_fiscal_year.html', {
-        'fiscal_year': fiscal_year, 'can_close': can_close,
-        'warnings': warnings, 'info': info, 'open_periods': open_periods,
+        'fiscal_year': fiscal_year,
+        'can_close':   can_close,
+        'warnings':    warnings,
+        'info':        info,
+        'open_periods':open_periods,
     })
 
 
@@ -345,7 +380,7 @@ def fiscal_year_close(request, pk):
     except Exception as e:
         logger.error(f"Error closing fiscal year: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 @login_required
@@ -360,7 +395,7 @@ def fiscal_year_lock(request, pk):
     except Exception as e:
         logger.error(f"Error locking fiscal year: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 @login_required
@@ -373,7 +408,7 @@ def fiscal_year_unlock(request, pk):
     except Exception as e:
         logger.error(f"Error unlocking fiscal year: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
@@ -395,17 +430,22 @@ def period_modal_form(request, pk=None):
 
     if is_edit and period.is_locked:
         messages.warning(request, 'Cannot edit a locked period.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     if request.method == 'POST':
-        form = FiscalPeriodForm(request.POST, instance=period if is_edit else None)
+        form = FiscalPeriodForm(
+            request.POST,
+            instance=period if is_edit else None,
+        )
         if form.is_valid():
             try:
                 with transaction.atomic():
                     period = form.save()
                     action = 'updated' if is_edit else 'created'
-                    messages.success(request, f'Period "{period.name}" {action} successfully!')
-                    return _hx_redirect('core:fiscal_management')
+                    messages.success(
+                        request, f'Period "{period.name}" {action} successfully!'
+                    )
+                    return htmx_redirect(reverse('core:fiscal_management'))
             except ValidationError as e:
                 form.add_error(None, str(e))
             except Exception as e:
@@ -415,37 +455,46 @@ def period_modal_form(request, pk=None):
             logger.warning(f"FiscalPeriodForm errors: {form.errors}")
 
         return render(request, 'core/fiscal_periods/_modal_form.html', {
-            'form': form, 'period': period if is_edit else None,
-            'is_edit': is_edit, 'modal_title': modal_title,
+            'form':        form,
+            'period':      period if is_edit else None,
+            'is_edit':     is_edit,
+            'modal_title': modal_title,
         })
 
-    # GET — build initial data for new period creation
+    # GET — build initial data for a new period
     initial = {}
     if fiscal_year_id and not is_edit:
         try:
-            import math
             fiscal_year = FiscalYear.objects.get(pk=fiscal_year_id)
-            last_period = fiscal_year.fiscal_periods.order_by('-period_number').first()
+            last_period = fiscal_year.fiscal_periods.order_by(
+                '-period_number'
+            ).first()
             next_number = (
-                math.ceil(float(last_period.period_number)) + 1 if last_period else 1
+                math.ceil(float(last_period.period_number)) + 1
+                if last_period
+                else 1
             )
-            initial['fiscal_year']  = fiscal_year.pk
+            initial['fiscal_year']   = fiscal_year.pk
             initial['period_number'] = next_number
             initial['code']          = f"FP_{fiscal_year.code}_P{int(next_number)}"
-            initial['name']          = f"Period {int(next_number)} - {fiscal_year.name}"
+            initial['name']          = f"Period {int(next_number)} — {fiscal_year.name}"
             initial['start_date']    = fiscal_year.start_date
             initial['end_date']      = fiscal_year.end_date
         except FiscalYear.DoesNotExist:
-            logger.warning(f"Fiscal year {fiscal_year_id} not found for period pre-fill.")
+            logger.warning(
+                f"Fiscal year {fiscal_year_id} not found for period pre-fill."
+            )
 
     form = FiscalPeriodForm(
         instance=period if is_edit else None,
-        initial=initial if not is_edit else {},
+        initial=initial  if not is_edit else {},
     )
 
     return render(request, 'core/fiscal_periods/_modal_form.html', {
-        'form': form, 'period': period if is_edit else None,
-        'is_edit': is_edit, 'modal_title': modal_title,
+        'form':        form,
+        'period':      period if is_edit else None,
+        'is_edit':     is_edit,
+        'modal_title': modal_title,
     })
 
 
@@ -468,9 +517,9 @@ def period_quick_action(request, pk, action):
                 raise ValidationError('Cannot activate a locked period.')
 
             with transaction.atomic():
-                FiscalPeriod.objects.exclude(pk=pk).filter(is_active=True).update(
-                    is_active=False, status='DRAFT'
-                )
+                FiscalPeriod.objects.exclude(pk=pk).filter(
+                    is_active=True
+                ).update(is_active=False, status='DRAFT')
                 period.is_active = True
                 period.save()
 
@@ -496,7 +545,10 @@ def period_quick_action(request, pk, action):
             with transaction.atomic():
                 period.lock_period(user=request.user)
 
-            messages.warning(request, f'Period "{period.name}" locked for audit compliance.')
+            messages.warning(
+                request,
+                f'Period "{period.name}" locked for audit compliance.'
+            )
 
         elif action == 'unlock':
             if not period.is_locked:
@@ -505,21 +557,32 @@ def period_quick_action(request, pk, action):
             with transaction.atomic():
                 period.unlock_period(user=request.user)
 
-            messages.warning(request, f'Period "{period.name}" unlocked. Use with caution.')
+            messages.warning(
+                request,
+                f'Period "{period.name}" unlocked. Use with caution.'
+            )
 
         elif action == 'reopen':
             if period.is_locked:
-                raise ValidationError('Cannot reopen a locked period. Unlock it first.')
+                raise ValidationError(
+                    'Cannot reopen a locked period. Unlock it first.'
+                )
             if not period.is_closed:
                 raise ValidationError('Period is not closed.')
 
             with transaction.atomic():
                 period.reopen_period(user=request.user)
 
-            messages.warning(request, f'Period "{period.name}" reopened. New transactions can now be posted.')
+            messages.warning(
+                request,
+                f'Period "{period.name}" reopened. '
+                f'New transactions can now be posted.'
+            )
 
         else:
-            return JsonResponse({'success': False, 'error': f'Invalid action: {action}'}, status=400)
+            return JsonResponse(
+                {'success': False, 'error': f'Invalid action: {action}'}, status=400
+            )
 
     except ValidationError as e:
         messages.error(request, str(e))
@@ -527,7 +590,7 @@ def period_quick_action(request, pk, action):
         logger.error(f"Error in period quick action '{action}': {e}")
         messages.error(request, f'Error performing action: {str(e)}')
 
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
@@ -536,10 +599,10 @@ def period_quick_action(request, pk, action):
 
 @login_required
 def fiscal_period_delete_modal(request, pk):
-    period    = get_object_or_404(FiscalPeriod, pk=pk)
+    period     = get_object_or_404(FiscalPeriod, pk=pk)
     can_delete = True
-    warnings  = []
-    errors    = []
+    warnings   = []
+    errors     = []
 
     if period.is_locked:
         can_delete = False
@@ -549,9 +612,10 @@ def fiscal_period_delete_modal(request, pk):
     if period.is_active:
         warnings.append('Period is currently active.')
 
+    # FeeInvoice and Payment live in fees, not finance
     try:
-        from finance.models import Invoice, Payment
-        invoice_count = Invoice.objects.filter(fiscal_period=period).count()
+        from fees.models import FeeInvoice, Payment
+        invoice_count = FeeInvoice.objects.filter(fiscal_period=period).count()
         if invoice_count > 0:
             can_delete = False
             errors.append(f'{invoice_count} invoice(s) belong to this period.')
@@ -573,13 +637,16 @@ def fiscal_period_delete_modal(request, pk):
             except Exception as e:
                 logger.error(f"Error deleting period: {e}")
                 messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     return render(request, 'core/modals/delete_confirmation.html', {
-        'object': period, 'object_name': 'Fiscal Period',
+        'object':       period,
+        'object_name':  'Fiscal Period',
         'object_title': period.name,
-        'can_delete': can_delete, 'warnings': warnings, 'errors': errors,
-        'delete_url': 'core:fiscal_period_delete_modal',
+        'can_delete':   can_delete,
+        'warnings':     warnings,
+        'errors':       errors,
+        'delete_url':   'core:fiscal_period_delete_modal',
     })
 
 
@@ -590,7 +657,7 @@ def fiscal_period_delete(request, pk):
 
     if period.is_locked:
         messages.error(request, 'Cannot delete a locked period.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     try:
         name = period.name
@@ -600,11 +667,11 @@ def fiscal_period_delete(request, pk):
         logger.error(f"Error deleting fiscal period: {e}")
         messages.error(request, f'Error: {str(e)}')
 
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
-# FISCAL PERIOD — legacy modals
+# FISCAL PERIOD — legacy modal views
 # =============================================================================
 
 @login_required
@@ -619,18 +686,23 @@ def fiscal_period_close_modal(request, pk):
     if period.is_locked:
         warnings.append('Period is locked.')
 
+    # Check transaction counts (fees app)
     try:
-        from finance.models import Invoice, Payment
-        ic = Invoice.objects.filter(fiscal_period=period).count()
+        from fees.models import FeeInvoice, Payment
+        ic = FeeInvoice.objects.filter(fiscal_period=period).count()
         pc = Payment.objects.filter(fiscal_period=period).count()
-        if ic: info.append(f'Invoices: {ic}')
-        if pc: info.append(f'Payments: {pc}')
+        if ic:
+            info.append(f'Invoices: {ic}')
+        if pc:
+            info.append(f'Payments: {pc}')
     except ImportError:
         pass
 
     return render(request, 'core/modals/close_fiscal_period.html', {
-        'period': period, 'can_close': can_close,
-        'warnings': warnings, 'info': info,
+        'period':    period,
+        'can_close': can_close,
+        'warnings':  warnings,
+        'info':      info,
     })
 
 
@@ -648,7 +720,9 @@ def fiscal_period_reopen_modal(request, pk):
         warnings.insert(0, 'Period is not closed.')
 
     return render(request, 'core/modals/reopen_fiscal_period.html', {
-        'period': period, 'can_reopen': can_reopen, 'warnings': warnings,
+        'period':     period,
+        'can_reopen': can_reopen,
+        'warnings':   warnings,
     })
 
 
@@ -662,7 +736,7 @@ def fiscal_period_close(request, pk):
     except Exception as e:
         logger.error(f"Error closing period: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 @login_required
@@ -677,12 +751,60 @@ def fiscal_period_reopen(request, pk):
     except Exception as e:
         logger.error(f"Error reopening period: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
 # PAYMENT METHOD — modals
 # =============================================================================
+
+@login_required
+def payment_method_modal_form(request, pk=None):
+    """Create or edit payment method via modal."""
+    if pk:
+        method      = get_object_or_404(PaymentMethod, pk=pk)
+        is_edit     = True
+        modal_title = f'Edit Payment Method: {method.name}'
+    else:
+        method      = None
+        is_edit     = False
+        modal_title = 'Create Payment Method'
+
+    if request.method == 'POST':
+        form = PaymentMethodForm(request.POST, instance=method)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    method = form.save()
+                    action = 'updated' if is_edit else 'created'
+                    messages.success(
+                        request,
+                        f'Payment method "{method.name}" {action} successfully!'
+                    )
+                    return htmx_redirect(reverse('core:payment_method_list'))
+            except ValidationError as e:
+                form.add_error(None, str(e))
+            except Exception as e:
+                logger.error(f"Error saving payment method: {e}")
+                form.add_error(None, f'Unexpected error: {str(e)}')
+        else:
+            logger.warning(f"PaymentMethodForm errors: {form.errors}")
+
+        return render(request, 'core/payment_methods/_modal_form.html', {
+            'form':        form,
+            'method':      method,
+            'is_edit':     is_edit,
+            'modal_title': modal_title,
+        })
+
+    form = PaymentMethodForm(instance=method)
+    return render(request, 'core/payment_methods/_modal_form.html', {
+        'form':        form,
+        'method':      method,
+        'is_edit':     is_edit,
+        'modal_title': modal_title,
+    })
+
 
 @login_required
 def payment_method_delete_modal(request, pk):
@@ -695,8 +817,9 @@ def payment_method_delete_modal(request, pk):
         can_delete = False
         errors.append('Cannot delete the default payment method.')
 
+    # Payment lives in fees.models
     try:
-        from finance.models import Payment
+        from fees.models import Payment
         count = Payment.objects.filter(payment_method=method).count()
         if count > 0:
             can_delete = False
@@ -718,14 +841,17 @@ def payment_method_delete_modal(request, pk):
             except Exception as e:
                 logger.error(f"Error deleting payment method: {e}")
                 messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:payment_method_list')
+        return htmx_redirect(reverse('core:payment_method_list'))
 
     return render(request, 'core/modals/delete_confirmation.html', {
-        'object': method, 'object_name': 'Payment Method',
-        'object_title': method.name,
-        'can_delete': can_delete, 'warnings': warnings, 'errors': errors,
-        'delete_url': 'core:payment_method_delete_modal',
-        'alternative_action': 'Deactivate instead' if not can_delete else None,
+        'object':            method,
+        'object_name':       'Payment Method',
+        'object_title':      method.name,
+        'can_delete':        can_delete,
+        'warnings':          warnings,
+        'errors':            errors,
+        'delete_url':        'core:payment_method_delete_modal',
+        'alternative_action':'Deactivate instead' if not can_delete else None,
     })
 
 
@@ -736,7 +862,19 @@ def payment_method_delete(request, pk):
 
     if method.is_default:
         messages.error(request, 'Cannot delete the default payment method.')
-        return _hx_redirect('core:payment_method_list')
+        return htmx_redirect(reverse('core:payment_method_list'))
+
+    try:
+        from fees.models import Payment
+        if Payment.objects.filter(payment_method=method).exists():
+            messages.error(
+                request,
+                'Cannot delete — method has been used in payments. '
+                'Deactivate it instead.'
+            )
+            return htmx_redirect(reverse('core:payment_method_list'))
+    except ImportError:
+        pass
 
     try:
         name = method.name
@@ -746,7 +884,7 @@ def payment_method_delete(request, pk):
         logger.error(f"Error deleting payment method: {e}")
         messages.error(request, f'Error: {str(e)}')
 
-    return _hx_redirect('core:payment_method_list')
+    return htmx_redirect(reverse('core:payment_method_list'))
 
 
 @login_required
@@ -757,13 +895,19 @@ def payment_method_toggle_status_modal(request, pk):
 
     if action == 'deactivate':
         if method.is_default:
-            warnings.append('This is the default method — set another as default first.')
-        warnings.append('Users will not be able to select this method for payments.')
+            warnings.append(
+                'This is the default method — set another as default first.'
+            )
+        warnings.append(
+            'Users will not be able to select this method for payments.'
+        )
     else:
         warnings.append('This method will become available for payments.')
 
     return render(request, 'core/modals/toggle_payment_method.html', {
-        'method': method, 'action': action, 'warnings': warnings,
+        'method':   method,
+        'action':   action,
+        'warnings': warnings,
     })
 
 
@@ -775,19 +919,22 @@ def payment_method_toggle_status(request, pk):
     try:
         if method.is_active and method.is_default:
             raise ValidationError(
-                'Cannot deactivate the default payment method. Set another as default first.'
+                'Cannot deactivate the default payment method. '
+                'Set another as default first.'
             )
         method.is_active = not method.is_active
         method.save()
         status = 'activated' if method.is_active else 'deactivated'
-        messages.success(request, f'Payment method "{method.name}" {status}.')
+        messages.success(
+            request, f'Payment method "{method.name}" {status}.'
+        )
     except ValidationError as e:
         messages.error(request, str(e))
     except Exception as e:
         logger.error(f"Error toggling payment method: {e}")
         messages.error(request, f'Error: {str(e)}')
 
-    return _hx_redirect('core:payment_method_list')
+    return htmx_redirect(reverse('core:payment_method_list'))
 
 
 # =============================================================================
@@ -795,24 +942,67 @@ def payment_method_toggle_status(request, pk):
 # =============================================================================
 
 @login_required
+def tax_rate_modal_form(request, pk=None):
+    """Create or edit tax rate via modal."""
+    if pk:
+        rate        = get_object_or_404(TaxRate, pk=pk)
+        is_edit     = True
+        modal_title = f'Edit Tax Rate: {rate.name}'
+    else:
+        rate        = None
+        is_edit     = False
+        modal_title = 'Create Tax Rate'
+
+    if request.method == 'POST':
+        form = TaxRateForm(request.POST, instance=rate)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    rate   = form.save()
+                    action = 'updated' if is_edit else 'created'
+                    messages.success(
+                        request, f'Tax rate "{rate.name}" {action} successfully!'
+                    )
+                    return htmx_redirect(reverse('core:tax_rate_list'))
+            except ValidationError as e:
+                form.add_error(None, str(e))
+            except Exception as e:
+                logger.error(f"Error saving tax rate: {e}")
+                form.add_error(None, f'Unexpected error: {str(e)}')
+        else:
+            logger.warning(f"TaxRateForm errors: {form.errors}")
+
+        return render(request, 'core/tax_rates/_modal_form.html', {
+            'form':        form,
+            'rate':        rate,
+            'is_edit':     is_edit,
+            'modal_title': modal_title,
+        })
+
+    form = TaxRateForm(instance=rate)
+    return render(request, 'core/tax_rates/_modal_form.html', {
+        'form':        form,
+        'rate':        rate,
+        'is_edit':     is_edit,
+        'modal_title': modal_title,
+    })
+
+
+@login_required
 def tax_rate_delete_modal(request, pk):
-    rate      = get_object_or_404(TaxRate, pk=pk)
-    today     = get_school_today()
+    rate       = get_object_or_404(TaxRate, pk=pk)
+    today      = get_school_today()
     can_delete = True
-    warnings  = []
-    errors    = []
+    warnings   = []
+    errors     = []
 
     if rate.is_effective(today):
         warnings.append('This tax rate is currently effective.')
 
-    try:
-        from finance.models import Invoice
-        count = Invoice.objects.filter(tax_rate=rate).count()
-        if count > 0:
-            can_delete = False
-            errors.append(f'Tax rate has been applied to {count} invoice(s).')
-    except ImportError:
-        pass
+    # TaxRate is not directly FK'd from FeeInvoice in the current model
+    # (TaxRate is a reference table — invoices store the rate value at time
+    # of issue, not a live FK). No FK check needed here.
+    # If a direct FK is added in future, add the check here.
 
     if request.method == 'POST':
         if not can_delete:
@@ -825,13 +1015,16 @@ def tax_rate_delete_modal(request, pk):
             except Exception as e:
                 logger.error(f"Error deleting tax rate: {e}")
                 messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:tax_rate_list')
+        return htmx_redirect(reverse('core:tax_rate_list'))
 
     return render(request, 'core/modals/delete_confirmation.html', {
-        'object': rate, 'object_name': 'Tax Rate',
+        'object':       rate,
+        'object_name':  'Tax Rate',
         'object_title': rate.name,
-        'can_delete': can_delete, 'warnings': warnings, 'errors': errors,
-        'delete_url': 'core:tax_rate_delete_modal',
+        'can_delete':   can_delete,
+        'warnings':     warnings,
+        'errors':       errors,
+        'delete_url':   'core:tax_rate_delete_modal',
     })
 
 
@@ -846,7 +1039,7 @@ def tax_rate_delete(request, pk):
     except Exception as e:
         logger.error(f"Error deleting tax rate: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:tax_rate_list')
+    return htmx_redirect(reverse('core:tax_rate_list'))
 
 
 # =============================================================================
@@ -854,15 +1047,66 @@ def tax_rate_delete(request, pk):
 # =============================================================================
 
 @login_required
+def unit_of_measure_modal_form(request, pk=None):
+    """Create or edit unit of measure via modal."""
+    if pk:
+        unit        = get_object_or_404(UnitOfMeasure, pk=pk)
+        is_edit     = True
+        modal_title = f'Edit Unit: {unit.name}'
+    else:
+        unit        = None
+        is_edit     = False
+        modal_title = 'Create Unit of Measure'
+
+    if request.method == 'POST':
+        form = UnitOfMeasureForm(request.POST, instance=unit)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    unit   = form.save()
+                    action = 'updated' if is_edit else 'created'
+                    messages.success(
+                        request, f'Unit "{unit.name}" {action} successfully!'
+                    )
+                    return htmx_redirect(reverse('core:unit_of_measure_list'))
+            except ValidationError as e:
+                form.add_error(None, str(e))
+            except Exception as e:
+                logger.error(f"Error saving unit of measure: {e}")
+                form.add_error(None, f'Unexpected error: {str(e)}')
+        else:
+            logger.warning(f"UnitOfMeasureForm errors: {form.errors}")
+
+        return render(request, 'core/units/_modal_form.html', {
+            'form':        form,
+            'unit':        unit,
+            'is_edit':     is_edit,
+            'modal_title': modal_title,
+        })
+
+    form = UnitOfMeasureForm(instance=unit)
+    return render(request, 'core/units/_modal_form.html', {
+        'form':        form,
+        'unit':        unit,
+        'is_edit':     is_edit,
+        'modal_title': modal_title,
+    })
+
+
+@login_required
 def unit_of_measure_delete_modal(request, pk):
-    unit      = get_object_or_404(UnitOfMeasure, pk=pk)
+    unit       = get_object_or_404(UnitOfMeasure, pk=pk)
     can_delete = unit.can_be_deleted()
-    warnings  = unit.get_deletion_warnings()
-    errors    = [] if can_delete else ['Unit has dependent units or is in use.']
+    warnings   = unit.get_deletion_warnings()
+    errors     = [] if can_delete else [
+        'Unit has dependent units or is in use by inventory/uniform items.'
+    ]
 
     if request.method == 'POST':
         if not can_delete:
-            messages.error(request, 'Cannot delete — unit has dependants or is in use.')
+            messages.error(
+                request, 'Cannot delete — unit has dependants or is in use.'
+            )
         else:
             try:
                 name = unit.name
@@ -871,13 +1115,16 @@ def unit_of_measure_delete_modal(request, pk):
             except Exception as e:
                 logger.error(f"Error deleting unit: {e}")
                 messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:unit_of_measure_list')
+        return htmx_redirect(reverse('core:unit_of_measure_list'))
 
     return render(request, 'core/modals/delete_confirmation.html', {
-        'object': unit, 'object_name': 'Unit of Measure',
+        'object':       unit,
+        'object_name':  'Unit of Measure',
         'object_title': unit.name,
-        'can_delete': can_delete, 'warnings': warnings, 'errors': errors,
-        'delete_url': 'core:unit_of_measure_delete_modal',
+        'can_delete':   can_delete,
+        'warnings':     warnings,
+        'errors':       errors,
+        'delete_url':   'core:unit_of_measure_delete_modal',
     })
 
 
@@ -887,8 +1134,11 @@ def unit_of_measure_delete(request, pk):
     unit = get_object_or_404(UnitOfMeasure, pk=pk)
 
     if not unit.can_be_deleted():
-        messages.error(request, 'Unit cannot be deleted — it has dependants or is in use.')
-        return _hx_redirect('core:unit_of_measure_list')
+        messages.error(
+            request,
+            'Unit cannot be deleted — it has dependants or is in use.'
+        )
+        return htmx_redirect(reverse('core:unit_of_measure_list'))
 
     try:
         name = unit.name
@@ -898,7 +1148,7 @@ def unit_of_measure_delete(request, pk):
         logger.error(f"Error deleting unit: {e}")
         messages.error(request, f'Error: {str(e)}')
 
-    return _hx_redirect('core:unit_of_measure_list')
+    return htmx_redirect(reverse('core:unit_of_measure_list'))
 
 
 # =============================================================================
@@ -910,11 +1160,13 @@ def bulk_close_periods_modal(request):
     today = get_school_today()
 
     closeable_periods = FiscalPeriod.objects.filter(
-        end_date__lt=today, is_closed=False, is_locked=False,
+        end_date__lt=today,
+        is_closed=False,
+        is_locked=False,
     ).select_related('fiscal_year').order_by('end_date')[:20]
 
     if request.method == 'POST':
-        period_ids = request.POST.getlist('periods')
+        period_ids   = request.POST.getlist('periods')
         if not period_ids:
             messages.error(request, 'No periods selected.')
         else:
@@ -922,7 +1174,9 @@ def bulk_close_periods_modal(request):
             close_errors = []
             with transaction.atomic():
                 for period in FiscalPeriod.objects.filter(
-                    id__in=period_ids, is_closed=False, is_locked=False,
+                    id__in=period_ids,
+                    is_closed=False,
+                    is_locked=False,
                 ):
                     try:
                         period.close_period(user=request.user)
@@ -932,15 +1186,21 @@ def bulk_close_periods_modal(request):
                         close_errors.append(f"{period.name}: {str(e)}")
 
             if closed_count:
-                messages.success(request, f'Successfully closed {closed_count} period(s).')
+                messages.success(
+                    request,
+                    f'Successfully closed {closed_count} period(s).'
+                )
             if close_errors:
-                messages.warning(request, f'Failed to close some periods: {"; ".join(close_errors)}')
+                messages.warning(
+                    request,
+                    f'Failed to close some periods: {"; ".join(close_errors)}'
+                )
 
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     return render(request, 'core/modals/bulk_close_periods.html', {
         'periods': closeable_periods,
-        'count': closeable_periods.count(),
+        'count':   closeable_periods.count(),
     })
 
 
@@ -952,11 +1212,13 @@ def bulk_close_periods(request):
 
     if not period_ids:
         messages.error(request, 'No periods selected.')
-        return _hx_redirect('core:fiscal_management')
+        return htmx_redirect(reverse('core:fiscal_management'))
 
     closed_count = 0
     for period in FiscalPeriod.objects.filter(
-        id__in=period_ids, is_closed=False, is_locked=False,
+        id__in=period_ids,
+        is_closed=False,
+        is_locked=False,
     ):
         try:
             period.close_period(user=request.user)
@@ -965,7 +1227,7 @@ def bulk_close_periods(request):
             logger.error(f"Error closing period {period}: {e}")
 
     messages.success(request, f'Successfully closed {closed_count} period(s).')
-    return _hx_redirect('core:fiscal_management')
+    return htmx_redirect(reverse('core:fiscal_management'))
 
 
 # =============================================================================
@@ -986,11 +1248,11 @@ def create_standard_units_modal(request):
         except Exception as e:
             logger.error(f"Error creating standard units: {e}")
             messages.error(request, f'Error: {str(e)}')
-        return _hx_redirect('core:unit_of_measure_list')
+        return htmx_redirect(reverse('core:unit_of_measure_list'))
 
     return render(request, 'core/modals/create_standard_units.html', {
         'existing_count': existing_count,
-        'has_existing': existing_count > 0,
+        'has_existing':   existing_count > 0,
     })
 
 
@@ -1007,4 +1269,4 @@ def create_standard_units(request):
     except Exception as e:
         logger.error(f"Error creating standard units: {e}")
         messages.error(request, f'Error: {str(e)}')
-    return _hx_redirect('core:unit_of_measure_list')
+    return htmx_redirect(reverse('core:unit_of_measure_list'))

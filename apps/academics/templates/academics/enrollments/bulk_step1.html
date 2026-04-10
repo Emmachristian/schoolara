@@ -1,269 +1,116 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
 
 {% block extra_css %}
 <style>
-/* ============================================================================
-   WIZARD STYLING
-   ============================================================================ */
-
-.wizard-steps {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 30px;
-    padding: 20px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --radius:    10px;
 }
 
-.wizard-step {
-    display: flex;
-    align-items: center;
-    flex: 1;
-    max-width: 300px;
+.step-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 24px;
+    margin-bottom: 20px; display: flex; align-items: center;
+}
+.step-item { display: flex; align-items: center; gap: 10px; }
+.step-pip  {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+}
+.step-pip.active { background: var(--accent); color: #fff; }
+.step-pip.idle   { background: #e2e8f0;       color: #94a3b8; }
+.step-text  { display: flex; flex-direction: column; }
+.step-label { font-size: 12.5px; font-weight: 700; }
+.step-label.active { color: var(--accent); }
+.step-label.idle   { color: var(--ink-muted); }
+.step-sub   { font-size: 11px; color: var(--ink-faint); }
+.step-connector { flex: 1; height: 2px; background: #e2e8f0; margin: 0 20px; }
+
+.stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 20px; transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #fff; flex-shrink: 0;
+}
+.stat-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); margin-bottom: 2px; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1; }
+
+.list-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; margin-bottom: 120px;
+}
+.list-card-head {
+    padding: 14px 22px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.list-card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
 }
 
-.step-number {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #e9ecef;
-    color: #6c757d;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    margin-right: 10px;
-    flex-shrink: 0;
+.filter-bar {
+    padding: 18px 22px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+}
+.filter-bar .form-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; color: var(--ink-muted); margin-bottom: 4px; display: block;
+}
+.filter-bar .form-control,
+.filter-bar .form-select {
+    border-radius: 8px; border-color: #dee2e6; font-size: 13px;
+}
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+    border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1);
 }
 
-.wizard-step.active .step-number {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+.context-note {
+    padding: 10px 22px;
+    background: #fffbeb;
+    border-bottom: 1px solid #fde68a;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: #92400e;
 }
 
-.wizard-step.completed .step-number {
-    background: #28a745;
-    color: white;
+.bulk-footer {
+    position: fixed; bottom: 0;
+    left: var(--sidebar-width, 280px); right: 0;
+    background: #fff; border-top: 2px solid var(--border);
+    padding: 14px 30px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 1050; box-shadow: 0 -4px 16px rgba(0,0,0,.08);
 }
-
-.step-text {
-    flex: 1;
-}
-
-.step-title {
-    font-weight: 600;
-    color: #495057;
-    margin: 0;
-}
-
-.step-description {
-    font-size: 0.875rem;
-    color: #6c757d;
-    margin: 0;
-}
-
-.wizard-step.active .step-title {
-    color: #667eea;
-}
-
-.step-connector {
-    height: 2px;
-    flex: 1;
-    background: #e9ecef;
-    margin: 0 15px;
-}
-
-.wizard-step.completed + .step-connector {
-    background: #28a745;
-}
-
-/* ============================================================================
-   FILTER SECTION
-   ============================================================================ */
-
-.filter-section {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 25px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.filter-header {
-    margin-bottom: 20px;
-}
-
-/* ============================================================================
-   STUDENT SELECTION TABLE
-   ============================================================================ */
-
-.selection-table-wrapper {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.table-header-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-.selection-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.student-checkbox {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-.student-row {
-    transition: background-color 0.2s;
-}
-
-.student-row:hover {
-    background-color: #f8f9fa;
-}
-
-.student-row.selected {
-    background-color: #e7f3ff !important;
-}
-
-/* ============================================================================
-   SELECTION SUMMARY BAR (FIXED BOTTOM)
-   ============================================================================ */
-
-.selection-summary {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    border-top: 2px solid #667eea;
-    padding: 15px;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-    z-index: 1000;
-    display: none;
-    transition: all 0.3s ease;
-}
-
-.selection-summary.active {
-    display: block;
-}
-
-.summary-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.summary-info {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.summary-count {
-    background: #667eea;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: bold;
-    white-space: nowrap;
-}
-
-/* ============================================================================
-   INFO BOXES
-   ============================================================================ */
-
-.info-box {
-    background: #e7f3ff;
-    border-left: 4px solid #0066cc;
-    padding: 15px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-
-.info-box.warning {
-    background: #fff3cd;
-    border-left-color: #ffc107;
-}
-
-.info-box i {
-    margin-right: 10px;
-}
-
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
-
-.empty-state {
-    text-align: center;
-    padding: 60px 30px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin: 20px 0;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: #dee2e6;
-    margin-bottom: 20px;
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
-@media (max-width: 768px) {
-    .wizard-steps {
-        flex-direction: column;
-    }
-
-    .wizard-step {
-        max-width: 100%;
-        margin-bottom: 10px;
-    }
-
-    .step-connector {
-        display: none;
-    }
-
-    .filter-section {
-        padding: 15px;
-    }
-
-    .summary-content {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .summary-info {
-        flex-direction: column;
-        gap: 10px;
-    }
+.selected-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent-lt); color: var(--accent);
+    border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 8px 16px; font-weight: 700; font-size: 14px;
 }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Page Title -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
@@ -271,433 +118,348 @@
                 <i class="pe-7s-users icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
-                Bulk Enrollment - Select Students
+                Bulk Enrollment
                 <div class="page-title-subheading">
-                    Step 1 of 2: Choose students to enroll
+                    Step 1 — Select students for {{ class_instance.get_display_name }}
                 </div>
             </div>
         </div>
         <div class="page-title-actions">
-            <a href="{% url 'academics:enrollment_list' %}" class="btn btn-outline-secondary">
-                <i class="fa fa-arrow-left me-1"></i> Back to Enrollments
+            <a href="{% url 'academics:class_detail' class_instance.pk %}"
+               class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-times me-1"></i>Cancel
             </a>
         </div>
     </div>
 </div>
 
-<!-- Wizard Progress -->
-<div class="wizard-steps">
-    <div class="wizard-step active">
-        <div class="step-number">1</div>
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-graduation-cap me-1"></i>Academics
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:level_detail' class_instance.academic_level.pk %}"
+               style="color:#64748b;text-decoration:none;">
+                {{ class_instance.academic_level.name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'academics:class_detail' class_instance.pk %}"
+               style="color:#64748b;text-decoration:none;">
+                {{ class_instance.get_display_name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">
+            Bulk Enrollment
+        </li>
+    </ol>
+</nav>
+
+{# ── Step bar ── #}
+<div class="step-bar">
+    <div class="step-item">
+        <div class="step-pip active">1</div>
         <div class="step-text">
-            <div class="step-title">Select Students</div>
-            <div class="step-description">Choose students to enroll</div>
+            <span class="step-label active">Select Students</span>
+            <span class="step-sub">Search, filter &amp; tick</span>
         </div>
     </div>
     <div class="step-connector"></div>
-    <div class="wizard-step">
-        <div class="step-number">2</div>
+    <div class="step-item">
+        <div class="step-pip idle">2</div>
         <div class="step-text">
-            <div class="step-title">Configure & Confirm</div>
-            <div class="step-description">Set enrollment details</div>
+            <span class="step-label idle">Confirm &amp; Enroll</span>
+            <span class="step-sub">Date, type, invoice</span>
         </div>
     </div>
 </div>
 
-<!-- Main Section -->
-<section class="section">
-    <div class="row">
-        <div class="col-lg-12">
-
-            <!-- Information Box -->
-            <div class="info-box">
-                <i class="fa fa-lightbulb"></i>
-                <strong>How it works:</strong>
-                Select students from the list below using checkboxes. You can filter students by level,
-                status, or search by name. Your selections are preserved when you navigate between pages.
-                Then proceed to Step 2 to configure enrollment details for all selected students.
-            </div>
-
-            {% if target_class %}
-            <div class="info-box warning">
-                <i class="fa fa-info-circle"></i>
-                <strong>Target Class:</strong> {{ target_class }} ({{ target_session.year_name }})
-            </div>
-            {% endif %}
-
-            <!-- Filter Section -->
-            <div class="filter-section">
-                <div class="filter-header">
-                    <h5 class="mb-0">
-                        <i class="fa fa-filter me-2"></i>Student Filters
-                    </h5>
-                </div>
-
-                <form id="filterForm" class="row g-3"
-                      hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
-                      hx-target="#student-selection-results"
-                      hx-trigger="input changed delay:500ms from:#{{ form.search.id_for_label }}, change from:select"
-                      hx-include="[name='class_id'], [name='session_id']">
-
-                    <!-- Hidden inputs for class and session context -->
-                    <input type="hidden" name="class_id" value="{{ request.GET.class_id }}">
-                    <input type="hidden" name="session_id" value="{{ request.GET.session_id }}">
-
-                    <!-- Search -->
-                    <div class="col-md-4">
-                        <label for="{{ form.search.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.search.label }}
-                        </label>
-                        {{ form.search }}
-                    </div>
-
-                    <!-- Current Level -->
-                    <div class="col-md-3">
-                        <label for="{{ form.current_level.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.current_level.label }}
-                        </label>
-                        {{ form.current_level }}
-                    </div>
-
-                    <!-- Enrollment Status -->
-                    <div class="col-md-3">
-                        <label for="{{ form.enrollment_status.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.enrollment_status.label }}
-                        </label>
-                        {{ form.enrollment_status }}
-                    </div>
-
-                    <!-- Gender -->
-                    <div class="col-md-2">
-                        <label for="{{ form.gender.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.gender.label }}
-                        </label>
-                        {{ form.gender }}
-                    </div>
-
-                    <!-- Second Row -->
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            {{ form.exclude_already_enrolled }}
-                            <label class="form-check-label" for="{{ form.exclude_already_enrolled.id_for_label }}">
-                                {{ form.exclude_already_enrolled.label }}
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            {{ form.show_only_eligible }}
-                            <label class="form-check-label" for="{{ form.show_only_eligible.id_for_label }}">
-                                {{ form.show_only_eligible.label }}
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Sort By -->
-                    <div class="col-md-4">
-                        <label for="{{ form.sort_by.id_for_label }}" class="form-label small text-muted mb-1">
-                            {{ form.sort_by.label }}
-                        </label>
-                        {{ form.sort_by }}
-                    </div>
-                </form>
-            </div>
-
-            <!-- Student Selection Table -->
-            <div class="selection-table-wrapper">
-                <div class="table-header-actions">
-                    <h6 class="mb-0">
-                        <i class="fa fa-users me-2"></i>Available Students
-                        <span class="badge bg-secondary ms-2" id="totalCountBadge"></span>
-                    </h6>
-                    <div class="selection-controls">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllVisible()">
-                            <i class="fa fa-check-double me-1"></i> Select Page
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
-                            <i class="fa fa-times me-1"></i> Clear All
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Results Container — HTMX loads the partial here -->
-                <div id="student-selection-results"
-                     hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
-                     hx-trigger="load"
-                     hx-vals='{"class_id": "{{ request.GET.class_id }}", "session_id": "{{ request.GET.session_id }}", "enrollment_status": "ACTIVE"}'
-                     hx-swap="innerHTML">
-                    <!-- Initial loading state -->
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary mb-3" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mb-0">Loading students...</p>
-                    </div>
+{# ── Stat cards ── #}
+<div class="row mb-0">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#1d4ed8;"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Currently Enrolled</div>
+                <div class="stat-value">
+                    {{ class_instance.enrollments.count }}
+                    <span style="font-size:13px;font-weight:500;color:#94a3b8;">
+                        / {{ class_instance.max_students }}
+                    </span>
                 </div>
             </div>
-
         </div>
     </div>
-</section>
-
-<!-- Selection Summary Bar (Fixed Bottom) -->
-<div class="selection-summary" id="selectionSummary">
-    <div class="summary-content">
-        <div class="summary-info">
-            <div class="summary-count">
-                <i class="fa fa-users me-2"></i>
-                <span id="selectedCount">0</span> students selected
-            </div>
-            <div class="text-muted small" id="selectedNames">
-                No students selected
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#15803d;"><i class="pe-7s-add-user"></i></div>
+            <div>
+                <div class="stat-label">Available Spots</div>
+                <div class="stat-value" style="color:#15803d;">
+                    {{ class_instance.get_available_capacity }}
+                </div>
             </div>
         </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#7c3aed;"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Selected</div>
+                <div class="stat-value" id="stat-selected-count">0</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0891b2;"><i class="pe-7s-date"></i></div>
+            <div>
+                <div class="stat-label">Session</div>
+                <div class="stat-value" style="font-size:13px;font-weight:600;line-height:1.3;">
+                    {{ class_instance.academic_session.name }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Main list card ── #}
+<div class="list-card">
+
+    <div class="list-card-head">
+        <span class="list-card-title">
+            <i class="fa fa-users text-primary"></i>
+            {{ class_instance.academic_level.name }} Students
+        </span>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-secondary" onclick="clearSelection()">
-                <i class="fa fa-times me-1"></i> Clear
+            <button class="btn btn-sm btn-outline-secondary" onclick="selectAllVisible()">
+                <i class="fa fa-check-square me-1"></i>Select page
             </button>
-            <button type="button" class="btn btn-primary btn-lg" onclick="proceedToStep2()" id="proceedBtn" disabled>
-                <i class="fa fa-arrow-right me-1"></i> Proceed to Step 2
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+                <i class="fa fa-times me-1"></i>Reset filters
             </button>
         </div>
     </div>
+
+    {# ── Filter bar ── #}
+    <div class="filter-bar">
+        <form id="filterForm"
+              hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
+              hx-target="#student-results"
+              hx-trigger="change, keyup changed delay:400ms from:#filterForm input[name='search']"
+              hx-include="#filterForm">
+
+            <input type="hidden" name="class_id" value="{{ class_instance.pk }}">
+
+            <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label">Search</label>
+                    <input type="text" name="search" class="form-control form-control-sm"
+                           placeholder="Name or admission number…">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Gender</label>
+                    <select name="gender" class="form-select form-select-sm">
+                        <option value="">All Genders</option>
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Status</label>
+                    <select name="enrollment_status" class="form-select form-select-sm">
+                        <option value="ACTIVE" selected>Active</option>
+                        <option value="">All</option>
+                        <option value="SUSPENDED">Suspended</option>
+                        <option value="GRADUATED">Graduated</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end pb-1">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox"
+                               name="exclude_already_enrolled"
+                               id="exclude_enrolled" value="true" checked>
+                        <label class="form-check-label" for="exclude_enrolled"
+                               style="font-size:12.5px;">Hide enrolled</label>
+                    </div>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="clearFilters()" title="Reset filters">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {# ── Context note ── #}
+    <div class="context-note">
+        <i class="fa fa-info-circle" style="flex-shrink:0;"></i>
+        <span>
+            Showing <strong>{{ class_instance.academic_level.name }}</strong> students
+            who are <strong>not yet enrolled</strong> in
+            <strong>{{ class_instance.get_display_name }}</strong>
+            for <strong>{{ class_instance.academic_session.name }}</strong>.
+            Students already enrolled here or assigned to another class this session
+            are hidden by default — uncheck <em>Hide enrolled</em> to see them.
+        </span>
+    </div>
+
+    {# ── Results ── #}
+    <div id="student-results"
+         hx-get="{% url 'academics:bulk_enrollment_student_search' %}?class_id={{ class_instance.pk }}&enrollment_status=ACTIVE&exclude_already_enrolled=true"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div style="padding:60px;text-align:center;color:#94a3b8;">
+            <i class="fa fa-spinner fa-spin fa-2x"></i>
+        </div>
+    </div>
+
 </div>
 
-<!-- Bottom padding so fixed bar doesn't obscure content -->
-<div style="height: 100px;"></div>
+{# ── Sticky footer ── #}
+<div class="bulk-footer">
+    <div class="d-flex align-items-center gap-3">
+        <div class="selected-badge">
+            <i class="fa fa-check-square"></i>
+            <span id="footer-selected-count">0</span> students selected
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                onclick="clearAllSelections()">
+            <i class="fa fa-times me-1"></i>Clear
+        </button>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'academics:class_detail' class_instance.pk %}"
+           class="btn btn-outline-secondary">
+            <i class="fa fa-arrow-left me-1"></i>Back
+        </a>
+        <button type="button" class="btn btn-primary" id="next-btn"
+                disabled onclick="proceedToStep2()">
+            Next: Confirm Enrollment <i class="fa fa-arrow-right ms-1"></i>
+        </button>
+    </div>
+</div>
+
+{# Hidden form that carries selected IDs to step 2 #}
+<form id="step2-form" method="GET"
+      action="{% url 'academics:bulk_enrollment_step2' %}"
+      style="display:none;">
+    <input type="hidden" name="class_id" value="{{ class_instance.pk }}">
+    <div id="selected-ids-container"></div>
+</form>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// ============================================================================
-// SELECTION STATE
-// Use a Map (id → name) so selections persist across HTMX pagination swaps.
-// Students not currently visible in the DOM are never accidentally lost.
-// ============================================================================
-
 const selectedStudents = new Map();
 
-// ============================================================================
-// CORE SELECTION FUNCTIONS
-// ============================================================================
-
-/**
- * Called by each checkbox's onchange. Adds or removes the student from the
- * Map depending on checked state, then syncs the UI.
- */
-function toggleStudentRow(checkbox) {
-    const id   = checkbox.value;
-    const name = checkbox.getAttribute('data-name') || 'Unknown Student';
-    const row  = checkbox.closest('tr');
-
-    if (checkbox.checked) {
-        selectedStudents.set(id, name);
-        row.classList.add('selected');
-    } else {
-        selectedStudents.delete(id);
-        row.classList.remove('selected');
-    }
-
-    updateSummaryBar();
-    updateLocalCountDisplay();
+function updateCounters() {
+    const n = selectedStudents.size;
+    document.getElementById('footer-selected-count').textContent = n;
+    document.getElementById('stat-selected-count').textContent   = n;
+    document.getElementById('next-btn').disabled = n === 0;
 }
 
-/**
- * Select every checkbox currently visible in the DOM (current page only).
- * Selections on other pages are preserved.
- */
+function toggleStudentRow(checkbox) {
+    const row = checkbox.closest('tr');
+    if (checkbox.checked) {
+        selectedStudents.set(checkbox.value, checkbox.dataset.name || checkbox.value);
+        row?.classList.add('selected');
+    } else {
+        selectedStudents.delete(checkbox.value);
+        row?.classList.remove('selected');
+    }
+    updateCounters();
+    syncLocalDisplay();
+}
+
 function selectAllVisible() {
     document.querySelectorAll('.student-checkbox').forEach(cb => {
-        cb.checked = true;
-        cb.closest('tr').classList.add('selected');
-        selectedStudents.set(cb.value, cb.getAttribute('data-name') || 'Unknown Student');
+        if (!cb.checked) { cb.checked = true; toggleStudentRow(cb); }
     });
-    updateSummaryBar();
-    updateLocalCountDisplay();
 }
 
-/**
- * Clear ALL selections, including students on other pages.
- */
-function clearSelection() {
+function clearAllSelections() {
     selectedStudents.clear();
-
     document.querySelectorAll('.student-checkbox').forEach(cb => {
         cb.checked = false;
-        cb.closest('tr').classList.remove('selected');
+        cb.closest('tr')?.classList.remove('selected');
     });
-
-    updateSummaryBar();
-    updateLocalCountDisplay();
+    updateCounters();
+    syncLocalDisplay();
 }
 
-/**
- * After an HTMX swap, re-check boxes for students that were already selected
- * (possibly selected on a previous page). This is what makes selection persist
- * across pagination.
- */
+function handleSelectAllCheckbox(master) {
+    document.querySelectorAll('.student-checkbox').forEach(cb => {
+        cb.checked = master.checked;
+        toggleStudentRow(cb);
+    });
+}
+
+function clearFilters() {
+    const form = document.getElementById('filterForm');
+    form.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+    form.querySelector('select[name="enrollment_status"]').value = 'ACTIVE';
+    form.querySelector('select[name="gender"]').value = '';
+    document.getElementById('exclude_enrolled').checked = true;
+    htmx.trigger(form, 'change');
+}
+
 function restoreCheckboxState() {
     document.querySelectorAll('.student-checkbox').forEach(cb => {
         if (selectedStudents.has(cb.value)) {
             cb.checked = true;
-            cb.closest('tr').classList.add('selected');
-        } else {
-            cb.checked = false;
-            cb.closest('tr').classList.remove('selected');
+            cb.closest('tr')?.classList.add('selected');
         }
     });
-    updateLocalCountDisplay();
+    syncLocalDisplay();
 }
 
-// ============================================================================
-// UI SYNC FUNCTIONS
-// ============================================================================
-
-/**
- * Update the fixed bottom summary bar.
- */
-function updateSummaryBar() {
-    const summary    = document.getElementById('selectionSummary');
-    const countEl    = document.getElementById('selectedCount');
-    const namesEl    = document.getElementById('selectedNames');
-    const proceedBtn = document.getElementById('proceedBtn');
-
-    const count = selectedStudents.size;
-    countEl.textContent = count;
-
-    if (count > 0) {
-        summary.classList.add('active');
-        proceedBtn.disabled = false;
-
-        const names = Array.from(selectedStudents.values());
-        namesEl.textContent = count <= 5
-            ? names.join(', ')
-            : `${names.slice(0, 5).join(', ')} and ${count - 5} more`;
-    } else {
-        summary.classList.remove('active');
-        proceedBtn.disabled = true;
-        namesEl.textContent = 'No students selected';
+function syncLocalDisplay() {
+    const checked = document.querySelectorAll('.student-checkbox:checked').length;
+    const total   = document.querySelectorAll('.student-checkbox').length;
+    const el      = document.getElementById('selectedCountDisplay');
+    if (el) el.textContent = checked;
+    const master = document.getElementById('selectAllStudents');
+    if (master && total > 0) {
+        master.checked       = checked === total;
+        master.indeterminate = checked > 0 && checked < total;
     }
 }
 
-/**
- * Update the local "X selected" counter inside the results partial,
- * and set the indeterminate / checked state on the "Select All" checkbox.
- */
-function updateLocalCountDisplay() {
-    const visibleChecked = document.querySelectorAll('.student-checkbox:checked').length;
-    const allVisible     = document.querySelectorAll('.student-checkbox').length;
-
-    // Local count display inside the partial
-    const displayEl = document.getElementById('selectedCountDisplay');
-    if (displayEl) displayEl.textContent = visibleChecked;
-
-    // Select-all checkbox state
-    const selectAllCb = document.getElementById('selectAllStudents');
-    if (selectAllCb && allVisible > 0) {
-        selectAllCb.checked       = visibleChecked === allVisible;
-        selectAllCb.indeterminate = visibleChecked > 0 && visibleChecked < allVisible;
-    }
-}
-
-// ============================================================================
-// NAVIGATION
-// ============================================================================
-
-/**
- * POSTs selected student IDs to Step 2, avoiding GET URL length limits.
- */
 function proceedToStep2() {
-    if (selectedStudents.size === 0) {
-        alert('Please select at least one student to continue.');
-        return;
-    }
-
-    const studentIds = Array.from(selectedStudents.keys()).join(',');
-    const classId    = '{{ request.GET.class_id }}';
-    const sessionId  = '{{ request.GET.session_id }}';
-
-    // Build and submit a hidden form via POST so we don't hit URL length limits
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = "{% url 'academics:bulk_enrollment_step2' %}";
-
-    const fields = {
-        'csrfmiddlewaretoken': '{{ csrf_token }}',
-        'student_ids'        : studentIds,
-        'class_id'           : classId,
-        'session_id'         : sessionId,
-    };
-
-    for (const [name, value] of Object.entries(fields)) {
-        if (!value) continue;
-        const input = document.createElement('input');
-        input.type  = 'hidden';
-        input.name  = name;
-        input.value = value;
-        form.appendChild(input);
-    }
-
-    document.body.appendChild(form);
-    form.submit();
-}
-
-// ============================================================================
-// HTMX LIFECYCLE HOOKS
-// ============================================================================
-
-/**
- * After every HTMX swap into #student-selection-results:
- *   1. Restore previously selected checkboxes (persists across pages).
- *   2. Re-initialise Bootstrap tooltips.
- */
-document.body.addEventListener('htmx:afterSwap', function (event) {
-    if (event.detail.target.id === 'student-selection-results') {
-        restoreCheckboxState();
-        initializeTooltips();
-    }
-});
-
-// ============================================================================
-// BOOTSTRAP TOOLTIPS
-// ============================================================================
-
-function initializeTooltips() {
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-        // Dispose existing instance to avoid duplicates
-        const existing = bootstrap.Tooltip.getInstance(el);
-        if (existing) existing.dispose();
-        new bootstrap.Tooltip(el);
+    if (selectedStudents.size === 0) return;
+    const container = document.getElementById('selected-ids-container');
+    container.innerHTML = '';
+    selectedStudents.forEach((name, pk) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'student_ids'; inp.value = pk;
+        container.appendChild(inp);
     });
+    document.getElementById('step2-form').submit();
 }
 
-// ============================================================================
-// KEYBOARD SHORTCUTS
-// ============================================================================
-
-document.addEventListener('keydown', function (event) {
-    // Ctrl/Cmd + A — select all visible (only when not typing in an input)
-    if ((event.ctrlKey || event.metaKey) && event.key === 'a' &&
-        !['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
-        event.preventDefault();
-        selectAllVisible();
-    }
-
-    // Escape — clear all selections
-    if (event.key === 'Escape') {
-        clearSelection();
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id === 'student-results') {
+        restoreCheckboxState();
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            var ex = bootstrap.Tooltip.getInstance(el);
+            if (ex) ex.dispose();
+            new bootstrap.Tooltip(el);
+        });
     }
 });
 
-// ============================================================================
-// INITIALISE ON PAGE LOAD
-// ============================================================================
-
-document.addEventListener('DOMContentLoaded', function () {
-    initializeTooltips();
-    updateSummaryBar();
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+        el => new bootstrap.Tooltip(el)
+    );
 });
 </script>
 {% endblock %}

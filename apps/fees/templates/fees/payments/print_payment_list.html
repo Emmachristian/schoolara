@@ -1,0 +1,111 @@
+{% extends "print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Payment List{% endblock %}
+{% block doc_title %}Payment List{% endblock %}
+{% block record_count %}{{ payments|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.completed|default:0 }}</span>
+        <span class="stat-label">Completed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.verified|default:0 }}</span>
+        <span class="stat-label">Verified</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.reversed|default:0 }}</span>
+        <span class="stat-label">Reversed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.refunded|default:0 }}</span>
+        <span class="stat-label">Refunded</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_amount|money_short }}</span>
+        <span class="stat-label">Total Collected</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if payments %}
+    {% for payment in payments %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "amount,amount_applied,overpayment" %} class="num"{% endif %}>
+            {% if field == 'payment_number' %}
+                <span class="chip-code">{{ payment.payment_number }}</span>
+            {% elif field == 'receipt_number' %}
+                {% if payment.receipt_number %}<span class="chip-code">{{ payment.receipt_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'payment_date' %}
+                {% if payment.payment_date %}{{ payment.payment_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'student_id' %}
+                <span class="chip-adm">{{ payment.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ payment.student.get_full_name }}
+            {% elif field == 'invoice_number' %}
+                {% if payment.invoice %}<span class="chip-code">{{ payment.invoice.invoice_number }}</span>{% else %}—{% endif %}
+            {% elif field == 'academic_session' %}
+                {{ payment.academic_session.name|default:"—" }}
+            {% elif field == 'fiscal_period' %}
+                {{ payment.fiscal_period.name|default:"—" }}
+            {% elif field == 'amount' %}
+                <strong>{{ payment.amount|amount }}</strong>
+            {% elif field == 'amount_applied' %}
+                {{ payment.amount_applied_to_invoice|amount }}
+            {% elif field == 'overpayment' %}
+                {% if payment.overpayment_amount %}{{ payment.overpayment_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'payment_method' %}
+                {{ payment.payment_method.name|default:"—" }}
+            {% elif field == 'reference_number' %}
+                {{ payment.reference_number|default:"—" }}
+            {% elif field == 'transaction_id' %}
+                {{ payment.transaction_id|default:"—" }}
+            {% elif field == 'bank_name' %}
+                {{ payment.bank_name|default:"—" }}
+            {% elif field == 'cheque_number' %}
+                {{ payment.cheque_number|default:"—" }}
+            {% elif field == 'mobile_provider' %}
+                {{ payment.mobile_money_provider|default:"—" }}
+            {% elif field == 'mobile_number' %}
+                {{ payment.mobile_number|default:"—" }}
+            {% elif field == 'paid_by_name' %}
+                {{ payment.paid_by_name|default:"—" }}
+            {% elif field == 'paid_by_phone' %}
+                {{ payment.paid_by_phone|default:"—" }}
+            {% elif field == 'paid_by_relationship' %}
+                {% if payment.paid_by_relationship %}{{ payment.get_paid_by_relationship_display }}{% else %}—{% endif %}
+            {% elif field == 'status' %}
+                {% with s=payment.status|lower %}
+                    <span class="badge s-{{ s }}">{{ payment.get_status_display }}</span>
+                {% endwith %}
+            {% elif field == 'is_verified' %}
+                {% if payment.is_verified %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'reversed' %}
+                {% if payment.reversed %}<span class="text-warn">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'refunded' %}
+                {% if payment.refunded %}<span class="text-warn">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'remarks' %}
+                {{ payment.remarks|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No payments found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

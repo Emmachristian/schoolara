@@ -1,0 +1,124 @@
+{% extends "print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}{{ title|default:"Expenses Report" }}{% endblock %}
+{% block doc_title %}{{ title|default:"Expenses Report" }}{% endblock %}
+{% block record_count %}{{ expenses|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if include_stats and stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.pending_approval|default:0 }}</span>
+        <span class="stat-label">Pending</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.approved|default:0 }}</span>
+        <span class="stat-label">Approved</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.paid|default:0 }}</span>
+        <span class="stat-label">Paid</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_amount|money }}</span>
+        <span class="stat-label">Total Amount</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.approved_amount|money }}</span>
+        <span class="stat-label">Approved Amount</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if expenses %}
+    {% for expense in expenses %}
+    <tr class="{% if expense.status == 'CANCELLED' or expense.status == 'REJECTED' %}row-muted{% endif %}">
+
+        <td>{{ forloop.counter }}</td>
+
+        {% for field in selected_fields %}
+        <td>
+            {% if field == 'expense_number' %}
+                {{ expense.expense_number }}
+
+            {% elif field == 'category' %}
+                {{ expense.category.name }}
+                {% if expense.category.get_category_type_display %}
+                    <div style="font-size:0.8em;color:#64748b;">{{ expense.category.get_category_type_display }}</div>
+                {% endif %}
+
+            {% elif field == 'description' %}
+                {{ expense.description|truncatewords:12 }}
+
+            {% elif field == 'expense_date' %}
+                {{ expense.expense_date|date:"d M Y" }}
+
+            {% elif field == 'academic_session' %}
+                {% if expense.academic_session %}{{ expense.academic_session.name }}{% else %}—{% endif %}
+
+            {% elif field == 'fiscal_period' %}
+                {% if expense.fiscal_period %}{{ expense.fiscal_period.name }}{% else %}—{% endif %}
+
+            {% elif field == 'vendor_name' %}
+                {{ expense.vendor_name|default:"—" }}
+
+            {% elif field == 'vendor_reference' %}
+                {{ expense.vendor_reference|default:"—" }}
+
+            {% elif field == 'subtotal_amount' %}
+                {{ expense.subtotal_amount|money }}
+
+            {% elif field == 'tax_amount' %}
+                {% if expense.tax_amount %}{{ expense.tax_amount|money }}{% else %}—{% endif %}
+
+            {% elif field == 'total_amount' %}
+                <strong>{{ expense.total_amount|money }}</strong>
+
+            {% elif field == 'status' %}
+                {% if expense.status == 'DRAFT' %}
+                    <span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Draft</span>
+                {% elif expense.status == 'PENDING_APPROVAL' %}
+                    <span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Pending</span>
+                {% elif expense.status == 'APPROVED' %}
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Approved</span>
+                {% elif expense.status == 'PAID' %}
+                    <span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Paid</span>
+                {% elif expense.status == 'REJECTED' %}
+                    <span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Rejected</span>
+                {% elif expense.status == 'CANCELLED' %}
+                    <span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:20px;font-size:0.78em;font-weight:700;">Cancelled</span>
+                {% else %}
+                    {{ expense.get_status_display }}
+                {% endif %}
+
+            {% elif field == 'is_recurring' %}
+                {% if expense.is_recurring %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+
+            {% elif field == 'notes' %}
+                {{ expense.notes|default:"—"|truncatewords:10 }}
+
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr>
+        <td colspan="{{ selected_fields|length|add:1 }}">
+            <div class="empty-state">
+                <strong>No expenses found</strong>
+                <p>No records match the applied filters.</p>
+            </div>
+        </td>
+    </tr>
+{% endif %}
+{% endblock %}

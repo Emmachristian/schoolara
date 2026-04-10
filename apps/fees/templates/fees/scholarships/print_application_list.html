@@ -1,0 +1,93 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Scholarship Applications{% endblock %}
+{% block doc_title %}Scholarship Applications{% endblock %}
+{% block record_count %}{{ applications|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.submitted|default:0 }}</span>
+        <span class="stat-label">Submitted</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.approved|default:0 }}</span>
+        <span class="stat-label">Approved</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.rejected|default:0 }}</span>
+        <span class="stat-label">Rejected</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_requested|money_short }}</span>
+        <span class="stat-label">Total Requested</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total_approved|money_short }}</span>
+        <span class="stat-label">Total Approved</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if applications %}
+    {% for app in applications %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "requested_amount,approved_amount,family_income" %} class="num"{% elif field in "current_gpa,attendance" %} class="ctr"{% endif %}>
+            {% if field == 'application_number' %}
+                <span class="chip-code">{{ app.application_number }}</span>
+            {% elif field == 'application_date' %}
+                {% if app.application_date %}{{ app.application_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'student_id' %}
+                <span class="chip-adm">{{ app.student.admission_number }}</span>
+            {% elif field == 'student_name' %}
+                {{ app.student.get_full_name }}
+            {% elif field == 'program' %}
+                {{ app.scholarship_program.name }}
+            {% elif field == 'program_code' %}
+                <span class="chip-code">{{ app.scholarship_program.code }}</span>
+            {% elif field == 'academic_session' %}
+                {{ app.academic_session.name|default:"—" }}
+            {% elif field == 'requested_amount' %}
+                {% if app.requested_amount %}{{ app.requested_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'approved_amount' %}
+                {% if app.approved_amount %}<span class="text-success">{{ app.approved_amount|amount }}</span>{% else %}—{% endif %}
+            {% elif field == 'current_gpa' %}
+                {% if app.current_gpa %}{{ app.current_gpa|format_decimal:2 }}{% else %}—{% endif %}
+            {% elif field == 'attendance' %}
+                {% if app.attendance_percentage %}{{ app.attendance_percentage|percentage }}{% else %}—{% endif %}
+            {% elif field == 'family_income' %}
+                {% if app.family_income %}{{ app.family_income|amount }}{% else %}—{% endif %}
+            {% elif field == 'status' %}
+                {% with s=app.status|lower %}
+                    {% if s == 'approved' %}<span class="badge s-approved">{{ app.get_status_display }}</span>
+                    {% elif s == 'rejected' %}<span class="badge s-rejected">{{ app.get_status_display }}</span>
+                    {% elif s == 'submitted' %}<span class="badge s-submitted">{{ app.get_status_display }}</span>
+                    {% elif s == 'under_review' %}<span class="badge s-review">{{ app.get_status_display }}</span>
+                    {% elif s == 'waitlisted' %}<span class="badge s-pending">{{ app.get_status_display }}</span>
+                    {% else %}<span class="badge s-default">{{ app.get_status_display }}</span>
+                    {% endif %}
+                {% endwith %}
+            {% elif field == 'decision_reason' %}
+                {{ app.decision_reason|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No applications found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}

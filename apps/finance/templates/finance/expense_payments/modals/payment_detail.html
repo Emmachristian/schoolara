@@ -1,0 +1,230 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-dollar-sign" style="color:#1565c0;font-size:16px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">
+                        Payment Details
+                    </h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;font-family:monospace;">
+                        {{ payment.reference_number|default:"—" }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:0;">
+
+            <!-- STATUS + AMOUNT HERO -->
+            <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:13px;font-weight:600;color:#334155;">
+                        {{ payment.expense.expense_number }} — {{ payment.expense.description|truncatewords:8 }}
+                    </div>
+                    <div style="font-size:12px;color:#64748b;margin-top:3px;">
+                        <i class="fa fa-calendar me-1"></i>{{ payment.payment_date|date:"d M Y" }}
+                        &nbsp;·&nbsp;<i class="fa fa-credit-card me-1"></i>{{ payment.payment_method.name }}
+                        &nbsp;·&nbsp;<i class="fa fa-bank me-1"></i>{{ payment.account.name }}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    {% if payment.reversed %}
+                        <span style="background:#fee2e2;color:#b91c1c;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;display:block;margin-bottom:4px;">
+                            <i class="fa fa-undo me-1"></i>Reversed
+                        </span>
+                    {% elif payment.is_verified %}
+                        <span style="background:#dcfce7;color:#15803d;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;display:block;margin-bottom:4px;">
+                            <i class="fa fa-check-circle me-1"></i>Verified
+                        </span>
+                    {% else %}
+                        <span style="background:#fef9c3;color:#92400e;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;display:block;margin-bottom:4px;">
+                            <i class="fa fa-clock-o me-1"></i>{{ payment.get_status_display }}
+                        </span>
+                    {% endif %}
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;">{{ payment.amount|money }}</div>
+                </div>
+            </div>
+
+            <!-- DETAILS GRID -->
+            <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Recorded By</div>
+                        <div style="font-size:13px;color:#334155;">
+                            {% with u=payment.get_performed_by_user %}
+                                {% if u %}{{ u.get_full_name|default:u.username }}{% else %}{{ payment.performed_by|default:"—" }}{% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Fiscal Period</div>
+                        <div style="font-size:13px;color:#334155;">{{ payment.fiscal_period.name|default:"—" }}</div>
+                    </div>
+
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Processing Fee</div>
+                        <div style="font-size:13px;color:#334155;">{{ payment.processing_fee|money }}</div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Bank Charges</div>
+                        <div style="font-size:13px;color:#334155;">{{ payment.bank_charges|money }}</div>
+                    </div>
+
+                    {% if payment.is_verified %}
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Verified By</div>
+                        <div style="font-size:13px;color:#334155;">
+                            {% with u=payment.get_verified_by_user %}
+                                {% if u %}{{ u.get_full_name|default:u.username }}{% else %}—{% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Verified On</div>
+                        <div style="font-size:13px;color:#334155;">{{ payment.verification_date|date:"d M Y, H:i" }}</div>
+                    </div>
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Verification Notes</div>
+                        <div style="font-size:13px;color:#334155;">{{ payment.verification_notes|default:"—" }}</div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;"></div>
+                    {% endif %}
+
+                    {% if payment.reversed %}
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Reversed By</div>
+                        <div style="font-size:13px;color:#b91c1c;">
+                            {% with u=payment.get_reversed_by_user %}
+                                {% if u %}{{ u.get_full_name|default:u.username }}{% else %}—{% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Reversed On</div>
+                        <div style="font-size:13px;color:#b91c1c;">{{ payment.reversed_on|date:"d M Y, H:i" }}</div>
+                    </div>
+                    <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:3px;">Reversal Reason</div>
+                        <div style="font-size:13px;color:#b91c1c;">{{ payment.reversal_reason|default:"—" }}</div>
+                    </div>
+                    <div style="padding:8px 0 8px 16px;border-bottom:1px solid #f1f5f9;border-left:1px solid #f1f5f9;"></div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <!-- JOURNAL ENTRY -->
+            <div style="padding:14px 22px;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:8px;">Journal Entry</div>
+                {% if payment.journal_entry %}
+                <div style="display:flex;align-items:center;justify-content:space-between;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <i class="fa fa-book" style="color:#15803d;font-size:14px;"></i>
+                        <div>
+                            <div style="font-size:13px;font-weight:700;color:#15803d;font-family:monospace;">
+                                {{ payment.journal_entry.entry_number }}
+                            </div>
+                            <div style="font-size:11.5px;color:#4ade80;margin-top:1px;">
+                                {{ payment.journal_entry.get_status_display }} &middot; {{ payment.journal_entry.entry_date|date:"d M Y" }}
+                            </div>
+                        </div>
+                    </div>
+                    <span style="background:#dcfce7;color:#15803d;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;">
+                        Posted
+                    </span>
+                </div>
+                <!-- Transactions -->
+                {% if payment.journal_entry.transactions.exists %}
+                <table style="width:100%;margin-top:10px;font-size:12px;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <th style="padding:4px 8px;text-align:left;color:#94a3b8;font-weight:600;">Account</th>
+                            <th style="padding:4px 8px;text-align:right;color:#94a3b8;font-weight:600;">Debit</th>
+                            <th style="padding:4px 8px;text-align:right;color:#94a3b8;font-weight:600;">Credit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in payment.journal_entry.transactions.all %}
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:5px 8px;color:#334155;">
+                                {{ txn.account.account_number }} — {{ txn.account.name }}
+                                {% if txn.description %}<div style="font-size:11px;color:#94a3b8;">{{ txn.description }}</div>{% endif %}
+                            </td>
+                            <td style="padding:5px 8px;text-align:right;color:#334155;font-family:monospace;">
+                                {% if txn.is_debit %}{{ txn.amount|money }}{% else %}—{% endif %}
+                            </td>
+                            <td style="padding:5px 8px;text-align:right;color:#334155;font-family:monospace;">
+                                {% if not txn.is_debit %}{{ txn.amount|money }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+
+                {% if payment.reversal_journal_entry %}
+                <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <i class="fa fa-undo" style="color:#b91c1c;font-size:14px;"></i>
+                        <div>
+                            <div style="font-size:13px;font-weight:700;color:#b91c1c;font-family:monospace;">
+                                {{ payment.reversal_journal_entry.entry_number }}
+                            </div>
+                            <div style="font-size:11.5px;color:#94a3b8;margin-top:1px;">Reversal entry</div>
+                        </div>
+                    </div>
+                    <span style="background:#fee2e2;color:#b91c1c;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;">
+                        Reversed
+                    </span>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div style="font-size:13px;color:#94a3b8;font-style:italic;">
+                    No journal entry yet — created automatically when payment is verified.
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- NOTES -->
+            {% if payment.notes %}
+            <div style="padding:14px 22px;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:4px;">Notes</div>
+                <div style="font-size:13px;color:#475569;line-height:1.6;">{{ payment.notes }}</div>
+            </div>
+            {% endif %}
+
+            <!-- AUDIT TRAIL -->
+            {% if audit_trail %}
+            <div style="padding:14px 22px;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:10px;">Audit Trail</div>
+                {% for event in audit_trail %}
+                <div style="display:flex;gap:10px;margin-bottom:8px;font-size:12px;">
+                    <span style="color:#94a3b8;white-space:nowrap;">{{ event.timestamp|date:"d M Y H:i" }}</span>
+                    <span style="color:#334155;">{{ event.description }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:12px 20px;justify-content:space-between;">
+            <a href="{% url 'finance:expense_payment_print_receipt' payment.pk %}"
+               target="_blank" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-print me-1"></i> Print Receipt
+            </a>
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+
+    </div>
+</div>

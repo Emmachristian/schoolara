@@ -1,0 +1,120 @@
+{% extends 'print_base.html' %}
+{% load static %}
+
+{% block page_title %}{{ title|default:"Fiscal Periods Report" }}{% endblock %}
+
+{% block print_orientation %}
+    size: {% if landscape %}A4 landscape{% else %}A4 portrait{% endif %};
+{% endblock %}
+
+{% block doc_title %}{{ title|default:"Fiscal Periods Report" }}{% endblock %}
+
+{% block record_count %}{{ periods|length }}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total Periods</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.closed|default:0 }}</span>
+        <span class="stat-label">Closed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.locked|default:0 }}</span>
+        <span class="stat-label">Locked</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% for period in periods %}
+<tr>
+    <td>{{ forloop.counter }}</td>
+    {% for field in selected_fields %}
+        {% if field == 'name' %}
+            <td><strong>{{ period.name }}</strong></td>
+        {% elif field == 'code' %}
+            <td><span class="chip-code">{{ period.code }}</span></td>
+        {% elif field == 'fiscal_year' %}
+            <td>{{ period.fiscal_year.name }}</td>
+        {% elif field == 'period_number' %}
+            <td class="num">{{ period.period_number }}</td>
+        {% elif field == 'period_type' %}
+            <td>{{ period.get_period_type_display }}</td>
+        {% elif field == 'start_date' %}
+            <td>{{ period.start_date|date:"d M Y" }}</td>
+        {% elif field == 'end_date' %}
+            <td>{{ period.end_date|date:"d M Y" }}</td>
+        {% elif field == 'status' %}
+            <td>
+                <span class="badge s-{{ period.status|lower }}">
+                    {{ period.get_status_display }}
+                </span>
+            </td>
+        {% elif field == 'is_active' %}
+            <td class="ctr">
+                {% if period.is_active %}
+                    <span class="bool-yes">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'is_closed' %}
+            <td class="ctr">
+                {% if period.is_closed %}
+                    <span class="text-warn">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'is_locked' %}
+            <td class="ctr">
+                {% if period.is_locked %}
+                    <span class="text-danger">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'duration_days' %}
+            <td class="num">{{ period.get_duration_days }}</td>
+        {% elif field == 'duration_weeks' %}
+            <td class="num">{{ period.get_duration_weeks }}</td>
+        {% elif field == 'progress_percentage' %}
+            <td class="num">
+                {% with pct=period.get_progress_percentage %}
+                <span class="{% if pct >= 100 %}text-muted{% elif pct >= 75 %}text-warn{% else %}text-success{% endif %}">
+                    {{ pct }}%
+                </span>
+                {% endwith %}
+            </td>
+        {% elif field == 'grace_period_days' %}
+            <td class="num">
+                {% if period.grace_period_days > 0 %}
+                    {{ period.grace_period_days }}
+                {% else %}
+                    <span class="text-muted">—</span>
+                {% endif %}
+            </td>
+        {% else %}
+            <td class="text-muted">—</td>
+        {% endif %}
+    {% endfor %}
+</tr>
+{% empty %}
+<tr>
+    <td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state">
+            <p>No fiscal periods found matching the current filters.</p>
+        </div>
+    </td>
+</tr>
+{% endfor %}
+{% endblock %}

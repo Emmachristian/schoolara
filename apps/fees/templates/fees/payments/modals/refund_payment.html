@@ -1,0 +1,104 @@
+{% load currency_filters %}
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#fff7ed;border-bottom:1px solid #fed7aa;padding:16px 22px;">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#ffedd5;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-reply" style="color:#f97316;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#9a3412;">Refund Payment</h5>
+                    <div style="font-size:11.5px;color:#f97316;margin-top:3px;">{{ payment.payment_number }} &middot; {{ payment.student.get_full_name }}</div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:22px;max-height:65vh;overflow-y:auto;">
+
+            {% if not can_refund %}
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:0 7px 7px 0;margin-bottom:0;">
+                <i class="fa fa-ban" style="color:#dc2626;margin-top:2px;flex-shrink:0;"></i>
+                <div style="font-size:13px;color:#7f1d1d;line-height:1.6;">
+                    <strong>Cannot refund:</strong> {{ reason }}
+                </div>
+            </div>
+            {% else %}
+
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:18px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;color:#64748b;">Original Payment</div>
+                    <div style="font-size:18px;font-weight:700;color:#0f172a;">{{ payment.amount|money }}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:12px;color:#64748b;">Payment Method</div>
+                    <div style="font-size:13px;font-weight:600;color:#0f172a;">{{ payment.payment_method.name }}</div>
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #f97316;border-radius:0 7px 7px 0;margin-bottom:18px;">
+                <i class="fa fa-exclamation-triangle" style="color:#f97316;margin-top:2px;flex-shrink:0;"></i>
+                <div style="font-size:13px;color:#9a3412;line-height:1.6;">
+                    <strong>A refund means money is physically returned to the payer.</strong>
+                    Use Reversal instead if this was a data-entry correction with no money movement.
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                    Refund Method <span style="color:#ef4444;">*</span>
+                </label>
+                <select name="refund_method" class="form-select form-select-sm" required>
+                    <option value="">— Select Method —</option>
+                    {% for value, label in payment.REFUND_METHOD_CHOICES %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                    Refund Reference <span style="color:#ef4444;">*</span>
+                </label>
+                <input type="text" name="refund_reference" class="form-control form-control-sm"
+                       placeholder="Bank ref, mobile money ID, cheque number..." required>
+            </div>
+
+            <div class="mb-3">
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                    Reason <span style="color:#ef4444;">*</span>
+                </label>
+                <textarea name="refund_reason" rows="3" class="form-control form-control-sm"
+                          placeholder="Why is this refund being issued..." required minlength="20"></textarea>
+            </div>
+
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;color:#0f172a;margin-bottom:0;">
+                <input type="checkbox" name="confirm_refund" value="1" required class="form-check-input" style="margin:0;">
+                <span>I confirm that money will be / has been physically returned to the payer</span>
+            </label>
+
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i> Cancel
+            </button>
+            {% if can_refund %}
+            <form method="POST" action="{% url 'fees:payment_refund' payment.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="fa fa-reply me-1"></i> Issue Refund
+                </button>
+            </form>
+            {% else %}
+            <button class="btn btn-warning btn-sm" disabled>
+                <i class="fa fa-ban me-1"></i> Cannot Refund
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>

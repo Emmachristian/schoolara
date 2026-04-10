@@ -1,0 +1,300 @@
+{% load humanize %}
+{% now "Y-m-d" as today %}
+
+<style>
+/* ── Table ── */
+.hol-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.hol-tbl thead th { background:#f8fafc; padding:11px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#64748b; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.hol-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color:#0f172a; }
+.hol-tbl tbody tr:last-child td { border-bottom:none; }
+.hol-tbl tbody tr:hover td { background:#eff6ff !important; }
+
+/* ── Holiday icon ── */
+.hol-icon { width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.hol-icon-public { background:linear-gradient(135deg,#eff6ff,#dbeafe); }
+.hol-icon-break  { background:linear-gradient(135deg,#fdf4ff,#f3e8ff); }
+.hol-icon-school { background:linear-gradient(135deg,#f0fdf4,#dcfce7); }
+.hol-icon-other  { background:linear-gradient(135deg,#f8fafc,#f1f5f9); }
+
+.hol-name { font-weight:600; font-size:13px; color:#0f172a; text-decoration:none; }
+.hol-name:hover { color:#1d4ed8; }
+.hol-desc { font-size:11px; color:#64748b; margin-top:3px; font-style:italic; }
+
+/* ── Type chips ── */
+.type-chip { display:inline-flex; align-items:center; gap:3px; border-radius:4px; font-size:10.5px; font-weight:700; padding:2px 7px; white-space:nowrap; }
+.tc-public { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.tc-break  { background:#fdf4ff; color:#7e22ce; border:1px solid #e9d5ff; }
+.tc-school { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.tc-other  { background:#f8fafc; color:#64748b; border:1px solid #cbd5e1; }
+
+/* ── Break sub-type chips ── */
+.break-chip { display:inline-flex; align-items:center; border-radius:4px; font-size:10px; font-weight:700; padding:1px 6px; margin-top:2px; white-space:nowrap; }
+.bk-mid  { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.bk-term { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.bk-seas { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+
+/* ── Duration ── */
+.dur-num  { font-weight:700; font-size:15px; color:#0f172a; line-height:1; }
+.dur-lbl  { font-size:11px; color:#64748b; }
+.dur-dates{ font-size:11px; color:#64748b; margin-top:3px; }
+
+/* ── Session chips ── */
+.sess-chip { display:inline-flex; align-items:center; gap:3px; border-radius:4px; font-size:10.5px; font-weight:600; padding:2px 7px; white-space:nowrap; }
+.sc-main  { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.sc-prev  { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.sc-next  { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+
+/* ── Status pills ── */
+.stat-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.sp-upcoming { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.sp-ongoing  { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.sp-past     { background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; }
+
+/* ── Empty ── */
+.tbl-empty { text-align:center; padding:60px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:3rem; display:block; margin-bottom:12px; opacity:.4; }
+.tbl-empty p { font-size:13px; margin:0 0 16px; }
+
+/* ── Pagination ── */
+.pag-bar { padding:14px 20px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:12.5px; color:#64748b; }
+
+/* ── Dropdown ── */
+.dropdown-menu { font-size:0.85rem; min-width:185px; border:1px solid #e2e8f0; }
+.dropdown-item  { padding:6px 14px; }
+
+/* ── OOB stat cards ── */
+.stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:18px 22px; display:flex; align-items:center; gap:16px; margin-bottom:20px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:22px; font-weight:600; color:#0f172a; line-height:1; }
+.stat-sub   { font-size:11px; color:#94a3b8; margin-top:2px; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="hol-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Holiday</th>
+            <th class="text-center" style="width:100px;">Duration</th>
+            <th style="width:120px;">Type</th>
+            <th style="width:160px;">Session</th>
+            <th class="text-center" style="width:100px;">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% if holidays_page %}
+        {% for holiday in holidays_page %}
+        <tr>
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ holidays_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Holiday name + icon + description -->
+            <td>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="hol-icon hol-icon-{{ holiday.holiday_type|lower|default:'other' }}">
+                        {% if holiday.holiday_type == 'PUBLIC' %}🏛️
+                        {% elif holiday.holiday_type == 'BREAK' %}🌴
+                        {% elif holiday.holiday_type == 'SCHOOL' %}🎓
+                        {% else %}📅{% endif %}
+                    </div>
+                    <div>
+                        <a href="{% url 'academics:holiday_detail' holiday.pk %}" class="hol-name">
+                            {{ holiday.name }}
+                        </a>
+                        {% if holiday.holiday_type == 'BREAK' and holiday.break_type %}
+                        <div class="mt-1">
+                            <span class="break-chip
+                                {% if 'MID' in holiday.break_type %}bk-mid
+                                {% elif 'TERM' in holiday.break_type %}bk-term
+                                {% else %}bk-seas{% endif %}">
+                                {{ holiday.get_break_type_display }}
+                            </span>
+                        </div>
+                        {% endif %}
+                        {% if holiday.description %}
+                        <div class="hol-desc">{{ holiday.description|truncatechars:55 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+
+            <!-- Duration -->
+            <td class="text-center">
+                {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                    <div class="dur-num">{{ holiday.duration }}</div>
+                    <div class="dur-lbl">day{{ holiday.duration|pluralize }}</div>
+                {% else %}
+                    <div class="dur-num">1</div>
+                    <div class="dur-lbl">day</div>
+                {% endif %}
+                <div class="dur-dates">
+                    {{ holiday.start_date|date:"d M" }}
+                    {% if holiday.end_date and holiday.end_date != holiday.start_date %}
+                    – {{ holiday.end_date|date:"d M Y" }}
+                    {% else %}
+                    {{ holiday.start_date|date:"Y" }}
+                    {% endif %}
+                </div>
+            </td>
+
+            <!-- Type -->
+            <td>
+                {% if holiday.holiday_type == 'PUBLIC' %}
+                    <span class="type-chip tc-public"><i class="fa fa-landmark" style="font-size:9px;"></i> Public</span>
+                {% elif holiday.holiday_type == 'BREAK' %}
+                    <span class="type-chip tc-break"><i class="fa fa-umbrella-beach" style="font-size:9px;"></i> Break</span>
+                {% elif holiday.holiday_type == 'SCHOOL' %}
+                    <span class="type-chip tc-school"><i class="fa fa-school" style="font-size:9px;"></i> School</span>
+                {% else %}
+                    <span class="type-chip tc-other">{{ holiday.get_holiday_type_display }}</span>
+                {% endif %}
+            </td>
+
+            <!-- Session links -->
+            <td>
+                {% if holiday.academic_session %}
+                <div class="mb-1">
+                    <span class="sess-chip sc-main">
+                        <i class="fa fa-graduation-cap" style="font-size:9px;"></i>
+                        {{ holiday.academic_session.year_name }}
+                    </span>
+                    <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                        {{ holiday.academic_session.term_name }}
+                    </div>
+                </div>
+                {% endif %}
+                {% if holiday.holiday_type == 'BREAK' %}
+                    {% if holiday.previous_session %}
+                    <span class="sess-chip sc-prev">
+                        <i class="fa fa-arrow-left" style="font-size:8px;"></i>
+                        After {{ holiday.previous_session.term_name }}
+                    </span>
+                    {% endif %}
+                    {% if holiday.next_session %}
+                    <span class="sess-chip sc-next">
+                        <i class="fa fa-arrow-right" style="font-size:8px;"></i>
+                        Before {{ holiday.next_session.term_name }}
+                    </span>
+                    {% endif %}
+                {% endif %}
+                {% if not holiday.academic_session and not holiday.previous_session and not holiday.next_session %}
+                    <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Status — computed from dates -->
+            <td class="text-center">
+                {% if holiday.start_date|date:"Y-m-d" > today %}
+                    <span class="stat-pill sp-upcoming"><i class="fa fa-clock" style="font-size:8px;"></i> Upcoming</span>
+                {% elif holiday.end_date and holiday.end_date|date:"Y-m-d" < today %}
+                    <span class="stat-pill sp-past"><i class="fa fa-check" style="font-size:8px;"></i> Past</span>
+                {% elif not holiday.end_date and holiday.start_date|date:"Y-m-d" < today %}
+                    <span class="stat-pill sp-past"><i class="fa fa-check" style="font-size:8px;"></i> Past</span>
+                {% else %}
+                    <span class="stat-pill sp-ongoing"><i class="fa fa-play" style="font-size:8px;"></i> Ongoing</span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:holiday_detail' holiday.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:holiday_update' holiday.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'academics:holiday_delete_modal' holiday.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr>
+            <td colspan="7">
+                <div class="tbl-empty">
+                    <i class="pe-7s-date"></i>
+                    <p>{% if request.GET %}No holidays match your current filters.{% else %}No holidays have been added yet.{% endif %}</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'academics:holiday_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>Add Holiday
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'academics:holiday_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+    </tbody>
+</table>
+</div>
+
+{% if holidays_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>Showing <strong>{{ holidays_page.start_index }}</strong>–<strong>{{ holidays_page.end_index }}</strong> of <strong>{{ holidays_page.paginator.count|intcomma }}</strong> holidays</span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if holidays_page.has_previous %}
+            <li class="page-item"><button class="page-link" hx-get="{% url 'academics:holiday_list' %}" hx-target="#holiday-list" hx-include="#searchForm" hx-vals='{"page":"{{ holidays_page.previous_page_number }}"}'>«</button></li>
+            {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+
+            {% for p in holidays_page.paginator.page_range %}
+                {% if p == holidays_page.number %}<li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > holidays_page.number|add:"-3" and p < holidays_page.number|add:"3" %}
+                <li class="page-item"><button class="page-link" hx-get="{% url 'academics:holiday_list' %}" hx-target="#holiday-list" hx-include="#searchForm" hx-vals='{"page":"{{ p }}"}'>{{ p }}</button></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if holidays_page.has_next %}
+            <li class="page-item"><button class="page-link" hx-get="{% url 'academics:holiday_list' %}" hx-target="#holiday-list" hx-include="#searchForm" hx-vals='{"page":"{{ holidays_page.next_page_number }}"}'>»</button></li>
+            {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6"><div class="stat-card"><div class="stat-icon bg-primary"><i class="pe-7s-date"></i></div><div><div class="stat-label">Total Holidays</div><div class="stat-value">{{ stats.total_holidays|default:0 }}</div></div></div></div>
+    <div class="col-xl-3 col-md-6"><div class="stat-card"><div class="stat-icon bg-info"><i class="pe-7s-clock"></i></div><div><div class="stat-label">Upcoming</div><div class="stat-value">{{ stats.upcoming_holidays|default:0 }}</div><div class="stat-sub">Future holidays</div></div></div></div>
+    <div class="col-xl-3 col-md-6"><div class="stat-card"><div class="stat-icon" style="background:#7c3aed;"><i class="fa fa-pause-circle"></i></div><div><div class="stat-label">Term Breaks</div><div class="stat-value">{{ stats.total_breaks|default:0 }}</div><div class="stat-sub">Break periods</div></div></div></div>
+    <div class="col-xl-3 col-md-6"><div class="stat-card"><div class="stat-icon bg-warning"><i class="fa fa-sun"></i></div><div><div class="stat-label">Total Days Off</div><div class="stat-value">{{ stats.total_days|default:0 }}</div><div class="stat-sub">Holiday days</div></div></div></div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el){ var ex=bootstrap.Tooltip.getInstance(el); if(ex)ex.dispose(); new bootstrap.Tooltip(el); });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el){ var ex=bootstrap.Dropdown.getInstance(el); if(ex)ex.dispose(); new bootstrap.Dropdown(el,{popperConfig:function(d){return Object.assign({},d,{strategy:'fixed'});}}); });
+})();
+</script>

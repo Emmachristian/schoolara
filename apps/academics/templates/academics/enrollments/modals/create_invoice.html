@@ -1,38 +1,369 @@
 {# academics/templates/academics/enrollments/modals/create_invoice.html #}
-<div class="modal-dialog">
+{% load currency_filters %}
+
+<style>
+.inv-prev-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+.inv-prev-tbl thead th {
+    background:#f8fafc; padding:7px 10px;
+    font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.5px; color:#64748b;
+    border-bottom:2px solid #e2e8f0; white-space:nowrap;
+}
+.inv-prev-tbl tbody td { padding:8px 10px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.inv-prev-tbl tbody tr:last-child td { border-bottom:none; }
+.inv-prev-tbl tfoot td { padding:9px 10px; }
+
+.schol-val { color:#15803d; font-weight:600; font-variant-numeric:tabular-nums; }
+.disc-val  { color:#1d4ed8; font-weight:600; font-variant-numeric:tabular-nums; }
+.tax-val   { color:#b45309; font-weight:600; font-variant-numeric:tabular-nums; }
+.neg       { font-variant-numeric:tabular-nums; }
+
+.sum-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:13px; }
+.sum-row:last-child { border-bottom:none; }
+.sum-lbl  { color:#64748b; }
+.sum-lbl small { display:block; font-size:10.5px; color:#94a3b8; font-family:'Courier New',monospace; margin-top:1px; }
+.sum-amt  { font-weight:700; font-variant-numeric:tabular-nums; }
+.sum-deduct { color:#15803d; }
+.sum-disc   { color:#1d4ed8; }
+.sum-tax    { color:#b45309; }
+
+.mand-yes { display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:20px;font-size:10px;font-weight:700;background:#eff6ff;color:#1d4ed8; }
+.mand-opt { display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:20px;font-size:10px;font-weight:700;background:#f1f5f9;color:#94a3b8; }
+
+.void-banner {
+    background:#fef2f2; border:1px solid #fecaca; border-radius:8px;
+    padding:12px 14px; display:flex; align-items:flex-start; gap:10px;
+    font-size:12.5px; color:#b91c1c; margin-bottom:14px;
+}
+.info-note {
+    background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;
+    padding:10px 14px; display:flex; align-items:flex-start; gap:8px;
+    font-size:12px; color:#1e40af; margin-bottom:16px;
+}
+</style>
+
+<div class="modal-dialog modal-lg">
     <div class="modal-content">
-        <div class="modal-header bg-success text-white">
-            <h5 class="modal-title"><i class="fa fa-file-invoice me-2"></i>Create Invoice</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+
+        {# ── Header ── #}
+        <div class="modal-header" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#0f172a;">
+                    <i class="fa fa-file-invoice-dollar me-2" style="color:#64748b;"></i>
+                    Create Invoice
+                </h5>
+                <div style="font-size:11.5px;color:#64748b;margin-top:3px;">
+                    {{ enrollment.student.get_full_name }} &middot; {{ enrollment.class_instance.get_display_name }}
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body text-center py-4">
-            {% if has_invoice %}
-                <div class="mb-3"><i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i></div>
-                <h4 class="mb-3">Invoice Already Exists</h4>
-                <div class="alert alert-info">
-                    <strong>{{ enrollment.student.get_full_name }}</strong><br>
-                    <small>Invoice: {{ enrollment.academic_invoice.invoice_number }}</small>
-                </div>
+
+        <div class="modal-body" style="padding:22px;">
+
+            {% if already_exists %}
+
+            {# ══════════════════════════════════════════════ #}
+            {# INVOICE ALREADY EXISTS                        #}
+            {# ══════════════════════════════════════════════ #}
+            <div style="text-align:center;padding:16px 0;">
+                <i class="fa fa-check-circle" style="font-size:2.8rem;color:#15803d;display:block;margin-bottom:12px;"></i>
+                <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#0f172a;">Invoice already exists</p>
+                <p style="margin:0;font-size:13px;color:#64748b;">
+                    This enrollment already has invoice
+                    <a href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}"
+                       style="font-weight:600;color:#1d4ed8;">
+                        {{ enrollment.academic_invoice.invoice_number }}
+                    </a>.
+                </p>
+            </div>
+
             {% else %}
-                <div class="mb-3"><i class="fa fa-file-invoice text-success" style="font-size: 4rem;"></i></div>
-                <h4 class="mb-3">Create Invoice?</h4>
-                <div class="alert alert-info">
-                    <strong>{{ enrollment.student.get_full_name }}</strong><br>
-                    <small>Class: {{ enrollment.class_instance }}</small>
+
+            {# ══════════════════════════════════════════════ #}
+            {# ENROLLMENT SUMMARY                            #}
+            {# ══════════════════════════════════════════════ #}
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                <i class="fa fa-user me-1"></i>Enrollment
+            </div>
+
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+                <div class="row g-2">
+                    <div class="col-sm-6">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:2px;">Student</div>
+                        <div style="font-size:13px;font-weight:600;color:#0f172a;">{{ enrollment.student.get_full_name }}</div>
+                        <div style="font-family:'Courier New',monospace;font-size:11px;color:#64748b;">{{ enrollment.student.admission_number }}</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:2px;">Class</div>
+                        <div style="font-size:13px;font-weight:600;color:#0f172a;">{{ enrollment.class_instance.get_display_name }}</div>
+                        <div style="font-size:11.5px;color:#64748b;">{{ enrollment.academic_session.name }}</div>
+                    </div>
+                    {% if enrollment.roll_number %}
+                    <div class="col-sm-6" style="margin-top:4px;">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:2px;">Roll No.</div>
+                        <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:#1d4ed8;">{{ enrollment.roll_number }}</div>
+                    </div>
+                    {% endif %}
                 </div>
-                <div class="alert alert-success">This will create a fee invoice for this enrollment.</div>
+            </div>
+
+            {# ══════════════════════════════════════════════ #}
+            {# PREVIEW                                       #}
+            {# ══════════════════════════════════════════════ #}
+
+            {% if preview %}
+
+                {% if preview.error == 'no_structure' %}
+
+                {# ── No fee structure ── #}
+                <div style="text-align:center;padding:16px 0;">
+                    <i class="fa fa-exclamation-triangle" style="font-size:2.4rem;color:#b45309;display:block;margin-bottom:10px;"></i>
+                    <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#0f172a;">No fee structure found</p>
+                    <p style="margin:0 0 14px;font-size:13px;color:#64748b;">
+                        No active fee structure is configured for
+                        <strong>{{ enrollment.class_instance.academic_level.name }}</strong>
+                        in <strong>{{ enrollment.academic_session.name }}</strong>.
+                    </p>
+                    <a href="{% url 'fees:structure_list' %}" class="btn btn-sm btn-outline-warning" target="_blank">
+                        <i class="fa fa-cog me-1"></i>Manage Fee Structures
+                    </a>
+                </div>
+
+                {% else %}
+
+                {# ── VOID warning ── #}
+                {% if preview.will_be_void %}
+                <div class="void-banner">
+                    <i class="fa fa-ban" style="font-size:1.2rem;margin-top:1px;flex-shrink:0;"></i>
+                    <div>
+                        <strong>Invoice will be marked VOID</strong> — scholarship and discount
+                        deductions cover the full invoice amount.  No payment will be required
+                        from this student.
+                    </div>
+                </div>
+                {% endif %}
+
+                {# ── Section header ── #}
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                    <i class="fa fa-calculator me-1"></i>Fee Breakdown &mdash; {{ preview.structure.name }}
+                </div>
+
+                {# ══════════════════════════════════════════════ #}
+                {# LINE ITEMS TABLE                              #}
+                {# ══════════════════════════════════════════════ #}
+                <div style="overflow-x:auto;margin-bottom:20px;">
+                    <table class="inv-prev-tbl">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Fee Item</th>
+                                <th style="text-align:center;">Type</th>
+                                <th style="text-align:right;">Amount</th>
+                                {% if preview.any_scholarship %}
+                                <th style="text-align:right;color:#15803d;">Scholarship</th>
+                                {% endif %}
+                                {% if preview.any_discount %}
+                                <th style="text-align:right;color:#1d4ed8;">Discount</th>
+                                {% endif %}
+                                {% if preview.tax_amount %}
+                                <th style="text-align:right;color:#b45309;">Tax</th>
+                                {% endif %}
+                                {% if preview.any_scholarship or preview.any_discount %}
+                                <th style="text-align:right;">Final</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in preview.items %}
+                            <tr>
+                                {# Item name #}
+                                <td style="color:#0f172a;">
+                                    <span style="font-weight:600;">{{ item.fee_category.name }}</span>
+                                    {% if item.fee_category.display_group %}
+                                    <div style="font-size:10.5px;color:#94a3b8;margin-top:1px;">{{ item.fee_category.display_group.name }}</div>
+                                    {% endif %}
+                                </td>
+
+                                {# Mandatory badge #}
+                                <td style="text-align:center;">
+                                    {% if item.fee_category.is_mandatory %}
+                                        <span class="mand-yes"><i class="fa fa-star" style="font-size:6px;"></i>Required</span>
+                                    {% else %}
+                                        <span class="mand-opt">Optional</span>
+                                    {% endif %}
+                                </td>
+
+                                {# Original amount #}
+                                <td style="text-align:right;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">
+                                    {{ item.amount|amount }}
+                                </td>
+
+                                {# Per-item scholarship deduction #}
+                                {% if preview.any_scholarship %}
+                                <td style="text-align:right;">
+                                    {% if item.scholarship_discount_amount %}
+                                        <span class="schol-val">&minus; {{ item.scholarship_discount_amount|amount }}</span>
+                                    {% else %}
+                                        <span style="color:#e2e8f0;">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+
+                                {# Per-item discount deduction #}
+                                {% if preview.any_discount %}
+                                <td style="text-align:right;">
+                                    {% if item.discount_amount %}
+                                        <span class="disc-val">&minus; {{ item.discount_amount|amount }}</span>
+                                    {% else %}
+                                        <span style="color:#e2e8f0;">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+
+                                {# Per-item tax #}
+                                {% if preview.tax_amount %}
+                                <td style="text-align:right;">
+                                    {% if item.tax_amount %}
+                                        <span class="tax-val">+ {{ item.tax_amount|amount }}</span>
+                                    {% else %}
+                                        <span style="color:#e2e8f0;">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+
+                                {# Per-item final #}
+                                {% if preview.any_scholarship or preview.any_discount %}
+                                <td style="text-align:right;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;">
+                                    {{ item.final_amount|amount }}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {# ══════════════════════════════════════════════ #}
+                {# SUMMARY                                       #}
+                {# ══════════════════════════════════════════════ #}
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+
+                    {# Subtotal #}
+                    <div class="sum-row">
+                        <span class="sum-lbl">Subtotal</span>
+                        <span class="sum-amt" style="color:#0f172a;">{{ preview.subtotal_amount|amount }}</span>
+                    </div>
+
+                    {# Scholarship deduction #}
+                    {% if preview.has_scholarships %}
+                    <div class="sum-row">
+                        <span class="sum-lbl">
+                            <i class="fa fa-graduation-cap me-1" style="font-size:10px;color:#15803d;"></i>
+                            Scholarship discount
+                        </span>
+                        <span class="sum-amt sum-deduct">&minus; {{ preview.scholarship_amount|amount }}</span>
+                    </div>
+                    {% endif %}
+
+                    {# DiscountEngine deductions — one row per policy #}
+                    {% if preview.has_discounts %}
+                        {% for d in preview.discount_summary %}
+                        <div class="sum-row">
+                            <span class="sum-lbl">
+                                <i class="fa fa-tag me-1" style="font-size:10px;color:#1d4ed8;"></i>
+                                {{ d.name }}
+                                <small>{{ d.code }}</small>
+                            </span>
+                            <span class="sum-amt sum-disc">&minus; {{ d.total|amount }}</span>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {# Tax #}
+                    {% if preview.tax_amount %}
+                    <div class="sum-row">
+                        <span class="sum-lbl">
+                            <i class="fa fa-percent me-1" style="font-size:10px;color:#b45309;"></i>Tax
+                        </span>
+                        <span class="sum-amt sum-tax">+ {{ preview.tax_amount|amount }}</span>
+                    </div>
+                    {% endif %}
+
+                    {# NET TOTAL #}
+                    <div style="margin-top:10px;padding-top:10px;border-top:2px solid {% if preview.will_be_void %}#fecaca{% else %}#bbf7d0{% endif %};display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:13px;font-weight:700;color:{% if preview.will_be_void %}#b91c1c{% else %}#15803d{% endif %};">
+                            {% if preview.will_be_void %}
+                                <i class="fa fa-ban me-1"></i>Invoice total (VOID)
+                            {% else %}
+                                <i class="fa fa-check-circle me-1"></i>Invoice total
+                            {% endif %}
+                        </span>
+                        <span style="font-size:20px;font-weight:900;color:{% if preview.will_be_void %}#b91c1c{% else %}#15803d{% endif %};font-variant-numeric:tabular-nums;letter-spacing:-.5px;">
+                            {{ preview.net_total|amount }}
+                        </span>
+                    </div>
+
+                </div>
+
+                {# ── Info note ── #}
+                <div class="info-note">
+                    <i class="fa fa-info-circle" style="margin-top:1px;flex-shrink:0;"></i>
+                    <span>
+                        Figures are calculated from your active fee structure, scholarships,
+                        and discount policies. The invoice will be created as <strong>DRAFT</strong>
+                        and can be reviewed before sending.
+                    </span>
+                </div>
+
+                {% endif %}{# end error check #}
+
+            {% else %}
+
+            {# ── No preview available (generator error) ── #}
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                <i class="fa fa-list-ul me-1"></i>What will happen
+            </div>
+            <ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#0f172a;line-height:2.2;">
+                <li>An invoice will be generated using the active fee structure for this class and session.</li>
+                <li>Scholarships and discounts will be applied automatically if configured.</li>
+                <li>The invoice will be created as <strong>DRAFT</strong>.</li>
+            </ul>
+
+            {% endif %}{# end preview check #}
+
+            {% endif %}{# end already_exists #}
+
+        </div>{# end modal-body #}
+
+        {# ── Footer ── #}
+        <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+            {% if already_exists %}
+            <a href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}"
+               class="btn btn-outline-success btn-sm">
+                <i class="fa fa-file-invoice me-1"></i>View Invoice
+            </a>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Close
+            </button>
+            {% elif preview and preview.error == 'no_structure' %}
+            <span></span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Close
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <i class="fa fa-times me-1"></i>Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-success btn-sm"
+                    hx-post="{% url 'academics:enrollment_create_invoice' enrollment.pk %}"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-disabled-elt="this">
+                <i class="fa fa-file-invoice-dollar me-1"></i>
+                {% if preview and preview.will_be_void %}Generate (VOID){% else %}Generate Invoice{% endif %}
+            </button>
             {% endif %}
         </div>
-        {% if not has_invoice %}
-            <form hx-post="{% url 'academics:enrollment_create_invoice' enrollment.pk %}" hx-target="#enrollment-results" hx-swap="innerHTML">
-                {% csrf_token %}
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success"><i class="fa fa-plus me-1"></i>Create Invoice</button>
-                </div>
-            </form>
-        {% else %}
-            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
-        {% endif %}
+
     </div>
 </div>

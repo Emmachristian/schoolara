@@ -34,49 +34,49 @@ class Student(BaseModel):
     )
     
     ENROLLMENT_STATUS_CHOICES = (
-        ('ACTIVE', 'Active'),
-        ('SUSPENDED', 'Suspended'),
-        ('DISMISSED', 'Dismissed'),
-        ('GRADUATED', 'Graduated'),
-        ('TRANSFERRED', 'Transferred'),
-        ('WITHDRAWN', 'Withdrawn'),
-        ('DECEASED', 'Deceased'),
-        ('DEFERRED', 'Deferred'),
+        ('ACTIVE',     'Active'),
+        ('SUSPENDED',  'Suspended'),
+        ('DISMISSED',  'Dismissed'),
+        ('GRADUATED',  'Graduated'),
+        ('TRANSFERRED','Transferred'),
+        ('WITHDRAWN',  'Withdrawn'),
+        ('DECEASED',   'Deceased'),
+        ('DEFERRED',   'Deferred'),
     )
     
     RELIGIOUS_AFFILIATION_CHOICES = (
-        ('CATHOLIC', 'Catholic'),
-        ('PROTESTANT', 'Protestant'),
-        ('ANGLICAN', 'Anglican'),
-        ('BAPTIST', 'Baptist'),
+        ('CATHOLIC',    'Catholic'),
+        ('PROTESTANT',  'Protestant'),
+        ('ANGLICAN',    'Anglican'),
+        ('BAPTIST',     'Baptist'),
         ('PENTECOSTAL', 'Pentecostal'),
         ('EVANGELICAL', 'Evangelical'),
-        ('ADVENTIST', 'Adventist'),
-        ('ISLAM', 'Islam'),
-        ('HINDU', 'Hindu'),
-        ('BUDDHIST', 'Buddhist'),
-        ('JEWISH', 'Jewish'),
+        ('ADVENTIST',   'Adventist'),
+        ('ISLAM',       'Islam'),
+        ('HINDU',       'Hindu'),
+        ('BUDDHIST',    'Buddhist'),
+        ('JEWISH',      'Jewish'),
         ('TRADITIONAL', 'Traditional'),
-        ('NONE', 'No Religion'),
-        ('OTHER', 'Other'),
+        ('NONE',        'No Religion'),
+        ('OTHER',       'Other'),
     )
     
     HEALTH_CONDITION_CHOICES = (
-        ('EXCELLENT', 'Excellent'),
-        ('GOOD', 'Good'),
-        ('FAIR', 'Fair'),
-        ('POOR', 'Poor'),
-        ('CHRONIC', 'Chronic Condition'),
-        ('RECOVERING', 'Recovering'),
-        ('SPECIAL_NEEDS', 'Special Needs'),
-        ('OTHER', 'Other'),
+        ('EXCELLENT',    'Excellent'),
+        ('GOOD',         'Good'),
+        ('FAIR',         'Fair'),
+        ('POOR',         'Poor'),
+        ('CHRONIC',      'Chronic Condition'),
+        ('RECOVERING',   'Recovering'),
+        ('SPECIAL_NEEDS','Special Needs'),
+        ('OTHER',        'Other'),
     )
     
     BLOOD_TYPE_CHOICES = (
-        ('A+', 'A+'), ('A-', 'A-'),
-        ('B+', 'B+'), ('B-', 'B-'),
+        ('A+',  'A+'),  ('A-',  'A-'),
+        ('B+',  'B+'),  ('B-',  'B-'),
         ('AB+', 'AB+'), ('AB-', 'AB-'),
-        ('O+', 'O+'), ('O-', 'O-'),
+        ('O+',  'O+'),  ('O-',  'O-'),
         ('UNKNOWN', 'Unknown'),
     )
     
@@ -108,10 +108,9 @@ class Student(BaseModel):
         blank=True
     )
     
-    # Personal information
-    first_name = models.CharField("First Name", max_length=50)
+    first_name  = models.CharField("First Name",  max_length=50)
     middle_name = models.CharField("Middle Name", max_length=50, blank=True)
-    last_name = models.CharField("Last Name", max_length=50)
+    last_name   = models.CharField("Last Name",   max_length=50)
     date_of_birth = models.DateField("Date of Birth")
     gender = models.CharField("Gender", max_length=1, choices=GENDER_CHOICES)
     
@@ -123,8 +122,7 @@ class Student(BaseModel):
         'academics.AcademicLevel',
         verbose_name="Current Academic Level",
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name='current_students',
         help_text="Current grade/class level"
     )
@@ -133,8 +131,7 @@ class Student(BaseModel):
         'academics.AcademicLevel',
         verbose_name="Admission Academic Level",
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name='admitted_students',
         help_text="Grade/class level at time of admission"
     )
@@ -143,9 +140,9 @@ class Student(BaseModel):
     # DEMOGRAPHICS & CULTURAL INFORMATION
     # -------------------------------------------------------------------------
     
-    nationality = CountryField("Nationality", blank=True, null=True)
-    ethnicity = models.CharField("Ethnicity", max_length=50, blank=True)
-    birth_place = models.CharField("Place of Birth", max_length=100, blank=True)
+    nationality  = CountryField("Nationality",      blank=True, null=True)
+    ethnicity    = models.CharField("Ethnicity",    max_length=50,  blank=True)
+    birth_place  = models.CharField("Place of Birth", max_length=100, blank=True)
     birth_country = CountryField("Country of Birth", blank=True, null=True)
     religious_affiliation = models.CharField(
         "Religious Affiliation",
@@ -158,13 +155,13 @@ class Student(BaseModel):
     # CONTACT & ADDRESS INFORMATION
     # -------------------------------------------------------------------------
     
-    personal_email = models.EmailField("Personal Email", blank=True)
-    phone_number = models.CharField("Phone Number", max_length=20, blank=True)
-    home_address = models.TextField("Home Address")
-    mailing_address = models.TextField("Mailing Address", blank=True)
-    district = models.CharField("District", max_length=50, blank=True)
-    region = models.CharField("Region/Province", max_length=50, blank=True)
-    country_of_residence = CountryField("Country of Residence", blank=True, null=True)
+    personal_email      = models.EmailField("Personal Email",    blank=True)
+    phone_number        = models.CharField("Phone Number",       max_length=20,  blank=True)
+    home_address        = models.TextField("Home Address")
+    mailing_address     = models.TextField("Mailing Address",    blank=True)
+    district            = models.CharField("District",           max_length=50,  blank=True)
+    region              = models.CharField("Region/Province",    max_length=50,  blank=True)
+    country_of_residence = CountryField("Country of Residence",  blank=True, null=True)
     
     # -------------------------------------------------------------------------
     # HEALTH & MEDICAL INFORMATION
@@ -182,45 +179,34 @@ class Student(BaseModel):
         choices=BLOOD_TYPE_CHOICES,
         default='UNKNOWN'
     )
-    medical_conditions = models.TextField("Medical Conditions", blank=True)
-    allergies = models.TextField("Allergies", blank=True)
-    medications = models.TextField("Current Medications", blank=True)
-    special_medical_needs = models.TextField("Special Medical Needs", blank=True)
-    emergency_medical_contact = models.CharField(
-        "Emergency Medical Contact",
-        max_length=20,
-        blank=True
-    )
-    preferred_hospital = models.CharField("Preferred Hospital", max_length=100, blank=True)
-    medical_insurance = models.CharField("Medical Insurance", max_length=100, blank=True)
-    insurance_policy_number = models.CharField(
-        "Insurance Policy Number",
-        max_length=50,
-        blank=True
-    )
+    medical_conditions       = models.TextField("Medical Conditions",     blank=True)
+    allergies                = models.TextField("Allergies",              blank=True)
+    medications              = models.TextField("Current Medications",    blank=True)
+    special_medical_needs    = models.TextField("Special Medical Needs",  blank=True)
+    emergency_medical_contact = models.CharField("Emergency Medical Contact", max_length=20, blank=True)
+    preferred_hospital       = models.CharField("Preferred Hospital",     max_length=100, blank=True)
+    medical_insurance        = models.CharField("Medical Insurance",      max_length=100, blank=True)
+    insurance_policy_number  = models.CharField("Insurance Policy Number",max_length=50,  blank=True)
     
     # -------------------------------------------------------------------------
     # SPECIAL NEEDS & ACCOMMODATIONS
     # -------------------------------------------------------------------------
     
-    has_special_needs = models.BooleanField("Has Special Needs", default=False)
-    special_needs_description = models.TextField("Special Needs Description", blank=True)
-    requires_special_diet = models.BooleanField("Requires Special Diet", default=False)
-    special_diet_details = models.TextField("Special Diet Details", blank=True)
-    learning_disabilities = models.TextField("Learning Disabilities", blank=True)
-    learning_accommodations = models.TextField("Learning Accommodations", blank=True)
+    has_special_needs         = models.BooleanField("Has Special Needs",         default=False)
+    special_needs_description = models.TextField("Special Needs Description",    blank=True)
+    requires_special_diet     = models.BooleanField("Requires Special Diet",     default=False)
+    special_diet_details      = models.TextField("Special Diet Details",         blank=True)
+    learning_disabilities     = models.TextField("Learning Disabilities",        blank=True)
+    learning_accommodations   = models.TextField("Learning Accommodations",      blank=True)
     
     # -------------------------------------------------------------------------
     # TRANSPORT INFORMATION
     # -------------------------------------------------------------------------
     
-    transportation_required = models.BooleanField(
-        "Transportation Required",
-        default=False
-    )
+    transportation_required = models.BooleanField("Transportation Required", default=False)
     transport_route = models.CharField("Transport Route", max_length=50, blank=True)
-    pickup_point = models.CharField("Pickup Point", max_length=50, blank=True)
-    pickup_time = models.TimeField("Pickup Time", null=True, blank=True)
+    pickup_point    = models.CharField("Pickup Point",    max_length=50, blank=True)
+    pickup_time     = models.TimeField("Pickup Time", null=True, blank=True)
     
     # -------------------------------------------------------------------------
     # PREVIOUS EDUCATION
@@ -232,20 +218,14 @@ class Student(BaseModel):
         'academics.AcademicLevel',
         verbose_name="Previous Academic Level",
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name='previous_students'
     )
-    transfer_reason = models.TextField("Reason for Transfer", blank=True)
-    transfer_certificate_number = models.CharField(
-        "Transfer Certificate Number",
-        max_length=50,
-        blank=True
-    )
+    transfer_reason              = models.TextField("Reason for Transfer",         blank=True)
+    transfer_certificate_number  = models.CharField("Transfer Certificate Number", max_length=50, blank=True)
     previous_school_completion_date = models.DateField(
         "Previous School Completion Date",
-        null=True,
-        blank=True
+        null=True, blank=True
     )
     
     # -------------------------------------------------------------------------
@@ -255,8 +235,7 @@ class Student(BaseModel):
     photo = models.ImageField(
         'Photo',
         upload_to='students/photos/%Y/%m/',
-        blank=True,
-        null=True
+        blank=True, null=True
     )
     
     # -------------------------------------------------------------------------
@@ -314,12 +293,10 @@ class Student(BaseModel):
     
     @property
     def full_name(self):
-        """Get student's full name as property"""
         return self.get_full_name()
     
     @property
     def age(self):
-        """Calculate student's age"""
         return self.get_age()
     
     # -------------------------------------------------------------------------
@@ -336,11 +313,10 @@ class Student(BaseModel):
         """Calculate student's age in years"""
         from datetime import date
         today = date.today()
-        age = (
+        return (
             today.year - self.date_of_birth.year
             - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
         )
-        return age
     
     def get_primary_guardian(self):
         """Get the primary guardian for this student"""
@@ -384,26 +360,66 @@ class Student(BaseModel):
         )
     
     def get_current_enrollment(self, academic_session=None):
-        """Get student's enrollment, optionally filtered by session"""
+        """Get student's current class enrollment, optionally filtered by session"""
         from academics.models import StudentClassEnrollment
-        
         queryset = StudentClassEnrollment.objects.filter(
             student=self,
             is_active=True,
             completion_status='ONGOING'
         )
-        
         if academic_session:
             queryset = queryset.filter(academic_session=academic_session)
-        
         return queryset.order_by('-enrollment_date').first()
-    
+
+    def get_sibling_rank(self):
+        """
+        1-based position of this student among their verified enrolled siblings,
+        sorted by id for a stable, deterministic rank.
+
+        Used by DiscountEngine._get_sibling_rank() for sibling-discount tier
+        lookups — logic lives here so the engine stays thin.
+
+        Returns 1 if no verified siblings are found or on any error.
+        """
+        try:
+            sibling_ids = list(
+                SiblingRelationship.objects.filter(
+                    from_student=self,
+                    is_verified=True,
+                ).values_list('to_student_id', flat=True)
+            )
+            # Include the student themselves and sort for a stable rank
+            all_ids = sorted(sibling_ids + [self.id])
+            return all_ids.index(self.id) + 1
+        except Exception:
+            return 1
+
+    def get_years_enrolled(self):
+        """
+        Number of full years since first class enrollment.
+
+        Used by DiscountEngine._get_years_enrolled() for loyalty-discount tier
+        lookups — logic lives here so the engine stays thin.
+
+        Returns 0 if no enrollment history is found or on any error.
+        Uses get_school_today() so the calculation respects the school's
+        configured operational timezone.
+        """
+        try:
+            from core.utils import get_school_today
+            first = self.class_enrollments.order_by('created_at').first()
+            if not first:
+                return 0
+            return (get_school_today() - first.created_at.date()).days // 365
+        except Exception:
+            return 0
+
     # -------------------------------------------------------------------------
     # SAVE METHOD
     # -------------------------------------------------------------------------
     
     def save(self, *args, **kwargs):
-        """Override save to auto-generate admission number"""        
+        """Override save to auto-generate admission number"""
         super().save(*args, **kwargs)
     
     # -------------------------------------------------------------------------
@@ -415,12 +431,10 @@ class Student(BaseModel):
         super().clean()
         errors = {}
         
-        # Validate age (students should typically be between 3 and 25)
         age = self.get_age()
         if age < 3 or age > 25:
             errors['date_of_birth'] = f"Student age ({age}) seems unusual. Please verify."
         
-        # Validate dates
         if self.graduation_date and self.admission_date:
             if self.graduation_date < self.admission_date:
                 errors['graduation_date'] = "Graduation date cannot be before admission date"

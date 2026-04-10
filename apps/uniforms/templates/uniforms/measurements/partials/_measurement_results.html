@@ -1,366 +1,245 @@
-<!-- uniforms/templates/uniforms/measurements/_measurement_results.html -->
+{# uniforms/templates/uniforms/measurements/_measurement_results.html #}
+{% load currency_filters %}
 
-{% load static %}
+<style>
+.meas-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.meas-tbl thead th { background:#f8fafc; padding:10px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.meas-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.meas-tbl tbody tr:last-child td { border-bottom:none; }
+.meas-tbl tbody tr:hover td { background:#fafbff; }
 
-<!-- Measurements Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+.stu-name { font-weight:600; font-size:13px; color:#0f172a; text-decoration:none; display:block; }
+.stu-name:hover { color:#1d4ed8; }
+.stu-adm  { font-family:'Courier New',monospace; font-size:11px; color:#94a3b8; margin-top:1px; }
+
+.mtype-name { font-weight:600; font-size:13px; color:#0f172a; }
+.mtype-cat  { font-size:11px; color:#94a3b8; margin-top:1px; }
+
+.value-big  { font-size:18px; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; }
+.value-unit { font-size:11.5px; color:#94a3b8; margin-left:3px; }
+
+.ctx-chip { display:inline-block; font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:4px; background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; }
+
+.verified-pill { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.vp-yes      { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.vp-no       { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.current-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#1d4ed8; margin-right:4px; }
+
+.pag-bar { padding:12px 16px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:12.5px; color:#64748b; }
+.tbl-empty { text-align:center; padding:56px 20px; color:#94a3b8; }
+.tbl-empty i { font-size:2.8rem; display:block; margin-bottom:12px; opacity:.35; }
+.tbl-empty p { font-size:13px; margin:0 0 16px; }
+
+/* OOB stat cards */
+.stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:18px 22px; display:flex; align-items:center; gap:16px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:22px; font-weight:700; color:#0f172a; line-height:1; }
+
+.dropdown-menu  { font-size:.85rem; min-width:190px; border:1px solid #e2e8f0; border-radius:8px; }
+.dropdown-item  { padding:6px 14px; }
+.dropdown-header{ font-size:.7rem; padding:6px 14px 2px; }
+</style>
+
+{% if measurements_page %}
+<div style="overflow-x:auto;">
+    <table class="meas-tbl">
         <thead>
             <tr>
-                <th width="50">#</th>
+                <th style="width:38px;">#</th>
                 <th>Student</th>
-                <th>Class</th>
-                <th>Measurement Type</th>
-                <th>Value</th>
-                <th>Date Taken</th>
+                <th>Type</th>
+                <th class="text-center">Value</th>
                 <th>Context</th>
-                <th>Status</th>
-                <th width="120">Actions</th>
+                <th class="text-center">Date</th>
+                <th class="text-center">Verified</th>
+                <th class="text-center">Current</th>
+                <th class="text-center" style="width:60px;">Actions</th>
             </tr>
         </thead>
         <tbody>
-            {% if measurements_page %}
-                {% for measurement in measurements_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:measurements_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Student Info -->
-                    <td>
-                        <div>
-                            <h6 class="mb-0">
-                                <a href="{% url 'students:student_detail' measurement.student.pk %}" 
-                                   class="text-decoration-none">
-                                    {{ measurement.student.get_full_name }}
+            {% for m in measurements_page %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ measurements_page.start_index|add:forloop.counter0 }}</td>
+
+                <td>
+                    <a href="{% url 'students:student_profile' m.student.pk %}" class="stu-name">
+                        {{ m.student.get_full_name }}
+                    </a>
+                    <div class="stu-adm">{{ m.student.admission_number }}</div>
+                </td>
+
+                <td>
+                    <div class="mtype-name">{{ m.measurement_type.name }}</div>
+                    <div class="mtype-cat">{{ m.measurement_type.get_category_display }}</div>
+                </td>
+
+                <td class="text-center">
+                    <span class="value-big">{{ m.value|floatformat:1 }}</span>
+                    {% if m.measurement_type.unit %}
+                    <span class="value-unit">{{ m.measurement_type.unit.abbreviation }}</span>
+                    {% endif %}
+                </td>
+
+                <td>
+                    <span class="ctx-chip">{{ m.get_measurement_context_display }}</span>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">{{ m.get_measurement_method_display }}</div>
+                </td>
+
+                <td class="text-center">
+                    <span style="font-size:12.5px;color:#64748b;">{{ m.measurement_date|date:"d M Y" }}</span>
+                    {% if m.academic_session %}
+                    <div style="font-size:11px;color:#94a3b8;">{{ m.academic_session.name }}</div>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if m.is_verified %}
+                        <span class="verified-pill vp-yes">
+                            <i class="fa fa-check-circle" style="font-size:9px;"></i>Verified
+                        </span>
+                    {% else %}
+                        <span class="verified-pill vp-no">
+                            <i class="fa fa-clock" style="font-size:9px;"></i>Pending
+                        </span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if m.is_current %}
+                        <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#1d4ed8;">
+                            <span class="current-dot"></span>Current
+                        </span>
+                    {% else %}
+                        <span style="font-size:11px;color:#94a3b8;">Historical</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:student_measurement_detail' m.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
                                 </a>
-                            </h6>
-                            <small class="text-muted">
-                                ID: {{ measurement.student.student_id }}
-                            </small>
-                        </div>
-                    </td>
-                    
-                    <!-- Class -->
-                    <td>
-                        {% if measurement.student.current_academic_level %}
-                            <span class="badge bg-primary">
-                                {{ measurement.student.current_academic_level.name }}
-                            </span>
-                        {% else %}
-                            <span class="text-muted">No class</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Measurement Type -->
-                    <td>
-                        <div>
-                            <strong>{{ measurement.measurement_type.name }}</strong>
-                            {% if measurement.measurement_type.description %}
-                                <br><small class="text-muted">{{ measurement.measurement_type.description|truncatewords:5 }}</small>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
-                    <!-- Value -->
-                    <td>
-                        <div class="text-center">
-                            <strong class="text-primary" style="font-size: 1.1rem;">
-                                {{ measurement.measurement_value|floatformat:1 }}
-                            </strong>
-                            <span class="text-muted">
-                                {{ measurement.measurement_type.unit.abbreviation }}
-                            </span>
-                        </div>
-                    </td>
-                    
-                    <!-- Date Taken -->
-                    <td>
-                        <div class="text-center">
-                            <strong>{{ measurement.measurement_date|date:"d M Y" }}</strong>
-                            <br><small class="text-muted">{{ measurement.measurement_date|date:"l" }}</small>
-                        </div>
-                    </td>
-                    
-                    <!-- Context -->
-                    <td>
-                        {% if measurement.measurement_context == 'ADMISSION' %}
-                            <span class="badge bg-primary">
-                                <i class="fa fa-user-plus me-1"></i>Admission
-                            </span>
-                        {% elif measurement.measurement_context == 'ANNUAL_CHECKUP' %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-calendar-check me-1"></i>Annual
-                            </span>
-                        {% elif measurement.measurement_context == 'GROWTH_MONITORING' %}
-                            <span class="badge bg-info">
-                                <i class="fa fa-chart-line me-1"></i>Growth
-                            </span>
-                        {% elif measurement.measurement_context == 'UNIFORM_ORDER' %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-tshirt me-1"></i>Uniform
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary">
-                                <i class="fa fa-clipboard me-1"></i>Other
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Status -->
-                    <td>
-                        <div>
-                            {% if measurement.is_verified %}
-                                <span class="badge bg-success">
-                                    <i class="fa fa-check-circle me-1"></i>Verified
-                                </span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fa fa-clock me-1"></i>Unverified
-                                </span>
-                            {% endif %}
-                            
-                            {% if measurement.is_current %}
-                                <br><span class="badge bg-info mt-1">
-                                    <i class="fa fa-star me-1"></i>Current
-                                </span>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'uniforms:student_measurement_detail' measurement.pk %}">
-                                    <i class="fa fa-eye me-2"></i>View Details
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'uniforms:student_measurement_edit' m.pk %}">
+                                    <i class="fa fa-pencil-alt me-2 text-secondary"></i>Edit
                                 </a>
-                                
-                                <!-- Quick View Modal -->
-                                <button type="button" class="dropdown-item text-info"
-                                        hx-get="{% url 'uniforms:student_measurement_quick_view_modal' measurement.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i>Quick View
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'students:student_profile' m.student.pk %}">
+                                    <i class="fa fa-user me-2"></i>Student Profile
+                                </a>
+                            </li>
+                            {% if not m.is_verified %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'uniforms:student_measurement_verify_modal' m.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-check me-2 text-success"></i>Verify
                                 </button>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'uniforms:student_measurement_edit' measurement.pk %}">
-                                    <i class="fa fa-edit me-2"></i>Edit
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Verification -->
-                                <h6 class="dropdown-header">Verification</h6>
-                                
-                                {% if not measurement.is_verified %}
-                                    <button type="button" class="dropdown-item text-success"
-                                            hx-get="{% url 'uniforms:student_measurement_verify_modal' measurement.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-check-circle me-2"></i>Verify Measurement
-                                    </button>
-                                {% else %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-success">
-                                            <i class="fa fa-check-circle me-1"></i>Already Verified
-                                        </small>
-                                    </div>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- View Student -->
-                                <a class="dropdown-item text-primary" 
-                                   href="{% url 'students:student_detail' measurement.student.pk %}">
-                                    <i class="fa fa-user me-2"></i>View Student
-                                </a>
-                                
-                                <!-- Measurement History -->
-                                <a class="dropdown-item text-secondary" 
-                                   href="{% url 'uniforms:student_measurement_list' %}?student={{ measurement.student.pk }}">
-                                    <i class="fa fa-history me-2"></i>Measurement History
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Print -->
-                                <a class="dropdown-item text-primary" 
-                                   href="{% url 'uniforms:student_measurement_print_detail' measurement.pk %}" 
-                                   target="_blank">
-                                    <i class="fa fa-print me-2"></i>Print Details
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'uniforms:student_measurement_delete_modal' measurement.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'uniforms:student_measurement_delete_modal' m.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
                                     <i class="fa fa-trash me-2"></i>Delete
                                 </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="9" class="text-center py-5">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <p class="mt-2 mb-0 text-muted">No measurements found matching your filters.</p>
-                            <small class="text-muted">Try adjusting your search criteria or add new measurements.</small>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 </div>
 
-<!-- Pagination -->
 {% if measurements_page.paginator.num_pages > 1 %}
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div class="text-muted">
-            Showing {{ measurements_page.start_index }} - {{ measurements_page.end_index }} of {{ measurements_page.paginator.count }} measurements
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Measurements pagination">
-            <ul class="pagination mb-0">
-                <!-- Previous Button -->
-                {% if measurements_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link" 
-                                hx-get="{% url 'uniforms:student_measurement_list' %}" 
-                                hx-target="#measurement-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ measurements_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">«</span>
-                    </li>
-                {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in measurements_page.paginator.page_range %}
-                    {% if page_num == measurements_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > measurements_page.number|add:"-3" and page_num < measurements_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'uniforms:student_measurement_list' %}"
-                                    hx-target="#measurement-results"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if measurements_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'uniforms:student_measurement_list' %}"
-                                hx-target="#measurement-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ measurements_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">»</span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ measurements_page.start_index }}</strong>–<strong>{{ measurements_page.end_index }}</strong>
+        of <strong>{{ measurements_page.paginator.count|format_number }}</strong>
+        measurement{{ measurements_page.paginator.count|pluralize }}
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if measurements_page.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:student_measurement_list' %}"
+                    hx-target="#measurement-results" hx-include="#searchForm"
+                    hx-vals='{"page":"{{ measurements_page.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+        {% for p in measurements_page.paginator.page_range %}
+            {% if p == measurements_page.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > measurements_page.number|add:"-3" and p < measurements_page.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'uniforms:student_measurement_list' %}"
+                            hx-target="#measurement-results" hx-include="#searchForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+        {% if measurements_page.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'uniforms:student_measurement_list' %}"
+                    hx-target="#measurement-results" hx-include="#searchForm"
+                    hx-vals='{"page":"{{ measurements_page.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
 </div>
 {% endif %}
 
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-tools"></i>
+    <p>
+        {% if request.GET.q or request.GET.measurement_type or request.GET.is_verified %}
+            No measurements match your filters.
+        {% else %}No measurements recorded yet.{% endif %}
+    </p>
+    <a href="{% url 'uniforms:student_measurement_create' %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+              font-size:13px;font-weight:600;border-radius:6px;
+              background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Record Measurement
+    </a>
+</div>
+{% endif %}
+
 {% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-study"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Measurements</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Verified</div>
-                <h3>{{ stats.verified|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-clock"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Unverified</div>
-                <h3>{{ stats.unverified|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-star"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Current Records</div>
-                <h3>{{ stats.current|default:0 }}</h3>
-            </div>
-        </div>
-    </div>
+<div class="row row-cols-xl-4 row-cols-md-2 row-cols-2 g-3 mb-3" id="stat-cards" hx-swap-oob="true">
+    <div class="col"><div class="stat-card"><div class="stat-icon bg-primary"><i class="pe-7s-tools"></i></div><div><div class="stat-label">Total</div><div class="stat-value">{{ stats.total|default:0|format_number }}</div></div></div></div>
+    <div class="col"><div class="stat-card"><div class="stat-icon bg-info"><i class="pe-7s-check"></i></div><div><div class="stat-label">Current</div><div class="stat-value">{{ stats.current|default:0|format_number }}</div></div></div></div>
+    <div class="col"><div class="stat-card"><div class="stat-icon bg-success"><i class="pe-7s-check"></i></div><div><div class="stat-label">Verified</div><div class="stat-value">{{ stats.verified|default:0|format_number }}</div></div></div></div>
+    <div class="col"><div class="stat-card"><div class="stat-icon bg-warning"><i class="pe-7s-attention"></i></div><div><div class="stat-label">Unverified</div><div class="stat-value">{{ stats.unverified|default:0|format_number }}</div></div></div></div>
 </div>
 {% endif %}
 
-<!-- Reinitialize tooltips after HTMX swap -->
 <script>
-if (typeof htmx !== 'undefined') {
-    htmx.on('htmx:afterSwap', function(event) {
-        if (event.detail.target.id === 'measurement-results') {
-            // Reinitialize Bootstrap tooltips
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(function (tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
-        }
+(function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, { popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); } });
     });
-}
+})();
 </script>

@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Collection Report — {{ school_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a;--ink-2:#334155;--ink-muted:#64748b;--ink-faint:#94a3b8;
+    --surface:#ffffff;--surface-2:#f8fafc;--surface-3:#f1f5f9;--border:#e2e8f0;
+    --accent:#1d4ed8;--accent-lt:#eff6ff;--accent-bd:#bfdbfe;
+    --green:#15803d;--green-lt:#f0fdf4;--amber:#b45309;--amber-lt:#fffbeb;
+    --red:#dc2626;--red-lt:#fef2f2;--purple:#7c3aed;--purple-lt:#f5f3ff;
+    --teal:#0f766e;--teal-lt:#f0fdfa;--radius:10px;
+}
+.filter-bar { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-bottom:22px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.filter-bar label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-muted);display:block;margin-bottom:5px; }
+.filter-bar select,.filter-bar input { border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;color:var(--ink);background:var(--surface-2);min-width:160px; }
+.filter-bar select:focus,.filter-bar input:focus { outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.1); }
+.kpi-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 18px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);transition:box-shadow .2s,transform .15s;height:100%; }
+.kpi-card:hover { box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
+.kpi-badge { position:absolute;top:18px;right:18px;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff; }
+.kpi-accent .kpi-badge { background:var(--accent);box-shadow:0 4px 12px rgba(29,78,216,.25); }
+.kpi-green  .kpi-badge { background:var(--green); box-shadow:0 4px 12px rgba(21,128,61,.25); }
+.kpi-amber  .kpi-badge { background:var(--amber); box-shadow:0 4px 12px rgba(180,83,9,.25); }
+.kpi-teal   .kpi-badge { background:var(--teal);  box-shadow:0 4px 12px rgba(15,118,110,.25); }
+.kpi-label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);margin-bottom:10px;padding-right:54px; }
+.kpi-value { font-size:26px;font-weight:800;color:var(--ink);line-height:1.1;margin-bottom:6px;font-family:'Poppins',sans-serif;font-variant-numeric:tabular-nums; }
+.kpi-sub   { font-size:11.5px;color:var(--ink-faint); }
+.dash-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.dash-head { padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between; }
+.dash-title { font-size:12.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px; }
+.dash-body  { padding:16px 18px; }
+.dt { width:100%;border-collapse:collapse;font-size:12.5px; }
+.dt thead th { background:var(--surface-2);padding:10px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);border-bottom:1px solid var(--border);white-space:nowrap; }
+.dt tbody td { padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle; }
+.dt tbody tr:last-child td { border-bottom:none; }
+.dt tbody tr:hover td { background:#f8faff; }
+.dt tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+.dt tfoot td { padding:10px 14px;border-top:2px solid var(--border);font-weight:700;font-size:12.5px;background:var(--surface-2); }
+.mono { font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px; }
+.prog-outer { background:var(--surface-3);border-radius:4px;height:8px;overflow:hidden; }
+.prog-inner { height:100%;border-radius:4px;transition:width .6s ease; }
+.method-dot { width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% currency_info as curr %}
+
+<!-- Page Header -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-cash icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Fee Collection Report
+                <div class="page-title-subheading">Payments by method, session &amp; date range</div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2">
+            <a href="{% url 'fees:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i>Dashboard
+            </a>
+            <a href="{% url 'fees:financial_summary_report' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-chart-line me-1"></i>Financial Summary
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <form method="GET" style="display:contents;">
+        <div>
+            <label>Academic Session</label>
+            <select name="academic_session">
+                <option value="">All Sessions</option>
+                {% for s in sessions %}
+                <option value="{{ s.id }}" {% if selected_session == s.id|stringformat:"s" %}selected{% endif %}>
+                    {{ s.year_name }} — {{ s.term_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>Fiscal Period</label>
+            <select name="fiscal_period">
+                <option value="">All Periods</option>
+                {% for fp in fiscal_periods %}
+                <option value="{{ fp.id }}" {% if selected_period == fp.id|stringformat:"s" %}selected{% endif %}>
+                    {{ fp.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>Date From</label>
+            <input type="date" name="date_from" value="{{ date_from }}">
+        </div>
+        <div>
+            <label>Date To</label>
+            <input type="date" name="date_to" value="{{ date_to }}">
+        </div>
+        <div style="padding-bottom:1px;">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa fa-filter me-1"></i>Apply
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- KPI Cards -->
+{% with ps=payment_stats %}
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-badge"><i class="fa fa-money-bill-wave"></i></div>
+            <div class="kpi-label">Total Collected</div>
+            <div class="kpi-value">{{ ps.totals.total_amount|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ ps.totals.total_count|default:0|format_number }} payments</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-badge"><i class="fa fa-check-double"></i></div>
+            <div class="kpi-label">Verified</div>
+            <div class="kpi-value">{{ ps.verification.verified_amount|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ ps.verification.verified_count|default:0|format_number }} payments verified</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-badge"><i class="fa fa-clock"></i></div>
+            <div class="kpi-label">Unverified</div>
+            <div class="kpi-value">{{ ps.verification.unverified_amount|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ ps.verification.unverified_count|default:0|format_number }} pending verification</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-calendar-day"></i></div>
+            <div class="kpi-label">Today's Collections</div>
+            <div class="kpi-value">{{ ps.today.amount|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ ps.today.count|default:0|format_number }} payments today</div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+
+<!-- By Payment Method -->
+<div class="row g-3 mb-3">
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-credit-card" style="color:var(--accent);"></i>
+                    Collections by Payment Method
+                </span>
+            </div>
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Payment Method</th>
+                        <th class="text-end">Transactions</th>
+                        <th class="text-end">Amount</th>
+                        <th style="width:30%;">Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% with total_collected=payment_stats.totals.total_amount|default:1 %}
+                    {% for m in by_method %}
+                    <tr>
+                        <td>
+                            <span class="method-dot" style="background:hsl({{ forloop.counter0|mul:47 }},60%,50%);"></span>
+                            <strong style="font-size:12.5px;">{{ m.payment_method__name|default:"Unknown" }}</strong>
+                            {% if m.payment_method__method_type %}
+                            <span style="font-size:10.5px;color:var(--ink-faint);margin-left:6px;">{{ m.payment_method__method_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end" style="color:var(--ink-muted);font-size:12px;">{{ m.count|default:0|format_number }}</td>
+                        <td class="text-end"><span class="mono">{{ m.total|default:0|money }}</span></td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="prog-outer" style="flex:1;">
+                                    <div class="prog-inner" style="width:{{ m.total|default:0|div:total_collected|mul:100|floatformat:0 }}%;background:hsl({{ forloop.counter0|mul:47 }},60%,50%);"></div>
+                                </div>
+                                <span style="font-size:11px;color:var(--ink-muted);width:36px;text-align:right;">
+                                    {{ m.total|default:0|div:total_collected|mul:100|floatformat:1 }}%
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--ink-faint);">No payment data for this period</td></tr>
+                    {% endfor %}
+                    {% endwith %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>Total</td>
+                        <td class="text-end">{{ payment_stats.totals.total_count|default:0|format_number }}</td>
+                        <td class="text-end mono">{{ payment_stats.totals.total_amount|default:0|money }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary panel -->
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-info-circle" style="color:var(--teal);"></i>
+                    Collection Summary
+                </span>
+            </div>
+            <div class="dash-body">
+                {% with ps=payment_stats %}
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:10px;">Verification Status</div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                        <span style="font-size:12.5px;color:var(--ink-2);">Verified</span>
+                        <div>
+                            <span style="font-weight:700;color:var(--green);">{{ ps.verification.verified_amount|default:0|money_short }}</span>
+                            <span style="font-size:10.5px;color:var(--ink-faint);margin-left:4px;">{{ ps.verification.verified_count|default:0 }} pmts</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                        <span style="font-size:12.5px;color:var(--ink-2);">Unverified</span>
+                        <div>
+                            <span style="font-weight:700;color:var(--amber);">{{ ps.verification.unverified_amount|default:0|money_short }}</span>
+                            <span style="font-size:10.5px;color:var(--ink-faint);margin-left:4px;">{{ ps.verification.unverified_count|default:0 }} pmts</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span style="font-size:12.5px;color:var(--ink-2);">Reversed / Refunded</span>
+                        <span style="font-weight:700;color:var(--red);">
+                            {{ ps.reversals.reversed_count|default:0 }}
+                        </span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:10px;">Period Breakdown</div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                        <span style="font-size:12.5px;color:var(--ink-2);">Today</span>
+                        <span style="font-weight:700;">{{ ps.today.amount|default:0|money_short }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                        <span style="font-size:12.5px;color:var(--ink-2);">This Week</span>
+                        <span style="font-weight:700;">{{ ps.this_week.amount|default:0|money_short }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span style="font-size:12.5px;color:var(--ink-2);">This Month</span>
+                        <span style="font-weight:700;">{{ ps.this_month.amount|default:0|money_short }}</span>
+                    </div>
+                </div>
+
+                <div style="padding-top:14px;border-top:2px solid var(--border);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:12.5px;font-weight:700;color:var(--ink);">Total Collected</span>
+                        <span style="font-size:16px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--green);">{{ ps.totals.total_amount|default:0|money_short }}</span>
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Method Detail -->
+<div class="dash-card mb-3">
+    <div class="dash-head">
+        <span class="dash-title">
+            <i class="fa fa-list" style="color:var(--accent);"></i>
+            Payment Method Detail
+        </span>
+        <span style="font-size:11px;color:var(--ink-faint);">Generated {{ generated_at }} · {{ generated_by }}</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="dt">
+        <thead>
+            <tr>
+                <th>Method</th>
+                <th>Type</th>
+                <th class="text-end">Transactions</th>
+                <th class="text-end">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in by_method %}
+            <tr>
+                <td style="font-weight:600;font-size:12.5px;">{{ m.payment_method__name|default:"Unknown" }}</td>
+                <td style="font-size:11.5px;color:var(--ink-muted);">{{ m.payment_method__method_type|default:"—" }}</td>
+                <td class="text-end" style="color:var(--ink-muted);font-size:12px;">{{ m.count|default:0|format_number }}</td>
+                <td class="text-end"><span class="mono" style="color:var(--green);">{{ m.total|default:0|money }}</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--ink-faint);">No payment data for selected filters</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="2">Total</td>
+                <td class="text-end">{{ payment_stats.totals.total_count|default:0|format_number }}</td>
+                <td class="text-end mono">{{ payment_stats.totals.total_amount|default:0|money }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,649 +1,401 @@
-{% load static %}
-{% load widget_tweaks %}
-{% load humanize %}
+{# fees/templates/fees/categories/partials/_category_results.html #}
+{% load currency_filters %}
 
-<!-- Fee Categories Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover align-middle">
-        <thead>
-            <tr>
-                <th width="3%">#</th>
-                <th width="32%">Category</th>
-                <th width="18%">Type & Frequency</th>
-                <th width="15%">Rules</th>
-                <th width="15%">Financial</th>
-                <th width="12%">Usage</th>
-                <th width="5%" class="text-center">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% if categories_page %}
-                {% for category in categories_page %}
-                <tr data-category-id="{{ category.id }}" class="category-row">
+<style>
+.cat-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cat-tbl thead th {
+    background: #f8fafc; padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.cat-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.cat-tbl tbody tr:last-child td { border-bottom: none; }
+.cat-tbl tbody tr:hover td { background: #fafbff !important; }
+.cat-tbl tbody tr.row-inactive td { color: #94a3b8; }
+.cat-tbl tbody tr.row-inactive:hover td { background: #f8fafc !important; }
 
-                    <!-- Row Number -->
-                    <td class="text-muted fw-light">
-                        {{ forloop.counter|add:categories_page.start_index|add:"-1" }}
-                    </td>
+/* ── Name cell ── */
+.cat-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; line-height: 1.3; }
+.cat-name:hover { color: #1d4ed8; }
+.cat-code { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 2px; display: block; }
 
-                    <!-- Category Information -->
-                    <td>
-                        <div class="d-flex align-items-start gap-3">
-                            <!-- Icon -->
-                            <div class="category-icon-wrapper">
-                                <div class="category-icon category-icon-{{ category.frequency|lower }}">
-                                    {{ category.code.0|default:'F' }}{{ category.code.1|default:'C' }}
-                                </div>
-                                <div class="category-status status-{{ category.is_active|yesno:'active,inactive' }}"></div>
-                            </div>
+/* ── Category type chip ── */
+.type-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.tc-tuition    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.tc-boarding   { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.tc-meals      { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.tc-exam       { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+.tc-transport  { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.tc-other      { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
 
-                            <!-- Details -->
-                            <div class="flex-grow-1">
-                                <div class="d-flex align-items-center gap-2 mb-1">
-                                    <a href="{% url 'fees:category_detail' category.pk %}"
-                                       class="category-name">
-                                        {{ category.name }}
-                                    </a>
-                                    {% if not category.is_active %}
-                                        <span class="badge badge-inactive">Inactive</span>
-                                    {% endif %}
-                                </div>
+/* ── Frequency pill ── */
+.freq-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 20px; font-size: 10.5px; font-weight: 700; }
+.fp-termly   { background: #ede9fe; color: #6b21a8; }
+.fp-yearly   { background: #fef9c3; color: #854d0e; }
+.fp-monthly  { background: #dcfce7; color: #15803d; }
+.fp-one_time { background: #fce7f3; color: #9d174d; }
+.fp-other    { background: #f1f5f9; color: #475569; }
 
-                                <div class="category-meta">
-                                    <span class="meta-item">
-                                        <i class="fa fa-tag"></i> {{ category.code }}
-                                    </span>
+/* ── Applicability pill ── */
+.appl-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 600; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.appl-chip.boarders { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
+.appl-chip.day      { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 
-                                    {% if category.display_group %}
-                                        <span class="meta-item">
-                                            <span class="color-dot" style="background-color: {{ category.display_group.color_code }};"></span>
-                                            {{ category.display_group.name }}
-                                        </span>
-                                    {% endif %}
-                                </div>
+/* ── Flag dots ── */
+.flags { display: flex; flex-direction: column; gap: 4px; }
+.flag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; width: fit-content; }
+.flag-req  { background: #eff6ff; color: #1d4ed8; }
+.flag-opt  { background: #f1f5f9; color: #64748b; }
+.flag-tax  { background: #fffbeb; color: #b45309; }
+.flag-ref  { background: #f0fdf4; color: #15803d; }
+.flag-noref{ background: #fef2f2; color: #dc2626; }
 
-                                {% if category.description %}
-                                    <p class="category-description">
-                                        {{ category.description|truncatechars:80 }}
-                                    </p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
+/* ── Group chip ── */
+.group-chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
-                    <!-- Type & Frequency -->
-                    <td>
-                        <div class="d-flex flex-column gap-1">
-                            <span class="badge-pill badge-{{ category.category_type|lower }}">
-                                {{ category.get_category_type_display }}
-                            </span>
-                            <span class="badge-pill badge-freq-{{ category.frequency|lower }}">
-                                <i class="fa fa-{% if category.is_recurring %}repeat{% else %}calendar{% endif %} fa-xs"></i>
-                                {{ category.get_frequency_display }}
-                            </span>
-                            {% if category.applicability != 'ALL' %}
-                                <small class="text-muted">
-                                    <i class="fa fa-filter fa-xs"></i> {{ category.get_applicability_display }}
-                                </small>
-                            {% endif %}
-                        </div>
-                    </td>
+.s-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 11px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sp-active   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sp-inactive { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
 
-                    <!-- Rules/Configuration -->
-                    <td>
-                        <div class="rules-grid">
-                            <div class="rule-item {% if category.is_mandatory %}text-danger{% else %}text-muted{% endif %}">
-                                <i class="fa fa-{% if category.is_mandatory %}exclamation-circle{% else %}info-circle{% endif %}"></i>
-                                <span>{{ category.is_mandatory|yesno:"Mandatory,Optional" }}</span>
-                            </div>
-                            <div class="rule-item {% if category.allows_partial_payment %}text-success{% else %}text-muted{% endif %}">
-                                <i class="fa fa-{% if category.allows_partial_payment %}check-circle{% else %}ban{% endif %}"></i>
-                                <span>{{ category.allows_partial_payment|yesno:"Partial,Full only" }}</span>
-                            </div>
-                            <div class="rule-item {% if category.is_refundable %}text-info{% else %}text-muted{% endif %}">
-                                <i class="fa fa-{% if category.is_refundable %}undo{% else %}lock{% endif %}"></i>
-                                <span>{{ category.is_refundable|yesno:"Refundable,Non-refund" }}</span>
-                            </div>
-                        </div>
-                    </td>
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
 
-                    <!-- Financial -->
-                    <td>
-                        {% if category.is_taxable %}
-                            <div class="tax-info">
-                                <span class="badge-warning-soft">
-                                    <i class="fa fa-receipt"></i> Taxable
-                                </span>
-                                {% if category.default_tax_rate %}
-                                    <div class="tax-rate">
-                                        {{ category.default_tax_rate }}% tax
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% else %}
-                            <span class="text-muted small">
-                                <i class="fa fa-minus-circle"></i> Tax-free
-                            </span>
-                        {% endif %}
-                    </td>
+.pag-bar {
+    padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; font-size: 12.5px; color: #64748b;
+}
+.pag-bar .page-link { color: #1d4ed8; border-color: #e2e8f0; font-size: 12.5px; padding: 4px 10px; }
+.pag-bar .page-link:hover { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
 
-                    <!-- Usage Statistics -->
-                    <td>
-                        {% if category.structure_count > 0 %}
-                            <div class="usage-stats">
-                                <div class="stat-item">
-                                    <i class="fa fa-list-alt text-primary"></i>
-                                    <span>{{ category.structure_count }} structure{{ category.structure_count|pluralize }}</span>
-                                </div>
-                            </div>
-                        {% else %}
-                            <span class="text-muted small">
-                                <i class="fa fa-inbox"></i> Not in use
-                            </span>
-                        {% endif %}
-                    </td>
+.dropdown-menu { font-size: .84rem; min-width: 192px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item { padding: 6px 14px; }
+.dropdown-header { font-size: .68rem; padding: 6px 14px 2px; }
 
-                    <!-- Actions Dropdown -->
-                    <td class="text-center">
-                        <div class="dropdown" style="position: static;">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                <i class="fa fa-ellipsis-v"></i>
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
+/* OOB stat cards */
+.stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 22px; display: flex; align-items: center; gap: 16px; margin-bottom: 20px; transition: box-shadow .2s; }
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; }
+.stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 3px; }
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+</style>
 
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'fees:category_detail' category.pk %}">
-                                    <i class="fa fa-eye fa-fw me-2"></i> View Details
-                                </a>
+<div style="overflow-x:auto;">
+<table class="cat-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Applicability</th>
+            <th>Flags</th>
+            <th class="text-center">In Use</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
 
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'fees:category_edit' category.pk %}">
-                                    <i class="fa fa-edit fa-fw me-2"></i> Edit
-                                </a>
+    {% if categories_page %}
+        {% for category in categories_page %}
+        <tr class="{% if not category.is_active %}row-inactive{% endif %}">
 
-                                <hr class="dropdown-divider">
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ categories_page.start_index|add:forloop.counter0 }}
+            </td>
 
-                                <!-- View Structures -->
-                                <a class="dropdown-item" href="{% url 'fees:structure_list' %}?fee_category={{ category.id }}">
-                                    <i class="fa fa-list fa-fw me-2"></i> View Structures
-                                </a>
+            {# ── Name + code + group ── #}
+            <td>
+                <a href="{% url 'fees:category_detail' category.pk %}" class="cat-name">
+                    {{ category.name }}
+                </a>
+                <span class="cat-code">
+                    <i class="fa fa-hashtag" style="font-size:9px;"></i> {{ category.code }}
+                </span>
+                {% if category.display_group %}
+                <span class="group-chip" style="margin-top:4px;display:inline-block;">
+                    {{ category.display_group.name }}
+                </span>
+                {% endif %}
+            </td>
 
-                                {% if category.structure_count > 0 %}
-                                    <!-- View Invoices -->
-                                    <a class="dropdown-item" href="{% url 'fees:invoice_list' %}?fee_category={{ category.id }}">
-                                        <i class="fa fa-file-invoice fa-fw me-2"></i> View Invoices
-                                    </a>
-                                {% endif %}
+            {# ── Category type + frequency ── #}
+            <td>
+                {% with t=category.category_type %}
+                {% if t == 'TUITION' %}
+                    <span class="type-chip tc-tuition"><i class="fa fa-graduation-cap" style="font-size:8px;"></i>Tuition</span>
+                {% elif t == 'BOARDING' %}
+                    <span class="type-chip tc-boarding"><i class="fa fa-home" style="font-size:8px;"></i>Boarding</span>
+                {% elif t == 'MEALS' %}
+                    <span class="type-chip tc-meals"><i class="fa fa-utensils" style="font-size:8px;"></i>Meals</span>
+                {% elif t == 'EXAM' %}
+                    <span class="type-chip tc-exam"><i class="fa fa-pen" style="font-size:8px;"></i>Exam</span>
+                {% elif t == 'TRANSPORT' %}
+                    <span class="type-chip tc-transport"><i class="fa fa-bus" style="font-size:8px;"></i>Transport</span>
+                {% else %}
+                    <span class="type-chip tc-other">{{ category.get_category_type_display }}</span>
+                {% endif %}
+                {% endwith %}
+                <div style="margin-top:4px;">
+                    {% with f=category.frequency|lower %}
+                    {% if f == 'termly' %}
+                        <span class="freq-pill fp-termly">Termly</span>
+                    {% elif f == 'yearly' %}
+                        <span class="freq-pill fp-yearly">Yearly</span>
+                    {% elif f == 'monthly' %}
+                        <span class="freq-pill fp-monthly">Monthly</span>
+                    {% elif f == 'one_time' %}
+                        <span class="freq-pill fp-one_time">One-time</span>
+                    {% else %}
+                        <span class="freq-pill fp-other">{{ category.get_frequency_display }}</span>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </td>
 
-                                <hr class="dropdown-divider">
+            {# ── Applicability ── #}
+            <td>
+                {% if category.applicability == 'ALL' %}
+                    <span class="appl-chip">
+                        <i class="fa fa-users" style="font-size:8px;"></i>All students
+                    </span>
+                {% elif 'BOARDER' in category.applicability %}
+                    <span class="appl-chip boarders">{{ category.get_applicability_display }}</span>
+                {% elif 'DAY' in category.applicability %}
+                    <span class="appl-chip day">{{ category.get_applicability_display }}</span>
+                {% else %}
+                    <span class="appl-chip">{{ category.get_applicability_display }}</span>
+                {% endif %}
+            </td>
 
-                                <!-- Activate / Deactivate -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% if category.is_active %}{% url 'fees:category_toggle_active_modal' category.pk %}{% else %}{% url 'fees:category_toggle_active_modal' category.pk %}{% endif %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-{% if category.is_active %}pause-circle{% else %}play-circle{% endif %} fa-fw me-2"></i>
-                                    {{ category.is_active|yesno:"Deactivate,Activate" }}
-                                </button>
+            {# ── Flags ── #}
+            <td>
+                <div class="flags">
+                    {% if category.is_mandatory %}
+                        <span class="flag flag-req"><i class="fa fa-star" style="font-size:7px;"></i>Required</span>
+                    {% else %}
+                        <span class="flag flag-opt">Optional</span>
+                    {% endif %}
+                    {% if category.is_taxable %}
+                        <span class="flag flag-tax"><i class="fa fa-receipt" style="font-size:8px;"></i>Taxable</span>
+                    {% endif %}
+                    {% if category.is_refundable %}
+                        <span class="flag flag-ref"><i class="fa fa-undo" style="font-size:8px;"></i>Refundable</span>
+                    {% else %}
+                        <span class="flag flag-noref"><i class="fa fa-lock" style="font-size:8px;"></i>Non-refund</span>
+                    {% endif %}
+                </div>
+            </td>
 
-                                <hr class="dropdown-divider">
+            {# ── Usage ── #}
+            <td class="text-center">
+                {% if category.structure_count > 0 %}
+                    <span style="font-weight:700;font-size:15px;color:#1d4ed8;">{{ category.structure_count }}</span>
+                    <div style="font-size:10px;color:#94a3b8;">structure{{ category.structure_count|pluralize }}</div>
+                {% else %}
+                    <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+            </td>
 
-                                <!-- Delete -->
-                                {% if category.structure_count == 0 %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'fees:category_delete_modal' category.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-trash fa-fw me-2"></i> Delete
-                                    </button>
-                                {% else %}
-                                    <button type="button"
-                                            class="dropdown-item text-muted"
-                                            disabled
-                                            data-bs-toggle="tooltip"
-                                            title="Cannot delete — used in {{ category.structure_count }} structure{{ category.structure_count|pluralize }}">
-                                        <i class="fa fa-trash fa-fw me-2"></i> Delete (In Use)
-                                    </button>
-                                {% endif %}
+            {# ── Status ── #}
+            <td class="text-center">
+                {% if category.is_active %}
+                    <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i>Active</span>
+                {% else %}
+                    <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i>Inactive</span>
+                {% endif %}
+            </td>
 
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="7" class="text-center">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <h5 class="mt-3">No Fee Categories Found</h5>
-                            <p class="text-muted">Try adjusting your filters or create a new fee category.</p>
-                            <a href="{% url 'fees:category_create' %}" class="btn btn-primary mt-3">
-                                <i class="fa fa-plus me-1"></i> Create Fee Category
+            {# ── Actions ── #}
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:category_detail' category.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
                             </a>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:category_edit' category.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Related</h6></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:structure_list' %}?fee_category={{ category.pk }}">
+                                <i class="fa fa-layer-group me-2 text-secondary"></i>View Structures
+                            </a>
+                        </li>
+                        {% if category.structure_count > 0 %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'fees:invoice_list' %}?fee_category={{ category.pk }}">
+                                <i class="fa fa-file-invoice me-2 text-secondary"></i>View Invoices
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:category_toggle_active_modal' category.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-{% if category.is_active %}pause-circle{% else %}play-circle{% endif %} me-2 text-secondary"></i>
+                                {{ category.is_active|yesno:"Deactivate,Activate" }}
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item {% if category.structure_count == 0 %}text-danger{% else %}text-muted{% endif %}"
+                                    {% if category.structure_count > 0 %}
+                                    disabled
+                                    data-bs-toggle="tooltip"
+                                    title="Used in {{ category.structure_count }} structure{{ category.structure_count|pluralize }} — cannot delete"
+                                    {% else %}
+                                    hx-get="{% url 'fees:category_delete_modal' category.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML"
+                                    {% endif %}>
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="8">
+                <div class="tbl-empty">
+                    <i class="pe-7s-wallet"></i>
+                    <p>
+                        {% if request.GET %}No categories match your current filters.
+                        {% else %}No fee categories have been created yet.{% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'fees:category_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:13px;font-weight:600;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>Create Category
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'fees:category_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
 </div>
 
-<!-- Pagination -->
+{# ── Pagination ── #}
 {% if categories_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ categories_page.start_index }}</strong>–<strong>{{ categories_page.end_index }}</strong>
+        of <strong>{{ categories_page.paginator.count|format_number }}</strong>
+        categor{{ categories_page.paginator.count|pluralize:"y,ies" }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if categories_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:category_list' %}"
+                        hx-target="#fee-category-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ categories_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
 
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ categories_page.start_index }} - {{ categories_page.end_index }}
-            of {{ categories_page.paginator.count }} categor{{ categories_page.paginator.count|pluralize:"y,ies" }}
-        </div>
-
-        <!-- Pagination Navigation -->
-        <nav aria-label="Fee category pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-
-                <!-- Previous Button -->
-                {% if categories_page.has_previous %}
+            {% for p in categories_page.paginator.page_range %}
+                {% if p == categories_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > categories_page.number|add:"-3" and p < categories_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'fees:category_list' %}"
                                 hx-target="#fee-category-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ categories_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true"><span aria-hidden="true">«</span></span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
+            {% endfor %}
 
-                <!-- Page Numbers -->
-                {% for page_num in categories_page.paginator.page_range %}
-                    {% if page_num == categories_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > categories_page.number|add:"-3" and page_num < categories_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'fees:category_list' %}"
-                                    hx-target="#fee-category-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-
-                <!-- Next Button -->
-                {% if categories_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:category_list' %}"
-                                hx-target="#fee-category-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ categories_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true"><span aria-hidden="true">»</span></span>
-                    </li>
-                {% endif %}
-
-            </ul>
-        </nav>
-    </div>
+            {% if categories_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:category_list' %}"
+                        hx-target="#fee-category-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ categories_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-/* ============================
-   Table Base Styles
-   ============================ */
-.table {
-    font-size: 0.9rem;
-}
-
-.table thead th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    color: #495057;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 1rem 0.75rem;
-}
-
-.table tbody td {
-    padding: 1rem 0.75rem;
-    vertical-align: middle;
-    position: relative;
-    overflow: visible;
-}
-
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.category-row {
-    transition: all 0.2s ease;
-}
-
-.category-row:hover {
-    background-color: #f8f9fb;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-
-/* ============================
-   Category Icon & Status
-   ============================ */
-.category-icon-wrapper {
-    position: relative;
-    flex-shrink: 0;
-}
-
-.category-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: -0.5px;
-    color: white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.category-icon-termly   { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.category-icon-yearly   { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.category-icon-monthly  { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.category-icon-one_time { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-
-.category-status {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 3px solid white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.category-status.status-active   { background-color: #28a745; }
-.category-status.status-inactive { background-color: #dc3545; }
-
-/* ============================
-   Category Information
-   ============================ */
-.category-name {
-    font-weight: 600;
-    color: #2c3e50;
-    font-size: 0.95rem;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.category-name:hover { color: #667eea; }
-
-.badge-inactive {
-    background-color: #f8d7da;
-    color: #721c24;
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
-    font-weight: 600;
-    border-radius: 4px;
-}
-
-.category-meta {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 0.25rem;
-}
-
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.8rem;
-    color: #6c757d;
-}
-
-.meta-item i { font-size: 0.75rem; opacity: 0.7; }
-
-.color-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-    display: inline-block;
-    border: 1px solid rgba(0,0,0,0.1);
-}
-
-.category-description {
-    margin: 0.5rem 0 0 0;
-    font-size: 0.8rem;
-    color: #6c757d;
-    line-height: 1.4;
-}
-
-/* ============================
-   Badge Pills
-   ============================ */
-.badge-pill {
-    padding: 0.35rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    white-space: nowrap;
-}
-
-.badge-freq-termly   { background-color: #ede9fe; color: #6b21a8; }
-.badge-freq-yearly   { background-color: #fef3c7; color: #92400e; }
-.badge-freq-monthly  { background-color: #d1fae5; color: #065f46; }
-.badge-freq-one_time { background-color: #ffe4e6; color: #9f1239; }
-
-/* ============================
-   Rules Grid
-   ============================ */
-.rules-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.rule-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8rem;
-}
-
-.rule-item i { width: 14px; font-size: 0.75rem; }
-
-/* ============================
-   Financial Section
-   ============================ */
-.tax-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.badge-warning-soft {
-    background-color: #fff3cd;
-    color: #856404;
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    width: fit-content;
-}
-
-.tax-rate {
-    font-size: 0.8rem;
-    color: #495057;
-    font-weight: 600;
-    margin-top: 0.25rem;
-}
-
-/* ============================
-   Usage Statistics
-   ============================ */
-.usage-stats { display: flex; flex-direction: column; gap: 0.3rem; }
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8rem;
-    color: #495057;
-}
-
-.stat-item i { font-size: 0.85rem; }
-
-/* ============================
-   Empty State
-   ============================ */
-.empty-state {
-    padding: 80px 30px;
-    text-align: center;
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 15px;
-    margin: 30px 0;
-    border: 2px dashed #dee2e6;
-}
-
-.empty-state-icon {
-    font-size: 5rem;
-    color: #dee2e6;
-    margin-bottom: 25px;
-}
-
-/* ============================
-   Dropdown
-   ============================ */
-.dropdown-menu {
-    z-index: 1050 !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    padding: 0.5rem 0;
-}
-
-.dropdown-item {
-    padding: 0.6rem 1.25rem;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-}
-
-.dropdown-item:hover { background-color: #f8f9fa; }
-
-/* ============================
-   Pagination
-   ============================ */
-.pagination .page-link {
-    border: 1px solid #dee2e6;
-    color: #667eea;
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    transition: all 0.2s;
-}
-
-.pagination .page-link:hover {
-    background-color: #667eea;
-    color: white;
-    border-color: #667eea;
-}
-
-.pagination .page-item.active .page-link {
-    background-color: #667eea;
-    border-color: #667eea;
-    font-weight: 600;
-}
-
-/* ============================
-   Responsive
-   ============================ */
-@media (max-width: 1200px) { .category-description { display: none; } }
-
-@media (max-width: 768px) {
-    table th:nth-child(6),
-    table td:nth-child(6) { display: none; }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only on HTMX requests) -->
+{# ── OOB stats refresh ── #}
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-wallet"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Categories</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-wallet"></i></div>
+            <div><div class="stat-label">Total Categories</div><div class="stat-value">{{ stats.total|default:0|format_number }}</div></div>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Categories</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div><div class="stat-label">Active</div><div class="stat-value">{{ stats.active|default:0|format_number }}</div></div>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-danger">
-                <i class="pe-7s-attention"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Mandatory</div>
-                <h3>{{ stats.mandatory|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-attention"></i></div>
+            <div><div class="stat-label">Mandatory</div><div class="stat-value">{{ stats.mandatory|default:0|format_number }}</div></div>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-cash"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Taxable</div>
-                <h3>{{ stats.taxable|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-cash"></i></div>
+            <div><div class="stat-label">Taxable</div><div class="stat-value">{{ stats.taxable|default:0|format_number }}</div></div>
         </div>
     </div>
 </div>
 {% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

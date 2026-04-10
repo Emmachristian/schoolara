@@ -1,714 +1,1290 @@
 {% extends "base.html" %}
 {% load static %}
-{% load humanize %}
 {% load currency_filters %}
 {% load custom_filters %}
 
-{% block title %}Fees Dashboard{% endblock %}
-
 {% block extra_css %}
 <style>
-/* ── Variables ─────────────────────────────────────────── */
 :root {
-  --fd-blue:    #1d4ed8;
-  --fd-green:   #059669;
-  --fd-amber:   #d97706;
-  --fd-red:     #dc2626;
-  --fd-purple:  #7c3aed;
-  --fd-teal:    #0891b2;
-  --card-bg:    #ffffff;
-  --card-bdr:   #e2e8f0;
-  --page-bg:    #f1f5f9;
-  --text-dark:  #0f172a;
-  --text-mid:   #475569;
-  --text-light: #94a3b8;
-  --radius:     12px;
-  --shadow-sm:  0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
-  --shadow-md:  0 4px 16px rgba(0,0,0,.08);
+    --ink:       #0f172a;
+    --ink-2:     #334155;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --teal:      #0f766e;
+    --teal-lt:   #f0fdfa;
+    --radius:    10px;
 }
 
-body { background: var(--page-bg); }
-
-/* ── Hero header ────────────────────────────────────────── */
-.fd-hero {
-  background: linear-gradient(130deg, #0f172a 0%, #1e3a8a 55%, #1d4ed8 100%);
-  border-radius: 16px;
-  padding: 28px 32px 26px;
-  color: #fff;
-  position: relative;
-  overflow: hidden;
-  margin-bottom: 24px;
+/* ── KPI cards ── */
+.kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 22px 18px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+    transition: box-shadow .2s, transform .15s;
 }
-.fd-hero::before {
-  content:''; position:absolute; top:-80px; right:-60px;
-  width:260px; height:260px;
-  background:rgba(255,255,255,.05); border-radius:50%;
-}
-.fd-hero::after {
-  content:''; position:absolute; bottom:-50px; left:38%;
-  width:180px; height:180px;
-  background:rgba(255,255,255,.04); border-radius:50%;
-}
-.fd-hero-title {
-  font-size:1.55rem; font-weight:700;
-  letter-spacing:-.02em; margin:0 0 6px;
-}
-.fd-hero-sub { font-size:.88rem; opacity:.72; margin:0; }
-.fd-hero-pill {
-  display:inline-flex; align-items:center; gap:6px;
-  background:rgba(255,255,255,.12);
-  border:1px solid rgba(255,255,255,.2);
-  border-radius:20px; padding:5px 14px;
-  font-size:.78rem; font-weight:500; color:#fff;
-  backdrop-filter:blur(6px);
+.kpi-card:hover {
+    box-shadow: 0 8px 28px rgba(0,0,0,.10);
+    transform: translateY(-2px);
 }
 
-/* ── Stat cards ─────────────────────────────────────────── */
-.stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-bdr);
-  border-radius: var(--radius);
-  padding: 20px 22px;
-  height: 100%;
-  transition: box-shadow .18s, transform .16s;
+/* Icon badge — top right */
+.kpi-badge {
+    position: absolute;
+    top: 18px; right: 18px;
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #fff;
+    flex-shrink: 0;
 }
-.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-.stat-card .sc-top { display:flex; align-items:flex-start; justify-content:space-between; }
-.stat-card .sc-icon {
-  width:46px; height:46px; border-radius:10px; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center;
-  font-size:1.2rem;
-}
-.stat-card .sc-value {
-  font-size:1.55rem; font-weight:800;
-  letter-spacing:-.03em; line-height:1.1;
-  color: var(--text-dark); margin:12px 0 4px;
-}
-.stat-card .sc-label {
-  font-size:.75rem; font-weight:600; text-transform:uppercase;
-  letter-spacing:.06em; color: var(--text-mid);
-}
-.stat-card .sc-sub { font-size:.8rem; color: var(--text-light); margin-top:2px; }
+.kpi-accent .kpi-badge { background: var(--accent); box-shadow: 0 4px 12px rgba(29,78,216,.25); }
+.kpi-green  .kpi-badge { background: var(--green);  box-shadow: 0 4px 12px rgba(21,128,61,.25); }
+.kpi-red    .kpi-badge { background: var(--red);    box-shadow: 0 4px 12px rgba(220,38,38,.25); }
+.kpi-amber  .kpi-badge { background: var(--amber);  box-shadow: 0 4px 12px rgba(180,83,9,.25); }
+.kpi-purple .kpi-badge { background: var(--purple); box-shadow: 0 4px 12px rgba(124,58,237,.25); }
+.kpi-teal   .kpi-badge { background: var(--teal);   box-shadow: 0 4px 12px rgba(15,118,110,.25); }
 
-.ico-blue   { background:#eff6ff; color:var(--fd-blue); }
-.ico-green  { background:#ecfdf5; color:var(--fd-green); }
-.ico-amber  { background:#fffbeb; color:var(--fd-amber); }
-.ico-red    { background:#fef2f2; color:var(--fd-red); }
-.ico-purple { background:#f5f3ff; color:var(--fd-purple); }
-.ico-teal   { background:#ecfeff; color:var(--fd-teal); }
+.kpi-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .7px; color: var(--ink-muted); margin-bottom: 10px;
+    padding-right: 54px; /* clear the badge */
+}
+.kpi-value {
+    font-size: 26px; font-weight: 800; color: var(--ink);
+    line-height: 1.1; margin-bottom: 6px;
+    font-family: 'Poppins', sans-serif;
+    font-variant-numeric: tabular-nums;
+    word-break: break-all;
+}
+.kpi-sub { font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 5px; }
 
-.accent-blue   { border-top:3px solid var(--fd-blue);   }
-.accent-green  { border-top:3px solid var(--fd-green);  }
-.accent-amber  { border-top:3px solid var(--fd-amber);  }
-.accent-red    { border-top:3px solid var(--fd-red);    }
-.accent-purple { border-top:3px solid var(--fd-purple); }
-.accent-teal   { border-top:3px solid var(--fd-teal);   }
+/* Accent colour tint on the value itself — removed, values stay black */
 
-/* ── Section card ───────────────────────────────────────── */
-.sec-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-bdr);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.sec-head {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--card-bdr);
-  display: flex; align-items: center; justify-content: space-between;
-}
-.sec-head h6 {
-  margin: 0; font-size: .92rem; font-weight: 700; color: var(--text-dark);
-  display: flex; align-items: center; gap: 8px;
-}
-.bc { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:10px; }
+/* ── Mini stat cells ── */
+.mini-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; text-align: center; }
+.mini-val  { font-size: 20px; font-weight: 700; line-height: 1; }
+.mini-lbl  { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); margin-top: 4px; }
 
-/* ── Table ──────────────────────────────────────────────── */
-.fd-table { font-size:.84rem; margin:0; }
-.fd-table thead th {
-  background:#f8fafc; font-size:.72rem; font-weight:700;
-  text-transform:uppercase; letter-spacing:.06em;
-  color: var(--text-mid); padding:10px 14px;
-  border-bottom: 1px solid var(--card-bdr); border-top:none;
-}
-.fd-table tbody tr { transition: background .1s; }
-.fd-table tbody tr:hover { background:#f8fafc; }
-.fd-table tbody td {
-  padding: 10px 14px; vertical-align:middle;
-  border-bottom: 1px solid #f1f5f9; color: var(--text-dark);
-}
-.fd-table tbody tr:last-child td { border-bottom:none; }
+/* ── Progress bar ── */
+.prog-outer { background: var(--surface-3); border-radius: 4px; height: 6px; overflow: hidden; }
+.prog-inner { height: 100%; border-radius: 4px; transition: width .6s ease; }
 
-/* ── Badges ─────────────────────────────────────────────── */
-.fd-badge {
-  font-size:.69rem; font-weight:700; padding:3px 9px;
-  border-radius:20px; letter-spacing:.03em; display:inline-block;
+/* ── Attention banner ── */
+.attn-banner {
+    background: var(--amber-lt);
+    border: 1px solid #fde68a;
+    border-left: 4px solid #d97706;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
 }
-.bg-paid     { background:#dcfce7; color:#15803d; }
-.bg-partial  { background:#fef9c3; color:#a16207; }
-.bg-pending  { background:#dbeafe; color:#1e40af; }
-.bg-overdue  { background:#fee2e2; color:#b91c1c; }
-.bg-draft    { background:#f1f5f9; color:#475569; }
-.bg-void     { background:#f1f5f9; color:#334155; }
+.attn-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--surface); border: 1px solid #fcd34d; color: #92400e;
+    text-decoration: none; transition: background .15s;
+}
+.attn-chip:hover { background: #fef3c7; color: #78350f; }
+.attn-chip.red   { border-color: #fca5a5; color: var(--red); }
+.attn-chip.red:hover { background: var(--red-lt); }
 
-/* ── Attention item ─────────────────────────────────────── */
-.attn-item {
-  display:flex; align-items:center; gap:12px;
-  padding:11px 18px; border-bottom:1px solid #f1f5f9;
-  transition:background .1s;
+/* ── Dash cards ── */
+.dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; height: 100%; }
+.dash-head {
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between;
 }
-.attn-item:hover { background:#f8fafc; }
-.attn-item:last-child { border-bottom:none; }
-.attn-avatar {
-  width:36px; height:36px; border-radius:8px;
-  display:flex; align-items:center; justify-content:center;
-  font-size:.85rem; font-weight:700; flex-shrink:0;
-}
-.attn-name { font-size:.85rem; font-weight:600; color:var(--text-dark); line-height:1.2; }
-.attn-sub  { font-size:.75rem; color:var(--text-light); }
-.attn-val  { font-size:.85rem; font-weight:700; margin-left:auto; text-align:right; white-space:nowrap; }
+.dash-title { font-size: 12.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.dash-link  { font-size: 11px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.dash-link:hover { text-decoration: underline; }
+.dash-body  { padding: 16px 18px; }
 
-/* ── Quick link ─────────────────────────────────────────── */
-.qlink {
-  display:flex; align-items:center; gap:10px;
-  padding:11px 16px; border-radius:10px;
-  border:1px solid var(--card-bdr); background:var(--card-bg);
-  text-decoration:none; color:var(--text-dark);
-  transition:border-color .15s, box-shadow .15s;
-  font-size:.85rem; font-weight:600;
+/* ── Inner data tables ── */
+.dt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dt thead th {
+    background: var(--surface-2);
+    padding: 10px 14px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
-.qlink:hover {
-  border-color:#93c5fd; box-shadow:0 0 0 3px rgba(147,197,253,.2);
-  color:var(--fd-blue);
+.dt tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
 }
-.ql-icon {
-  width:32px; height:32px; border-radius:8px;
-  display:flex; align-items:center; justify-content:center;
-  font-size:.9rem; flex-shrink:0;
+.dt tbody tr:last-child td { border-bottom: none; }
+.dt tbody tr {
+    transition: background .12s;
+    position: relative;
+}
+.dt tbody tr:hover td { background: #f8faff; }
+.dt tbody tr:hover td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
-/* ── Empty ──────────────────────────────────────────────── */
-.fd-empty { text-align:center; padding:36px 20px; color:var(--text-light); }
-.fd-empty i { font-size:2.2rem; margin-bottom:10px; opacity:.45; }
-.fd-empty p { margin:0; font-size:.85rem; }
-
-/* ── Scroll panel ───────────────────────────────────────── */
-.scroll-panel { max-height:360px; overflow-y:auto; }
-.scroll-panel::-webkit-scrollbar { width:4px; }
-.scroll-panel::-webkit-scrollbar-track { background:transparent; }
-.scroll-panel::-webkit-scrollbar-thumb { background:var(--card-bdr); border-radius:4px; }
-
-@media(max-width:767px) {
-  .fd-hero { padding:20px 18px; }
-  .fd-hero-title { font-size:1.2rem; }
-  .stat-card .sc-value { font-size:1.25rem; }
+/* ── Student cell avatar ── */
+.stu-cell { display: flex; align-items: center; gap: 10px; }
+.stu-av {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+    background: var(--accent-lt); color: var(--accent);
+    border: 1px solid var(--accent-bd);
+    text-transform: uppercase; letter-spacing: .5px;
 }
+.stu-av.green  { background: var(--green-lt);  color: var(--green);  border-color: #bbf7d0; }
+.stu-av.amber  { background: var(--amber-lt);  color: var(--amber);  border-color: #fde68a; }
+.stu-av.purple { background: var(--purple-lt); color: var(--purple); border-color: #ddd6fe; }
+
+/* ── Status pills ── */
+.sp { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.sp-paid      { background: var(--green-lt);  color: var(--green); }
+.sp-partial   { background: var(--accent-lt); color: var(--accent); }
+.sp-pending   { background: var(--amber-lt);  color: var(--amber); }
+.sp-overdue   { background: var(--red-lt);    color: var(--red); }
+.sp-draft     { background: var(--surface-3); color: var(--ink-muted); }
+.sp-verified  { background: var(--green-lt);  color: var(--green); }
+.sp-unverif   { background: var(--amber-lt);  color: var(--amber); }
+.sp-reversed  { background: var(--red-lt);    color: var(--red); }
+.sp-refunded  { background: var(--purple-lt); color: var(--purple); }
+
+
+/* ── Aging bars ── */
+.aging-row { margin-bottom: 13px; }
+.aging-row:last-child { margin-bottom: 0; }
+.aging-labels { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 5px; }
+.aging-labels .aging-name { font-weight: 600; color: var(--ink-2); }
+.aging-labels .aging-val  { font-family: 'Poppins', sans-serif; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ── Aid & Discounts mini blocks ── */
+.aid-block { background: var(--surface-2); border-radius: 8px; padding: 10px; text-align: center; }
+.aid-num   { font-size: 20px; font-weight: 700; line-height: 1; }
+.aid-desc  { font-size: 10.5px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Empty states ── */
+.dash-empty { text-align: center; padding: 30px 16px; color: var(--ink-faint); }
+.dash-empty i { font-size: 2rem; display: block; margin-bottom: 8px; opacity: .35; }
+.dash-empty p { font-size: 12px; margin: 0; }
+
+/* ── Monospace cells ── */
+.mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px; }
+.mono-link { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px; color: var(--accent); text-decoration: none; }
+.mono-link:hover { text-decoration: underline; }
+
+/* ── Student name / adm ── */
+.s-name { font-weight: 600; font-size: 12.5px; color: var(--ink); display: block; line-height: 1.3; }
+.s-adm  { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faint); display: block; }
+
+@media (max-width: 576px) { .kpi-value { font-size: 18px; } }
 </style>
 {% endblock %}
 
 {% block content %}
+{% currency_info as curr %}
 
-<!-- ═══════════════════════════════════════════════════
-     HERO HEADER
-══════════════════════════════════════════════════════ -->
-<div class="fd-hero">
-  <div class="row align-items-center">
-    <div class="col-md-7" style="position:relative;z-index:1;">
-      {% if current_session %}
-      <div class="mb-3">
-        <span class="fd-hero-pill">
-          <i class="fas fa-calendar-check"></i>
-          {{ current_session.academic_year }} &mdash; {{ current_session.academic_term }}
-        </span>
-      </div>
-      {% endif %}
-      <h1 class="fd-hero-title">Fees Management Dashboard</h1>
-      <p class="fd-hero-sub">Invoices, payments, scholarships and account balances at a glance.</p>
-    </div>
-    <div class="col-md-5 d-none d-md-flex justify-content-end align-items-center gap-2" style="position:relative;z-index:1;">
-      <a href="{% url 'fees:invoice_create' %}" class="btn btn-light btn-sm fw-semibold">
-        <i class="fas fa-plus me-1"></i>New Invoice
-      </a>
-      <a href="{% url 'fees:payment_create' %}" class="btn btn-light btn-sm fw-semibold">
-        <i class="fas fa-credit-card me-1"></i>Record Payment
-      </a>
-      <a href="{% url 'fees:invoice_bulk_generate' %}" class="btn btn-warning btn-sm fw-semibold">
-        <i class="fas fa-layer-group me-1"></i>Bulk Generate
-      </a>
-    </div>
-  </div>
-</div>
+<!-- Django flash messages → SweetAlert -->
+{% if messages %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    {% for message in messages %}
+        {% if 'sweetalert' in message.tags %}
+            {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+            {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+            {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+            {% else %}showInfo('{{ message|escapejs }}');
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+});
+</script>
+{% endif %}
 
-
-<!-- ═══════════════════════════════════════════════════
-     KPI STAT CARDS
-══════════════════════════════════════════════════════ -->
-<div class="row g-3 mb-4">
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-blue">
-      <div class="sc-top">
-        <div><div class="sc-label">Total Billed</div></div>
-        <div class="sc-icon ico-blue"><i class="fas fa-file-invoice-dollar"></i></div>
-      </div>
-      <div class="sc-value">
-        {% if invoice_stats.total_amount %}{{ invoice_stats.total_amount|money_short }}{% else %}&mdash;{% endif %}
-      </div>
-      <div class="sc-sub">{{ invoice_stats.total_invoices|default:0|intcomma }} invoice{{ invoice_stats.total_invoices|default:0|pluralize }}</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-green">
-      <div class="sc-top">
-        <div><div class="sc-label">Collected</div></div>
-        <div class="sc-icon ico-green"><i class="fas fa-coins"></i></div>
-      </div>
-      <div class="sc-value">
-        {% if payment_stats.total_amount %}{{ payment_stats.total_amount|money_short }}{% else %}&mdash;{% endif %}
-      </div>
-      <div class="sc-sub">{{ payment_stats.total_payments|default:0|intcomma }} payment{{ payment_stats.total_payments|default:0|pluralize }}</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-amber">
-      <div class="sc-top">
-        <div><div class="sc-label">Outstanding</div></div>
-        <div class="sc-icon ico-amber"><i class="fas fa-hourglass-half"></i></div>
-      </div>
-      <div class="sc-value">
-        {% if invoice_stats.total_balance %}{{ invoice_stats.total_balance|money_short }}{% else %}&mdash;{% endif %}
-      </div>
-      <div class="sc-sub">{{ invoice_stats.overdue_count|default:0 }} overdue</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-red">
-      <div class="sc-top">
-        <div><div class="sc-label">Overdue</div></div>
-        <div class="sc-icon ico-red"><i class="fas fa-exclamation-triangle"></i></div>
-      </div>
-      <div class="sc-value">{{ overdue_invoices|length|intcomma }}</div>
-      <div class="sc-sub">Need follow-up</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-purple">
-      <div class="sc-top">
-        <div><div class="sc-label">Scholarships</div></div>
-        <div class="sc-icon ico-purple"><i class="fas fa-graduation-cap"></i></div>
-      </div>
-      <div class="sc-value">{{ scholarship_stats.active_scholarships|default:0|intcomma }}</div>
-      <div class="sc-sub">{{ scholarship_stats.total_programs|default:0 }} program{{ scholarship_stats.total_programs|default:0|pluralize }}</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="stat-card accent-teal">
-      <div class="sc-top">
-        <div><div class="sc-label">Unverified</div></div>
-        <div class="sc-icon ico-teal"><i class="fas fa-clock"></i></div>
-      </div>
-      <div class="sc-value">{{ unverified_payments|length|intcomma }}</div>
-      <div class="sc-sub">Payments pending review</div>
-    </div>
-  </div>
-
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════
-     RECENT INVOICES + RECENT PAYMENTS
-══════════════════════════════════════════════════════ -->
-<div class="row g-3 mb-4">
-
-  <!-- Recent Invoices -->
-  <div class="col-lg-7">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6><i class="fas fa-file-invoice text-primary"></i> Recent Invoices</h6>
-        <a href="{% url 'fees:invoice_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:.75rem;padding:3px 12px;border-radius:20px;">
-          View All <i class="fas fa-arrow-right ms-1"></i>
-        </a>
-      </div>
-
-      {% if recent_invoices %}
-      <div class="table-responsive">
-        <table class="table fd-table">
-          <thead>
-            <tr>
-              <th>Invoice #</th>
-              <th>Student</th>
-              <th>Session</th>
-              <th class="text-end">Total</th>
-              <th class="text-end">Balance</th>
-              <th class="text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for inv in recent_invoices %}
-            <tr>
-              <td>
-                <a href="{% url 'fees:invoice_detail' inv.pk %}" class="text-primary fw-semibold text-decoration-none" style="font-size:.83rem;">
-                  {{ inv.invoice_number }}
-                </a>
-              </td>
-              <td>
-                <div style="font-size:.83rem;font-weight:600;color:var(--text-dark);">{{ inv.student.get_full_name }}</div>
-                <div style="font-size:.73rem;color:var(--text-light);">{{ inv.issue_date|date:"d M Y" }}</div>
-              </td>
-              <td style="font-size:.78rem;color:var(--text-mid);">{{ inv.academic_session }}</td>
-              <td class="text-end fw-semibold" style="font-size:.83rem;">{{ inv.total_amount|money_short }}</td>
-              <td class="text-end" style="font-size:.83rem;">
-                {% if inv.balance > 0 %}
-                  <span class="text-danger fw-bold">{{ inv.balance|money_short }}</span>
-                {% else %}
-                  <span class="text-success fw-bold">Cleared</span>
-                {% endif %}
-              </td>
-              <td class="text-center">
-                {% if inv.status == 'PAID' %}
-                  <span class="fd-badge bg-paid">Paid</span>
-                {% elif inv.status == 'PARTIALLY_PAID' %}
-                  <span class="fd-badge bg-partial">Partial</span>
-                {% elif inv.status == 'OVERDUE' %}
-                  <span class="fd-badge bg-overdue">Overdue</span>
-                {% elif inv.status == 'PENDING' %}
-                  <span class="fd-badge bg-pending">Pending</span>
-                {% elif inv.status == 'DRAFT' %}
-                  <span class="fd-badge bg-draft">Draft</span>
-                {% else %}
-                  <span class="fd-badge bg-void">{{ inv.get_status_display }}</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-file-invoice-dollar d-block"></i>
-        <p>No invoices yet.</p>
-        <a href="{% url 'fees:invoice_create' %}" class="btn btn-sm btn-primary mt-2">Create Invoice</a>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Recent Payments -->
-  <div class="col-lg-5">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6><i class="fas fa-credit-card text-success"></i> Recent Payments</h6>
-        <a href="{% url 'fees:payment_list' %}" class="btn btn-sm btn-outline-success" style="font-size:.75rem;padding:3px 12px;border-radius:20px;">
-          View All <i class="fas fa-arrow-right ms-1"></i>
-        </a>
-      </div>
-
-      {% if recent_payments %}
-      <div class="scroll-panel">
-        {% for pmt in recent_payments %}
-        <div class="attn-item">
-          <div class="attn-avatar {% if pmt.is_verified %}ico-green{% else %}ico-amber{% endif %}">
-            <i class="fas fa-money-bill-wave"></i>
-          </div>
-          <div class="flex-grow-1 overflow-hidden">
-            <div class="attn-name text-truncate">{{ pmt.student.get_full_name }}</div>
-            <div class="attn-sub">
-              {{ pmt.payment_method.name }} &bull; {{ pmt.payment_date|date:"d M" }}
-              {% if pmt.is_verified %}
-                <span class="fd-badge bg-paid ms-1" style="font-size:.64rem;">Verified</span>
-              {% else %}
-                <span class="fd-badge bg-partial ms-1" style="font-size:.64rem;">Pending</span>
-              {% endif %}
+<!-- ── Page Header ── -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-graph2 icon-gradient bg-happy-itmeo"></i>
             </div>
-          </div>
-          <div class="attn-val">
-            <div class="text-success fw-bold" style="font-size:.88rem;">{{ pmt.amount|money_short }}</div>
-            <div style="font-size:.72rem;color:var(--text-light);">{{ pmt.receipt_number }}</div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-hand-holding-usd d-block"></i>
-        <p>No payments recorded.</p>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════
-     ATTENTION SECTIONS  (2×2)
-══════════════════════════════════════════════════════ -->
-<div class="row g-3 mb-4">
-
-  <!-- Overdue Invoices -->
-  <div class="col-md-6">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6>
-          <i class="fas fa-exclamation-circle text-danger"></i>
-          Overdue Invoices
-          {% if overdue_invoices %}
-            <span class="bc bg-danger text-white">{{ overdue_invoices|length }}</span>
-          {% endif %}
-        </h6>
-        <a href="{% url 'fees:invoice_list' %}?status=OVERDUE" class="btn btn-sm btn-outline-danger" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
-      </div>
-      {% if overdue_invoices %}
-      <div class="scroll-panel">
-        {% for inv in overdue_invoices %}
-        <div class="attn-item">
-          <div class="attn-avatar ico-red"><i class="fas fa-file-invoice"></i></div>
-          <div class="flex-grow-1 overflow-hidden">
-            <div class="attn-name text-truncate">{{ inv.student.get_full_name }}</div>
-            <div class="attn-sub">Due {{ inv.due_date|date:"d M Y" }} &bull; {{ inv.invoice_number }}</div>
-          </div>
-          <div class="attn-val">
-            <div class="text-danger fw-bold" style="font-size:.88rem;">{{ inv.balance|money_short }}</div>
-            <a href="{% url 'fees:invoice_detail' inv.pk %}" class="text-primary" style="font-size:.72rem;">View</a>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-check-circle d-block text-success"></i>
-        <p>No overdue invoices. Great!</p>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Unverified Payments -->
-  <div class="col-md-6">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6>
-          <i class="fas fa-clock" style="color:var(--fd-amber);"></i>
-          Unverified Payments
-          {% if unverified_payments %}
-            <span class="bc bg-warning text-dark">{{ unverified_payments|length }}</span>
-          {% endif %}
-        </h6>
-        <a href="{% url 'fees:payment_list' %}?is_verified=false" class="btn btn-sm btn-outline-warning" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
-      </div>
-      {% if unverified_payments %}
-      <div class="scroll-panel">
-        {% for pmt in unverified_payments %}
-        <div class="attn-item">
-          <div class="attn-avatar ico-amber"><i class="fas fa-question-circle"></i></div>
-          <div class="flex-grow-1 overflow-hidden">
-            <div class="attn-name text-truncate">{{ pmt.student.get_full_name }}</div>
-            <div class="attn-sub">{{ pmt.payment_method.name }} &bull; {{ pmt.payment_date|date:"d M Y" }}</div>
-          </div>
-          <div class="attn-val">
-            <div class="fw-bold" style="font-size:.88rem;color:var(--fd-amber);">{{ pmt.amount|money_short }}</div>
-            <a href="{% url 'fees:payment_detail' pmt.pk %}" class="text-primary" style="font-size:.72rem;">Verify</a>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-check-double d-block text-success"></i>
-        <p>All payments verified.</p>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Accounts with Debt -->
-  <div class="col-md-6">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6>
-          <i class="fas fa-user-times text-danger"></i>
-          Accounts with Debt
-          {% if accounts_in_debt %}
-            <span class="bc bg-danger text-white">{{ accounts_in_debt|length }}</span>
-          {% endif %}
-        </h6>
-        <a href="{% url 'fees:account_list' %}?has_debt=true" class="btn btn-sm btn-outline-danger" style="font-size:.72rem;padding:3px 10px;border-radius:20px;">View All</a>
-      </div>
-      {% if accounts_in_debt %}
-      <div class="scroll-panel">
-        {% for acct in accounts_in_debt %}
-        <div class="attn-item">
-          <div class="attn-avatar ico-red">
-            <span style="font-size:.8rem;font-weight:700;">{{ acct.student.get_full_name|first }}</span>
-          </div>
-          <div class="flex-grow-1 overflow-hidden">
-            <div class="attn-name text-truncate">{{ acct.student.get_full_name }}</div>
-            <div class="attn-sub">
-              {{ acct.status }} &bull; {{ acct.last_transaction_date|date:"d M"|default:"No activity" }}
+            <div>
+                Fee Management Dashboard
+                <div class="page-title-subheading">
+                    Financial overview
+                </div>
             </div>
-          </div>
-          <div class="attn-val">
-            <div class="text-danger fw-bold" style="font-size:.88rem;">{{ acct.outstanding_amount|money_short }}</div>
-            <a href="{% url 'fees:account_detail' acct.pk %}" class="text-primary" style="font-size:.72rem;">View</a>
-          </div>
         </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-smile-beam d-block text-success"></i>
-        <p>No accounts with outstanding debt.</p>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Pending Scholarship Applications -->
-  <div class="col-md-6">
-    <div class="sec-card h-100">
-      <div class="sec-head">
-        <h6>
-          <i class="fas fa-graduation-cap" style="color:var(--fd-purple);"></i>
-          Pending Applications
-          {% if pending_scholarship_applications %}
-            <span class="bc text-white" style="background:var(--fd-purple);">{{ pending_scholarship_applications|length }}</span>
-          {% endif %}
-        </h6>
-        <a href="{% url 'fees:scholarship_application_list' %}?status=SUBMITTED" class="btn btn-sm" style="font-size:.72rem;padding:3px 10px;border-radius:20px;border:1px solid var(--fd-purple);color:var(--fd-purple);">View All</a>
-      </div>
-      {% if pending_scholarship_applications %}
-      <div class="scroll-panel">
-        {% for app in pending_scholarship_applications %}
-        <div class="attn-item">
-          <div class="attn-avatar ico-purple"><i class="fas fa-scroll"></i></div>
-          <div class="flex-grow-1 overflow-hidden">
-            <div class="attn-name text-truncate">{{ app.student.get_full_name }}</div>
-            <div class="attn-sub text-truncate">
-              {{ app.scholarship_program.name }} &bull; {{ app.application_date|date:"d M Y" }}
-            </div>
-          </div>
-          <div class="attn-val">
-            <a href="{% url 'fees:scholarship_application_detail' app.pk %}" class="btn btn-sm text-white" style="font-size:.72rem;padding:3px 12px;border-radius:20px;background:var(--fd-purple);">
-              Review
+        <div class="page-title-actions d-flex gap-2 flex-wrap">
+            <a href="{% url 'fees:reports_index' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-chart-bar me-1"></i>Reports
             </a>
-          </div>
+            <a href="{% url 'fees:financial_summary_report' %}{% if current_session %}?academic_session={{ current_session.pk }}{% endif %}"
+               class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-history me-1"></i>Historical View
+            </a>
+            <a href="{% url 'fees:invoice_list' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-file-invoice me-1"></i>Invoices
+            </a>
+            <a href="{% url 'fees:multiple_payment_create' %}" class="btn btn-sm btn-primary">
+                <i class="fa fa-plus me-1"></i>Record Payment
+            </a>
         </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="fd-empty">
-        <i class="fas fa-inbox d-block"></i>
-        <p>No pending applications.</p>
-      </div>
-      {% endif %}
     </div>
-  </div>
+</div>
+
+<!-- ── Attention Banner ── -->
+{% with unverif=dashboard_data.needs_attention.unverified_payments|default:0 ov_count=dashboard_data.needs_attention.overdue_invoices|default:0 sc_apps=pending_scholarship_applications %}
+{% if unverif or ov_count or sc_apps %}
+<div class="attn-banner">
+    <span style="font-size:12px;font-weight:700;color:#92400e;">
+        <i class="fa fa-exclamation-circle me-1"></i>Needs attention:
+    </span>
+    {% if unverif %}
+    <a href="{% url 'fees:payment_list' %}?is_verified=false" class="attn-chip">
+        <i class="fa fa-clock" style="font-size:11px;"></i>
+        {{ unverif }} unverified payment{{ unverif|pluralize }}
+    </a>
+    {% endif %}
+    {% if ov_count %}
+    <a href="{% url 'fees:invoice_list' %}?is_overdue=true" class="attn-chip red">
+        <i class="fa fa-exclamation-triangle" style="font-size:11px;"></i>
+        {{ ov_count }} overdue invoice{{ ov_count|pluralize }}
+    </a>
+    {% endif %}
+    {% if sc_apps %}
+    <a href="{% url 'fees:scholarship_application_list' %}?status=SUBMITTED" class="attn-chip">
+        <i class="fa fa-graduation-cap" style="font-size:11px;"></i>
+        {{ sc_apps|length }} scholarship application{{ sc_apps|length|pluralize }} pending review
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- ══════════════════════════════════════
+     KPI CARDS
+     ══════════════════════════════════════ -->
+{% with fo=dashboard_data.financial_overview %}
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-badge"><i class="fa fa-file-invoice-dollar"></i></div>
+            <div class="kpi-label">Total Billed</div>
+            <div class="kpi-value">{{ fo.total_billed|default:0|money_short }}</div>
+            <div class="kpi-sub">
+                {{ dashboard_data.summary.total_invoices|default:0|format_number }}
+                invoice{{ dashboard_data.summary.total_invoices|default:0|pluralize }}
+                issued
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-badge"><i class="fa fa-check-circle"></i></div>
+            <div class="kpi-label">Total Collected</div>
+            <div class="kpi-value">{{ fo.total_collected|default:0|money_short }}</div>
+            <div class="kpi-sub">
+                {{ dashboard_data.summary.total_payments|default:0|format_number }}
+                payment{{ dashboard_data.summary.total_payments|default:0|pluralize }}
+                recorded
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-red">
+            <div class="kpi-badge"><i class="fa fa-hourglass-half"></i></div>
+            <div class="kpi-label">Outstanding</div>
+            <div class="kpi-value">{{ fo.total_outstanding|default:0|money_short }}</div>
+            <div class="kpi-sub">
+                {{ account_stats.debt_analysis.total_debtors|default:0|format_number }}
+                account{{ account_stats.debt_analysis.total_debtors|default:0|pluralize }}
+                in arrears
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-chart-pie"></i></div>
+            <div class="kpi-label">Collection Rate</div>
+            <div class="kpi-value">{{ fo.collection_rate|default:0|floatformat:1 }}%</div>
+            <div class="kpi-sub" style="flex-direction:column;align-items:flex-start;gap:4px;">
+                <div class="prog-outer" style="width:100%;">
+                    <div class="prog-inner"
+                         style="width:{{ fo.collection_rate|default:0|floatformat:0 }}%;background:var(--teal);">
+                    </div>
+                </div>
+                <span>of total billed amount</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+
+<!-- ── Mini stats row ── -->
+<div class="row g-2 mb-3">
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val" style="color:var(--amber);">
+                {{ invoice_stats.by_status.PENDING.count|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Pending</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val" style="color:var(--accent);">
+                {{ invoice_stats.by_status.PARTIALLY_PAID.count|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Partial</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val" style="color:var(--red);">
+                {{ invoice_stats.overdue.count|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Overdue</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val" style="color:var(--green);">
+                {{ invoice_stats.by_status.PAID.count|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Fully Paid</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val" style="color:var(--purple);">
+                {{ payment_stats.verification.unverified_count|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Unverified</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="mini-stat">
+            <div class="mini-val">
+                {{ dashboard_data.summary.total_accounts|default:0|format_number }}
+            </div>
+            <div class="mini-lbl">Accounts</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     CHARTS ROW 1
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+    <!-- Payment Trends – line chart -->
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-chart-area" style="color:var(--accent);font-size:13px;"></i>
+                    Payment Trends — Last 30 Days
+                </span>
+                <a href="{% url 'fees:collection_report' %}" class="dash-link">View report →</a>
+            </div>
+            <div style="padding:10px 16px 6px;">
+                <div id="chart-trends" style="min-height:220px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice Status – donut -->
+    <div class="col-xl-4">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-chart-pie" style="color:var(--purple);font-size:13px;"></i>
+                    Invoice Status
+                </span>
+                <a href="{% url 'fees:invoice_list' %}" class="dash-link">View all →</a>
+            </div>
+            <div style="padding:6px 8px 4px;">
+                <div id="chart-donut" style="min-height:220px;"></div>
+            </div>
+        </div>
+    </div>
 
 </div>
 
+<!-- ══════════════════════════════════════
+     CHARTS ROW 2
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
 
-<!-- ═══════════════════════════════════════════════════
-     QUICK ACTIONS
-══════════════════════════════════════════════════════ -->
-<div class="sec-card mb-4">
-  <div class="sec-head">
-    <h6><i class="fas fa-bolt text-warning"></i> Quick Actions</h6>
-  </div>
-  <div class="p-3">
-    <div class="row g-2">
+    <!-- Outstanding Aging – horizontal bar -->
+    <div class="col-xl-4">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-layer-group" style="color:var(--red);font-size:13px;"></i>
+                    Outstanding Aging
+                </span>
+                <a href="{% url 'fees:outstanding_report' %}" class="dash-link">Full report →</a>
+            </div>
+            <div class="dash-body">
+                {% with ag=dashboard_data.outstanding_aging %}
 
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:invoice_create' %}" class="qlink">
-          <div class="ql-icon ico-blue"><i class="fas fa-file-plus"></i></div>
-          New Invoice
-        </a>
-      </div>
+                <!-- Use JS for the bars to avoid float arithmetic in templates -->
+                <div id="aging-bars">
+                    <div class="aging-row">
+                        <div class="aging-labels">
+                            <span class="aging-name">Current (not yet due)</span>
+                            <span class="aging-val" style="color:var(--green);"
+                                  id="ag-current-val">{{ ag.current|default:0|money_short }}</span>
+                        </div>
+                        <div class="prog-outer">
+                            <div class="prog-inner" id="ag-bar-current"
+                                 style="width:0%;background:var(--green);"></div>
+                        </div>
+                    </div>
+                    <div class="aging-row">
+                        <div class="aging-labels">
+                            <span class="aging-name">1–30 days overdue</span>
+                            <span class="aging-val" style="color:var(--amber);"
+                                  id="ag-1-30-val">{{ ag.overdue_1_30|default:0|money_short }}</span>
+                        </div>
+                        <div class="prog-outer">
+                            <div class="prog-inner" id="ag-bar-1-30"
+                                 style="width:0%;background:var(--amber);"></div>
+                        </div>
+                    </div>
+                    <div class="aging-row">
+                        <div class="aging-labels">
+                            <span class="aging-name">31–60 days overdue</span>
+                            <span class="aging-val" style="color:var(--red);"
+                                  id="ag-31-60-val">{{ ag.overdue_31_60|default:0|money_short }}</span>
+                        </div>
+                        <div class="prog-outer">
+                            <div class="prog-inner" id="ag-bar-31-60"
+                                 style="width:0%;background:var(--red);"></div>
+                        </div>
+                    </div>
+                    <div class="aging-row">
+                        <div class="aging-labels">
+                            <span class="aging-name">Over 60 days</span>
+                            <span class="aging-val" style="color:#7f1d1d;"
+                                  id="ag-over-60-val">{{ ag.overdue_over_60|default:0|money_short }}</span>
+                        </div>
+                        <div class="prog-outer">
+                            <div class="prog-inner" id="ag-bar-over-60"
+                                 style="width:0%;background:#7f1d1d;"></div>
+                        </div>
+                    </div>
+                </div>
 
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:payment_create' %}" class="qlink">
-          <div class="ql-icon ico-green"><i class="fas fa-credit-card"></i></div>
-          Record Payment
-        </a>
-      </div>
+                <!-- Hidden raw values for JS to read -->
+                <span id="ag-raw"
+                      data-current="{{ ag.current|default:0|floatformat:2 }}"
+                      data-1-30="{{ ag.overdue_1_30|default:0|floatformat:2 }}"
+                      data-31-60="{{ ag.overdue_31_60|default:0|floatformat:2 }}"
+                      data-over-60="{{ ag.overdue_over_60|default:0|floatformat:2 }}"
+                      style="display:none;"></span>
 
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:invoice_bulk_generate' %}" class="qlink">
-          <div class="ql-icon ico-amber"><i class="fas fa-layer-group"></i></div>
-          Bulk Generate
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:student_scholarship_create' %}" class="qlink">
-          <div class="ql-icon ico-purple"><i class="fas fa-award"></i></div>
-          Award Scholarship
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:payment_bulk_verify' %}" class="qlink">
-          <div class="ql-icon ico-teal"><i class="fas fa-check-double"></i></div>
-          Bulk Verify
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:outstanding_report' %}" class="qlink">
-          <div class="ql-icon" style="background:#f0fdfa;color:#0f766e;"><i class="fas fa-chart-pie"></i></div>
-          Reports
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:structure_list' %}" class="qlink">
-          <div class="ql-icon" style="background:#fdf4ff;color:#a21caf;"><i class="fas fa-sitemap"></i></div>
-          Fee Structures
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:category_list' %}" class="qlink">
-          <div class="ql-icon" style="background:#fff7ed;color:#c2410c;"><i class="fas fa-tags"></i></div>
-          Categories
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:discount_list' %}" class="qlink">
-          <div class="ql-icon" style="background:#fef9c3;color:#a16207;"><i class="fas fa-percent"></i></div>
-          Discounts
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:refund_list' %}" class="qlink">
-          <div class="ql-icon" style="background:#fff1f2;color:#be185d;"><i class="fas fa-undo"></i></div>
-          Refunds
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:account_list' %}" class="qlink">
-          <div class="ql-icon ico-blue"><i class="fas fa-wallet"></i></div>
-          Accounts
-        </a>
-      </div>
-
-      <div class="col-6 col-md-3 col-lg-2">
-        <a href="{% url 'fees:collection_report' %}" class="qlink">
-          <div class="ql-icon ico-green"><i class="fas fa-file-export"></i></div>
-          Collection Report
-        </a>
-      </div>
-
+                {% endwith %}
+            </div>
+        </div>
     </div>
-  </div>
+
+    <!-- Payment Methods – column chart -->
+    <div class="col-xl-4">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-credit-card" style="color:var(--teal);font-size:13px;"></i>
+                    Payment Methods
+                </span>
+            </div>
+            <div style="padding:6px 8px 4px;">
+                <div id="chart-methods" style="min-height:220px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scholarships & Discounts -->
+    <div class="col-xl-4">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-graduation-cap" style="color:var(--purple);font-size:13px;"></i>
+                    Aid &amp; Discounts
+                </span>
+            </div>
+            <div class="dash-body" style="padding:14px 18px;">
+
+                <!-- Scholarships block -->
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);margin-bottom:8px;">
+                        Scholarships
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="aid-block" style="background:var(--purple-lt);">
+                                <div class="aid-num" style="color:var(--purple);">
+                                    {{ scholarship_stats.scholarships.total_active|default:0 }}
+                                </div>
+                                <div class="aid-desc">Active awards</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="aid-block">
+                                <div class="aid-num">
+                                    {{ scholarship_stats.applications.by_status.SUBMITTED|default:0 }}
+                                </div>
+                                <div class="aid-desc">Pending apps</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-size:12px;color:var(--ink-muted);">
+                        Disbursed to date:
+                        <strong style="color:var(--purple);">
+                            {{ scholarship_stats.budget.total_disbursed|default:0|money_short }}
+                        </strong>
+                    </div>
+                </div>
+
+                <hr style="border-color:var(--border);margin:12px 0;">
+
+                <!-- Discounts block -->
+                <div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);margin-bottom:8px;">
+                        Discounts
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="aid-block" style="background:var(--teal-lt);">
+                                <div class="aid-num" style="color:var(--teal);">
+                                    {{ discount_stats.student_discount_awards.active|default:0 }}
+                                </div>
+                                <div class="aid-desc">Active awards</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="aid-block">
+                                <div class="aid-num">
+                                    {{ discount_stats.active_policies|default:0 }}
+                                </div>
+                                <div class="aid-desc">Active policies</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-size:12px;color:var(--ink-muted);">
+                        Total discounted:
+                        <strong style="color:var(--teal);">
+                            {{ discount_stats.applications.total_discount_value|default:0|money_short }}
+                        </strong>
+                    </div>
+                </div>
+
+                <hr style="border-color:var(--border);margin:12px 0;">
+
+                <div class="d-flex gap-2">
+                    <a href="{% url 'fees:student_scholarship_list' %}"
+                       class="btn btn-sm btn-outline-secondary flex-fill"
+                       style="font-size:11.5px;">
+                        Scholarships
+                    </a>
+                    <a href="{% url 'fees:discount_list' %}"
+                       class="btn btn-sm btn-outline-secondary flex-fill"
+                       style="font-size:11.5px;">
+                        Discounts
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
 </div>
 
+<!-- ══════════════════════════════════════
+     DATA TABLES ROW 1
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+    <!-- Recent Payments -->
+    <div class="col-xl-7">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-money-bill-wave" style="color:var(--green);font-size:13px;"></i>
+                    Recent Payments
+                </span>
+                <a href="{% url 'fees:payment_list' %}" class="dash-link">View all →</a>
+            </div>
+            {% if recent_payments %}
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Payment</th>
+                        <th>Student</th>
+                        <th>Method</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in recent_payments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'fees:payment_detail' p.pk %}" class="mono-link">
+                            {{ p.payment_number }}
+                        </a>
+                        <div style="font-size:10.5px;color:var(--ink-faint);">
+                            {{ p.payment_date|date:"d M Y" }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-av">
+                                {{ p.student.first_name|first }}{{ p.student.last_name|first }}
+                            </div>
+                            <div>
+                                <span class="s-name">{{ p.student.get_full_name }}</span>
+                                <span class="s-adm">{{ p.student.admission_number }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="color:var(--ink-muted);font-size:12px;">
+                        {{ p.payment_method.name }}
+                    </td>
+                    <td class="text-end">
+                        <span class="mono"
+                              style="color:{% if p.reversed or p.refunded %}var(--ink-faint){% else %}var(--green){% endif %};">
+                            {{ p.amount|format_in_currency:p.currency }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if p.reversed %}<span class="sp sp-reversed"><i class="fa fa-undo"></i> Reversed</span>
+                        {% elif p.refunded %}<span class="sp sp-refunded"><i class="fa fa-reply"></i> Refunded</span>
+                        {% elif p.is_verified %}<span class="sp sp-verified"><i class="fa fa-check-double"></i> Verified</span>
+                        {% else %}<span class="sp sp-unverif"><i class="fa fa-clock"></i> Unverified</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="dash-empty">
+                <i class="pe-7s-cash"></i>
+                <p>No recent payments recorded</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Overdue Invoices -->
+    <div class="col-xl-5">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-exclamation-triangle" style="color:var(--red);font-size:13px;"></i>
+                    Overdue Invoices
+                </span>
+                <a href="{% url 'fees:invoice_list' %}?is_overdue=true"
+                   class="dash-link" style="color:var(--red);">
+                    View all →
+                </a>
+            </div>
+            {% if overdue_invoices %}
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Invoice</th>
+                        <th>Student</th>
+                        <th class="text-end">Balance</th>
+                        <th class="text-center">Overdue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for inv in overdue_invoices %}
+                <tr>
+                    <td>
+                        <a href="{% url 'fees:invoice_detail' inv.pk %}" class="mono-link">
+                            {{ inv.invoice_number }}
+                        </a>
+                        <div style="font-size:10.5px;color:var(--ink-faint);">
+                            Due {{ inv.due_date|date:"d M Y" }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-av amber">
+                                {{ inv.student.first_name|first }}{{ inv.student.last_name|first }}
+                            </div>
+                            <span class="s-name" style="font-size:12px;">{{ inv.student.get_full_name }}</span>
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <span class="mono" style="color:var(--red);">
+                            {{ inv.balance|money_short }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <span style="font-size:10.5px;font-weight:700;
+                                     background:var(--red-lt);color:var(--red);
+                                     padding:2px 8px;border-radius:4px;white-space:nowrap;">
+                            {{ inv.due_date|timesince }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="dash-empty">
+                <i class="fa fa-check-circle" style="color:var(--green);opacity:.5;"></i>
+                <p>No overdue invoices — great!</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     DATA TABLES ROW 2
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+    <!-- Top Outstanding Accounts -->
+    <div class="col-xl-5">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-user-times" style="color:var(--amber);font-size:13px;"></i>
+                    Top Outstanding Accounts
+                </span>
+                <a href="{% url 'fees:account_list' %}?balance_status=negative" class="dash-link">
+                    View all →
+                </a>
+            </div>
+            {% if accounts_in_debt %}
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th class="text-end">Outstanding</th>
+                        <th style="width:60px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for acct in accounts_in_debt %}
+                <tr>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-av amber">
+                                {{ acct.student.first_name|first }}{{ acct.student.last_name|first }}
+                            </div>
+                            <div>
+                                <span class="s-name">{{ acct.student.get_full_name }}</span>
+                                <span class="s-adm">{{ acct.student.admission_number }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <span class="mono" style="color:var(--red);">
+                            {{ acct.get_outstanding_amount|money_short }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{% url 'fees:account_detail' acct.pk %}"
+                           style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;">
+                            View →
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="dash-empty">
+                <i class="fa fa-smile" style="color:var(--green);opacity:.5;"></i>
+                <p>No accounts currently in arrears</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Invoices -->
+    <div class="col-xl-7">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-file-invoice" style="color:var(--accent);font-size:13px;"></i>
+                    Recent Invoices
+                </span>
+                <a href="{% url 'fees:invoice_list' %}" class="dash-link">View all →</a>
+            </div>
+            {% if recent_invoices %}
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Invoice</th>
+                        <th>Student</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Balance</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for inv in recent_invoices %}
+                <tr>
+                    <td>
+                        <a href="{% url 'fees:invoice_detail' inv.pk %}" class="mono-link">
+                            {{ inv.invoice_number }}
+                        </a>
+                        <div style="font-size:10.5px;color:var(--ink-faint);">
+                            {{ inv.issue_date|date:"d M Y" }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="stu-cell">
+                            <div class="stu-av">
+                                {{ inv.student.first_name|first }}{{ inv.student.last_name|first }}
+                            </div>
+                            <div>
+                                <span class="s-name" style="font-size:12px;">{{ inv.student.get_full_name }}</span>
+                                <span class="s-adm">{{ inv.academic_session }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <span class="mono">{{ inv.total_amount|money_short }}</span>
+                    </td>
+                    <td class="text-end">
+                        <span class="mono"
+                              style="color:{% if inv.balance > 0 %}var(--red){% else %}var(--green){% endif %};">
+                            {{ inv.balance|money_short }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if inv.status == 'PAID' %}
+                            <span class="sp sp-paid"><i class="fa fa-check"></i> Paid</span>
+                        {% elif inv.status == 'PARTIALLY_PAID' %}
+                            <span class="sp sp-partial"><i class="fa fa-adjust"></i> Partial</span>
+                        {% elif inv.status == 'OVERDUE' %}
+                            <span class="sp sp-overdue"><i class="fa fa-clock"></i> Overdue</span>
+                        {% elif inv.status == 'PENDING' %}
+                            <span class="sp sp-pending"><i class="fa fa-hourglass"></i> Pending</span>
+                        {% elif inv.status == 'DRAFT' %}
+                            <span class="sp sp-draft">Draft</span>
+                        {% else %}
+                            <span class="sp sp-draft">{{ inv.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="dash-empty">
+                <i class="pe-7s-news-paper"></i>
+                <p>No recent invoices</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Pending Scholarship Applications ── -->
+{% if pending_scholarship_applications %}
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-graduation-cap" style="color:var(--purple);font-size:13px;"></i>
+                    Pending Scholarship Applications
+                </span>
+                <a href="{% url 'fees:scholarship_application_list' %}?status=SUBMITTED" class="dash-link">
+                    View all →
+                </a>
+            </div>
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead>
+                    <tr>
+                        <th>Application</th>
+                        <th>Student</th>
+                        <th>Program</th>
+                        <th>Date</th>
+                        <th class="text-end">Requested</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for app in pending_scholarship_applications %}
+                <tr>
+                    <td>
+                        <span class="mono" style="color:var(--accent);">{{ app.application_number }}</span>
+                    </td>
+                    <td>
+                        <span class="s-name" style="font-size:12px;">{{ app.student.get_full_name }}</span>
+                        <span class="s-adm">{{ app.student.admission_number }}</span>
+                    </td>
+                    <td style="font-size:12px;">{{ app.scholarship_program.name }}</td>
+                    <td style="font-size:12px;color:var(--ink-muted);">
+                        {{ app.application_date|date:"d M Y" }}
+                    </td>
+                    <td class="text-end">
+                        <span class="mono">
+                            {% if app.requested_amount %}{{ app.requested_amount|money_short }}{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{% url 'fees:scholarship_application_detail' app.pk %}"
+                           class="btn btn-xs btn-outline-primary"
+                           style="font-size:11px;padding:3px 12px;border-radius:5px;">
+                            Review
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dynamic modal container — HTMX swaps modal HTML here -->
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var schoolCurrency = '{{ curr.code|default:"UGX"|escapejs }}';
+
+    function fmtNum(n) {
+        if (!n && n !== 0) return '0';
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000)    return Math.round(n / 1000) + 'K';
+        return Math.round(n).toLocaleString();
+    }
+    function fmtFull(n) {
+        if (!n && n !== 0) return '0';
+        return Math.round(n).toLocaleString();
+    }
+
+    /* 1. Aging bars – width driven by JS to avoid float issues */
+    (function () {
+        var raw = document.getElementById('ag-raw');
+        if (!raw) return;
+        var vals = {
+            current:  parseFloat(raw.dataset.current)  || 0,
+            d1_30:    parseFloat(raw.dataset['1-30'])   || 0,
+            d31_60:   parseFloat(raw.dataset['31-60'])  || 0,
+            dOver60:  parseFloat(raw.dataset['over-60'])|| 0,
+        };
+        var total = vals.current + vals.d1_30 + vals.d31_60 + vals.dOver60;
+        if (total <= 0) return;
+        function setBar(barId, val) {
+            var el = document.getElementById(barId);
+            if (el) el.style.width = Math.round((val / total) * 100) + '%';
+        }
+        setBar('ag-bar-current',  vals.current);
+        setBar('ag-bar-1-30',     vals.d1_30);
+        setBar('ag-bar-31-60',    vals.d31_60);
+        setBar('ag-bar-over-60',  vals.dOver60);
+    }());
+
+    /* 2. Payment Trends – ApexCharts area */
+    var trendDates   = [{% for item in dashboard_data.payment_trends %}"{{ item.date }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+    var trendAmounts = [{% for item in dashboard_data.payment_trends %}{{ item.amount|default:0|floatformat:2 }}{% if not forloop.last %},{% endif %}{% endfor %}];
+    var trendCounts  = [{% for item in dashboard_data.payment_trends %}{{ item.count|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+    if (typeof ApexCharts !== 'undefined' && document.getElementById('chart-trends')) {
+        new ApexCharts(document.getElementById('chart-trends'), {
+            chart: {
+                type: 'area', height: 220,
+                toolbar: { show: false },
+                fontFamily: 'Open Sans, sans-serif',
+                animations: { enabled: true, speed: 500 },
+                sparkline: { enabled: false },
+            },
+            series: [{ name: 'Collected', data: trendAmounts.length ? trendAmounts : [0] }],
+            xaxis: {
+                categories: trendDates.length ? trendDates : ['—'],
+                labels: {
+                    style: { fontSize: '10px', colors: '#64748b' },
+                    rotate: -40,
+                    show: trendDates.length > 0,
+                    formatter: function (val) {
+                        if (!val || val === '—') return val;
+                        var d = new Date(val);
+                        return isNaN(d) ? val : (d.getDate() + '/' + (d.getMonth() + 1));
+                    },
+                },
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                tickAmount: Math.min(trendDates.length, 10),
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px', colors: '#64748b' },
+                    formatter: function (val) { return fmtNum(val); },
+                },
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            fill: {
+                type: 'gradient',
+                gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.03, stops: [0, 100] },
+            },
+            colors: ['#1d4ed8'],
+            grid: { borderColor: '#e2e8f0', strokeDashArray: 4, xaxis: { lines: { show: false } } },
+            dataLabels: { enabled: false },
+            markers: { size: 0 },
+            tooltip: {
+                y: {
+                    formatter: function (val, opts) {
+                        var idx = opts.dataPointIndex;
+                        var cnt = trendCounts[idx] || 0;
+                        return schoolCurrency + ' ' + fmtFull(val) + ' (' + cnt + ' payment' + (cnt !== 1 ? 's' : '') + ')';
+                    },
+                },
+            },
+        }).render();
+    }
+
+    /* 3. Invoice Status – donut */
+    var donutLabels = [];
+    var donutSeries = [];
+    var donutColors = [];
+    var statusColors = {
+        'PENDING':        '#f97316',
+        'PARTIALLY_PAID': '#3b82f6',
+        'PAID':           '#15803d',
+        'OVERDUE':        '#dc2626',
+        'DRAFT':          '#94a3b8',
+        'VOID':           '#cbd5e1',
+        'CANCELLED':      '#e2e8f0',
+        'BAD_DEBT':       '#7f1d1d',
+    };
+    {% for status, data in dashboard_data.invoice_status.items %}
+    {% if data.count %}
+    donutLabels.push('{{ status|title|replace:"_: " }}');
+    donutSeries.push({{ data.count|default:0 }});
+    donutColors.push(statusColors['{{ status }}'] || '#94a3b8');
+    {% endif %}
+    {% endfor %}
+
+    if (typeof ApexCharts !== 'undefined' && document.getElementById('chart-donut')) {
+        if (!donutSeries.length) {
+            donutLabels = ['No data']; donutSeries = [1]; donutColors = ['#e2e8f0'];
+        }
+        new ApexCharts(document.getElementById('chart-donut'), {
+            chart: {
+                type: 'donut', height: 220,
+                fontFamily: 'Open Sans, sans-serif',
+                animations: { enabled: true, speed: 500 },
+            },
+            series: donutSeries,
+            labels: donutLabels,
+            colors: donutColors,
+            legend: {
+                position: 'bottom',
+                fontSize: '11px',
+                offsetY: 4,
+                itemMargin: { horizontal: 5, vertical: 2 },
+                markers: { width: 8, height: 8, radius: 2 },
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function (val) { return Math.round(val) + '%'; },
+                style: { fontSize: '10px', fontWeight: '600' },
+                dropShadow: { enabled: false },
+            },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: '56%',
+                        labels: {
+                            show: true,
+                            total: {
+                                show: true,
+                                label: 'Total',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                color: '#64748b',
+                                formatter: function (w) {
+                                    return w.globals.seriesTotals.reduce(function (a, b) { return a + b; }, 0).toLocaleString();
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            stroke: { width: 2, colors: ['#ffffff'] },
+            tooltip: {
+                y: { formatter: function (val) { return val.toLocaleString() + ' invoice' + (val !== 1 ? 's' : ''); } },
+            },
+        }).render();
+    }
+
+    /* 4. Payment Methods – column chart */
+    var methNames   = [];
+    var methAmounts = [];
+    var methCounts  = [];
+    {% for m in payment_stats.by_payment_method %}
+    methNames.push('{{ m.method|truncatechars:14|escapejs }}');
+    methAmounts.push({{ m.total_amount|default:0|floatformat:2 }});
+    methCounts.push({{ m.count|default:0 }});
+    {% endfor %}
+
+    if (typeof ApexCharts !== 'undefined' && document.getElementById('chart-methods')) {
+        if (!methNames.length) { methNames = ['No data']; methAmounts = [0]; methCounts = [0]; }
+        new ApexCharts(document.getElementById('chart-methods'), {
+            chart: {
+                type: 'bar', height: 220,
+                toolbar: { show: false },
+                fontFamily: 'Open Sans, sans-serif',
+                animations: { enabled: true, speed: 500 },
+            },
+            series: [{ name: 'Collected', data: methAmounts }],
+            xaxis: {
+                categories: methNames,
+                labels: { style: { fontSize: '10px', colors: '#64748b' }, rotate: -30 },
+                axisBorder: { show: false },
+                axisTicks:  { show: false },
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px', colors: '#64748b' },
+                    formatter: function (val) { return fmtNum(val); },
+                },
+            },
+            plotOptions: {
+                bar: { borderRadius: 4, columnWidth: '52%' },
+            },
+            colors: ['#0f766e'],
+            grid: { borderColor: '#e2e8f0', strokeDashArray: 4, xaxis: { lines: { show: false } } },
+            dataLabels: { enabled: false },
+            tooltip: {
+                y: {
+                    formatter: function (val, opts) {
+                        var cnt = methCounts[opts.dataPointIndex] || 0;
+                        return schoolCurrency + ' ' + fmtFull(val) + ' (' + cnt + ' pmt' + (cnt !== 1 ? 's' : '') + ')';
+                    },
+                },
+            },
+        }).render();
+    }
+
+}());
+</script>
+
+<script>
+/* ── HTMX modal wiring + header-driven alerts ── */
+(function () {
+    var currentModal = null;
+
+    /* afterSwap — wire dynamic modals loaded into #modal-container */
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target.id !== 'modal-container') return;
+        var dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+        if (!dialog) return;
+
+        var old = document.getElementById('dynamicModalWrapper');
+        if (old) {
+            var existing = bootstrap.Modal.getInstance(old);
+            if (existing) existing.dispose();
+            old.remove();
+        }
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'modal fade';
+        wrapper.id = 'dynamicModalWrapper';
+        wrapper.setAttribute('tabindex', '-1');
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(dialog);
+        document.body.appendChild(wrapper);
+
+        currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+
+        wrapper.addEventListener('hidden.bs.modal', function () {
+            wrapper.remove();
+            document.getElementById('modal-container').innerHTML = '';
+            currentModal = null;
+        });
+    });
+
+    /* beforeSwap — read custom response headers for alerts / modal close */
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        var xhr     = e.detail.xhr;
+        var message = xhr.getResponseHeader('HX-Alert-Message');
+        var type    = xhr.getResponseHeader('HX-Alert-Type')  || 'success';
+        var title   = xhr.getResponseHeader('HX-Alert-Title');
+        var close   = xhr.getResponseHeader('HX-Close-Modal');
+        var redirect= xhr.getResponseHeader('HX-Redirect');
+
+        if (close === 'true' && currentModal) currentModal.hide();
+
+        if (message && typeof Swal !== 'undefined') {
+            setTimeout(function () {
+                Swal.fire({
+                    icon: type,
+                    title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                    text: message,
+                    confirmButtonColor: type === 'success' ? '#15803d'
+                                      : type === 'error'   ? '#dc2626'
+                                      : '#b45309',
+                    timer: type === 'success' ? 3000 : null,
+                    timerProgressBar: type === 'success',
+                }).then(function () {
+                    if (redirect) window.location.href = redirect;
+                });
+            }, 300);
+        }
+    });
+
+    /* DOMContentLoaded — tooltips */
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+            new bootstrap.Tooltip(el, { html: true });
+        });
+    });
+}());
+</script>
 {% endblock %}

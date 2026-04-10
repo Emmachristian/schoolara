@@ -1,190 +1,261 @@
-{# hr/templates/hr/payroll/modals/process_payment.html #}
 {% load currency_filters %}
+<div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:10px; border:1px solid #e2e8f0; overflow:hidden;">
 
-<div class="modal-dialog">
-    <div class="modal-content">
-        <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title">
-                <i class="fa fa-money-bill me-2"></i>Process Payment
-            </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <!-- Header -->
+        <div class="modal-header" style="background:#f0fdf4; border-bottom:1px solid #bbf7d0; padding:14px 20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:32px; height:32px; border-radius:8px; background:#dcfce7;
+                            display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="fa fa-money-bill-wave" style="color:#15803d; font-size:14px;"></i>
+                </div>
+                <div>
+                    <h6 class="modal-title mb-0" style="font-size:14px; font-weight:700; color:#0f172a;">
+                        Record Payment
+                    </h6>
+                    <div style="font-size:11px; color:#64748b; margin-top:1px;">
+                        {{ payroll.payroll_number }} &mdash; {{ payroll.staff.full_name }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        
-        <div class="modal-body text-center py-4">
-            <div class="mb-3">
-                <i class="fa fa-money-bill text-primary" style="font-size: 4rem;"></i>
-            </div>
-            <h4 class="mb-3">Process Payment for Payroll?</h4>
-            
-            {# Payroll Summary #}
-            <div class="alert alert-info">
-                <div class="mb-2">
-                    <strong>{{ payroll.staff.full_name }}</strong>
-                </div>
-                <small class="d-block">
-                    <strong>Pay Period:</strong> {{ payroll.pay_period_label|default:"N/A" }}
-                </small>
-                <small class="d-block">
-                    {{ payroll.pay_period_start|date:"M d" }} - {{ payroll.pay_period_end|date:"M d, Y" }}
-                </small>
-                <small class="d-block mt-1">
-                    <strong>Fiscal Period:</strong> {{ payroll.fiscal_period.name }}
-                </small>
-                <hr class="my-2">
-                <small class="d-block">
-                    <strong>Payment Date:</strong> {{ payroll.payment_date|date:"F d, Y" }}
-                </small>
-                <small class="d-block">
-                    <strong>Payment Method:</strong> 
-                    {{ payroll.payment_method.name|default:"Not specified" }}
-                </small>
-                {% if payroll.bank_account %}
-                    <small class="d-block text-muted">
-                        Account: {{ payroll.bank_account }}
-                    </small>
-                {% endif %}
-                {% if payroll.payment_reference %}
-                    <small class="d-block text-muted">
-                        Reference: {{ payroll.payment_reference }}
-                    </small>
-                {% endif %}
-                <hr class="my-2">
-                <div class="mt-2">
-                    <strong class="text-primary">Amount to Pay: {{ payroll.net_pay|money }}</strong>
-                </div>
-                {% if payroll.is_prorated %}
-                    <div class="mt-2">
-                        <span class="badge bg-warning">PRORATED</span>
-                        <br>
-                        <small class="text-muted">
-                            {{ payroll.days_worked }}/{{ payroll.total_working_days }} days
-                        </small>
+
+        <!-- Body -->
+        <div class="modal-body" style="padding:20px;">
+
+            {% if payroll.status != 'APPROVED' and payroll.status != 'PARTIAL' %}
+
+                <!-- Cannot process -->
+                <div style="background:#fef2f2; border:1px solid #fecaca;
+                            border-left:4px solid #dc2626;
+                            border-radius:0 8px 8px 0;
+                            padding:14px 16px;
+                            display:flex; gap:10px; align-items:flex-start;
+                            font-size:12.5px; color:#7f1d1d;">
+                    <i class="fa fa-ban" style="flex-shrink:0; margin-top:1px; font-size:14px;"></i>
+                    <div>
+                        <strong style="display:block; margin-bottom:4px;">Cannot Record Payment</strong>
+                        Payroll must be <strong>Approved</strong> or <strong>Partially Paid</strong> before a payment
+                        can be recorded. Current status: <strong>{{ payroll.get_status_display }}</strong>.
                     </div>
-                {% endif %}
-            </div>
-            
-            {# Error or Success Messages #}
-            {% if message %}
-                {# Show error message from modal_views.py #}
-                <div class="alert alert-danger text-start">
-                    <i class="fa fa-exclamation-circle me-2"></i>
-                    <strong>Cannot Process Payment:</strong>
-                    <p class="mb-0 mt-2">{{ message }}</p>
                 </div>
-            {% elif not can_process %}
-                <div class="alert alert-danger text-start">
-                    <i class="fa fa-exclamation-circle me-2"></i>
-                    <strong>Cannot Process Payment:</strong>
-                    <p class="mb-0 mt-2">
-                        Payroll must be approved before payment. Current status: 
-                        <span class="badge bg-{{ payroll.status|lower }}">
-                            {{ payroll.get_status_display }}
-                        </span>
-                    </p>
-                </div>
+
             {% else %}
-                {# Show what happens after payment #}
-                <div class="alert alert-primary text-start">
-                    <i class="fa fa-info-circle me-2"></i>
-                    <strong>After Processing:</strong>
-                    <ul class="mb-0 mt-2 small">
-                        <li>Payroll will be marked as <strong>PAID</strong></li>
-                        <li>Payment timestamp will be recorded</li>
-                        <li>Payment processor will be recorded (your name)</li>
-                        <li>Cannot be edited or deleted</li>
-                        <li>Payment record is final</li>
-                        {% if payroll.requires_statutory_adjustments %}
-                            <li class="text-warning">
-                                <i class="fa fa-exclamation-triangle me-1"></i>
-                                Contains statutory deductions that may require reporting
-                            </li>
-                        {% endif %}
-                    </ul>
-                </div>
-                
-                {# Critical Warning #}
-                <div class="alert alert-warning text-start">
-                    <i class="fa fa-exclamation-triangle me-2"></i>
-                    <strong>Important:</strong>
-                    <p class="mb-0 mt-2">
-                        Ensure the payment of <strong>{{ payroll.net_pay|money }}</strong> 
-                        has been successfully transferred to 
-                        <strong>{{ payroll.staff.full_name }}</strong> 
-                        before marking as paid!
-                    </p>
-                </div>
-                
-                {# Payment Breakdown Card #}
-                <div class="card border-primary">
-                    <div class="card-body py-2">
-                        <small class="text-muted d-block mb-1">
-                            <strong>Payment Breakdown:</strong>
-                        </small>
-                        <div class="row text-start">
-                            <div class="col-6">
-                                <small class="d-block">Gross Pay:</small>
-                                <small class="d-block">Deductions:</small>
-                                {% if payroll.allowances.exists %}
-                                    <small class="d-block">Allowances:</small>
-                                {% endif %}
-                                {% if payroll.bonuses.exists %}
-                                    <small class="d-block">Bonuses:</small>
-                                {% endif %}
-                            </div>
-                            <div class="col-6 text-end">
-                                <small class="d-block">{{ payroll.gross_pay|money }}</small>
-                                <small class="d-block text-danger">
-                                    ({{ payroll.total_deductions|money }})
-                                </small>
-                                {% if payroll.allowances.exists %}
-                                    <small class="d-block text-success">
-                                        {{ payroll.allowances.all|sum_field:"amount"|money }}
-                                    </small>
-                                {% endif %}
-                                {% if payroll.bonuses.exists %}
-                                    <small class="d-block text-success">
-                                        {{ payroll.bonuses.all|sum_field:"amount"|money }}
-                                    </small>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <hr class="my-1">
-                        <div class="row text-start">
-                            <div class="col-6">
-                                <small class="d-block"><strong>Net Pay:</strong></small>
-                            </div>
-                            <div class="col-6 text-end">
-                                <small class="d-block">
-                                    <strong>{{ payroll.net_pay|money }}</strong>
-                                </small>
-                            </div>
-                        </div>
+
+                <!-- Balance summary -->
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;
+                            overflow:hidden; margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;
+                                padding:8px 14px; border-bottom:1px solid #e2e8f0; font-size:12.5px;">
+                        <span style="color:#64748b;">Net Pay</span>
+                        <span style="font-weight:700; font-variant-numeric:tabular-nums;">
+                            {{ payroll.net_pay|format_currency }}
+                        </span>
+                    </div>
+                    {% if payroll.total_paid %}
+                    <div style="display:flex; justify-content:space-between; align-items:center;
+                                padding:8px 14px; border-bottom:1px solid #e2e8f0; font-size:12.5px; color:#15803d;">
+                        <span>Already Paid</span>
+                        <span style="font-weight:700; font-variant-numeric:tabular-nums;">
+                            &minus; {{ payroll.total_paid|format_currency }}
+                        </span>
+                    </div>
+                    {% endif %}
+                    <div style="display:flex; justify-content:space-between; align-items:center;
+                                padding:10px 14px; font-size:14px; font-weight:900;
+                                background:#eff6ff; border-top:2px solid #bfdbfe; color:#1d4ed8;">
+                        <span>Balance Due</span>
+                        <span style="font-variant-numeric:tabular-nums;">
+                            {{ payroll.balance_due|format_currency }}
+                        </span>
                     </div>
                 </div>
+
+                <!-- Payment form -->
+                <form method="post"
+                      action="{% url 'hr:payroll_record_payment' payroll.pk %}"
+                      id="payment-form">
+                    {% csrf_token %}
+
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block;font-size:11px;font-weight:700;
+                                      text-transform:uppercase;letter-spacing:.5px;
+                                      color:#64748b;margin-bottom:6px;">
+                            Amount <span style="color:#dc2626;">*</span>
+                        </label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}
+                        <div style="font-size:12px;color:#dc2626;margin-top:4px;font-weight:600;">
+                            {{ form.amount.errors.0 }}
+                        </div>
+                        {% endif %}
+                        <div style="font-size:11px;color:#475569;margin-top:4px;">
+                            Enter the amount being paid now. For full payment enter
+                            <a href="#" id="fill-balance"
+                               style="color:#1d4ed8;font-weight:600;text-decoration:none;">
+                                {{ payroll.balance_due|format_currency }}
+                            </a>.
+                        </div>
+                    </div>
+
+                    <div class="row g-2" style="margin-bottom:14px;">
+                        <div class="col-6">
+                            <label style="display:block;font-size:11px;font-weight:700;
+                                          text-transform:uppercase;letter-spacing:.5px;
+                                          color:#64748b;margin-bottom:6px;">
+                                Payment Date <span style="color:#dc2626;">*</span>
+                            </label>
+                            {{ form.payment_date }}
+                            {% if form.payment_date.errors %}
+                            <div style="font-size:12px;color:#dc2626;margin-top:4px;font-weight:600;">
+                                {{ form.payment_date.errors.0 }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label style="display:block;font-size:11px;font-weight:700;
+                                          text-transform:uppercase;letter-spacing:.5px;
+                                          color:#64748b;margin-bottom:6px;">
+                                Payment Method <span style="color:#dc2626;">*</span>
+                            </label>
+                            {{ form.payment_method }}
+                            {% if form.payment_method.errors %}
+                            <div style="font-size:12px;color:#dc2626;margin-top:4px;font-weight:600;">
+                                {{ form.payment_method.errors.0 }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div id="payment-reference-field" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:11px;font-weight:700;
+                                      text-transform:uppercase;letter-spacing:.5px;
+                                      color:#64748b;margin-bottom:6px;">
+                            Payment Reference
+                        </label>
+                        {{ form.payment_reference }}
+                        {% if form.payment_reference.errors %}
+                        <div style="font-size:12px;color:#dc2626;margin-top:4px;font-weight:600;">
+                            {{ form.payment_reference.errors.0 }}
+                        </div>
+                        {% endif %}
+                        <div style="font-size:11px;color:#475569;margin-top:4px;">
+                            Transaction ID, cheque number, or mobile money reference.
+                            Auto-generated if left blank.
+                        </div>
+                    </div>
+
+                    {% if form.notes %}
+                    <div style="margin-bottom:0;">
+                        <label style="display:block;font-size:11px;font-weight:700;
+                                      text-transform:uppercase;letter-spacing:.5px;
+                                      color:#64748b;margin-bottom:6px;">
+                            Notes
+                        </label>
+                        {{ form.notes }}
+                    </div>
+                    {% endif %}
+
+                    {% if form.non_field_errors %}
+                    <div style="background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;
+                                border-radius:0 8px 8px 0;padding:10px 14px;margin-top:14px;
+                                font-size:12.5px;color:#7f1d1d;">
+                        {{ form.non_field_errors.0 }}
+                    </div>
+                    {% endif %}
+
+                </form>
+
+            {% endif %}
+
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer" style="background:#f8fafc; border-top:1px solid #e2e8f0;
+                                          padding:12px 20px; gap:8px;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                Cancel
+            </button>
+
+            {% if payroll.status == 'APPROVED' or payroll.status == 'PARTIAL' %}
+                <button type="submit"
+                        form="payment-form"
+                        class="btn btn-sm btn-success"
+                        hx-post="{% url 'hr:payroll_record_payment' payroll.pk %}"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                        hx-include="#payment-form"
+                        hx-target="body"
+                        hx-swap="none">
+                    <i class="fa fa-check me-1"></i> Record Payment
+                </button>
             {% endif %}
         </div>
-        
-        {# Footer with Actions #}
-        {% if can_process %}
-            <form hx-post="{% url 'hr:payroll_process_payment' payroll.pk %}" 
-                  hx-target="#payroll-results" 
-                  hx-swap="innerHTML">
-                {% csrf_token %}
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fa fa-times me-1"></i>Cancel
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa fa-check me-1"></i>Yes, Mark as Paid
-                    </button>
-                </div>
-            </form>
-        {% else %}
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fa fa-times me-1"></i>Close
-                </button>
-            </div>
-        {% endif %}
+
     </div>
 </div>
+
+<script>
+(function () {
+    // Fill balance shortcut — raw decimal value for the input, not the formatted display
+    var fillBtn = document.getElementById('fill-balance');
+    if (fillBtn) {
+        fillBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var amountInput = document.querySelector('#payment-form [name="amount"]');
+            if (amountInput) {
+                amountInput.value = '{{ payroll.balance_due }}';
+                amountInput.focus();
+            }
+        });
+    }
+
+    // Hide payment reference field for cash payments — no external reference exists
+    var methodSelect = document.querySelector('#payment-form [name="payment_method"]');
+    var refField     = document.getElementById('payment-reference-field');
+
+    function syncRefField() {
+        if (!methodSelect || !refField) return;
+        var selected = methodSelect.options[methodSelect.selectedIndex];
+        var text     = selected ? selected.text.toLowerCase() : '';
+        var isCash   = text.indexOf('cash') !== -1;
+
+        refField.style.display = isCash ? 'none' : '';
+
+        // Clear any stale value so it doesn't submit on cash payments
+        if (isCash) {
+            var input = refField.querySelector('input');
+            if (input) input.value = '';
+        }
+    }
+
+    if (methodSelect) {
+        methodSelect.addEventListener('change', syncRefField);
+        syncRefField(); // run immediately in case method is already selected
+    }
+
+    // Style all form inputs inside this modal to match Option C design
+    document.querySelectorAll('#payment-form input, #payment-form select, #payment-form textarea').forEach(function (el) {
+        el.style.width          = '100%';
+        el.style.border         = '1px solid #cbd5e1';
+        el.style.borderRadius   = '8px';
+        el.style.padding        = '8px 12px';
+        el.style.fontSize       = '13px';
+        el.style.background     = '#f8fafc';
+        el.style.color          = '#0f172a';
+        el.style.boxSizing      = 'border-box';
+        el.style.transition     = 'background .15s, border-color .15s, box-shadow .15s';
+        el.addEventListener('focus', function () {
+            this.style.background   = '#ffffff';
+            this.style.borderColor  = '#bfdbfe';
+            this.style.boxShadow    = '0 0 0 3px rgba(29,78,216,.1)';
+            this.style.outline      = 'none';
+        });
+        el.addEventListener('blur', function () {
+            this.style.background   = '#f8fafc';
+            this.style.borderColor  = '#cbd5e1';
+            this.style.boxShadow    = 'none';
+        });
+    });
+})();
+</script>

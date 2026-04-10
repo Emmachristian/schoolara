@@ -1,527 +1,135 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Directory — {{ school_name }}</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+{% extends "print_base.html" %}
+{% load currency_filters %}
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+{% block page_title %}Student Directory{% endblock %}
+{% block doc_title %}Student Directory{% endblock %}
+{% block record_count %}{{ students|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
 
-        :root {
-            --ink:        #111827;
-            --ink-mid:    #374151;
-            --ink-soft:   #6b7280;
-            --ink-faint:  #d1d5db;
-            --accent:     #1e3a5f;
-            --accent-bg:  #eef2f7;
-            --stripe:     #f9fafb;
-            --white:      #ffffff;
-            --success:    #16a34a;
-            --radius:     4px;
-
-            /* Overridden at runtime by JS based on column count */
-            --table-font:  12pt;
-            --cell-pad-v:  7px;
-            --cell-pad-h:  10px;
-        }
-
-        body {
-            font-family: 'DM Sans', sans-serif;
-            color: var(--ink);
-            background: var(--white);
-            padding: 24px 32px;
-            line-height: 1.5;
-        }
-
-        /* ================================================================
-           SCREEN TOOLBAR
-        ================================================================ */
-        .screen-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: var(--accent);
-            color: var(--white);
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-        .screen-toolbar span { font-size: 0.85rem; opacity: 0.85; }
-        .toolbar-actions { display: flex; gap: 8px; }
-
-        .btn-print, .btn-close {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 7px 16px;
-            border-radius: var(--radius);
-            font-size: 0.8rem;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            text-decoration: none;
-            transition: opacity 0.15s;
-        }
-        .btn-print { background: var(--white); color: var(--accent); }
-        .btn-close  { background: rgba(255,255,255,0.15); color: var(--white); }
-        .btn-print:hover, .btn-close:hover { opacity: 0.85; }
-
-        #font-info {
-            font-size: 0.75rem;
-            opacity: 0.7;
-            font-style: italic;
-        }
-
-        /* ================================================================
-           DOCUMENT HEADER
-        ================================================================ */
-        .doc-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            padding-bottom: 16px;
-            border-bottom: 3px solid var(--accent);
-            margin-bottom: 20px;
-            gap: 20px;
-        }
-        .doc-header-left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .school-logo {
-            width: 64px;
-            height: 64px;
-            object-fit: contain;
-            border-radius: 6px;
-        }
-        .school-logo-placeholder {
-            width: 64px;
-            height: 64px;
-            background: var(--accent-bg);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'DM Serif Display', serif;
-            font-size: 1.4rem;
-            color: var(--accent);
-            font-weight: 700;
-            flex-shrink: 0;
-        }
-        .school-info h1 {
-            font-family: 'DM Serif Display', serif;
-            font-size: 1.55rem;
-            color: var(--accent);
-            line-height: 1.2;
-            margin-bottom: 4px;
-        }
-        .school-info p {
-            font-size: 0.84rem;
-            color: var(--ink-soft);
-            line-height: 1.45;
-        }
-        .doc-header-right { text-align: right; flex-shrink: 0; }
-        .doc-header-right h2 {
-            font-family: 'DM Serif Display', serif;
-            font-size: 1.25rem;
-            color: var(--ink);
-            margin-bottom: 4px;
-        }
-        .doc-header-right p {
-            font-size: 0.8rem;
-            color: var(--ink-soft);
-            line-height: 1.6;
-        }
-
-        /* ================================================================
-           STATS BAR
-        ================================================================ */
-        .stats-bar {
-            display: flex;
-            background: var(--accent-bg);
-            border: 1px solid var(--ink-faint);
-            border-radius: var(--radius);
-            overflow: hidden;
-            margin-bottom: 18px;
-        }
-        .stat-cell {
-            flex: 1;
-            padding: 10px 14px;
-            border-right: 1px solid var(--ink-faint);
-            text-align: center;
-        }
-        .stat-cell:last-child { border-right: none; }
-        .stat-cell .stat-value {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--accent);
-            display: block;
-            line-height: 1;
-            margin-bottom: 3px;
-        }
-        .stat-cell .stat-label {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--ink-soft);
-        }
-
-        /* ================================================================
-           TABLE — font and padding driven by CSS vars set by JS
-        ================================================================ */
-        .table-wrap {
-            width: 100%;
-            overflow: hidden;
-            border: 1px solid var(--ink-faint);
-            border-radius: var(--radius);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: var(--table-font);
-        }
-
-        thead tr { background: var(--accent); color: var(--white); }
-
-        thead th {
-            padding: var(--cell-pad-v) var(--cell-pad-h);
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.82em;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            /* Keep headers on one line — never compress/wrap */
-            white-space: nowrap;
-        }
-        thead th:first-child {
-            width: 36px;
-            text-align: center;
-        }
-
-        tbody tr:nth-child(even) { background: var(--stripe); }
-        tbody tr:nth-child(odd)  { background: var(--white); }
-
-        tbody td {
-            padding: var(--cell-pad-v) var(--cell-pad-h);
-            border-bottom: 1px solid var(--ink-faint);
-            vertical-align: middle;
-            color: var(--ink-mid);
-            /* Let cell content wrap naturally */
-            word-break: break-word;
-            overflow-wrap: anywhere;
-        }
-        tbody tr:last-child td { border-bottom: none; }
-
-        td:first-child {
-            text-align: center;
-            color: var(--ink-soft);
-            font-size: 0.8em;
-            width: 36px;
-            white-space: nowrap;
-        }
-
-        /* ── Field chips — never break these ────────────────────── */
-        .cell-name { color: var(--ink); }
-        .cell-adm {
-            font-family: monospace;
-            font-size: 0.85em;
-            color: var(--accent);
-            background: var(--accent-bg);
-            padding: 2px 6px;
-            border-radius: 3px;
-            display: inline-block;
-            white-space: nowrap;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-size: 0.78em;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-        .status-active      { background: #dcfce7; color: #15803d; }
-        .status-suspended   { background: #fee2e2; color: #b91c1c; }
-        .status-graduated   { background: #dbeafe; color: #1d4ed8; }
-        .status-transferred { background: #ede9fe; color: #6d28d9; }
-        .status-withdrawn,
-        .status-dismissed   { background: #f3f4f6; color: #4b5563; }
-        .status-default     { background: #fef9c3; color: #92400e; }
-
-        .gender-m { color: #1d4ed8; }
-        .gender-f { color: #be185d; }
-        .bool-yes { color: var(--success); }
-        .bool-no  { color: var(--ink-soft); }
-
-        /* ================================================================
-           EMPTY STATE
-        ================================================================ */
-        .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-soft); }
-        .empty-state p { font-size: 0.85rem; margin-top: 8px; }
-
-        /* ================================================================
-           FOOTER
-        ================================================================ */
-        .doc-footer {
-            margin-top: 20px;
-            padding-top: 12px;
-            border-top: 1px solid var(--ink-faint);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.75rem;
-            color: var(--ink-soft);
-        }
-
-        /* ================================================================
-           PRINT STYLES
-        ================================================================ */
-        @media print {
-            @page {
-                margin: 12mm 10mm;
-                {% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}
-            }
-
-            body            { padding: 0; background: white; }
-            .screen-toolbar { display: none !important; }
-            .doc-header     { page-break-inside: avoid; }
-            .stats-bar      { page-break-inside: avoid; }
-            .table-wrap     { border: none; }
-            thead           { display: table-header-group; }
-            tfoot           { display: table-footer-group; }
-            tbody tr        { page-break-inside: avoid; }
-            a               { text-decoration: none; color: inherit; }
-        }
-
-        @media screen {
-            body { max-width: 1200px; margin: 0 auto; }
-        }
-    </style>
-</head>
-<body>
-
-    <!-- Screen toolbar -->
-    <div class="screen-toolbar">
-        <div>
-            <span>Preview — use Print / Save PDF to export.</span>&nbsp;
-            <span id="font-info"></span>
-        </div>
-        <div class="toolbar-actions">
-            <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
-            <button class="btn-close" onclick="window.close()">✕ Close</button>
-        </div>
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
     </div>
-
-    <!-- Document header -->
-    <div class="doc-header">
-        <div class="doc-header-left">
-            {% if school_logo %}
-                <img src="{{ school_logo }}" alt="{{ school_name }}" class="school-logo">
-            {% else %}
-                <div class="school-logo-placeholder">{{ school_name|first|upper }}</div>
-            {% endif %}
-            <div class="school-info">
-                <h1>{{ school_name }}</h1>
-                {% if school_address %}<p>{{ school_address }}</p>{% endif %}
-                {% if school_contact %}<p>{{ school_contact }}</p>{% endif %}
-            </div>
-        </div>
-        <div class="doc-header-right">
-            <h2>Student Directory</h2>
-            <p>
-                Generated: {{ now|date:"d M Y, H:i" }}<br>
-                Total records: {{ students|length }}
-            </p>
-        </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
     </div>
-
-    <!-- Stats bar -->
-    {% if stats %}
-    <div class="stats-bar">
-        <div class="stat-cell">
-            <span class="stat-value">{{ stats.total|default:0 }}</span>
-            <span class="stat-label">Total</span>
-        </div>
-        <div class="stat-cell">
-            <span class="stat-value">{{ stats.active|default:0 }}</span>
-            <span class="stat-label">Active</span>
-        </div>
-        <div class="stat-cell">
-            <span class="stat-value">{{ stats.male|default:0 }}</span>
-            <span class="stat-label">Male</span>
-        </div>
-        <div class="stat-cell">
-            <span class="stat-value">{{ stats.female|default:0 }}</span>
-            <span class="stat-label">Female</span>
-        </div>
-        <div class="stat-cell">
-            <span class="stat-value">{{ stats.special_needs|default:0 }}</span>
-            <span class="stat-label">Special Needs</span>
-        </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.male|default:0 }}</span>
+        <span class="stat-label">Male</span>
     </div>
-    {% endif %}
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.female|default:0 }}</span>
+        <span class="stat-label">Female</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.special_needs|default:0 }}</span>
+        <span class="stat-label">Special Needs</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
 
-    <!-- Table -->
-    <div class="table-wrap">
-        <table id="student-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    {% for field_name in selected_field_names %}
-                        <th>{{ field_name }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% if students %}
-                    {% for student in students %}
-                    <tr>
-                        <td>{{ forloop.counter }}</td>
+{% block table_body %}
+{% if students %}
+    {% for student in students %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
 
-                        {% for field in selected_fields %}
-                        <td>
-                            {% if field == 'admission_number' %}
-                                <span class="cell-adm">{{ student.admission_number }}</span>
+        {% for field in selected_fields %}
+        <td>
+            {% if field == 'admission_number' %}
+                <span class="chip-adm">{{ student.admission_number }}</span>
 
-                            {% elif field == 'full_name' %}
-                                <span class="cell-name">{{ student.get_full_name }}</span>
+            {% elif field == 'full_name' %}
+                {{ student.get_full_name }}
 
-                            {% elif field == 'first_name' %}
-                                {{ student.first_name }}
+            {% elif field == 'first_name' %}
+                {{ student.first_name }}
 
-                            {% elif field == 'last_name' %}
-                                {{ student.last_name }}
+            {% elif field == 'last_name' %}
+                {{ student.last_name }}
 
-                            {% elif field == 'national_student_number' %}
-                                {{ student.national_student_number|default:"—" }}
+            {% elif field == 'national_student_number' %}
+                {{ student.national_student_number|default:"—" }}
 
-                            {% elif field == 'date_of_birth' %}
-                                {% if student.date_of_birth %}{{ student.date_of_birth|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'date_of_birth' %}
+                {% if student.date_of_birth %}{{ student.date_of_birth|date:"d M Y" }}{% else %}—{% endif %}
 
-                            {% elif field == 'age' %}
-                                {% if student.age %}{{ student.age }} yrs{% else %}—{% endif %}
+            {% elif field == 'age' %}
+                {% if student.age %}{{ student.age }} yrs{% else %}—{% endif %}
 
-                            {% elif field == 'gender' %}
-                                {% if gender_display == 'short' %}
-                                    {% if student.gender == 'M' %}
-                                        <span class="gender-m">M</span>
-                                    {% elif student.gender == 'F' %}
-                                        <span class="gender-f">F</span>
-                                    {% else %}—{% endif %}
-                                {% else %}
-                                    {% if student.gender == 'M' %}
-                                        <span class="gender-m">Male</span>
-                                    {% elif student.gender == 'F' %}
-                                        <span class="gender-f">Female</span>
-                                    {% else %}—{% endif %}
-                                {% endif %}
-
-                            {% elif field == 'nationality' %}
-                                {{ student.nationality|default:"—" }}
-
-                            {% elif field == 'phone_number' %}
-                                {{ student.phone_number|default:"—" }}
-
-                            {% elif field == 'personal_email' %}
-                                {{ student.personal_email|default:"—" }}
-
-                            {% elif field == 'home_address' %}
-                                {{ student.home_address|default:"—"|truncatechars:50 }}
-
-                            {% elif field == 'current_academic_level' %}
-                                {% if student.current_academic_level %}
-                                    {% if level_display == 'code' %}{{ student.current_academic_level.code }}{% else %}{{ student.current_academic_level.name }}{% endif %}
-                                {% else %}—{% endif %}
-
-                            {% elif field == 'admission_academic_level' %}
-                                {% if student.admission_academic_level %}
-                                    {% if level_display == 'code' %}{{ student.admission_academic_level.code }}{% else %}{{ student.admission_academic_level.name }}{% endif %}
-                                {% else %}—{% endif %}
-
-                            {% elif field == 'enrollment_status' %}
-                                {% with s=student.enrollment_status|lower %}
-                                    <span class="status-badge status-{{ s }}">{{ student.get_enrollment_status_display }}</span>
-                                {% endwith %}
-
-                            {% elif field == 'admission_date' %}
-                                {% if student.admission_date %}{{ student.admission_date|date:"d M Y" }}{% else %}—{% endif %}
-
-                            {% elif field == 'health_condition' %}
-                                {{ student.get_health_condition_display|default:"—" }}
-
-                            {% elif field == 'has_special_needs' %}
-                                {% if student.has_special_needs %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
-
-                            {% elif field == 'transportation_required' %}
-                                {% if student.transportation_required %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
-
-                            {% elif field == 'religious_affiliation' %}
-                                {{ student.get_religious_affiliation_display|default:"—" }}
-
-                            {% else %}—{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
+            {% elif field == 'gender' %}
+                {% if gender_display == 'short' %}
+                    {% if student.gender == 'M' %}<span style="color:#1d4ed8;">M</span>
+                    {% elif student.gender == 'F' %}<span style="color:#be185d;">F</span>
+                    {% else %}—{% endif %}
                 {% else %}
-                    <tr>
-                        <td colspan="{{ selected_fields|length|add:1 }}">
-                            <div class="empty-state">
-                                <strong>No students found</strong>
-                                <p>No records match the applied filters.</p>
-                            </div>
-                        </td>
-                    </tr>
+                    {% if student.gender == 'M' %}<span style="color:#1d4ed8;">Male</span>
+                    {% elif student.gender == 'F' %}<span style="color:#be185d;">Female</span>
+                    {% else %}—{% endif %}
                 {% endif %}
-            </tbody>
-        </table>
-    </div>
 
-    <!-- Footer -->
-    <div class="doc-footer">
-        <span>{{ school_name }} &mdash; Student Directory</span>
-        <span>{{ now|date:"d M Y" }}</span>
-    </div>
+            {% elif field == 'nationality' %}
+                {{ student.nationality|default:"—" }}
 
-    <script>
-    (function () {
-        var IS_LANDSCAPE = {{ landscape|yesno:"true,false" }};
+            {% elif field == 'phone_number' %}
+                {{ student.phone_number|default:"—" }}
 
-        /* ── Column-responsive font & padding scaling ──────────────── */
-        var cols = document.querySelectorAll('#student-table thead th').length;
+            {% elif field == 'personal_email' %}
+                {{ student.personal_email|default:"—" }}
 
-        var fontSize, padV, padH;
-        if      (cols <= 3)  { fontSize = '11pt';   padV = '7px';  padH = '11px'; }
-        else if (cols <= 5)  { fontSize = '10pt';   padV = '6px';  padH = '10px'; }
-        else if (cols <= 7)  { fontSize = '9pt';    padV = '5px';  padH = '9px';  }
-        else if (cols <= 9)  { fontSize = '8.5pt';  padV = '5px';  padH = '8px';  }
-        else if (cols <= 11) { fontSize = '8pt';    padV = '4px';  padH = '7px';  }
-        else                 { fontSize = '7.5pt';  padV = '4px';  padH = '6px';  }
+            {% elif field == 'home_address' %}
+                {{ student.home_address|default:"—"|truncatechars:50 }}
 
-        var root = document.documentElement;
-        root.style.setProperty('--table-font', fontSize);
-        root.style.setProperty('--cell-pad-v', padV);
-        root.style.setProperty('--cell-pad-h', padH);
+            {% elif field == 'current_academic_level' %}
+                {% if student.current_academic_level %}
+                    {% if level_display == 'code' %}{{ student.current_academic_level.code }}
+                    {% else %}{{ student.current_academic_level.name }}{% endif %}
+                {% else %}—{% endif %}
 
-        var info = document.getElementById('font-info');
-        if (info) {
-            var hint = cols + ' column' + (cols !== 1 ? 's' : '') +
-                       ' — table font: ' + fontSize + '.';
-            if (!IS_LANDSCAPE && cols >= 7) {
-                hint += ' Tip: reprint with Landscape checked for more room.';
-            }
-            info.textContent = hint;
-        }
-    })();
-    </script>
+            {% elif field == 'admission_academic_level' %}
+                {% if student.admission_academic_level %}
+                    {% if level_display == 'code' %}{{ student.admission_academic_level.code }}
+                    {% else %}{{ student.admission_academic_level.name }}{% endif %}
+                {% else %}—{% endif %}
 
-</body>
-</html>
+            {% elif field == 'enrollment_status' %}
+                {% with s=student.enrollment_status|lower %}
+                    <span class="badge s-{{ s }}">{{ student.get_enrollment_status_display }}</span>
+                {% endwith %}
+
+            {% elif field == 'admission_date' %}
+                {% if student.admission_date %}{{ student.admission_date|date:"d M Y" }}{% else %}—{% endif %}
+
+            {% elif field == 'health_condition' %}
+                {{ student.get_health_condition_display|default:"—" }}
+
+            {% elif field == 'has_special_needs' %}
+                {% if student.has_special_needs %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+
+            {% elif field == 'transportation_required' %}
+                {% if student.transportation_required %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+
+            {% elif field == 'religious_affiliation' %}
+                {{ student.get_religious_affiliation_display|default:"—" }}
+
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr>
+        <td colspan="{{ selected_fields|length|add:1 }}">
+            <div class="empty-state">
+                <strong>No students found</strong>
+                <p>No records match the applied filters.</p>
+            </div>
+        </td>
+    </tr>
+{% endif %}
+{% endblock %}

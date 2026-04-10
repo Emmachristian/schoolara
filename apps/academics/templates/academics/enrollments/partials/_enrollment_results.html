@@ -1,519 +1,514 @@
-{% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
 
-<!-- Student Enrollments Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="50">#</th>
-                <th width="220">Student</th>
-                <th width="180">Class</th>
-                <th width="150">Session</th>
-                <th width="100">Enrollment Date</th>
-                <th width="90">Roll No.</th>
-                <th width="100">Type</th>
-                <th width="100">Status</th>
-                <th width="120">Invoice</th>
-                <th width="120">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="enrollmentTableBody">
-            {% if enrollments_page %}
-                {% for enrollment in enrollments_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:enrollments_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Student Info -->
-                    <td>
-                        <div class="student-info">
-                            <div class="student-avatar">
-                                {{ enrollment.student.first_name|slice:":1" }}{{ enrollment.student.last_name|slice:":1" }}
-                            </div>
-                            <div class="student-details">
-                                <a href="{% url 'students:student_profile' enrollment.student.pk %}" 
-                                   class="text-decoration-none">
-                                    <strong>{{ enrollment.student.get_full_name }}</strong>
-                                </a>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fa fa-id-card me-1"></i>
-                                    {{ enrollment.student.admission_number }}
-                                </small>
-                            </div>
+<style>
+/* ── Table ── */
+.enr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.enr-tbl thead th {
+    background: #f8fafc; padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.enr-tbl tbody td {
+    padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle; color: #0f172a;
+}
+.enr-tbl tbody tr:last-child td { border-bottom: none; }
+.enr-tbl tbody tr:hover td { background: #eff6ff !important; }
+.enr-tbl tbody tr.row-muted td { color: #94a3b8; }
+.enr-tbl tbody tr.row-muted:hover td { background: #f8fafc !important; }
+
+/* ── Student avatar + name ── */
+.student-cell { display: flex; align-items: center; gap: 10px; }
+
+/* Avatar wrapper so the status dot can overlay */
+.avatar-wrapper { position: relative; flex-shrink: 0; }
+
+.student-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 12px;
+    letter-spacing: -.5px;
+}
+
+/* 10-colour neutral palette driven by first letter of last name */
+.av-a,.av-k,.av-u { background: #64748b; }   /* slate   */
+.av-b,.av-l,.av-v { background: #0369a1; }   /* sky     */
+.av-c,.av-m,.av-w { background: #0891b2; }   /* cyan    */
+.av-d,.av-n,.av-x { background: #0d9488; }   /* teal    */
+.av-e,.av-o,.av-y { background: #059669; }   /* emerald */
+.av-f,.av-p,.av-z { background: #7c3aed; }   /* violet  */
+.av-g,.av-q       { background: #db2777; }   /* pink    */
+.av-h,.av-r       { background: #dc2626; }   /* red     */
+.av-i,.av-s       { background: #d97706; }   /* amber   */
+.av-j,.av-t       { background: #16a34a; }   /* green   */
+
+/* Status dot overlaid on avatar (bottom-right) */
+.enr-status-dot {
+    position: absolute; bottom: 0; right: 0;
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid #fff;
+}
+.dot-ongoing     { background: #15803d; }
+.dot-completed   { background: #64748b; }
+.dot-dropped     { background: #dc2626; }
+.dot-withdrawn   { background: #b45309; }
+.dot-suspended   { background: #7c3aed; }
+.dot-transferred { background: #0369a1; }
+.dot-other       { background: #94a3b8; }
+
+.student-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; line-height: 1.3; }
+.student-name:hover { color: #1d4ed8; }
+.student-adm  { font-size: 11px; color: #64748b; margin-top: 2px; font-family: 'Courier New', monospace; }
+
+/* ── Class cell ── */
+.cls-link { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; }
+.cls-link:hover { color: #1d4ed8; }
+.cls-session { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+/* ── Inline chips ── */
+.enr-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 4px; font-size: 10.5px; font-weight: 700;
+    padding: 1px 6px; margin-top: 2px; white-space: nowrap;
+}
+.chip-type-new      { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.chip-type-cont     { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.chip-type-transfer { background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
+.chip-type-repeat   { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.chip-type-other    { background: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; }
+.chip-prog          { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+
+/* ── Roll number ── */
+.roll-badge { font-family: 'Courier New', monospace; font-weight: 700; font-size: 12.5px; color: #1d4ed8; background: #eff6ff; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; }
+
+/* ── Status pills ── */
+.stat-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sp-ongoing   { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+.sp-completed { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sp-dropped   { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.sp-withdrawn { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+.sp-suspended { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+.sp-transferred { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.sp-other     { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+.active-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot-active   { background: #15803d; }
+.dot-inactive { background: #94a3b8; }
+
+/* ── Invoice cell ── */
+.inv-badge {
+    display: inline-block; padding: 4px 9px; border-radius: 6px;
+    font-size: 11.5px; font-weight: 600; text-decoration: none;
+    border: 1px solid;
+}
+.inv-badge:hover { opacity: .85; }
+.inv-default  { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+.inv-paid     { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.inv-overdue  { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+.inv-pending  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+
+/* ── Empty state ── */
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ── Pagination bar ── */
+.pag-bar {
+    padding: 14px 20px; border-top: 1px solid #e2e8f0;
+    background: #f8fafc; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: #64748b;
+}
+
+/* ── Dropdown ── */
+.dropdown-menu { font-size: 0.85rem; min-width: 210px; border: 1px solid #e2e8f0; }
+.dropdown-item  { padding: 6px 14px; }
+.dropdown-header { font-size: 0.7rem; padding: 6px 14px 2px; }
+
+/* ── OOB stat cards ── */
+.stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:18px 22px; display:flex; align-items:center; gap:16px; margin-bottom:20px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex-shrink:0; }
+.stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin-bottom:3px; }
+.stat-value { font-size:22px; font-weight:600; color:#0f172a; line-height:1; }
+.stat-sub   { font-size:11px; color:#94a3b8; margin-top:2px; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="enr-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th style="min-width:200px;">Student</th>
+            <th style="min-width:160px;">Class</th>
+            <th class="text-center" style="width:80px;">Roll</th>
+            <th style="width:130px;">Type</th>
+            <th class="text-center" style="width:110px;">Status</th>
+            <th style="width:120px;">Invoice</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% if enrollments_page %}
+        {% for enrollment in enrollments_page %}
+        <tr class="{% if not enrollment.is_active %}row-muted{% endif %}">
+
+            <!-- # — fixed calculation -->
+            <td style="color:#94a3b8; font-size:12px;">
+                {{ enrollments_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Student -->
+            <td>
+                <div class="student-cell">
+                    <div class="avatar-wrapper">
+                        <div class="student-avatar av-{{ enrollment.student.last_name|first|lower }}">
+                            {{ enrollment.student.first_name|slice:":1" }}{{ enrollment.student.last_name|slice:":1" }}
                         </div>
-                    </td>
-                    
-                    <!-- Class Info -->
-                    <td>
-                        <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}" 
-                           class="text-decoration-none">
-                            <div>
-                                <strong>
-                                    {{ enrollment.class_instance.academic_level.name }}
-                                    {% if enrollment.class_instance.section %}
-                                        {{ enrollment.class_instance.section }}
-                                    {% endif %}
-                                </strong>
-                            </div>
-                            <small class="text-muted">
-                                {{ enrollment.class_instance.academic_session.term_name }}
-                            </small>
+                        <span class="enr-status-dot dot-{{ enrollment.completion_status|lower }}"
+                              title="{{ enrollment.get_completion_status_display }}"
+                              data-bs-toggle="tooltip"></span>
+                    </div>
+                    <div>
+                        <a href="{% url 'students:student_profile' enrollment.student.pk %}" class="student-name">
+                            {{ enrollment.student.get_full_name }}
                         </a>
-                    </td>
-                    
-                    <!-- Session Info -->
-                    <td>
-                        <div>
-                            <strong>{{ enrollment.academic_session.year_name }}</strong>
-                            <br>
-                            <small class="text-muted">
-                                {{ enrollment.academic_session.start_date|date:"M Y" }} - 
-                                {{ enrollment.academic_session.end_date|date:"M Y" }}
-                            </small>
+                        <div class="student-adm">
+                            <i class="fa fa-id-card" style="font-size:9px;"></i>
+                            {{ enrollment.student.admission_number }}
                         </div>
-                    </td>
-                    
-                    <!-- Enrollment Date -->
-                    <td>
-                        <div>
-                            <i class="fa fa-calendar me-1 text-muted"></i>
+                        <div style="font-size:11px;color:#64748b;margin-top:2px;">
                             {{ enrollment.enrollment_date|date:"d M Y" }}
                         </div>
-                    </td>
-                    
-                    <!-- Roll Number -->
-                    <td class="text-center">
-                        {% if enrollment.roll_number %}
-                            <span class="badge bg-info">{{ enrollment.roll_number }}</span>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Enrollment Type -->
-                    <td>
-                        <span class="badge bg-light text-dark">
-                            {{ enrollment.get_enrollment_type_display }}
-                        </span>
-                        {% if enrollment.progression_type %}
-                            <br>
-                            <small class="text-muted">
-                                {{ enrollment.get_progression_type_display }}
-                            </small>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Completion Status -->
-                    <td class="text-center">
-                        <div>
-                            {% if enrollment.completion_status == 'ONGOING' %}
-                                <span class="status-badge ongoing">
-                                    <i class="fa fa-circle me-1"></i>Ongoing
-                                </span>
-                            {% elif enrollment.completion_status == 'COMPLETED' %}
-                                <span class="status-badge completed">
-                                    <i class="fa fa-check-circle me-1"></i>Completed
-                                </span>
-                            {% elif enrollment.completion_status == 'DROPPED' %}
-                                <span class="status-badge dropped">
-                                    <i class="fa fa-times-circle me-1"></i>Dropped
-                                </span>
-                            {% elif enrollment.completion_status == 'WITHDRAWN' %}
-                                <span class="status-badge withdrawn">
-                                    <i class="fa fa-sign-out-alt me-1"></i>Withdrawn
-                                </span>
-                            {% endif %}
-                        </div>
-                        <div class="mt-1">
-                            {% if enrollment.is_active %}
-                                <span class="badge bg-success">Active</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Inactive</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
-                    <!-- Invoice Status -->
-                    <td>
+                    </div>
+                </div>
+            </td>
+
+            <!-- Class + session chips inside one cell -->
+            <td>
+                <a href="{% url 'academics:class_detail' enrollment.class_instance.pk %}" class="cls-link">
+                    {{ enrollment.class_instance.academic_level.name }}{% if enrollment.class_instance.section %} {{ enrollment.class_instance.section }}{% endif %}
+                </a>
+                <div class="cls-session">
+                    <i class="fa fa-calendar" style="font-size:9px;"></i>
+                    {{ enrollment.academic_session.year_name }} · {{ enrollment.academic_session.term_name }}
+                </div>
+            </td>
+
+            <!-- Roll number -->
+            <td class="text-center">
+                {% if enrollment.roll_number %}
+                    <span class="roll-badge">{{ enrollment.roll_number }}</span>
+                {% else %}
+                    <button class="btn btn-link btn-sm p-0 text-muted"
+                            style="font-size:11px;"
+                            hx-get="{% url 'academics:enrollment_assign_roll_number_modal' enrollment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML"
+                            title="Assign roll number">
+                        <i class="fa fa-plus-circle me-1"></i>Assign
+                    </button>
+                {% endif %}
+            </td>
+
+            <!-- Enrollment type + progression as chips -->
+            <td>
+                {# Type chip — colour by category #}
+                {% if enrollment.enrollment_type in "NEW,READMISSION" %}
+                    <span class="enr-chip chip-type-new">
+                        <i class="fa fa-user-plus" style="font-size:8px;"></i>
+                        {{ enrollment.get_enrollment_type_display }}
+                    </span>
+                {% elif enrollment.enrollment_type in "CONTINUING,PROMOTED" %}
+                    <span class="enr-chip chip-type-cont">
+                        <i class="fa fa-arrow-right" style="font-size:8px;"></i>
+                        {{ enrollment.get_enrollment_type_display }}
+                    </span>
+                {% elif enrollment.enrollment_type in "TRANSFER_IN,TRANSFERRED,INTERNAL_TRANSFER" %}
+                    <span class="enr-chip chip-type-transfer">
+                        <i class="fa fa-exchange-alt" style="font-size:8px;"></i>
+                        {{ enrollment.get_enrollment_type_display }}
+                    </span>
+                {% elif enrollment.enrollment_type == "REPEATER" or enrollment.enrollment_type == "REPEATED" %}
+                    <span class="enr-chip chip-type-repeat">
+                        <i class="fa fa-redo" style="font-size:8px;"></i>
+                        {{ enrollment.get_enrollment_type_display }}
+                    </span>
+                {% else %}
+                    <span class="enr-chip chip-type-other">{{ enrollment.get_enrollment_type_display }}</span>
+                {% endif %}
+
+                {# Progression chip — only if not NORMAL #}
+                {% if enrollment.progression_type and enrollment.progression_type != 'NORMAL' %}
+                <div class="mt-1">
+                    <span class="enr-chip chip-prog">
+                        <i class="fa fa-tag" style="font-size:8px;"></i>
+                        {{ enrollment.get_progression_type_display }}
+                    </span>
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Status — pill + active dot -->
+            <td class="text-center">
+                {% if enrollment.completion_status == 'ONGOING' %}
+                    <span class="stat-pill sp-ongoing"><i class="fa fa-circle" style="font-size:7px;"></i>Ongoing</span>
+                {% elif enrollment.completion_status == 'COMPLETED' %}
+                    <span class="stat-pill sp-completed"><i class="fa fa-check-circle"></i>Completed</span>
+                {% elif enrollment.completion_status == 'DROPPED' %}
+                    <span class="stat-pill sp-dropped"><i class="fa fa-times-circle"></i>Dropped</span>
+                {% elif enrollment.completion_status == 'WITHDRAWN' %}
+                    <span class="stat-pill sp-withdrawn"><i class="fa fa-sign-out-alt"></i>Withdrawn</span>
+                {% elif enrollment.completion_status == 'SUSPENDED' %}
+                    <span class="stat-pill sp-suspended"><i class="fa fa-pause-circle"></i>Suspended</span>
+                {% elif enrollment.completion_status == 'TRANSFERRED' %}
+                    <span class="stat-pill sp-transferred"><i class="fa fa-exchange-alt"></i>Transferred</span>
+                {% else %}
+                    <span class="stat-pill sp-other">{{ enrollment.get_completion_status_display }}</span>
+                {% endif %}
+
+                <div style="margin-top:5px;font-size:10.5px;color:#64748b;">
+                    <span class="active-dot {% if enrollment.is_active %}dot-active{% else %}dot-inactive{% endif %}"></span>
+                    {% if enrollment.is_active %}Active{% else %}Inactive{% endif %}
+                </div>
+            </td>
+
+            <!-- Invoice -->
+            <td>
+                {% if enrollment.academic_invoice %}
+                    {% with inv=enrollment.academic_invoice %}
+                    <a href="{% url 'fees:invoice_detail' inv.pk %}"
+                       class="inv-badge {% if inv.payment_status == 'PAID' %}inv-paid{% elif inv.payment_status == 'OVERDUE' %}inv-overdue{% else %}inv-pending{% endif %}">
+                        #{{ inv.invoice_number }}
+                    </a>
+                    <div style="font-size:10.5px;color:#64748b;margin-top:3px;">
+                        {{ inv.get_payment_status_display }}
+                    </div>
+                    {% endwith %}
+                {% else %}
+                    <button class="btn btn-link btn-sm p-0"
+                            style="font-size:12px;color:#15803d;"
+                            hx-get="{% url 'academics:enrollment_create_invoice_modal' enrollment.pk %}"
+                            hx-target="#modal-container" hx-swap="innerHTML">
+                        <i class="fa fa-plus-circle me-1"></i>Create Invoice
+                    </button>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:enrollment_detail' enrollment.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:enrollment_edit' enrollment.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'academics:enrollment_print_detail' enrollment.pk %}" target="_blank">
+                                <i class="fa fa-print me-2"></i>Print Detail
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Quick Actions</h6></li>
+
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:enrollment_quick_view_modal' enrollment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-info-circle me-2"></i>Quick View
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:enrollment_assign_roll_number_modal' enrollment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-{% if enrollment.roll_number %}edit{% else %}plus{% endif %} me-2"></i>
+                                {% if enrollment.roll_number %}Edit{% else %}Assign{% endif %} Roll Number
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:enrollment_update_status_modal' enrollment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-flag me-2"></i>Update Status
+                            </button>
+                        </li>
                         {% if enrollment.academic_invoice %}
-                            <div class="invoice-badge {% if enrollment.academic_invoice.payment_status == 'PAID' %}paid{% elif enrollment.academic_invoice.payment_status == 'OVERDUE' %}overdue{% else %}pending{% endif %}">
-                                <a href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}" 
-                                   class="text-decoration-none">
-                                    #{{ enrollment.academic_invoice.invoice_number }}
-                                </a>
-                                <br>
-                                <small>{{ enrollment.academic_invoice.get_payment_status_display }}</small>
-                            </div>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}">
+                                <i class="fa fa-file-invoice me-2"></i>View Invoice
+                            </a>
+                        </li>
                         {% else %}
-                            <div class="text-muted small">
-                                No invoice
-                            </div>
-                            <button type="button" class="text-success small mt-1 btn btn-link btn-sm p-0"
+                        <li>
+                            <button class="dropdown-item text-success"
                                     hx-get="{% url 'academics:enrollment_create_invoice_modal' enrollment.pk %}"
-                                    hx-target="#modal-container"
-                                    hx-swap="innerHTML">
-                                <i class="fa fa-plus me-1"></i>Create
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-plus me-2"></i>Create Invoice
                             </button>
+                        </li>
                         {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'students:student_profile' enrollment.student.pk %}">
+                                <i class="fa fa-user me-2"></i>View Student
+                            </a>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:enrollment_toggle_active_modal' enrollment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-{% if enrollment.is_active %}ban{% else %}check-circle{% endif %} me-2"></i>
+                                {% if enrollment.is_active %}Deactivate{% else %}Activate{% endif %}
                             </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" 
-                                   href="{% url 'academics:enrollment_detail' enrollment.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
-                                </a>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" 
-                                   href="{% url 'academics:enrollment_edit' enrollment.pk %}">
-                                    <i class="fa fa-edit me-2"></i> Edit Enrollment
-                                </a>
-                                
-                                <!-- Print -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'academics:enrollment_print_detail' enrollment.pk %}" 
-                                   target="_blank">
-                                    <i class="fa fa-print me-2"></i> Print Details
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
-                                
-                                <!-- Quick View -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:enrollment_quick_view_modal' enrollment.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i> Quick View
-                                </button>
-                                
-                                <!-- Roll Number -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:enrollment_assign_roll_number_modal' enrollment.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-{% if enrollment.roll_number %}edit{% else %}plus{% endif %} me-2"></i> 
-                                    {% if enrollment.roll_number %}Edit{% else %}Assign{% endif %} Roll Number
-                                </button>
-                                
-                                <!-- Invoice -->
-                                {% if enrollment.academic_invoice %}
-                                    <a class="dropdown-item" 
-                                       href="{% url 'fees:invoice_detail' enrollment.academic_invoice.pk %}">
-                                        <i class="fa fa-file-invoice me-2"></i> View Invoice
-                                    </a>
-                                {% else %}
-                                    <button type="button" class="dropdown-item text-success"
-                                            hx-get="{% url 'academics:enrollment_create_invoice_modal' enrollment.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-plus me-2"></i> Create Invoice
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Update Status -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:enrollment_update_status_modal' enrollment.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-flag me-2"></i> Update Status
-                                </button>
-                                
-                                <!-- View Student -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'students:student_profile' enrollment.student.pk %}">
-                                    <i class="fa fa-user me-2"></i> View Student
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Toggle Active -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:enrollment_toggle_active_modal' enrollment.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-{% if enrollment.is_active %}ban{% else %}check-circle{% endif %} me-2"></i>
-                                    {% if enrollment.is_active %}Deactivate{% else %}Activate{% endif %}
-                                </button>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i> Delete Enrollment
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="10" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-users empty-state-icon"></i>
-                            <h5 class="mt-3">No Enrollments Found</h5>
-                            <p class="text-muted">Try adjusting your filters or enroll new students.</p>
-                            <div class="mt-3">
-                                <a href="{% url 'academics:bulk_enrollment_step1' %}" class="btn btn-primary me-2">
-                                    <i class="fa fa-users me-1"></i> Bulk Enrollment
-                                </a>
-                                <a href="{% url 'academics:enrollment_create' %}" class="btn btn-outline-primary">
-                                    <i class="fa fa-user-plus me-1"></i> Single Enrollment
-                                </a>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'academics:enrollment_delete_modal' enrollment.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr>
+            <td colspan="8">
+                <div class="tbl-empty">
+                    <i class="pe-7s-users"></i>
+                    <p>
+                        {% if request.GET %}
+                            No enrollments match your current filters.
+                        {% else %}
+                            No student enrollments have been recorded yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                        <a href="{% url 'academics:bulk_enrollment_step1' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-users" style="font-size:11px;"></i>Bulk Enroll
+                        </a>
+                        <a href="{% url 'academics:enrollment_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#1d4ed8;text-decoration:none;border:1px solid #bfdbfe;">
+                            <i class="fa fa-user-plus" style="font-size:11px;"></i>Single Enroll
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'academics:enrollment_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+    </tbody>
+</table>
 </div>
 
-<!-- Pagination -->
 {% if enrollments_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ enrollments_page.start_index }} - {{ enrollments_page.end_index }} of {{ enrollments_page.paginator.count }} enrollments
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Enrollment pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if enrollments_page.has_previous %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ enrollments_page.start_index }}</strong>–<strong>{{ enrollments_page.end_index }}</strong>
+        of <strong>{{ enrollments_page.paginator.count|intcomma }}</strong> enrollments
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if enrollments_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:enrollment_list' %}"
+                        hx-target="#enrollment-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ enrollments_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in enrollments_page.paginator.page_range %}
+                {% if p == enrollments_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > enrollments_page.number|add:"-3" and p < enrollments_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'academics:enrollment_list' %}"
                                 hx-target="#enrollment-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ enrollments_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in enrollments_page.paginator.page_range %}
-                    {% if page_num == enrollments_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > enrollments_page.number|add:"-3" and page_num < enrollments_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'academics:enrollment_list' %}"
-                                    hx-target="#enrollment-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if enrollments_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'academics:enrollment_list' %}"
-                                hx-target="#enrollment-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ enrollments_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if enrollments_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:enrollment_list' %}"
+                        hx-target="#enrollment-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ enrollments_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.student-info {
-    display: flex;
-    align-items: center;
-}
-
-.student-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    margin-right: 10px;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.student-details {
-    flex: 1;
-    min-width: 0;
-}
-
-.invoice-badge {
-    background-color: #e7f3ff;
-    color: #0056b3;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    border: 1px solid #b3d9ff;
-    display: inline-block;
-}
-
-.invoice-badge.pending {
-    background-color: #fff3cd;
-    color: #856404;
-    border-color: #ffeaa7;
-}
-
-.invoice-badge.paid {
-    background-color: #d1e7dd;
-    color: #0f5132;
-    border-color: #badbcc;
-}
-
-.invoice-badge.overdue {
-    background-color: #f8d7da;
-    color: #842029;
-    border-color: #f5c2c7;
-}
-
-.invoice-badge a {
-    color: inherit;
-    text-decoration: none;
-}
-
-.invoice-badge a:hover {
-    text-decoration: underline;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-users"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Enrollments</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-primary"><i class="pe-7s-users"></i></div><div><div class="stat-label">Total Enrollments</div><div class="stat-value">{{ stats.total|default:0 }}</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-                <p class="mb-0">Currently enrolled</p>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-success"><i class="pe-7s-check"></i></div><div><div class="stat-label">Active Students</div><div class="stat-value">{{ stats.active|default:0 }}</div><div class="stat-sub">Currently enrolled</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-medal"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Completed</div>
-                <h3>{{ stats.completed|default:0 }}</h3>
-                <p class="mb-0">Finished sessions</p>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-info"><i class="pe-7s-medal"></i></div><div><div class="stat-label">Completed</div><div class="stat-value">{{ stats.completed|default:0 }}</div><div class="stat-sub">Finished sessions</div></div></div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-note2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">With Invoice</div>
-                <h3>{{ stats.with_invoice|default:0 }}</h3>
-                <p class="mb-0">Have fee invoices</p>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon bg-warning"><i class="pe-7s-note2"></i></div><div><div class="stat-label">With Invoice</div><div class="stat-value">{{ stats.with_invoice|default:0 }}</div><div class="stat-sub">Have fee invoices</div></div></div>
     </div>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

@@ -4,13 +4,10 @@
     <div class="modal-content">
 
         <!-- ===== HEADER ===== -->
-        <div class="modal-header" style="background:#fff5f5; border-bottom:1px solid #fecaca;">
+        <div class="modal-header" style="background:#f8f9fa; border-bottom:1px solid #e9ecef;">
             <div class="d-flex align-items-center gap-2">
-                <div style="
-                    width:36px; height:36px; border-radius:8px;
-                    background:#fde8e8; display:flex; align-items:center;
-                    justify-content:center;">
-                    <i class="fa fa-trash" style="color:#e74c3c; font-size:15px;"></i>
+                <div style="width:36px; height:36px; border-radius:8px; background:#fee2e2; display:flex; align-items:center; justify-content:center;">
+                    <i class="fa fa-trash" style="color:#dc2626; font-size:15px;"></i>
                 </div>
                 <div>
                     <h5 class="modal-title mb-0" style="font-size:15px; font-weight:700; color:#1a1a2e;">
@@ -24,105 +21,167 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
-        <!-- ===== BODY ===== -->
-        <div class="modal-body" style="padding:24px 22px;">
-
-            <!-- Warning block -->
-            <div style="
-                background:#fff5f5;
-                border:1px solid #fecaca;
-                border-left:4px solid #e74c3c;
-                border-radius:0 8px 8px 0;
-                padding:14px 16px;
-                margin-bottom:20px;
-                display:flex;
-                align-items:flex-start;
-                gap:10px;">
-                <i class="fa fa-exclamation-triangle" style="color:#e74c3c; margin-top:2px; flex-shrink:0;"></i>
-                <div style="font-size:13px; color:#7f1d1d; line-height:1.5;">
-                    <strong>This action cannot be undone.</strong>
-                    The expense and all its line items will be permanently deleted.
+        <!-- ===== EXPENSE SUMMARY ===== -->
+        <div style="background:#fff; border-bottom:1px solid #e9ecef; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+                <div style="font-size:13px; font-weight:600; color:#1a1a2e;">
+                    {{ expense.description }}
+                </div>
+                <div style="font-size:12px; color:#6c757d; margin-top:2px;">
+                    <span class="me-3">
+                        <i class="fa fa-tag me-1"></i>{{ expense.category.name }}
+                    </span>
+                    <span class="me-3">
+                        <i class="fa fa-calendar me-1"></i>{{ expense.expense_date|date:"d M Y" }}
+                    </span>
+                    {% if expense.payee_name %}
+                    <span>
+                        <i class="fa fa-user me-1"></i>{{ expense.payee_name }}
+                    </span>
+                    {% endif %}
+                </div>
+                <!-- Status badge -->
+                <div style="margin-top:6px;">
+                    {% if expense.status == 'DRAFT' %}
+                        <span style="background:#f1f5f9; color:#475569; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700;">
+                            <i class="fa fa-pencil me-1"></i>Draft
+                        </span>
+                    {% elif expense.status == 'REJECTED' %}
+                        <span style="background:#fee2e2; color:#b91c1c; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700;">
+                            <i class="fa fa-times-circle me-1"></i>Rejected
+                        </span>
+                    {% elif expense.status == 'CANCELLED' %}
+                        <span style="background:#f1f5f9; color:#64748b; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700;">
+                            <i class="fa fa-ban me-1"></i>Cancelled
+                        </span>
+                    {% endif %}
                 </div>
             </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px;">Total Amount</div>
+                <div style="font-size:20px; font-weight:800; color:#1a1a2e;">{{ expense.total_amount|money }}</div>
+            </div>
+        </div>
 
-            <!-- Expense summary -->
-            <div style="
-                background:#f8f9fa;
-                border:1px solid #e9ecef;
-                border-radius:10px;
-                padding:16px 18px;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-                    <div style="flex:1;">
-                        <div style="font-size:12px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px; font-weight:600;">
-                            Expense
-                        </div>
-                        <div style="font-size:15px; font-weight:700; color:#1a1a2e; margin-top:3px;">
-                            {{ expense.description }}
-                        </div>
-                        <div style="font-size:12px; color:#6c757d; margin-top:5px; display:flex; flex-wrap:wrap; gap:10px;">
-                            <span><i class="fa fa-tag me-1"></i>{{ expense.category.name }}</span>
-                            <span><i class="fa fa-calendar-alt me-1"></i>{{ expense.expense_date|date:"d M Y" }}</span>
-                            {% if expense.lines.count %}
-                            <span><i class="fa fa-list me-1"></i>{{ expense.lines.count }} line item{{ expense.lines.count|pluralize }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div style="text-align:right; flex-shrink:0;">
-                        <div style="font-size:11px; color:#6c757d; text-transform:uppercase; letter-spacing:.4px;">Amount</div>
-                        <div style="font-size:20px; font-weight:800; color:#e74c3c; margin-top:2px;">
-                            {{ expense.total_amount|money }}
-                        </div>
-                    </div>
-                </div>
+        <!-- ===== BLOCKING REASONS (can_delete is False) ===== -->
+        {% if not can_delete %}
+        <div style="background:#fff8f8; border-bottom:1px solid #fecaca; padding:14px 20px;">
+            <div style="display:flex; align-items:flex-start; gap:10px; font-size:13px; color:#7f1d1d; margin-bottom:{% if has_payments or has_journal_entry %}10px{% else %}0{% endif %};">
+                <i class="fa fa-lock mt-1" style="flex-shrink:0;"></i>
+                <strong>This expense cannot be deleted.</strong>
             </div>
 
-            <!-- Only DRAFT/PENDING check -->
-            {% if expense.status not in 'DRAFT,PENDING_APPROVAL' %}
-            <div style="
-                margin-top:14px;
-                background:#fff8e1;
-                border:1px solid #ffe082;
-                border-left:4px solid #f39c12;
-                border-radius:0 8px 8px 0;
-                padding:12px 14px;
-                font-size:12px;
-                color:#856404;
-                display:flex;
-                align-items:center;
-                gap:8px;">
-                <i class="fa fa-lock" style="flex-shrink:0;"></i>
-                Expenses with status <strong>&nbsp;{{ expense.get_status_display }}&nbsp;</strong> cannot be deleted.
-                Cancel it first if you need to remove it.
+            {% if has_payments %}
+            <div style="display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:#7f1d1d; margin-top:8px; padding:8px 12px; background:#fee2e2; border-radius:6px;">
+                <i class="fa fa-money mt-1" style="flex-shrink:0; font-size:11px;"></i>
+                <div>
+                    <strong>Has payment records.</strong>
+                    This expense has payments attached. Reverse all payments before deleting.
+                </div>
             </div>
             {% endif %}
 
+            {% if has_journal_entry %}
+            <div style="display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:#7f1d1d; margin-top:8px; padding:8px 12px; background:#fee2e2; border-radius:6px;">
+                <i class="fa fa-book mt-1" style="flex-shrink:0; font-size:11px;"></i>
+                <div>
+                    <strong>Has a journal entry.</strong>
+                    The journal entry
+                    <a href="{% url 'finance:journal_entry_detail' expense.journal_entry.pk %}"
+                       style="color:#b91c1c; font-weight:700;"
+                       target="_blank">{{ expense.journal_entry.entry_number }}</a>
+                    must be reversed before this expense can be deleted.
+                </div>
+            </div>
+            {% endif %}
+
+            {% if expense.status not in 'DRAFT,REJECTED,CANCELLED' %}
+            <div style="display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:#7f1d1d; margin-top:8px; padding:8px 12px; background:#fee2e2; border-radius:6px;">
+                <i class="fa fa-exclamation-circle mt-1" style="flex-shrink:0; font-size:11px;"></i>
+                <div>
+                    <strong>Status does not allow deletion.</strong>
+                    Only Draft, Rejected, or Cancelled expenses can be deleted.
+                    Cancel this expense first.
+                </div>
+            </div>
+            {% endif %}
         </div>
 
-        <!-- ===== FOOTER ===== -->
-        <div class="modal-footer" style="background:#f8f9fa; border-top:1px solid #e9ecef; padding:14px 20px;">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
-                <i class="fa fa-times me-1"></i> Cancel
-            </button>
+        <!-- ===== SAFE TO DELETE ===== -->
+        {% else %}
+        <!-- Permanent action warning -->
+        <div style="background:#fff8f8; border-bottom:1px solid #fecaca; padding:12px 20px; display:flex; align-items:flex-start; gap:10px; font-size:12.5px; color:#7f1d1d;">
+            <i class="fa fa-exclamation-triangle mt-1" style="flex-shrink:0;"></i>
+            <div>
+                <strong>This action is permanent and cannot be undone.</strong>
+                The expense record and all its line items will be permanently removed from the system.
+                {% if expense.lines.count > 0 %}
+                <div style="margin-top:4px; color:#991b1b;">
+                    <i class="fa fa-list me-1"></i>
+                    {{ expense.lines.count }} line item{{ expense.lines.count|pluralize }} will also be deleted.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
-            {% if expense.status in 'DRAFT,PENDING_APPROVAL' %}
-            <form method="post" action="{% url 'finance:expense_delete' expense.pk %}"
-                  hx-post="{% url 'finance:expense_delete' expense.pk %}"
-                  hx-target="body"
-                  hx-swap="none"
-                  style="display:inline;">
-                {% csrf_token %}
-                <button type="submit"
-                        class="btn btn-danger btn-sm"
-                        style="min-width:130px;">
-                    <i class="fa fa-trash me-1"></i> Yes, Delete
+        <!-- ===== FORM ===== -->
+        <form method="post"
+              action="{% url 'finance:expense_delete' expense.pk %}"
+              hx-post="{% url 'finance:expense_delete' expense.pk %}"
+              hx-target="body"
+              hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:20px;">
+                {% if can_delete %}
+                <!-- Confirmation text input — prevents accidental clicks -->
+                <div class="mb-0">
+                    <label for="id_confirm_delete" class="form-label"
+                           style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#495057;">
+                        Type <span style="font-family:monospace; background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:12px;">DELETE</span> to confirm
+                    </label>
+                    <input type="text" id="id_confirm_delete" autocomplete="off"
+                           class="form-control"
+                           placeholder="Type DELETE to enable the button"
+                           style="font-size:13px; font-family:monospace;"
+                           oninput="checkConfirm(this.value)">
+                    <div style="font-size:11px; color:#6c757d; margin-top:5px;">
+                        <i class="fa fa-info-circle me-1"></i>
+                        This confirmation is required to prevent accidental deletion.
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0" style="font-size:13px;">
+                    Resolve the issues listed above before this expense can be deleted.
+                </p>
+                {% endif %}
+            </div>
+
+            <!-- ===== FOOTER ===== -->
+            <div class="modal-footer" style="background:#f8f9fa; border-top:1px solid #e9ecef; padding:14px 20px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-arrow-left me-1"></i> Back
                 </button>
-            </form>
-            {% else %}
-            <button type="button" class="btn btn-secondary btn-sm" disabled>
-                <i class="fa fa-lock me-1"></i> Cannot Delete
-            </button>
-            {% endif %}
-        </div>
+                {% if can_delete %}
+                <button type="submit" id="delete-btn"
+                        class="btn btn-danger btn-sm"
+                        style="min-width:140px;"
+                        disabled>
+                    <i class="fa fa-trash me-1"></i> Delete Permanently
+                </button>
+                {% endif %}
+            </div>
+
+        </form>
 
     </div>
 </div>
+
+{% if can_delete %}
+<script>
+function checkConfirm(val) {
+    document.getElementById('delete-btn').disabled = (val.trim().toUpperCase() !== 'DELETE');
+}
+</script>
+{% endif %}

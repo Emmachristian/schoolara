@@ -1,0 +1,488 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0; --accent:#1d4ed8; --accent-lt:#eff6ff;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+
+.sz-hero { background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:var(--radius); padding:26px 30px 22px; margin-bottom:24px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; }
+.hero-top  { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.hero-meta { display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; }
+.hero-meta-item  { display:flex; flex-direction:column; gap:2px; }
+.hero-meta-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value { font-size:13px; font-weight:600; color:var(--ink); }
+
+.sz-badge { font-size:28px; font-weight:900; color:var(--accent); background:var(--accent-lt); border:2px solid #bfdbfe; border-radius:10px; padding:6px 18px; display:inline-block; line-height:1.2; }
+.type-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; background:var(--surface-3); color:var(--ink-muted); border:1px solid var(--border); }
+.s-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; }
+.sp-active   { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.sp-inactive { background:var(--red-lt); color:var(--red); border:1px solid #fecaca; }
+
+.stat-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:16px; margin-bottom:24px; }
+.strip-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; }
+.strip-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); margin-bottom:4px; }
+.strip-value { font-size:22px; font-weight:700; color:var(--ink); line-height:1; }
+.strip-sub   { font-size:11px; color:var(--ink-faint); margin-top:3px; }
+
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
+
+.data-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.data-tbl thead th { background:var(--surface-2); padding:10px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:#64748b; border-bottom:2px solid var(--border); white-space:nowrap; }
+.data-tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.data-tbl tbody tr:last-child td { border-bottom:none; }
+.data-tbl tbody tr:hover td { background:#fafbff; }
+
+.item-link { font-weight:600; font-size:13px; color:var(--ink); text-decoration:none; display:block; }
+.item-link:hover { color:var(--accent); }
+.item-code { font-family:'Courier New',monospace; font-size:11px; color:var(--ink-muted); margin-top:1px; }
+
+.qty-ok    { font-size:16px; font-weight:800; color:var(--green); }
+.qty-low   { font-size:16px; font-weight:800; color:var(--amber); }
+.qty-empty { font-size:16px; font-weight:800; color:var(--red); }
+
+.sidebar-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+.sidebar-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.sidebar-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.s-label { color:var(--ink-muted); font-size:12.5px; }
+.s-value { font-weight:700; color:var(--ink); }
+.s-value.green { color:var(--green); }
+
+.tbl-empty { text-align:center; padding:32px 20px; color:var(--ink-faint); }
+.tbl-empty i { font-size:2rem; display:block; margin-bottom:8px; opacity:.35; }
+.tbl-empty p { font-size:12.5px; margin:0; }
+
+@media (max-width:768px) { .sz-hero { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-albums icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Size {{ size.name }}
+                <div class="page-title-subheading">
+                    {{ size.get_size_type_display }} &mdash; {{ size.code }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:uniform_size_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+            <a href="{% url 'uniforms:uniform_size_edit' size.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
+            </a>
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"><i class="fa fa-ellipsis-v"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <button class="dropdown-item"
+                                hx-get="{% url 'uniforms:uniform_size_toggle_active_modal' size.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-{% if size.is_active %}pause{% else %}play{% endif %} me-2 text-warning"></i>
+                            {% if size.is_active %}Deactivate{% else %}Activate{% endif %}
+                        </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:uniform_size_delete_modal' size.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Delete
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:uniform_size_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-ruler-combined me-1"></i>Sizes
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">{{ size.name }}</li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="sz-hero">
+    <div>
+        <div class="hero-top">
+            <span class="sz-badge">{{ size.name }}</span>
+            <span class="type-chip">{{ size.get_size_type_display }}</span>
+            {% if size.is_active %}
+                <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+            {% else %}
+                <span class="s-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
+            {% endif %}
+        </div>
+        {% if size.description %}
+        <p style="margin:4px 0 0;font-size:13px;color:var(--ink-muted);">{{ size.description }}</p>
+        {% endif %}
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Code</span>
+                <span class="hero-meta-value" style="font-family:'Courier New',monospace;">{{ size.code }}</span>
+            </div>
+            {% if size.min_height or size.max_height %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Height</span>
+                <span class="hero-meta-value">{{ size.min_height|default:"—" }} – {{ size.max_height|default:"∞" }} cm</span>
+            </div>
+            {% endif %}
+            {% if size.min_chest or size.max_chest %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Chest</span>
+                <span class="hero-meta-value">{{ size.min_chest|default:"—" }} – {{ size.max_chest|default:"∞" }} cm</span>
+            </div>
+            {% endif %}
+            {% if size.min_waist or size.max_waist %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Waist</span>
+                <span class="hero-meta-value">{{ size.min_waist|default:"—" }} – {{ size.max_waist|default:"∞" }} cm</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">Total Stock</div>
+        <div style="font-size:48px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums;
+                    color:{% if total_stock == 0 %}var(--red){% else %}var(--ink){% endif %};">
+            {{ total_stock|format_number }}
+        </div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">
+            across {{ stock_records.count }} record{{ stock_records.count|pluralize }}
+        </div>
+    </div>
+</div>
+
+{# ── Stat strip ── #}
+<div class="stat-strip">
+    <div class="strip-card">
+        <div class="strip-label">Items Using Size</div>
+        <div class="strip-value">{{ items.count }}</div>
+        <div class="strip-sub">active items</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Stock Records</div>
+        <div class="strip-value">{{ stock_records.count }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Total Units</div>
+        <div class="strip-value" style="{% if total_stock == 0 %}color:var(--red);{% endif %}">
+            {{ total_stock|format_number }}
+        </div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Stock Value</div>
+        <div class="strip-value" style="font-size:18px;">{{ total_value|money_short }}</div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        {# ── Items ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <h6 class="det-card-title">
+                    <i class="fa fa-box-open"></i>Items Using This Size
+                    <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">
+                        {{ items.count }} item{{ items.count|pluralize }}
+                    </span>
+                </h6>
+            </div>
+            {% if items %}
+            <div style="overflow-x:auto;">
+                <table class="data-tbl">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th class="text-center">Type</th>
+                            <th class="text-center">Gender</th>
+                            <th class="text-center">Price</th>
+                            <th class="text-center">Stock (this size)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'uniforms:uniform_item_detail' item.pk %}" class="item-link">
+                                    {{ item.name }}
+                                </a>
+                                <div class="item-code">{{ item.code }}</div>
+                            </td>
+                            <td class="text-center" style="font-size:12px;color:var(--ink-muted);">
+                                {{ item.get_item_type_display }}
+                            </td>
+                            <td class="text-center" style="font-size:12px;color:var(--ink-muted);">
+                                {{ item.get_gender_display }}
+                            </td>
+                            <td class="text-center" style="font-size:13px;font-weight:700;">
+                                {{ item.selling_price|money }}
+                            </td>
+                            <td class="text-center">
+                                {% for sr in stock_records %}
+                                    {% if sr.uniform_item.pk == item.pk %}
+                                        {% if sr.quantity == 0 %}
+                                            <span class="qty-empty">0</span>
+                                        {% elif sr.quantity <= sr.uniform_item.reorder_level %}
+                                            <span class="qty-low">{{ sr.quantity }}</span>
+                                        {% else %}
+                                            <span class="qty-ok">{{ sr.quantity }}</span>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="tbl-empty">
+                <i class="fa fa-box-open"></i>
+                <p>No active items assigned to this size.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── Stock Records ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <h6 class="det-card-title">
+                    <i class="fa fa-warehouse"></i>Stock Records
+                    <span style="font-size:11px;font-weight:400;color:var(--ink-faint);">
+                        {{ stock_records.count }} record{{ stock_records.count|pluralize }}
+                    </span>
+                </h6>
+            </div>
+            {% if stock_records %}
+            <div style="overflow-x:auto;">
+                <table class="data-tbl">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th class="text-center">Quantity</th>
+                            <th class="text-center">Reserved</th>
+                            <th class="text-center">Available</th>
+                            <th class="text-center">Value (cost)</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sr in stock_records %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'uniforms:uniform_stock_detail' sr.pk %}" class="item-link">
+                                    {{ sr.uniform_item.name }}
+                                </a>
+                                <div class="item-code">{{ sr.uniform_item.code }}</div>
+                            </td>
+                            <td class="text-center">
+                                {% if sr.quantity == 0 %}
+                                    <span class="qty-empty">0</span>
+                                {% elif sr.quantity <= sr.uniform_item.reorder_level %}
+                                    <span class="qty-low">{{ sr.quantity }}</span>
+                                {% else %}
+                                    <span class="qty-ok">{{ sr.quantity }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if sr.reserved_quantity > 0 %}
+                                    <span style="font-size:13px;font-weight:700;color:var(--amber);">{{ sr.reserved_quantity }}</span>
+                                {% else %}
+                                    <span style="color:var(--ink-faint);">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span style="font-size:14px;font-weight:700;
+                                             color:{% if sr.available_quantity == 0 %}var(--red){% elif sr.available_quantity <= sr.uniform_item.reorder_level %}var(--amber){% else %}var(--green){% endif %};">
+                                    {{ sr.available_quantity }}
+                                </span>
+                            </td>
+                            <td class="text-center" style="font-size:13px;font-weight:600;">
+                                {{ sr.total_cost_value|money }}
+                            </td>
+                            <td style="font-size:12.5px;color:var(--ink-muted);">
+                                {{ sr.location|default:"" }}
+                                {% if sr.bin_number %}
+                                <span style="font-family:'Courier New',monospace;font-size:11px;">{{ sr.bin_number }}</span>
+                                {% endif %}
+                                {% if not sr.location and not sr.bin_number %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="tbl-empty">
+                <i class="fa fa-warehouse"></i>
+                <p>No stock records for this size yet.</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div class="col-lg-4">
+
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-info-circle"></i>Configuration</div>
+            <div class="sidebar-body">
+                <div class="side-row">
+                    <span class="s-label">Code</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">{{ size.code }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Type</span>
+                    <span class="s-value">{{ size.get_size_type_display }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Display Order</span>
+                    <span class="s-value">{{ size.display_order }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Status</span>
+                    <span class="s-value {% if size.is_active %}green{% endif %}">
+                        {{ size.is_active|yesno:"Active,Inactive" }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-ruler"></i>Body Ranges</div>
+            <div class="sidebar-body">
+                {% for label, lo, hi in body_ranges %}
+                <div class="side-row">
+                    <span class="s-label">{{ label }}</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                        {% if lo or hi %}{{ lo|default:"—" }} – {{ hi|default:"∞" }} cm
+                        {% else %}Not set{% endif %}
+                    </span>
+                </div>
+                {% empty %}
+                <div class="side-row">
+                    <span class="s-label">Height</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                        {% if size.min_height or size.max_height %}{{ size.min_height|default:"—" }} – {{ size.max_height|default:"∞" }} cm
+                        {% else %}Not set{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Chest</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                        {% if size.min_chest or size.max_chest %}{{ size.min_chest|default:"—" }} – {{ size.max_chest|default:"∞" }} cm
+                        {% else %}Not set{% endif %}
+                    </span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Waist</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">
+                        {% if size.min_waist or size.max_waist %}{{ size.min_waist|default:"—" }} – {{ size.max_waist|default:"∞" }} cm
+                        {% else %}Not set{% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+            <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+                <a href="{% url 'uniforms:uniform_size_edit' size.pk %}"
+                   class="btn btn-sm btn-outline-warning w-100 text-start">
+                    <i class="fa fa-edit me-2"></i>Edit Size
+                </a>
+                <a href="{% url 'uniforms:uniform_size_list' %}"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-list me-2"></i>All Sizes
+                </a>
+                <a href="{% url 'uniforms:uniform_stock_list' %}?size={{ size.pk }}"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-warehouse me-2"></i>Stock for This Size
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type, title: type.charAt(0).toUpperCase() + type.slice(1), text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626',
+                timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, { popperConfig: d => Object.assign({}, d, { strategy: 'fixed' }) });
+    });
+});
+</script>
+{% endblock %}

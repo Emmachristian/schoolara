@@ -1,601 +1,720 @@
-{% load static %}
-{% load widget_tweaks %}
 {% load currency_filters %}
 
-<!-- Accounts Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="50">#</th>
-                <th>Student</th>
-                <th>Current Balance</th>
-                <th>Total Charged</th>
-                <th>Total Paid</th>
-                <th>Credit Limit</th>
-                <th>Status</th>
-                <th>Last Activity</th>
-                <th width="120">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="accountTableBody">
-            {% if accounts_page %}
-                {% for account in accounts_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:accounts_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Student Info -->
-                    <td>
-                        <div class="d-flex align-items-center">
-                            {% if account.student.photo %}
-                                <div class="position-relative me-3 flex-shrink-0">
-                                    <img src="{{ account.student.photo.url }}" 
-                                         class="student-avatar" 
-                                         alt="{{ account.student.get_full_name }}">
-                                </div>
-                            {% else %}
-                                <div class="position-relative me-3 flex-shrink-0">
-                                    <div class="avatar-placeholder">
-                                        {{ account.student.first_name.0 }}{{ account.student.last_name.0 }}
-                                    </div>
-                                </div>
-                            {% endif %}
-                            <div>
-                                <h6 class="mb-0">
-                                    <a href="{% url 'fees:account_detail' account.pk %}" 
-                                       class="text-decoration-none text-dark fw-bold">
-                                        {{ account.student.get_full_name }}
-                                    </a>
-                                </h6>
-                                <div class="mt-1">
-                                    <small class="text-muted">
-                                        <i class="fa fa-id-card me-1"></i>
-                                        {{ account.student.admission_number }}
-                                    </small>
-                                </div>
-                                {% if account.student.current_academic_level %}
-                                    <div class="mt-1">
-                                        <small class="text-muted">
-                                            <i class="fa fa-graduation-cap me-1"></i>
-                                            {{ account.student.current_academic_level.name }}
-                                        </small>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    
-                    <!-- Current Balance with Color Coding -->
-                    <td class="text-end">
-                        {% with balance=account.current_balance %}
-                            {% if balance < 0 %}
-                                {# Negative = Student owes money #}
-                                <div class="balance-indicator negative" 
-                                     title="Outstanding balance"
-                                     data-bs-toggle="tooltip">
-                                    <i class="fa fa-exclamation-triangle me-1"></i>
-                                    <strong>{{ balance|abs_money }}</strong>
-                                </div>
-                                <div class="mt-1">
-                                    <small class="text-danger fw-bold">OWES</small>
-                                </div>
-                            {% elif balance > 0 %}
-                                {# Positive = Student has credit (overpaid) #}
-                                <div class="balance-indicator positive" 
-                                     title="Credit balance"
-                                     data-bs-toggle="tooltip">
-                                    <i class="fa fa-check-circle me-1"></i>
-                                    <strong>{{ balance|money }}</strong>
-                                </div>
-                                <div class="mt-1">
-                                    <small class="text-success fw-bold">CREDIT</small>
-                                </div>
-                            {% else %}
-                                {# Zero = Settled #}
-                                <div class="balance-indicator zero" 
-                                     title="Account settled"
-                                     data-bs-toggle="tooltip">
-                                    <i class="fa fa-check me-1"></i>
-                                    <strong>{{ balance|money }}</strong>
-                                </div>
-                                <div class="mt-1">
-                                    <small class="text-muted">SETTLED</small>
-                                </div>
-                            {% endif %}
-                        {% endwith %}
-                    </td>
-                    
-                    <!-- Total Fees Charged -->
-                    <td class="text-end">
-                        <strong>{{ account.get_total_charges|money }}</strong>
-                        <div class="mt-1">
-                            <small class="text-muted">
-                                <i class="fa fa-file-invoice me-1"></i>
-                                {{ account.student.fee_invoices.count }} invoice{{ account.student.fee_invoices.count|pluralize }}
-                            </small>
-                        </div>
-                    </td>
-                    
-                    <!-- Total Payments -->
-                    <td class="text-end">
-                        <strong class="text-success">{{ account.get_total_payments|money }}</strong>
-                        <div class="mt-1">
-                            <small class="text-muted">
-                                <i class="fa fa-money-bill me-1"></i>
-                                {{ account.student.payments.count }} payment{{ account.student.payments.count|pluralize }}
-                            </small>
-                        </div>
-                    </td>
-                    
-                    <!-- Credit Limit -->
-                    <td class="text-end">
-                        {% if account.credit_limit > 0 %}
-                            <strong>{{ account.credit_limit|money }}</strong>
-                            {% if account.current_balance < 0 %}
-                                <div class="mt-1">
-                                    {% with outstanding=account.current_balance|abs_value %}
-                                        {% widthratio outstanding account.credit_limit 100 as utilization %}
-                                        {% if utilization > 90 %}
-                                            <small class="text-danger">
-                                                <i class="fa fa-exclamation-triangle me-1"></i>
-                                                {{ utilization }}% used
-                                            </small>
-                                        {% elif utilization > 70 %}
-                                            <small class="text-warning">
-                                                <i class="fa fa-exclamation-circle me-1"></i>
-                                                {{ utilization }}% used
-                                            </small>
-                                        {% else %}
-                                            <small class="text-muted">
-                                                {{ utilization }}% used
-                                            </small>
-                                        {% endif %}
-                                    {% endwith %}
-                                </div>
-                            {% endif %}
-                        {% else %}
-                            <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Account Status Badge -->
-                    <td class="text-center">
-                        {% if account.status == 'ACTIVE' %}
-                            <span class="status-badge active">
-                                <i class="fa fa-check-circle me-1"></i>Active
-                            </span>
-                        {% elif account.status == 'SUSPENDED' %}
-                            <span class="status-badge suspended">
-                                <i class="fa fa-ban me-1"></i>Suspended
-                            </span>
-                        {% elif account.status == 'FROZEN' %}
-                            <span class="status-badge frozen">
-                                <i class="fa fa-snowflake me-1"></i>Frozen
-                            </span>
-                        {% elif account.status == 'CLOSED' %}
-                            <span class="status-badge closed">
-                                <i class="fa fa-times-circle me-1"></i>Closed
-                            </span>
-                        {% else %}
-                            <span class="badge bg-light text-dark">
-                                {{ account.get_status_display }}
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Last Activity -->
-                    <td>
-                        {% if account.last_transaction_date %}
-                            <div class="mb-1">
-                                <small class="text-muted">
-                                    <i class="fa fa-exchange-alt me-1"></i>
-                                    Transaction:
-                                </small>
-                                <br>
-                                <small class="fw-bold">{{ account.last_transaction_date|date:"M d, Y" }}</small>
-                            </div>
-                        {% endif %}
-                        
-                        {% if account.last_payment_date %}
-                            <div>
-                                <small class="text-muted">
-                                    <i class="fa fa-money-bill me-1"></i>
-                                    Payment:
-                                </small>
-                                <br>
-                                <small class="fw-bold text-success">{{ account.last_payment_date|date:"M d, Y" }}</small>
-                            </div>
-                        {% endif %}
-                        
-                        {% if not account.last_transaction_date and not account.last_payment_date %}
-                            <span class="text-muted">No activity</span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
-                            </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" 
-                                   href="{% url 'fees:account_detail' account.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
-                                </a>
-                                
-                                <!-- Edit Account -->
-                                <a class="dropdown-item text-warning" 
-                                   href="{% url 'fees:account_edit' account.pk %}">
-                                    <i class="fa fa-edit me-2"></i> Edit Account
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
-                                
-                                <!-- Adjust Balance -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'fees:account_adjust_modal' account.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-exchange-alt me-2"></i> Adjust Balance
-                                </button>
-                                
-                                <!-- View Transactions -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:transaction_list' %}?student_account={{ account.pk }}">
-                                    <i class="fa fa-list me-2"></i> View Transactions
-                                </a>
-                                
-                                <!-- Quick View -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'fees:account_quick_view_modal' account.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i> Quick View
-                                </button>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Financial Actions -->
-                                <h6 class="dropdown-header">Financial Actions</h6>
-                                
-                                <!-- Create Invoice -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:invoice_create' %}?student={{ account.student.pk }}">
-                                    <i class="fa fa-file-invoice me-2"></i> Create Invoice
-                                </a>
-                                
-                                <!-- Record Payment -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:payment_create' %}?student={{ account.student.pk }}">
-                                    <i class="fa fa-money-bill me-2"></i> Record Payment
-                                </a>
-                                
-                                <!-- View Invoices -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:invoice_list' %}?student={{ account.student.pk }}">
-                                    <i class="fa fa-file-alt me-2"></i> View Invoices
-                                </a>
-                                
-                                <!-- View Payments -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:payment_list' %}?student={{ account.student.pk }}">
-                                    <i class="fa fa-receipt me-2"></i> View Payments
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Reports -->
-                                <h6 class="dropdown-header">Reports</h6>
-                                
-                                <!-- Account Statement -->
-                                <a class="dropdown-item" 
-                                   href="{% url 'fees:student_account_report' account.pk %}" 
-                                   target="_blank">
-                                    <i class="fa fa-file-pdf me-2"></i> Account Statement
-                                </a>
-                                
-                                <!-- Print Statement -->
-                                <a class="dropdown-item" 
-                                href="{% url 'fees:account_print' account.pk %}" 
-                                target="_blank">
-                                    <i class="fa fa-print me-2"></i> Print Statement
-                                </a>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="9" class="text-center text-muted">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="pe-7s-search"></i>
-                            </div>
-                            <h5 class="mt-3">No Student Accounts Found</h5>
-                            <p class="text-muted">Try adjusting your search filters or check back later.</p>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
-</div>
-
-<!-- Pagination -->
-{% if accounts_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ accounts_page.start_index }} - {{ accounts_page.end_index }} of {{ accounts_page.paginator.count|format_number }} accounts
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Account pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if accounts_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:account_list' %}"
-                                hx-target="#account-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ accounts_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
-                    </li>
-                {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in accounts_page.paginator.page_range %}
-                    {% if page_num == accounts_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > accounts_page.number|add:"-3" and page_num < accounts_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'fees:account_list' %}"
-                                    hx-target="#account-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if accounts_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'fees:account_list' %}"
-                                hx-target="#account-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ accounts_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
-</div>
-{% endif %}
-
 <style>
-.student-avatar {
-    width: 50px;
-    height: 50px;
+/* ── Table core ── */
+.acc-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.acc-tbl thead th {
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.acc-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.acc-tbl tbody tr:last-child td { border-bottom: none; }
+.acc-tbl tbody tr:hover td      { background: #eff6ff !important; }
+
+/* ── Avatar ── */
+.acc-avatar {
+    width: 42px; height: 42px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid #e9ecef;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
 }
-
-.avatar-placeholder {
-    width: 50px;
-    height: 50px;
+.acc-avatar-placeholder {
+    width: 42px; height: 42px;
     border-radius: 50%;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 14px;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2rem;
-    font-weight: bold;
-    background-color: #f8f9fa;
-    color: #556ee6;
     flex-shrink: 0;
+    border: 2px solid #bfdbfe;
 }
 
-.balance-indicator {
+/* ── Student cell ── */
+.acc-student-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+}
+.acc-student-name:hover { color: #1d4ed8; }
+.acc-student-adm {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #64748b;
+    display: block;
+    margin-top: 2px;
+}
+.acc-level-badge {
     display: inline-flex;
     align-items: center;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.9rem;
+    gap: 3px;
+    background: #f5f3ff;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    margin-top: 3px;
     white-space: nowrap;
 }
 
-.balance-indicator.positive {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.balance-indicator.negative {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.balance-indicator.zero {
-    background-color: #e2e3e5;
-    color: #383d41;
-}
-
-.status-badge {
-    padding: 5px 12px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 600;
+/* ── Balance indicators ── */
+.bal-indicator {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-weight: 600;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+.bal-negative { background: #fef2f2; color: #dc2626; }
+.bal-positive { background: #f0fdf4; color: #15803d; }
+.bal-zero     { background: #f8fafc; color: #64748b; }
+
+.bal-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin-top: 4px;
 }
 
-.status-badge.active {
-    background-color: #28a745;
-    color: white;
-    border: none;
+/* ── Charge / payment amounts ── */
+.amt-charge  { font-weight: 600; font-size: 12.5px; color: #0f172a; }
+.amt-payment { font-weight: 600; font-size: 12.5px; color: #15803d; }
+.amt-sub     { font-size: 10.5px; color: #94a3b8; margin-top: 2px; }
+
+/* ── Credit limit bar ── */
+.limit-bar {
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+    width: 80px;
+}
+.limit-bar-fill         { height: 100%; border-radius: 2px; }
+.limit-bar-fill.safe    { background: #22c55e; }
+.limit-bar-fill.warning { background: #f59e0b; }
+.limit-bar-fill.danger  { background: #dc2626; }
+
+/* ── Status pills ── */
+.acc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.as-active    { background: #dcfce7; color: #15803d; }
+.as-suspended { background: #fef3c7; color: #b45309; }
+.as-frozen    { background: #dbeafe; color: #1d4ed8; }
+.as-closed    { background: #e2e8f0; color: #475569; }
+
+/* ── Activity dates ── */
+.act-date {
+    font-size: 11.5px;
+    color: #0f172a;
+    font-weight: 600;
+}
+.act-label {
+    font-size: 10.5px;
+    color: #94a3b8;
 }
 
-.status-badge.suspended {
-    background-color: #dc3545;
-    color: white;
-    border: none;
+/* ── Actions button ── */
+.act-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s, border-color .15s, color .15s;
+    padding: 0;
+}
+.act-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
 }
 
-.status-badge.frozen {
-    background-color: #17a2b8;
-    color: white;
-    border: none;
-}
+/* ── Empty state ── */
+.tbl-empty   { text-align: center; padding: 64px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0 0 18px; }
 
-.status-badge.closed {
-    background-color: #6c757d;
-    color: white;
-    border: none;
+/* ── Pagination ── */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #64748b;
 }
-
-.empty-state {
-    padding: 60px 20px;
+.pag-bar .page-link {
+    color: #1d4ed8; border-color: #e2e8f0;
+    font-size: 12.5px; padding: 4px 10px;
 }
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
 
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
+/* ── Dropdown ── */
+.dropdown-menu   { font-size: 0.84rem; min-width: 200px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: 0.68rem; padding: 6px 14px 2px; }
+
+/* ── OOB stat cards ── */
+.stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
     margin-bottom: 20px;
+    transition: box-shadow .2s;
 }
-
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
 }
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #64748b; margin-bottom: 3px;
 }
-
-.dropdown-menu {
-    z-index: 1050 !important;
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+.stat-sub   { font-size: 11px; color: #64748b; margin-top: 3px; }
+.collection-bar {
+    height: 6px; background: #e2e8f0; border-radius: 3px;
+    overflow: hidden; margin-top: 8px;
 }
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-    
-    .student-avatar,
-    .avatar-placeholder {
-        width: 40px;
-        height: 40px;
-    }
-    
-    .balance-indicator {
-        font-size: 0.75rem;
-        padding: 4px 8px;
-    }
+.collection-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    border-radius: 3px;
 }
 </style>
 
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
-{% if is_htmx %}
-<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-wallet"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Accounts</div>
-                <h3>{{ stats.total_accounts|default:0|format_number }}</h3>
-                <div class="stats-sublabel">
-                    <span class="text-success">{{ stats.by_status.active|default:0 }} Active</span>
+<!-- ══════════════════════════════════════════════════════════
+     TABLE
+     ══════════════════════════════════════════════════════════ -->
+<div style="overflow-x:auto;">
+<table class="acc-tbl">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Student</th>
+            <th class="text-end">Balance</th>
+            <th class="text-end">Charged</th>
+            <th class="text-end">Paid</th>
+            <th class="text-end">Credit Limit</th>
+            <th class="text-center">Status</th>
+            <th>Last Activity</th>
+            <th class="text-center" style="width:50px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if accounts_page %}
+        {% for account in accounts_page %}
+
+        <tr data-account-pk="{{ account.pk }}">
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ accounts_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Student -->
+            <td>
+                <div class="d-flex align-items-center gap-3">
+                    {% if account.student.photo %}
+                    <img src="{{ account.student.photo.url }}"
+                         class="acc-avatar"
+                         alt="{{ account.student.get_full_name }}">
+                    {% else %}
+                    <div class="acc-avatar-placeholder">
+                        {{ account.student.first_name.0 }}{{ account.student.last_name.0 }}
+                    </div>
+                    {% endif %}
+                    <div>
+                        <a href="{% url 'fees:account_detail' account.pk %}"
+                           class="acc-student-name">
+                            {{ account.student.get_full_name }}
+                        </a>
+                        <span class="acc-student-adm">
+                            {{ account.student.admission_number }}
+                        </span>
+                        {% if account.student.current_academic_level %}
+                        <div>
+                            <span class="acc-level-badge">
+                                <i class="fa fa-layer-group" style="font-size:9px;"></i>
+                                {{ account.student.current_academic_level.name }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-danger">
-                <i class="pe-7s-attention"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Outstanding</div>
-                <h3>{{ stats.debt_analysis.total_outstanding|default:0|money_short }}</h3>
-                <div class="stats-sublabel">
-                    From {{ stats.debt_analysis.total_debtors|default:0 }} debtors
+            </td>
+
+            <!-- Balance -->
+            <td class="text-end">
+                {% if account.calculated_balance is None or account.calculated_balance == 0 %}
+                    <div class="bal-indicator bal-zero">
+                        <i class="fa fa-check-circle"></i>
+                        Settled
+                    </div>
+                {% elif account.calculated_balance < 0 %}
+                    <div class="bal-indicator bal-negative">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        {{ account.calculated_balance|abs_value|money }}
+                    </div>
+                    <div class="bal-label text-danger">Owes</div>
+                {% else %}
+                    <div class="bal-indicator bal-positive">
+                        <i class="fa fa-check-circle"></i>
+                        {{ account.calculated_balance|money }}
+                    </div>
+                    <div class="bal-label text-success">Credit</div>
+                {% endif %}
+            </td>
+
+            <!-- Total Charged -->
+            <td class="text-end">
+                {% if account.total_charges %}
+                <span class="amt-charge">
+                    {{ account.total_charges|abs_value|money }}
+                </span>
+                {% else %}
+                <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Total Paid -->
+            <td class="text-end">
+                {% if account.total_payments %}
+                <span class="amt-payment">
+                    {{ account.total_payments|money }}
+                </span>
+                {% else %}
+                <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Credit Limit -->
+            <td class="text-end">
+                {% if account.credit_limit > 0 %}
+                    <span class="amt-charge">
+                        {{ account.credit_limit|money }}
+                    </span>
+                    {% if account.calculated_balance and account.calculated_balance < 0 %}
+                        {% with outstanding=account.calculated_balance|abs_value %}
+                        {% widthratio outstanding account.credit_limit 100 as utilization %}
+                        <div>
+                            <div class="limit-bar">
+                                <div class="limit-bar-fill
+                                    {% if utilization > 90 %}danger
+                                    {% elif utilization > 70 %}warning
+                                    {% else %}safe{% endif %}"
+                                    style="width:{{ utilization }}%;">
+                                </div>
+                            </div>
+                            <span class="amt-sub
+                                {% if utilization > 90 %}text-danger
+                                {% elif utilization > 70 %}text-warning
+                                {% else %}text-muted{% endif %}">
+                                {{ utilization }}% used
+                            </span>
+                        </div>
+                        {% endwith %}
+                    {% endif %}
+                {% else %}
+                    <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+            </td>
+
+            <!-- Status -->
+            <td class="text-center">
+                {% if account.status == 'ACTIVE' %}
+                    <span class="acc-status as-active">
+                        <i class="fa fa-circle" style="font-size:7px;"></i> Active
+                    </span>
+                {% elif account.status == 'SUSPENDED' %}
+                    <span class="acc-status as-suspended">
+                        <i class="fa fa-pause-circle" style="font-size:9px;"></i> Suspended
+                    </span>
+                {% elif account.status == 'FROZEN' %}
+                    <span class="acc-status as-frozen">
+                        <i class="fa fa-snowflake" style="font-size:9px;"></i> Frozen
+                    </span>
+                {% elif account.status == 'CLOSED' %}
+                    <span class="acc-status as-closed">
+                        <i class="fa fa-times-circle" style="font-size:9px;"></i> Closed
+                    </span>
+                {% endif %}
+            </td>
+
+            <!-- Last Activity -->
+            <td>
+                {% if account.last_transaction_date %}
+                <div class="mb-1">
+                    <div class="act-label">
+                        <i class="fa fa-exchange-alt me-1"></i>Last transaction
+                    </div>
+                    <div class="act-date">
+                        {{ account.last_transaction_date|date:"d M Y" }}
+                    </div>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-cash"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Credit Balances</div>
-                <h3>{{ stats.debt_analysis.total_credit|default:0|amount_no_decimals }}</h3>
-                <div class="stats-sublabel">
-                    From {{ stats.debt_analysis.accounts_with_credit|default:0 }} accounts
+                {% endif %}
+                {% if account.last_payment_date %}
+                <div>
+                    <div class="act-label">
+                        <i class="fa fa-money-bill me-1"></i>Last payment
+                    </div>
+                    <div class="act-date" style="color:#15803d;">
+                        {{ account.last_payment_date|date:"d M Y" }}
+                    </div>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-graph2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Collection Rate</div>
-                <h3>{{ stats.collection_rate|default:0|floatformat:1 }}%</h3>
-                <div class="stats-sublabel">
-                    {{ stats.debt_analysis.zero_balance_accounts|default:0 }} settled
+                {% endif %}
+                {% if not account.last_transaction_date and not account.last_payment_date %}
+                <span style="font-size:12px;color:#94a3b8;">No activity</span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="act-btn"
+                            data-bs-toggle="dropdown"
+                            data-bs-boundary="viewport"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:account_detail' account.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Ledger
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:account_edit' account.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit Account
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'students:student_profile' account.student.pk %}">
+                                <i class="fa fa-user me-2"></i>Student Profile
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Account Actions</h6></li>
+
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:account_adjust_modal' account.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-sliders-h me-2 text-warning"></i>Adjust Balance
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:account_quick_view_modal' account.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-info-circle me-2 text-secondary"></i>Quick View
+                            </button>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:account_statement_print' %}?account_id={{ account.pk }}"
+                               target="_blank">
+                                <i class="fa fa-print me-2 text-secondary"></i>Print Statement
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Financial</h6></li>
+
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:invoice_list' %}?student={{ account.student.pk }}">
+                                <i class="fa fa-file-alt me-2"></i>View Invoices
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:payment_list' %}?student={{ account.student.pk }}">
+                                <i class="fa fa-receipt me-2"></i>View Payments
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-success"
+                               href="{% url 'fees:payment_create' %}?student={{ account.student.pk }}">
+                                <i class="fa fa-credit-card me-2"></i>Record Payment
+                            </a>
+                        </li>
+
+                    </ul>
                 </div>
-            </div>
-        </div>
-    </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="9">
+                <div class="tbl-empty">
+                    <i class="pe-7s-wallet"></i>
+                    <p>
+                        {% if request.GET %}
+                            No accounts match your current filters.
+                        {% else %}
+                            No student accounts found.
+                        {% endif %}
+                    </p>
+                    {% if request.GET %}
+                    <div class="d-flex justify-content-center">
+                        <a href="{% url 'fees:account_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;
+                                  padding:7px 16px;font-size:13px;font-weight:500;
+                                  border-radius:6px;background:#fff;color:#64748b;
+                                  text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>
+                            Clear Filters
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
+</div>
+
+<!-- ── Pagination ── -->
+{% if accounts_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing
+        <strong>{{ accounts_page.start_index }}</strong>–<strong>{{ accounts_page.end_index }}</strong>
+        of <strong>{{ accounts_page.paginator.count|format_number }}</strong>
+        account{{ accounts_page.paginator.count|pluralize }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+
+            {% if accounts_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:account_list' %}"
+                        hx-target="#account-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ accounts_page.previous_page_number }}"}'>
+                    &laquo;
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">&laquo;</span>
+            </li>
+            {% endif %}
+
+            {% for p in accounts_page.paginator.page_range %}
+                {% if p == accounts_page.number %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ p }}</span>
+                    </li>
+                {% elif p > accounts_page.number|add:"-3" and p < accounts_page.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:account_list' %}"
+                                hx-target="#account-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page":"{{ p }}"}'>
+                            {{ p }}
+                        </button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if accounts_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:account_list' %}"
+                        hx-target="#account-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ accounts_page.next_page_number }}"}'>
+                    &raquo;
+                </button>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">&raquo;</span>
+            </li>
+            {% endif %}
+
+        </ul>
+    </nav>
 </div>
 {% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     OOB STATS
+     ══════════════════════════════════════════════════════════ -->
+{% if is_htmx %}
+<div class="row mb-2 flex-nowrap overflow-auto"
+     id="stats-cards"
+     hx-swap-oob="true">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-primary"><i class="pe-7s-users"></i></div>
+            <div>
+                <div class="stat-label">Total Accounts</div>
+                <div class="stat-value">
+                    {{ stats.total_accounts|format_number }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.by_status.active|format_number }} active
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-danger"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Outstanding</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.total_outstanding|money_short }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.debt_analysis.total_debtors|format_number }}
+                    student{{ stats.debt_analysis.total_debtors|pluralize }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-success"><i class="pe-7s-piggy"></i></div>
+            <div>
+                <div class="stat-label">Credit Balances</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.total_credit|money_short }}
+                </div>
+                <div class="stat-sub">
+                    {{ stats.debt_analysis.accounts_with_credit|format_number }}
+                    student{{ stats.debt_analysis.accounts_with_credit|pluralize }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon bg-info"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Settled</div>
+                <div class="stat-value">
+                    {{ stats.debt_analysis.zero_balance_accounts|format_number }}
+                </div>
+                <div class="stat-sub">zero balance</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon" style="background:#6d28d9;">
+                <i class="pe-7s-graph1"></i>
+            </div>
+            <div style="width:100%;">
+                <div class="stat-label">Collection Rate</div>
+                <div class="stat-value">
+                    {{ stats.collection_rate|floatformat:1 }}%
+                </div>
+                <div class="collection-bar">
+                    <div class="collection-bar-fill"
+                         style="width:{{ stats.collection_rate|floatformat:0 }}%;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endif %}
+
+<!-- ── Bootstrap re-init ── -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el, { html: true });
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+})();
+</script>

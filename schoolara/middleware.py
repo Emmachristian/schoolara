@@ -16,6 +16,14 @@ Key Features:
 - Comprehensive caching to minimize database queries
 - Safe fallbacks for all error conditions
 - Superuser override capabilities for administration
+
+FIX (2026-04-03):
+    get_school_timezone_for_db() previously queried
+    `WHERE id = 1` which never matched because SchoolConfiguration
+    uses a fixed UUID primary key stored as a 32-char hex string in
+    MySQL ('00000000000000000000000000000002').  The query now uses
+    the correct hex value sourced directly from core.models so it can
+    never drift out of sync again.
 """
 
 import logging
@@ -29,31 +37,62 @@ from .managers import get_current_db, set_current_db, clear_current_db
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Singleton UUID — imported from core so the raw-SQL query stays in sync
+# with the model definition and never drifts.
+# ---------------------------------------------------------------------------
+def _get_school_config_pk_hex():
+    """
+    Return the 32-char hex string that MySQL stores for
+    SchoolConfiguration's fixed UUID primary key.
+
+    Imported lazily to avoid an import-time circular dependency
+    (core.models → schoolara.managers → here).
+    """
+    from core.models import _SCHOOL_CONFIGURATION_UUID   # noqa: PLC0415
+    return _SCHOOL_CONFIGURATION_UUID.hex
+
+
 class SchoolDatabaseMiddleware:
     """
     Universal, SAFE multi-tenant database middleware with timezone support.
-    
+
     Database Selection Logic:
     1. System paths (/admin/, /static/, /media/) → 'default' database
     2. Authenticated users → School's database (from user.profile.school.database_alias)
     3. Superusers → Can override with ?db=<database_name>
     4. Fallback → 'default' database
-    
+
     Timezone Handling:
-    - Queries timezone directly from SchoolConfiguration table
+    - Queries timezone directly from SchoolConfiguration table via raw SQL
     - Sets timezone in request.school_timezone for use by other components
     - Caches timezone to minimize database queries
-    - Prevents recursion in BaseModel.save() by avoiding model layer
+    - Prevents recursion in BaseModel.save() by avoiding the model layer
+
+    CRITICAL — raw SQL pk:
+    SchoolConfiguration uses a fixed UUID pk stored in MySQL as a 32-char
+    hex string.  All raw SQL queries in this class MUST use
+    _SCHOOL_CONFIGURATION_PK_HEX (populated at __init__ time) rather than
+    a literal '1' or any other guess.
     """
 
     # Paths that always use 'default' database
     SYSTEM_PATHS = ['/admin/', '/static/', '/media/', '/__debug__/']
-    
+
     # Cache timeout (1 hour)
     CACHE_TIMEOUT = 3600
 
     def __init__(self, get_response):
         self.get_response = get_response
+
+        # Resolve and cache the singleton pk hex once at startup so every
+        # per-request SQL call can use it without re-importing core.models.
+        self._school_config_pk_hex = _get_school_config_pk_hex()
+        logger.debug(
+            f"SchoolConfiguration pk hex resolved: {self._school_config_pk_hex}"
+        )
+
         self.load_school_databases()
 
     # ==========================================================================
@@ -67,8 +106,11 @@ class SchoolDatabaseMiddleware:
         """
         try:
             self.school_databases = self.get_available_school_databases()
-            logger.info(f"SchoolDatabaseMiddleware loaded. School databases: {self.school_databases}")
-        except Exception as e:
+            logger.info(
+                f"SchoolDatabaseMiddleware loaded. "
+                f"School databases: {self.school_databases}"
+            )
+        except Exception:
             logger.exception("Failed to load school databases")
             self.school_databases = []
 
@@ -79,7 +121,7 @@ class SchoolDatabaseMiddleware:
     def __call__(self, request):
         """
         Process request and set appropriate database context.
-        
+
         Flow:
         1. Save original database state
         2. Determine target database for this request
@@ -100,26 +142,31 @@ class SchoolDatabaseMiddleware:
                 if target_db != original_db:
                     set_current_db(target_db)
                     logger.debug(f"Switched database context to: {target_db}")
-                
+
                 request.current_db = target_db
-                
-                # ⭐ CRITICAL: Set timezone in request context
+
+                # ⭐ CRITICAL: Set timezone in request context.
                 # This prevents recursion in BaseModel.save() by making
-                # timezone available without querying SchoolConfiguration model
+                # timezone available without querying SchoolConfiguration model.
                 request.school_timezone = self.get_school_timezone_for_db(target_db)
+                request.school_db = target_db
                 logger.debug(f"Set timezone to: {request.school_timezone}")
             else:
                 # Fallback to default database
                 set_current_db('default')
                 request.current_db = 'default'
+                request.school_db = 'default'
                 request.school_timezone = 'Africa/Kampala'
                 logger.debug("Using default database and timezone")
 
-        except Exception as e:
+        except Exception:
             # On any error, fallback to default database
-            logger.exception("SchoolDatabaseMiddleware failure - falling back to default")
+            logger.exception(
+                "SchoolDatabaseMiddleware failure - falling back to default"
+            )
             set_current_db('default')
             request.current_db = 'default'
+            request.school_db = 'default'
             request.school_timezone = 'Africa/Kampala'
 
         # Process the request
@@ -140,7 +187,7 @@ class SchoolDatabaseMiddleware:
     def determine_database(self, request):
         """
         Determine which database should be used for this request.
-        
+
         Returns:
             str: Database name to use
         """
@@ -166,14 +213,14 @@ class SchoolDatabaseMiddleware:
     def handle_system_path(self, request):
         """
         Handle system paths (admin, static, media).
-        
+
         Superusers can override database even on system paths.
         """
         if request.user.is_authenticated and request.user.is_superuser:
             override = self.get_database_override(request)
             if override:
                 return override
-        
+
         return 'default'
 
     # ==========================================================================
@@ -183,18 +230,15 @@ class SchoolDatabaseMiddleware:
     def handle_authenticated_user(self, request):
         """
         Route authenticated users to their school's database.
-        
+
         Returns:
             str: Database name for user's school
         """
-        # Get user's school database
         user_db = self.get_user_school_database(request.user)
 
-        # Superusers can override their school's database
         if request.user.is_superuser:
             return self.handle_superuser_access(request, user_db)
 
-        # Regular users must use their assigned school database
         return self.handle_regular_user_access(request, user_db)
 
     # ==========================================================================
@@ -204,23 +248,22 @@ class SchoolDatabaseMiddleware:
     def get_user_school_database(self, user):
         """
         Get database name for user's school.
-        
+
         This method:
         1. Checks user has a profile with school assigned
         2. Verifies school has active subscription
         3. Validates database exists in settings
         4. Returns database alias or None
-        
+
         CRITICAL: School model is ALWAYS queried from 'default' database!
-        
+
         Args:
             user: Django User object
-            
+
         Returns:
             str or None: Database alias or None if not found
         """
         try:
-            # Check if user has profile
             if not hasattr(user, 'profile'):
                 logger.warning(f"User {user.username} has no profile")
                 return None
@@ -238,29 +281,31 @@ class SchoolDatabaseMiddleware:
             if cached_db:
                 return cached_db
 
-            # Verify school has active subscription
             if not school.is_active_subscription:
-                logger.warning(f"Inactive subscription for school: {school.full_name}")
-                return None
-
-            # Get database alias from school
-            db_alias = school.database_alias
-
-            # Verify database exists in settings
-            if db_alias not in settings.DATABASES:
-                logger.error(
-                    f"Database alias '{db_alias}' not found in settings for school: {school.full_name}"
+                logger.warning(
+                    f"Inactive subscription for school: {school.full_name}"
                 )
                 return None
 
-            # Cache the result
+            db_alias = school.database_alias
+
+            if db_alias not in settings.DATABASES:
+                logger.error(
+                    f"Database alias '{db_alias}' not found in settings "
+                    f"for school: {school.full_name}"
+                )
+                return None
+
             cache.set(cache_key, db_alias, self.CACHE_TIMEOUT)
-            
-            logger.debug(f"Resolved database for user {user.username}: {db_alias}")
+            logger.debug(
+                f"Resolved database for user {user.username}: {db_alias}"
+            )
             return db_alias
 
-        except Exception as e:
-            logger.exception(f"Error resolving database for user {user.username}: {e}")
+        except Exception:
+            logger.exception(
+                f"Error resolving database for user {user.username}"
+            )
             return None
 
     # ==========================================================================
@@ -270,54 +315,73 @@ class SchoolDatabaseMiddleware:
     def get_school_timezone_for_db(self, db_name):
         """
         Get timezone for a specific school database.
-        
+
         CRITICAL: Uses direct SQL query to avoid model layer recursion!
-        
+
         When BaseModel.save() tries to set timestamps, it calls
-        get_school_current_time() which needs timezone. If we query
+        get_school_current_time() which needs timezone.  If we query the
         SchoolConfiguration model, it triggers another save(), causing
         infinite recursion.
-        
+
         Solution: Query timezone table directly with raw SQL.
-        
+
+        BUG FIX (2026-04-03):
+        The previous implementation used `WHERE id = 1`, which never matched
+        because SchoolConfiguration uses a fixed UUID primary key stored in
+        MySQL as a 32-char hex string
+        ('00000000000000000000000000000002').
+        The query now uses self._school_config_pk_hex which is resolved once
+        at middleware __init__ time from core.models._SCHOOL_CONFIGURATION_UUID
+        so it can never drift out of sync with the model definition.
+
         Args:
             db_name: Database name (e.g., 'atepi_palabek')
-            
+
         Returns:
             str: Timezone string (e.g., 'Africa/Kampala')
         """
-        # Default database always uses default timezone
         if not db_name or db_name == 'default':
             return 'Africa/Kampala'
-        
+
         # Check cache first
         cache_key = f"school_tz_{db_name}"
         cached_tz = cache.get(cache_key)
         if cached_tz:
             return cached_tz
-        
+
         try:
-            # Query timezone directly from database using raw SQL
-            # This bypasses the model layer and prevents recursion
             with connections[db_name].cursor() as cursor:
                 cursor.execute(
-                    "SELECT operational_timezone FROM core_schoolconfiguration WHERE id = 1 LIMIT 1"
+                    "SELECT operational_timezone "
+                    "FROM core_schoolconfiguration "
+                    "WHERE id = %s "
+                    "LIMIT 1",
+                    [self._school_config_pk_hex],   # ← fixed: was `WHERE id = 1`
                 )
                 row = cursor.fetchone()
-                
-                if row and row[0]:
-                    tz_str = row[0]
-                    # Cache for 1 hour
-                    cache.set(cache_key, tz_str, self.CACHE_TIMEOUT)
-                    logger.debug(f"Retrieved timezone for {db_name}: {tz_str}")
-                    return tz_str
-                else:
-                    logger.warning(f"No SchoolConfiguration found in {db_name}, using default timezone")
-                    
+
+            if row and row[0]:
+                tz_str = row[0]
+                cache.set(cache_key, tz_str, self.CACHE_TIMEOUT)
+                logger.debug(f"Retrieved timezone for {db_name}: {tz_str}")
+                return tz_str
+
+            # Row missing means migrations haven't run yet for this DB,
+            # or the record was deleted.  Log at WARNING so it's visible
+            # but not alarming in production.
+            logger.warning(
+                f"No SchoolConfiguration found in '{db_name}' "
+                f"(pk={self._school_config_pk_hex}). "
+                f"Run: python manage.py migrate --database={db_name} "
+                f"then visit /core/configuration/ to seed the record. "
+                f"Falling back to Africa/Kampala."
+            )
+
         except Exception as e:
-            logger.debug(f"Could not get timezone for {db_name}: {e}")
-        
-        # Fallback to default timezone
+            logger.debug(
+                f"Could not query timezone for '{db_name}': {e}"
+            )
+
         return 'Africa/Kampala'
 
     # ==========================================================================
@@ -327,12 +391,12 @@ class SchoolDatabaseMiddleware:
     def get_database_by_school_id(self, school_id):
         """
         Get database alias by school ID.
-        
+
         ALWAYS queries from 'default' database.
-        
+
         Args:
             school_id: School UUID
-            
+
         Returns:
             str or None: Database alias
         """
@@ -343,11 +407,10 @@ class SchoolDatabaseMiddleware:
 
         try:
             School = apps.get_model('accounts', 'School')
-            
-            # CRITICAL: Always query School from 'default' database
+
             school = School.objects.using('default').filter(
                 id=school_id,
-                is_active_subscription=True
+                is_active_subscription=True,
             ).first()
 
             if school:
@@ -356,20 +419,22 @@ class SchoolDatabaseMiddleware:
                     cache.set(cache_key, db_alias, self.CACHE_TIMEOUT)
                     return db_alias
 
-        except Exception as e:
-            logger.exception(f"Error resolving database for school ID {school_id}: {e}")
+        except Exception:
+            logger.exception(
+                f"Error resolving database for school ID {school_id}"
+            )
 
         return None
 
     def get_database_by_email_domain(self, email):
         """
         Get database alias by email domain.
-        
+
         ALWAYS queries from 'default' database.
-        
+
         Args:
             email: Email address
-            
+
         Returns:
             str or None: Database alias
         """
@@ -384,11 +449,10 @@ class SchoolDatabaseMiddleware:
 
         try:
             School = apps.get_model('accounts', 'School')
-            
-            # CRITICAL: Always query School from 'default' database
+
             school = School.objects.using('default').filter(
                 domain__iexact=domain,
-                is_active_subscription=True
+                is_active_subscription=True,
             ).first()
 
             if school:
@@ -397,8 +461,10 @@ class SchoolDatabaseMiddleware:
                     cache.set(cache_key, db_alias, self.CACHE_TIMEOUT)
                     return db_alias
 
-        except Exception as e:
-            logger.exception(f"Error resolving database for email domain {domain}: {e}")
+        except Exception:
+            logger.exception(
+                f"Error resolving database for email domain {domain}"
+            )
 
         return None
 
@@ -409,55 +475,48 @@ class SchoolDatabaseMiddleware:
     def handle_superuser_access(self, request, user_school_db):
         """
         Handle database routing for superusers.
-        
+
         Superusers can:
         1. Override database with ?db=<database_name>
         2. Use their assigned school database
         3. Fall back to default
-        
+
         Args:
             request: HTTP request
             user_school_db: User's school database (or None)
-            
+
         Returns:
             str: Database to use
         """
-        # Check for database override
         override = self.get_database_override(request)
         if override:
             return override
 
-        # Use school database if available
-        if user_school_db:
-            return user_school_db
-        
-        # Fall back to default
-        return 'default'
+        return user_school_db or 'default'
 
     def handle_regular_user_access(self, request, user_school_db):
         """
         Handle database routing for regular users.
-        
+
         Regular users:
         1. CANNOT override database
         2. Must use their assigned school database
-        3. Get error message if they try to override
-        
+        3. Get an error message if they attempt to override
+
         Args:
             request: HTTP request
             user_school_db: User's school database (or None)
-            
+
         Returns:
             str: Database to use
         """
-        # Block attempts to override database
         if 'db' in request.GET:
             messages.error(request, "You are not allowed to switch databases.")
             logger.warning(
-                f"User {request.user.username} attempted unauthorized database override"
+                f"User {request.user.username} attempted unauthorized "
+                f"database override"
             )
-        
-        # Use school database or fall back to default
+
         return user_school_db or 'default'
 
     # ==========================================================================
@@ -467,32 +526,32 @@ class SchoolDatabaseMiddleware:
     def get_database_override(self, request):
         """
         Get database override from query parameter or session.
-        
+
         Superusers can switch databases by:
         1. Adding ?db=<database_name> to URL
-        2. Using session-stored override from previous request
-        
+        2. Using the session-stored override from a previous request
+
         Args:
             request: HTTP request
-            
+
         Returns:
             str or None: Database override or None
         """
-        # Check for ?db= parameter
         db_param = request.GET.get('db')
 
         if db_param and self.is_valid_database(db_param):
-            # Store override in session for subsequent requests
             request.session['db_override'] = db_param
-            logger.info(f"Database override set to: {db_param} by {request.user.username}")
+            logger.info(
+                f"Database override set to: {db_param} "
+                f"by {request.user.username}"
+            )
             return db_param
 
-        # Check session for stored override
         session_db = request.session.get('db_override')
         if session_db and self.is_valid_database(session_db):
             return session_db
 
-        # Clear invalid override from session
+        # Clear stale/invalid override from session
         request.session.pop('db_override', None)
         return None
 
@@ -501,24 +560,16 @@ class SchoolDatabaseMiddleware:
     # ==========================================================================
 
     def is_valid_database(self, db_name):
-        """
-        Check if database name is valid.
-        
-        Args:
-            db_name: Database name to check
-            
-        Returns:
-            bool: True if valid
-        """
+        """Check if database name is present in settings.DATABASES."""
         return db_name in settings.DATABASES
 
     def ensure_database_available(self, db_name):
         """
         Ensure database connection is available and working.
-        
+
         Args:
             db_name: Database name
-            
+
         Returns:
             bool: True if available
         """
@@ -527,22 +578,24 @@ class SchoolDatabaseMiddleware:
             connection.ensure_connection()
             return True
         except Exception as e:
-            logger.error(f"Database '{db_name}' is unavailable: {e}", exc_info=True)
+            logger.error(
+                f"Database '{db_name}' is unavailable: {e}", exc_info=True
+            )
             return False
 
     def get_available_school_databases(self):
         """
         Get list of available school databases from settings.
-        
+
         Returns:
-            list: List of database names (excluding 'default' and 'test_*')
+            list: Database names excluding 'default' and test databases
         """
         try:
             return [
                 db for db in settings.DATABASES.keys()
                 if db != 'default' and not db.startswith('test_')
             ]
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to list school databases")
             return []
 
@@ -554,56 +607,61 @@ class SchoolDatabaseMiddleware:
     def clear_database_cache():
         """
         Clear all database-related caches.
-        
+
         Call this when:
         - School assignments change
         - Database configuration changes
         - Subscriptions are modified
-        
+
         Usage:
             from schoolara.middleware import SchoolDatabaseMiddleware
             SchoolDatabaseMiddleware.clear_database_cache()
         """
         cache.delete_many([
-            key for key in cache.keys() 
-            if key.startswith(('user_school_db_', 'school_db_', 'domain_db_', 'school_tz_'))
+            key for key in cache.keys()
+            if key.startswith((
+                'user_school_db_',
+                'school_db_',
+                'domain_db_',
+                'school_tz_',
+            ))
         ])
         logger.info("Cleared database routing cache")
 
     @staticmethod
     def clear_user_cache(user_id):
         """
-        Clear cache for specific user.
-        
-        Call this when user's school assignment changes.
-        
+        Clear cache for a specific user.
+
+        Call this when the user's school assignment changes.
+
         Args:
             user_id: User ID
-            
+
         Usage:
             from schoolara.middleware import SchoolDatabaseMiddleware
             SchoolDatabaseMiddleware.clear_user_cache(user.id)
         """
-        cache_key = f"user_school_db_{user_id}"
-        cache.delete(cache_key)
+        cache.delete(f"user_school_db_{user_id}")
         logger.debug(f"Cleared database cache for user {user_id}")
 
     @staticmethod
     def clear_timezone_cache(db_name):
         """
-        Clear timezone cache for specific database.
-        
-        Call this when SchoolConfiguration timezone changes.
-        
+        Clear timezone cache for a specific database.
+
+        Call this when SchoolConfiguration.operational_timezone changes
+        (the SchoolConfiguration.save() method should call this automatically
+        via a post_save signal or an override).
+
         Args:
             db_name: Database name
-            
+
         Usage:
             from schoolara.middleware import SchoolDatabaseMiddleware
             SchoolDatabaseMiddleware.clear_timezone_cache('atepi_palabek')
         """
-        cache_key = f"school_tz_{db_name}"
-        cache.delete(cache_key)
+        cache.delete(f"school_tz_{db_name}")
         logger.debug(f"Cleared timezone cache for {db_name}")
 
 
@@ -613,20 +671,20 @@ class SchoolDatabaseMiddleware:
 
 def with_school_database(db_name):
     """
-    Decorator to execute a function with specific database context.
-    
+    Decorator to execute a function with a specific database context.
+
     Usage:
         from schoolara.middleware import with_school_database
-        
+
         @with_school_database('atepi_palabek')
         def get_student_count():
             return Student.objects.count()
-        
+
         count = get_student_count()
-    
+
     Args:
         db_name: Database name to use
-        
+
     Returns:
         Decorated function
     """
@@ -641,18 +699,18 @@ def with_school_database(db_name):
 
 def get_request_database(request):
     """
-    Get the database being used for current request.
-    
+    Get the database being used for the current request.
+
     Usage:
         from schoolara.middleware import get_request_database
-        
+
         def my_view(request):
             db = get_request_database(request)
             logger.info(f"Using database: {db}")
-    
+
     Args:
         request: HTTP request
-        
+
     Returns:
         str: Database name or 'default'
     """
@@ -661,18 +719,18 @@ def get_request_database(request):
 
 def get_request_timezone(request):
     """
-    Get the timezone being used for current request.
-    
+    Get the timezone being used for the current request.
+
     Usage:
         from schoolara.middleware import get_request_timezone
-        
+
         def my_view(request):
             tz = get_request_timezone(request)
             logger.info(f"Using timezone: {tz}")
-    
+
     Args:
         request: HTTP request
-        
+
     Returns:
         str: Timezone string or 'Africa/Kampala'
     """

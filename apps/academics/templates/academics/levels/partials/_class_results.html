@@ -1,0 +1,259 @@
+{# academics/templates/academics/levels/partials/_class_results.html #}
+{# No <script> blocks — parent detail.html owns all JS. #}
+
+{% load humanize %}
+
+<style>
+.cls-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cls-tbl thead th {
+    background: #f8fafc;
+    padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.cls-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; }
+.cls-tbl tbody tr:last-child td { border-bottom: none; }
+.cls-tbl tbody tr:hover td { background: #fafbff; }
+.cls-tbl tbody tr.row-muted td { color: #94a3b8; }
+.cls-tbl tbody tr.row-muted:hover td { background: #f8fafc; }
+
+.cls-name { font-weight: 700; font-size: 13.5px; color: #0f172a; text-decoration: none; display: block; }
+.cls-name:hover { color: #1d4ed8; }
+
+.enroll-bar { display: flex; align-items: center; gap: 6px; }
+.enroll-track { height: 6px; background: #e2e8f0; border-radius: 3px; width: 60px; overflow: hidden; flex-shrink: 0; }
+
+.teacher-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #334155; }
+.section-badge { display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 4px; font-size: 11px; font-weight: 700; padding: 1px 7px; }
+
+.tbl-empty { text-align: center; padding: 48px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.pag-bar {
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+    font-size: 12.5px; color: #64748b;
+}
+
+.dropdown-menu { font-size: .85rem; min-width: 185px; border: 1px solid #e2e8f0; }
+.dropdown-item  { padding: 6px 13px; }
+</style>
+
+{% if classes %}
+<div style="overflow-x:auto;">
+    <table class="cls-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Class</th>
+                <th>Session</th>
+                <th>Teacher</th>
+                <th class="text-center">Enrollment</th>
+                <th class="text-center">Subjects</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cls in classes %}
+            <tr {% if not cls.is_active %}class="row-muted"{% endif %}>
+
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+
+                <td>
+                    <a href="{% url 'academics:class_detail' cls.pk %}" class="cls-name">
+                        {{ cls.get_display_name }}
+                        {% if cls.section %}
+                            <span class="section-badge ms-1">{{ cls.section }}</span>
+                        {% endif %}
+                    </a>
+                    {% if cls.classroom %}
+                    <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                        <i class="fa fa-door-open" style="opacity:.5;font-size:10px;"></i>
+                        {{ cls.classroom.room_number }}
+                    </div>
+                    {% endif %}
+                </td>
+
+                <td style="font-size:12.5px;color:#64748b;">
+                    {{ cls.academic_session.name }}
+                    <div style="font-size:11px;color:#94a3b8;font-family:monospace;">{{ cls.academic_session.year_name }}</div>
+                </td>
+
+                <td>
+                    {% if cls.class_teacher %}
+                        <span class="teacher-chip">
+                            <i class="fa fa-user-tie" style="color:#94a3b8;font-size:10px;"></i>
+                            {{ cls.class_teacher.staff.full_name }}
+                        </span>
+                    {% else %}
+                        <span style="font-size:12px;color:#94a3b8;">
+                            <i class="fa fa-user-slash me-1" style="opacity:.5;"></i>Unassigned
+                        </span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <div class="enroll-bar" style="justify-content:center;">
+                        <strong style="font-size:13px;min-width:18px;">{{ cls.enrollment_count }}</strong>
+                        <span style="font-size:11px;color:#94a3b8;">/{{ cls.max_students }}</span>
+                        <div class="enroll-track">
+                            {% if cls.max_students > 0 and cls.enrollment_count > 0 %}
+                            <div style="height:100%;border-radius:3px;
+                                        width:{% widthratio cls.enrollment_count cls.max_students 100 %}%;
+                                        background:{% if cls.enrollment_count >= cls.max_students %}#dc2626{% else %}#15803d{% endif %};"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+
+                <td class="text-center">
+                    <span style="font-size:13px;font-weight:600;color:#1d4ed8;">{{ cls.active_subject_count }}</span>
+                    {% if cls.subjects_without_teacher_count > 0 %}
+                    <div style="font-size:10.5px;color:#b45309;">
+                        <i class="fa fa-exclamation-triangle me-1"></i>{{ cls.subjects_without_teacher_count }} no teacher
+                    </div>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    {% if cls.is_active %}
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">
+                            <i class="fa fa-check-circle"></i>Active
+                        </span>
+                    {% else %}
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">
+                            <i class="fa fa-times-circle"></i>Inactive
+                        </span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'academics:class_detail' cls.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Class
+                                </a>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'academics:class_edit_modal' cls.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'academics:class_toggle_active_modal' cls.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    {% if cls.is_active %}
+                                        <i class="fa fa-pause me-2 text-warning"></i>Deactivate
+                                    {% else %}
+                                        <i class="fa fa-play me-2 text-success"></i>Activate
+                                    {% endif %}
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'academics:class_delete_modal' cls.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if classes.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ classes.start_index }}</strong>–<strong>{{ classes.end_index }}</strong>
+        of <strong>{{ classes.paginator.count }}</strong> class{{ classes.paginator.count|pluralize:"es" }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if classes.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:level_classes_partial' level.pk %}"
+                        hx-target="#class-results"
+                        hx-include="#classFilterForm"
+                        hx-vals='{"page":"{{ classes.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in classes.paginator.page_range %}
+                {% if p == classes.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > classes.number|add:"-3" and p < classes.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'academics:level_classes_partial' level.pk %}"
+                                hx-target="#class-results"
+                                hx-include="#classFilterForm"
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if classes.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:level_classes_partial' level.pk %}"
+                        hx-target="#class-results"
+                        hx-include="#classFilterForm"
+                        hx-vals='{"page":"{{ classes.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-chalkboard"></i>
+    <p>
+        {% if request.GET.q or request.GET.academic_session or request.GET.is_active %}
+            No classes match your filters.
+        {% else %}
+            No classes created for this level yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.academic_session or request.GET.is_active %}
+    <button type="button"
+            onclick="clearClassFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <a href="{% url 'academics:class_create' %}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+        <i class="fa fa-plus" style="font-size:11px;"></i>Create Class
+    </a>
+    {% endif %}
+</div>
+{% endif %}

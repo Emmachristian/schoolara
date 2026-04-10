@@ -1,0 +1,892 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --teal:      #0f766e;
+    --teal-lt:   #f0fdfa;
+    --radius:    10px;
+}
+
+/* ── Hero (white card) ── */
+.detail-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin-bottom: 22px;
+}
+.hero-title  { font-size: 20px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+.hero-sub    { font-size: 13px; color: var(--ink-muted); margin-bottom: 16px; }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.hero-badge  {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 700;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted);
+}
+.hero-badge.active   { background: #dcfce7; border-color: #bbf7d0; color: var(--green); }
+.hero-badge.inactive { background: var(--red-lt); border-color: #fecaca; color: var(--red); }
+.hero-badge.accent   { background: var(--accent-lt); border-color: var(--accent-bd); color: var(--accent); }
+.hero-actions { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── Cards ── */
+.detail-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.detail-card-head {
+    background: var(--surface-2); padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.detail-card-head-left { display: flex; align-items: center; gap: 8px; }
+.head-icon {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--accent-lt); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
+}
+.head-icon.green  { background: #dcfce7; color: var(--green); }
+.head-icon.amber  { background: var(--amber-lt); color: var(--amber); }
+.head-icon.purple { background: var(--purple-lt); color: var(--purple); }
+.head-icon.teal   { background: var(--teal-lt); color: var(--teal); }
+.head-icon.red    { background: var(--red-lt); color: var(--red); }
+.head-icon.muted  { background: var(--surface-3); color: var(--ink-muted); }
+.head-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.head-sub   { font-size: 11px; color: var(--ink-muted); }
+.detail-card-body { padding: 20px; }
+
+/* ── KV grid ── */
+.kv-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
+.kv-grid.cols-3 { grid-template-columns: repeat(3,1fr); }
+.kv-item-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.kv-item-val   { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.kv-item-val.muted { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+
+/* ── Stat strip ── */
+.stat-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.stat-card-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 5px; }
+.stat-card-val   { font-size: 20px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.stat-card-val.green { color: var(--green); }
+.stat-card-val.amber { color: var(--amber); }
+.stat-card-val.red   { color: var(--red); }
+.stat-card-sub   { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Budget bar ── */
+.budget-bar-wrap   { margin-top: 10px; }
+.budget-bar-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-muted); margin-bottom: 5px; }
+.budget-bar-track  { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.budget-bar-fill   { height: 100%; border-radius: 99px; background: var(--green); transition: width .4s; }
+.budget-bar-fill.warning { background: var(--amber); }
+.budget-bar-fill.danger  { background: var(--red); }
+
+/* ── Status pills ── */
+.status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
+.pill-active   { background: #dcfce7; color: var(--green); }
+.pill-inactive { background: var(--surface-3); color: var(--ink-muted); }
+.pill-auto     { background: var(--accent-lt); color: var(--accent); }
+
+/* ── Value highlight ── */
+.value-highlight {
+    display: flex; align-items: center; gap: 14px;
+    background: linear-gradient(135deg, var(--green-lt) 0%, var(--accent-lt) 100%);
+    border: 1px solid var(--accent-bd); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 16px;
+}
+.value-highlight-number { font-size: 28px; font-weight: 900; color: var(--accent); line-height: 1; }
+.value-highlight-label  { font-size: 12px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Tier table ── */
+.tier-table { width: 100%; border-collapse: collapse; }
+.tier-table thead { background: var(--surface-2); }
+.tier-table th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); padding: 9px 12px; border-bottom: 2px solid var(--border); }
+.tier-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: middle; }
+.tier-table tr:last-child td { border-bottom: none; }
+.tier-table tr:hover td { background: var(--surface-2); }
+
+/* ── Award rows ── */
+.award-table { width: 100%; border-collapse: collapse; }
+.award-table thead { background: var(--surface-2); }
+.award-table th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); padding: 10px 16px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.award-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.award-table tr:last-child td { border-bottom: none; }
+.award-table tr:hover td { background: var(--surface-2); }
+
+/* ── Student cell inside award row ── */
+.stu-cell { display: flex; align-items: center; gap: 10px; }
+.stu-initials {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent-lt); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; border: 2px solid var(--accent-bd);
+}
+.stu-name-link { font-weight: 700; font-size: 13px; color: var(--ink); text-decoration: none; display: block; }
+.stu-name-link:hover { color: var(--accent); }
+.stu-adm-num  { font-size: 11px; color: var(--ink-muted); font-family: 'Courier New', monospace; }
+
+/* ── Application / data table ── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead { background: var(--surface-2); }
+.data-table th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); padding: 10px 14px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.data-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--surface-2); }
+
+/* ── Matrix chips ── */
+.matrix-display { display: flex; flex-wrap: wrap; gap: 8px; }
+.matrix-chip { display: inline-flex; flex-direction: column; align-items: center; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; min-width: 90px; text-align: center; }
+.matrix-chip-cat { font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+.matrix-chip-pct { font-size: 14px; font-weight: 800; color: var(--green); }
+.matrix-chip-pct.zero { color: var(--ink-faint); }
+
+/* ── Empty state ── */
+.empty-state { padding: 36px 20px; text-align: center; color: var(--ink-faint); }
+.empty-state i { font-size: 28px; margin-bottom: 10px; display: block; }
+.empty-state p { font-size: 13px; margin: 0; }
+
+/* ── Sidebar ── */
+.sidebar-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.sidebar-card-head { background: var(--surface-2); padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+.sidebar-card-body { padding: 14px 16px; }
+.sidebar-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.sidebar-row:last-child { border-bottom: none; }
+.sidebar-row-label { color: var(--ink-muted); flex-shrink: 0; margin-right: 10px; }
+.sidebar-row-val   { font-weight: 600; color: var(--ink); text-align: right; word-break: break-word; }
+
+.action-btn-group { display: flex; flex-direction: column; gap: 8px; }
+.action-btn { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; transition: all .15s; }
+.action-btn:hover { background: var(--surface-2); color: var(--ink); text-decoration: none; }
+.action-btn.danger  { color: var(--red);   border-color: #fecaca; }
+.action-btn.danger:hover  { background: var(--red-lt); }
+.action-btn.warning { color: var(--amber); border-color: #fde68a; }
+.action-btn.warning:hover { background: var(--amber-lt); }
+.action-btn.success { color: var(--green); border-color: #bbf7d0; }
+.action-btn.success:hover { background: var(--green-lt); }
+.action-btn i { width: 16px; text-align: center; flex-shrink: 0; }
+
+@media (max-width: 992px) {
+    .stat-strip { grid-template-columns: repeat(2,1fr); }
+    .kv-grid.cols-3 { grid-template-columns: repeat(2,1fr); }
+}
+@media (max-width: 576px) {
+    .stat-strip { grid-template-columns: 1fr; }
+    .kv-grid, .kv-grid.cols-3 { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Hero (white card) ── -->
+<div class="detail-hero">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div style="flex:1;min-width:0;">
+            <div class="hero-title">
+                <i class="fa fa-tag me-2" style="color:var(--accent);"></i>{{ policy.name }}
+            </div>
+            <div class="hero-sub">
+                <span style="font-family:'Courier New',monospace;background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--ink-muted);">
+                    {{ policy.code }}
+                </span>
+                &nbsp;·&nbsp; {{ policy.get_category_display }}
+            </div>
+            <div class="hero-badges">
+                {% if policy.is_active %}
+                    <span class="hero-badge active"><i class="fa fa-check-circle"></i> Active</span>
+                {% else %}
+                    <span class="hero-badge inactive"><i class="fa fa-times-circle"></i> Inactive</span>
+                {% endif %}
+                {% if policy.auto_apply %}
+                    <span class="hero-badge accent"><i class="fa fa-magic"></i> Auto-apply</span>
+                {% else %}
+                    <span class="hero-badge"><i class="fa fa-hand-pointer-o"></i> Manual</span>
+                {% endif %}
+                <span class="hero-badge">
+                    <i class="fa fa-sliders"></i> {{ policy.get_value_mode_display }}
+                </span>
+                <span class="hero-badge">
+                    <i class="fa fa-link"></i> {{ policy.get_combination_mode_display }}
+                </span>
+                <span class="hero-badge">
+                    <i class="fa fa-sort-numeric-asc"></i> Priority {{ policy.priority }}
+                </span>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+            <a href="{% url 'fees:discount_edit' policy.pk %}"
+               class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-edit" style="font-size:11px;"></i> Edit Policy
+            </a>
+            <a href="{% url 'fees:student_discount_create' %}?policy={{ policy.pk }}"
+               class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1">
+                <i class="fa fa-plus" style="font-size:11px;"></i> Award to Student
+            </a>
+            <a href="{% url 'fees:discount_list' %}"
+               class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-arrow-left" style="font-size:11px;"></i> All Policies
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ── Stat strip ── -->
+<div class="stat-strip">
+    <div class="stat-card">
+        <div class="stat-card-label">Total Discounted</div>
+        <div class="stat-card-val green">{{ total_discounted|money }}</div>
+        <div class="stat-card-sub">Across all active applications</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Applications</div>
+        <div class="stat-card-val">{{ application_count }}</div>
+        <div class="stat-card-sub">Active (not reversed)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Active Awards</div>
+        <div class="stat-card-val">{{ active_awards_total }}</div>
+        <div class="stat-card-sub">{{ all_awards_total }} total award{{ all_awards_total|pluralize }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">
+            {% if policy.total_budget %}Budget Remaining{% else %}Budget{% endif %}
+        </div>
+        {% if budget_remaining is not None %}
+            {% widthratio policy.budget_used policy.total_budget 100 as used_pct %}
+            <div class="stat-card-val
+                {% if budget_remaining <= 0 %}red
+                {% elif budget_remaining < policy.total_budget|mul:0.2 %}amber
+                {% endif %}">
+                {{ budget_remaining|money }}
+            </div>
+            <div class="stat-card-sub">of {{ policy.total_budget|money }} total</div>
+            <div class="budget-bar-wrap">
+                <div class="budget-bar-labels">
+                    <span>{{ used_pct|default:0 }}% used</span>
+                    <span>{{ budget_remaining|money }} left</span>
+                </div>
+                <div class="budget-bar-track">
+                    <div class="budget-bar-fill {% if used_pct >= 90 %}danger{% elif used_pct >= 70 %}warning{% endif %}"
+                         style="width:{{ used_pct|default:0 }}%;"></div>
+                </div>
+            </div>
+        {% else %}
+            <div class="stat-card-val muted" style="font-size:14px;font-weight:400;">No budget</div>
+            <div class="stat-card-sub">Unlimited spend</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+
+<!-- ══════════════════════════ LEFT COLUMN ══════════════════════════ -->
+<div class="col-lg-8">
+
+    <!-- ── Policy configuration ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon"><i class="pe-7s-ribbon"></i></div>
+                <div>
+                    <div class="head-title">Policy Configuration</div>
+                    <div class="head-sub">Value mode, combination rules and limits</div>
+                </div>
+            </div>
+            <a href="{% url 'fees:discount_edit' policy.pk %}"
+               class="btn btn-xs btn-outline-primary d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-edit"></i> Edit
+            </a>
+        </div>
+        <div class="detail-card-body">
+            <div class="value-highlight">
+                <div>
+                    {% if policy.value_mode == 'FLAT_PERCENTAGE' and policy.flat_percentage %}
+                        <div class="value-highlight-number">{{ policy.flat_percentage }}%</div>
+                        <div class="value-highlight-label">Flat percentage discount</div>
+                    {% elif policy.value_mode == 'FLAT_FIXED' and policy.flat_fixed_amount %}
+                        <div class="value-highlight-number" style="font-size:22px;">{{ policy.flat_fixed_amount|money }}</div>
+                        <div class="value-highlight-label">Fixed amount discount</div>
+                    {% elif policy.value_mode == 'FLAT_WAIVER' %}
+                        <div class="value-highlight-number">100%</div>
+                        <div class="value-highlight-label">Full fee waiver</div>
+                    {% elif policy.value_mode == 'TIERED' %}
+                        <div class="value-highlight-number" style="font-size:22px;">{{ policy.tiers.count }}</div>
+                        <div class="value-highlight-label">Tier band{{ policy.tiers.count|pluralize }} — {{ policy.get_tier_dimension_display }}</div>
+                    {% elif policy.value_mode == 'CATEGORY_MATRIX' %}
+                        <div class="value-highlight-number" style="font-size:22px;">Matrix</div>
+                        <div class="value-highlight-label">Per-category percentage</div>
+                    {% endif %}
+                </div>
+                <div style="flex:1;"></div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:4px;">Mode</div>
+                    <div style="font-weight:700;font-size:13px;">{{ policy.get_value_mode_display }}</div>
+                    <div style="font-size:11px;color:var(--ink-muted);margin-top:8px;margin-bottom:4px;">Category</div>
+                    <div style="font-weight:700;font-size:13px;">{{ policy.get_category_display }}</div>
+                </div>
+            </div>
+
+            <div class="kv-grid cols-3">
+                <div>
+                    <div class="kv-item-label">Application Method</div>
+                    <div class="kv-item-val" style="font-size:12.5px;">{{ policy.get_application_method_display }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Combination Mode</div>
+                    <div class="kv-item-val" style="font-size:12.5px;">{{ policy.get_combination_mode_display }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Auto-Apply</div>
+                    <div class="kv-item-val">
+                        {% if policy.auto_apply %}
+                            <span class="status-pill pill-auto"><i class="fa fa-magic"></i> Yes</span>
+                        {% else %}
+                            <span class="status-pill pill-inactive"><i class="fa fa-hand-stop-o"></i> No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Priority</div>
+                    <div class="kv-item-val">{{ policy.priority }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Per-Student Cap</div>
+                    <div class="kv-item-val">
+                        {% if policy.max_discount_per_student %}{{ policy.max_discount_per_student|money }}
+                        {% else %}<span class="kv-item-val muted">No cap</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Max Beneficiaries</div>
+                    <div class="kv-item-val">
+                        {% if policy.max_beneficiaries %}{{ policy.max_beneficiaries }}
+                        {% else %}<span class="kv-item-val muted">Unlimited</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Valid From</div>
+                    <div class="kv-item-val">
+                        {% if policy.valid_from %}{{ policy.valid_from|date:"d M Y" }}
+                        {% else %}<span class="kv-item-val muted">No restriction</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Valid Until</div>
+                    <div class="kv-item-val">
+                        {% if policy.valid_until %}{{ policy.valid_until|date:"d M Y" }}
+                        {% else %}<span class="kv-item-val muted">No expiry</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Annual Review</div>
+                    <div class="kv-item-val">
+                        {% if policy.requires_annual_review %}
+                            <span class="status-pill" style="background:var(--amber-lt);color:var(--amber);font-size:11px;padding:2px 8px;">
+                                <i class="fa fa-refresh"></i> Required
+                            </span>
+                        {% else %}
+                            <span class="kv-item-val muted">Not required</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if policy.description %}
+            <div style="margin-top:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12.5px;color:var(--ink);line-height:1.7;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px;">
+                    <i class="fa fa-align-left me-1"></i>Description
+                </div>
+                {{ policy.description|linebreaksbr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Tier bands ── -->
+    {% if policy.value_mode == 'TIERED' %}
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon purple"><i class="pe-7s-graph1"></i></div>
+                <div>
+                    <div class="head-title">Tier Bands</div>
+                    <div class="head-sub">
+                        Dimension: {{ policy.get_tier_dimension_display }}
+                        &nbsp;·&nbsp; {{ policy.tiers.count }} tier{{ policy.tiers.count|pluralize }} defined
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="detail-card-body" style="padding:0;">
+            {% if policy.tiers.all %}
+            <div class="table-responsive">
+                <table class="tier-table">
+                    <thead>
+                        <tr>
+                            <th>Min Value</th>
+                            <th>Max Value</th>
+                            <th>Discount Type</th>
+                            <th>Discount Value</th>
+                            <th>Label</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tier in policy.tiers.all %}
+                        <tr>
+                            <td style="font-weight:600;">{{ tier.min_value }}</td>
+                            <td>{{ tier.max_value|default:"and above" }}</td>
+                            <td>{{ tier.get_discount_type_display }}</td>
+                            <td style="font-weight:700;color:var(--green);">
+                                {% if tier.discount_type == 'PERCENTAGE' %}{{ tier.discount_value }}%
+                                {% elif tier.discount_type == 'FIXED' %}{{ tier.discount_value|money }}
+                                {% else %}100% waiver{% endif %}
+                            </td>
+                            <td style="color:var(--ink-muted);">{{ tier.label|default:"—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state"><i class="fa fa-list-ol"></i><p>No tier bands defined yet.</p></div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Category matrix ── -->
+    {% if policy.value_mode == 'CATEGORY_MATRIX' and policy.category_matrix %}
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon teal"><i class="pe-7s-table"></i></div>
+                <div>
+                    <div class="head-title">Category Discount Matrix</div>
+                    <div class="head-sub">Percentage applied per fee category type</div>
+                </div>
+            </div>
+        </div>
+        <div class="detail-card-body">
+            <div class="matrix-display">
+                {% for ctype, pct in policy.category_matrix.items %}
+                <div class="matrix-chip">
+                    <div class="matrix-chip-cat">{{ ctype|replace:"_: " }}</div>
+                    <div class="matrix-chip-pct {% if pct == 0 %}zero{% endif %}">{{ pct }}%</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div style="margin-top:14px;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px;">Raw JSON</div>
+                <div style="background:var(--surface-3);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:'Courier New',monospace;font-size:12px;color:var(--ink);line-height:1.8;white-space:pre-wrap;">{{ policy.category_matrix }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Active awards ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon green"><i class="pe-7s-users"></i></div>
+                <div>
+                    <div class="head-title">Active Awards</div>
+                    <div class="head-sub">Students currently holding this discount</div>
+                </div>
+            </div>
+            <a href="{% url 'fees:student_discount_list' %}?policy={{ policy.pk }}"
+               class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-external-link"></i> View All
+            </a>
+        </div>
+        <div class="detail-card-body" style="padding:0;">
+            {% if active_awards %}
+            <div class="table-responsive">
+                <table class="award-table">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Override</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th class="text-center" style="width:60px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for award in active_awards %}
+                        <tr>
+                            <td>
+                                <div class="stu-cell">
+                                    <div class="stu-initials">
+                                        {{ award.student.first_name|first }}{{ award.student.last_name|first }}
+                                    </div>
+                                    <div>
+                                        <a href="{% url 'fees:student_discount_detail' award.pk %}"
+                                           class="stu-name-link">
+                                            {{ award.student.get_full_name }}
+                                        </a>
+                                        <div class="stu-adm-num">{{ award.student.admission_number }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if award.override_percentage is not None %}
+                                    <span style="color:var(--purple);font-weight:700;">{{ award.override_percentage }}%</span>
+                                {% elif award.override_fixed_amount is not None %}
+                                    <span style="color:var(--purple);font-weight:700;">{{ award.override_fixed_amount|money }}</span>
+                                {% else %}
+                                    <span style="color:var(--ink-faint);font-style:italic;font-size:11.5px;">Policy default</span>
+                                {% endif %}
+                            </td>
+                            <td style="color:var(--ink-muted);font-size:12.5px;">{{ award.start_date|date:"d M Y" }}</td>
+                            <td style="color:var(--ink-muted);font-size:12.5px;">
+                                {% if award.end_date %}{{ award.end_date|date:"d M Y" }}
+                                {% else %}<span style="color:var(--ink-faint);font-style:italic;">No expiry</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                <a href="{% url 'fees:student_discount_detail' award.pk %}"
+                                   class="btn btn-xs btn-outline-primary"
+                                   style="font-size:10.5px;padding:3px 8px;">
+                                    <i class="fa fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if all_awards_total > 20 %}
+            <div style="padding:10px 16px;text-align:center;font-size:12px;color:var(--ink-muted);border-top:1px solid var(--border);">
+                Showing 20 of {{ all_awards_total }} award{{ all_awards_total|pluralize }} —
+                <a href="{% url 'fees:student_discount_list' %}?policy={{ policy.pk }}" style="color:var(--accent);">View all</a>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state">
+                <i class="pe-7s-users"></i>
+                <p>No active awards yet.</p>
+                <p style="font-size:12px;color:var(--ink-faint);margin-top:6px;">
+                    <a href="{% url 'fees:student_discount_create' %}?policy={{ policy.pk }}" style="color:var(--accent);">
+                        Award this discount to a student
+                    </a>
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Recent applications ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon amber"><i class="pe-7s-cash"></i></div>
+                <div>
+                    <div class="head-title">Recent Applications</div>
+                    <div class="head-sub">Last 20 invoices this discount was applied to</div>
+                </div>
+            </div>
+            <span style="font-size:11px;color:var(--ink-muted);">
+                {{ application_count }} total &nbsp;·&nbsp; {{ total_discounted|money }}
+            </span>
+        </div>
+        <div class="detail-card-body" style="padding:0;">
+            {% if recent_applications %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Student</th>
+                            <th>Invoice</th>
+                            <th class="text-end">Amount</th>
+                            <th>Applied By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for app in recent_applications %}
+                        <tr>
+                            <td style="color:var(--ink-muted);white-space:nowrap;font-size:12px;">
+                                {{ app.created_at|date:"d M Y" }}
+                            </td>
+                            <td>
+                                <div class="stu-cell">
+                                    <div class="stu-initials" style="width:28px;height:28px;font-size:10px;">
+                                        {{ app.student_discount.student.first_name|first }}{{ app.student_discount.student.last_name|first }}
+                                    </div>
+                                    <div>
+                                        <a href="{% url 'fees:student_discount_detail' app.student_discount.pk %}"
+                                           class="stu-name-link" style="font-size:12.5px;">
+                                            {{ app.student_discount.student.get_full_name }}
+                                        </a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if app.invoice %}
+                                <a href="{% url 'fees:invoice_detail' app.invoice.pk %}"
+                                   style="color:var(--accent);font-family:'Courier New',monospace;font-size:12px;">
+                                    {{ app.invoice.invoice_number }}
+                                </a>
+                                {% else %}
+                                <span style="color:var(--ink-faint);font-style:italic;">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <span style="font-weight:700;color:var(--green);">{{ app.amount_discounted|money }}</span>
+                            </td>
+                            <td style="color:var(--ink-muted);font-size:12px;">{{ app.applied_by_id|default:"—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="pe-7s-cash"></i>
+                <p>No applications recorded yet.</p>
+                <p style="font-size:12px;color:var(--ink-faint);margin-top:4px;">
+                    {% if policy.auto_apply %}Applications will appear here once invoices are generated.
+                    {% else %}Apply this discount from the invoice detail page.{% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>{# /col-lg-8 #}
+
+<!-- ══════════════════════════ RIGHT COLUMN ══════════════════════════ -->
+<div class="col-lg-4">
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-bar-chart"></i> Stats</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Total Awards</span>
+                <span class="sidebar-row-val">{{ all_awards_total }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Active Awards</span>
+                <span class="sidebar-row-val" style="color:var(--green);">{{ active_awards_total }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Applications</span>
+                <span class="sidebar-row-val">{{ application_count }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Total Discounted</span>
+                <span class="sidebar-row-val" style="color:var(--green);">{{ total_discounted|money }}</span>
+            </div>
+            {% if policy.total_budget %}
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Budget Used</span>
+                <span class="sidebar-row-val">{{ policy.budget_used|money }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Budget Remaining</span>
+                <span class="sidebar-row-val"
+                      style="color:{% if budget_remaining <= 0 %}var(--red){% else %}var(--green){% endif %};">
+                    {{ budget_remaining|money }}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-calendar"></i> Validity</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Valid From</span>
+                <span class="sidebar-row-val">
+                    {% if policy.valid_from %}{{ policy.valid_from|date:"d M Y" }}
+                    {% else %}<span style="color:var(--ink-faint);font-weight:400;">No restriction</span>{% endif %}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Valid Until</span>
+                <span class="sidebar-row-val">
+                    {% if policy.valid_until %}{{ policy.valid_until|date:"d M Y" }}
+                    {% else %}<span style="color:var(--ink-faint);font-weight:400;">No expiry</span>{% endif %}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Valid Sessions</span>
+                <span class="sidebar-row-val">
+                    {% if policy.valid_sessions.all %}
+                        {{ policy.valid_sessions.count }} session{{ policy.valid_sessions.count|pluralize }}
+                    {% else %}
+                        <span style="color:var(--ink-faint);font-weight:400;">All sessions</span>
+                    {% endif %}
+                </span>
+            </div>
+            {% if policy.valid_sessions.all %}
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;">
+                {% for session in policy.valid_sessions.all %}
+                <span style="display:inline-flex;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:var(--accent-lt);color:var(--accent);border:1px solid var(--accent-bd);">
+                    {{ session.name }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-filter"></i> Applicable Categories</div>
+        <div class="sidebar-card-body">
+            {% if policy.applicable_categories.all %}
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                {% for cat in policy.applicable_categories.all %}
+                <span style="display:inline-flex;padding:3px 9px;border-radius:6px;font-size:11.5px;font-weight:600;background:var(--teal-lt);color:var(--teal);border:1px solid #99f6e4;">
+                    {{ cat.name }}
+                </span>
+                {% endfor %}
+            </div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">
+                Discount only applies to these fee categories.
+            </div>
+            {% else %}
+            <p style="font-size:12.5px;color:var(--ink-muted);margin:0;">
+                <i class="fa fa-check-circle me-1" style="color:var(--green);"></i>
+                Applies to all fee categories.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-cog"></i> Actions</div>
+        <div class="sidebar-card-body">
+            <div class="action-btn-group">
+                <a href="{% url 'fees:discount_edit' policy.pk %}" class="action-btn">
+                    <i class="fa fa-edit"></i> Edit Policy
+                </a>
+                <a href="{% url 'fees:student_discount_create' %}?policy={{ policy.pk }}" class="action-btn success">
+                    <i class="fa fa-plus"></i> Award to Student
+                </a>
+                <a href="{% url 'fees:student_discount_list' %}?policy={{ policy.pk }}" class="action-btn">
+                    <i class="fa fa-users"></i> View All Awards
+                </a>
+                <button type="button" class="action-btn warning"
+                        hx-get="{% url 'fees:discount_toggle_active_modal' policy.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    {% if policy.is_active %}
+                        <i class="fa fa-pause-circle"></i> Deactivate Policy
+                    {% else %}
+                        <i class="fa fa-play-circle"></i> Activate Policy
+                    {% endif %}
+                </button>
+                <button type="button" class="action-btn danger"
+                        hx-get="{% url 'fees:discount_delete_modal' policy.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-trash"></i> Delete Policy
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-info-circle"></i> Record Info</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Code</span>
+                <span class="sidebar-row-val" style="font-family:'Courier New',monospace;">{{ policy.code }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Status</span>
+                <span class="sidebar-row-val">
+                    {% if policy.is_active %}
+                        <span class="status-pill pill-active" style="font-size:11px;padding:2px 8px;">
+                            <i class="fa fa-check-circle"></i> Active
+                        </span>
+                    {% else %}
+                        <span class="status-pill pill-inactive" style="font-size:11px;padding:2px 8px;">
+                            <i class="fa fa-times-circle"></i> Inactive
+                        </span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Created</span>
+                <span class="sidebar-row-val">{{ policy.created_at|date:"d M Y" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Last Updated</span>
+                <span class="sidebar-row-val">{{ policy.updated_at|date:"d M Y" }}</span>
+            </div>
+        </div>
+    </div>
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+<!-- ── HTMX modal shell ── -->
+<div class="modal fade" id="htmx-modal" tabindex="-1" aria-hidden="true" aria-modal="true" role="dialog">
+    <div id="modal-container"></div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    var modalEl     = document.getElementById('htmx-modal');
+    var containerEl = document.getElementById('modal-container');
+    if (!modalEl || !containerEl) return;
+
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.detail.target && evt.detail.target.id === 'modal-container') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    });
+    modalEl.addEventListener('hidden.bs.modal', function () { containerEl.innerHTML = ''; });
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var xhr = evt.detail.xhr; if (!xhr) return;
+        if (xhr.getResponseHeader('HX-Close-Modal') === 'true') {
+            var i = bootstrap.Modal.getInstance(modalEl); if (i) i.hide();
+        }
+    });
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var xhr = evt.detail.xhr; if (!xhr) return;
+        var message = xhr.getResponseHeader('HX-Alert-Message');
+        var type    = xhr.getResponseHeader('HX-Alert-Type')  || 'success';
+        var title   = xhr.getResponseHeader('HX-Alert-Title') || '';
+        if (message && typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: type, title: title || (type === 'success' ? 'Done!' : 'Notice'),
+                text: message, timer: type === 'success' ? 3000 : undefined,
+                timerProgressBar: type === 'success',
+                confirmButtonColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#ffc107',
+            });
+        }
+    });
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var xhr = evt.detail.xhr; if (!xhr) return;
+        var redirect = xhr.getResponseHeader('HX-Redirect');
+        var type     = xhr.getResponseHeader('HX-Alert-Type') || '';
+        if (redirect) { setTimeout(function () { window.location.href = redirect; }, type === 'success' ? 1200 : 0); }
+    });
+})();
+</script>
+{% endblock %}

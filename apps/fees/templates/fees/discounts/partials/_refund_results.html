@@ -1,0 +1,562 @@
+{# fees/templates/fees/discounts/partials/_refund_results.html #}
+{% load currency_filters %}
+
+<style>
+/* ============================================================
+   TABLE CORE
+   ============================================================ */
+.ref-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.ref-tbl thead th {
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.ref-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.ref-tbl tbody tr:last-child td { border-bottom: none; }
+.ref-tbl tbody tr:hover td      { background: #fafbff !important; }
+
+/* ============================================================
+   PAYMENT / REFUND NUMBER
+   ============================================================ */
+.ref-num {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: #6f42c1;
+    text-decoration: none;
+}
+.ref-num:hover { text-decoration: underline; }
+
+/* ============================================================
+   STUDENT CELL
+   ============================================================ */
+.ref-student-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+}
+.ref-student-name:hover { color: #1d4ed8; }
+.ref-student-adm {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    color: #64748b;
+    display: block;
+    margin-top: 1px;
+}
+
+/* ============================================================
+   METHOD CHIP
+   ============================================================ */
+.method-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #6d28d9;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   AMOUNT
+   ============================================================ */
+.ref-amount {
+    font-weight: 700;
+    font-size: 13px;
+    color: #dc2626;
+    cursor: default;
+}
+
+/* ============================================================
+   FOREIGN CURRENCY BADGE
+   ============================================================ */
+.fx-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 3px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   REFERENCE CHIP
+   ============================================================ */
+.ref-ref {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #64748b;
+    display: block;
+    margin-top: 2px;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.tbl-empty   { text-align: center; padding: 64px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0 0 18px; }
+
+/* ============================================================
+   PAGINATION BAR
+   ============================================================ */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: #64748b;
+}
+.pag-bar .page-link { color: #1d4ed8; border-color: #e2e8f0; font-size: 12.5px; padding: 4px 10px; }
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
+
+/* ============================================================
+   DROPDOWN
+   ============================================================ */
+.dropdown-menu   { font-size: 0.84rem; min-width: 192px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: 0.68rem; padding: 6px 14px 2px; }
+
+/* ============================================================
+   OOB STAT CARDS
+   ============================================================ */
+.stat-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 18px 22px; display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px; transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label     { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 3px; }
+.stat-value     { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+.stat-value-sub { font-size: 10.5px; color: #94a3b8; margin-top: 2px; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="ref-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Payment / Refund</th>
+            <th>Student</th>
+            <th>Refund Date</th>
+            <th>Method</th>
+            <th class="text-end">Amount</th>
+            <th>Reference</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if refunds_page %}
+        {% for payment in refunds_page %}
+        <tr>
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ refunds_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- ── Payment number + invoice link ── -->
+            <td>
+                <a href="{% url 'fees:payment_detail' payment.pk %}" class="ref-num">
+                    {{ payment.payment_number }}
+                </a>
+
+                {% if payment.currency|is_foreign_currency %}
+                    <div>
+                        <span class="fx-badge">
+                            <i class="fa fa-exchange-alt" style="font-size:9px;"></i>
+                            {{ payment.currency }}
+                        </span>
+                    </div>
+                {% endif %}
+
+                {% if payment.invoice %}
+                    <div style="margin-top:3px;">
+                        <a href="{% url 'fees:invoice_detail' payment.invoice.pk %}"
+                           style="font-size:11px;color:#64748b;text-decoration:none;font-family:'Courier New',monospace;">
+                            <i class="fa fa-file-invoice me-1" style="font-size:9px;opacity:.6;"></i>
+                            {{ payment.invoice.invoice_number }}
+                        </a>
+                    </div>
+                {% endif %}
+
+                {% if payment.receipt_number %}
+                    <div style="font-size:10.5px;color:#94a3b8;margin-top:2px;">
+                        Rcpt: {{ payment.receipt_number }}
+                    </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Student ── -->
+            <td>
+                <a href="{% url 'students:student_profile' payment.student.pk %}"
+                   class="ref-student-name">
+                    {{ payment.student.get_full_name }}
+                </a>
+                <span class="ref-student-adm">{{ payment.student.admission_number }}</span>
+            </td>
+
+            <!-- ── Refund date + original payment date ── -->
+            <td style="white-space:nowrap;">
+                <div style="font-weight:600;color:#334155;font-size:13px;">
+                    {% if payment.refunded_on %}
+                        {{ payment.refunded_on|date:"d M Y" }}
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:1px;">
+                    <i class="fa fa-history me-1" style="font-size:9px;"></i>
+                    Orig: {{ payment.payment_date|date:"d M Y" }}
+                </div>
+                {% if payment.academic_session %}
+                    <div style="font-size:10.5px;color:#64748b;margin-top:2px;">
+                        {{ payment.academic_session.name }}
+                    </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Refund method ── -->
+            <td>
+                {% if payment.refund_method %}
+                    <span class="method-chip">
+                        {% if payment.refund_method == 'CASH' %}
+                            <i class="fa fa-money-bill-wave" style="font-size:9px;opacity:.7;"></i>
+                        {% elif payment.refund_method == 'BANK_TRANSFER' %}
+                            <i class="fa fa-university" style="font-size:9px;opacity:.7;"></i>
+                        {% elif payment.refund_method == 'MOBILE_MONEY' %}
+                            <i class="fa fa-mobile-alt" style="font-size:9px;opacity:.7;"></i>
+                        {% elif payment.refund_method == 'CHEQUE' %}
+                            <i class="fa fa-file-alt" style="font-size:9px;opacity:.7;"></i>
+                        {% else %}
+                            <i class="fa fa-undo" style="font-size:9px;opacity:.7;"></i>
+                        {% endif %}
+                        {{ payment.get_refund_method_display }}
+                    </span>
+                {% else %}
+                    <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+
+                <!-- Original payment method for context -->
+                {% if payment.payment_method %}
+                    <div style="font-size:10.5px;color:#94a3b8;margin-top:3px;">
+                        <i class="fa fa-arrow-up me-1" style="font-size:9px;"></i>
+                        Orig: {{ payment.payment_method.name }}
+                    </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Amount ── -->
+            <td class="text-end">
+                <span class="ref-amount"
+                      data-bs-toggle="tooltip"
+                      data-bs-html="true"
+                      data-bs-placement="left"
+                      title="
+                        <div class='text-start small'>
+                          <div class='mb-2 pb-1' style='border-bottom:1px solid rgba(255,255,255,.2);'>
+                            <span class='badge bg-danger'>
+                              <i class='fa fa-reply me-1'></i>Refunded Payment
+                            </span>
+                            {% if payment.currency|is_foreign_currency %}
+                            <div class='mt-1' style='font-size:10px;color:#fcd34d;'>
+                              <i class='fa fa-exchange-alt me-1'></i>{{ payment.currency }} payment
+                            </div>
+                            {% endif %}
+                          </div>
+
+                          <div class='d-flex justify-content-between gap-3 fw-bold'>
+                            <span>Refund Amount</span>
+                            <span class='text-danger'>{{ payment.amount|format_in_currency:payment.currency }}</span>
+                          </div>
+
+                          {% if payment.currency|is_foreign_currency %}
+                          <div class='d-flex justify-content-between gap-3' style='font-size:10px;color:#94a3b8;'>
+                            <span>School currency equiv.</span>
+                            <span>{{ payment.amount_in_school_currency|money }}</span>
+                          </div>
+                          {% endif %}
+
+                          <hr class='my-1'>
+
+                          {% if payment.refund_notes %}
+                          <div class='mt-1' style='font-size:11px;color:#94a3b8;'>
+                            <i class='fa fa-comment me-1'></i>{{ payment.refund_notes|truncatechars:80 }}
+                          </div>
+                          {% endif %}
+                        </div>
+                      ">
+                    {{ payment.amount|format_in_currency:payment.currency }}
+                </span>
+
+                {% if payment.currency|is_foreign_currency %}
+                    <div style="font-size:10.5px;color:#94a3b8;margin-top:2px;">
+                        ≈ {{ payment.amount_in_school_currency|money }}
+                    </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Refund reference + notes ── -->
+            <td>
+                {% if payment.refund_reference %}
+                    <span class="ref-ref">{{ payment.refund_reference }}</span>
+                {% else %}
+                    <span style="color:#94a3b8;font-size:12px;">—</span>
+                {% endif %}
+                {% if payment.refund_notes %}
+                    <div style="font-size:11px;color:#64748b;margin-top:3px;max-width:200px;
+                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                         data-bs-toggle="tooltip"
+                         title="{{ payment.refund_notes }}">
+                        {{ payment.refund_notes|truncatechars:40 }}
+                    </div>
+                {% endif %}
+            </td>
+
+            <!-- ── Actions ── -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:payment_detail' payment.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Payment
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:payment_print_receipt' payment.pk %}"
+                               target="_blank">
+                                <i class="fa fa-print me-2 text-secondary"></i>Print Receipt
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Related</h6></li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'students:student_profile' payment.student.pk %}">
+                                <i class="fa fa-user me-2"></i>View Student
+                            </a>
+                        </li>
+                        {% if payment.invoice %}
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:invoice_detail' payment.invoice.pk %}">
+                                <i class="fa fa-file-invoice me-2"></i>View Invoice
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% with acct=payment.student.financial_account %}
+                        {% if acct %}
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:account_detail' acct.pk %}">
+                                <i class="fa fa-wallet me-2"></i>View Account
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% endwith %}
+
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="8">
+                <div class="tbl-empty">
+                    <i class="pe-7s-back-2"></i>
+                    <p>
+                        {% if request.GET %}
+                            No refunds match your current filters.
+                        {% else %}
+                            No refunds have been recorded yet.
+                        {% endif %}
+                    </p>
+                    {% if request.GET %}
+                    <div class="d-flex justify-content-center">
+                        <a href="{% url 'fees:refund_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:500;border-radius:6px;background:#fff;
+                                  color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
+</div>
+
+<!-- ── Pagination ── -->
+{% if refunds_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ refunds_page.start_index }}</strong>–<strong>{{ refunds_page.end_index }}</strong>
+        of <strong>{{ refunds_page.paginator.count|format_number }}</strong>
+        refund{{ refunds_page.paginator.count|pluralize }}
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+
+            {% if refunds_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:refund_list' %}"
+                        hx-target="#refund-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ refunds_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in refunds_page.paginator.page_range %}
+                {% if p == refunds_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > refunds_page.number|add:"-3" and p < refunds_page.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:refund_list' %}"
+                                hx-target="#refund-list"
+                                hx-include="#searchForm"
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if refunds_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'fees:refund_list' %}"
+                        hx-target="#refund-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ refunds_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+<!-- ── OOB stats refresh (HTMX only) ── -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-back-2"></i></div>
+            <div>
+                <div class="stat-label">Total Refunds</div>
+                <div class="stat-value">{{ stats.total|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-calendar"></i></div>
+            <div>
+                <div class="stat-label">This Month</div>
+                <div class="stat-value">{{ stats.this_month|default:0|format_number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-purple" style="background:#7c3aed;"><i class="pe-7s-graph2"></i></div>
+            <div>
+                <div class="stat-label">Total Refunded</div>
+                <div class="stat-value">{{ stats.total_amount|default:0|money_short }}</div>
+                <div class="stat-value-sub">school currency</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#0891b2;"><i class="pe-7s-medal"></i></div>
+            <div>
+                <div class="stat-label">Top Method</div>
+                <div class="stat-value" style="font-size:16px;">
+                    {% with top=stats.by_method.0 %}
+                        {% if top %}{{ top.refund_method|default:"—" }}
+                        {% else %}<span style="color:#94a3b8;font-size:14px;">None yet</span>{% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Re-init Bootstrap after every HTMX swap ── -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el, { html: true });
+    });
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+})();
+</script>

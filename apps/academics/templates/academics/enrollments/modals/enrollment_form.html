@@ -1,0 +1,247 @@
+{# academics/templates/academics/enrollments/modals/enrollment_form.html #}
+{% load widget_tweaks %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#0f172a;">
+                    <i class="fa fa-user-plus me-2" style="color:#64748b;"></i>
+                    Enroll Student
+                </h5>
+                {% if class_instance %}
+                <div style="font-size:11.5px;color:#64748b;margin-top:3px;">
+                    {{ class_instance.get_display_name }} &middot; {{ class_instance.academic_session.name }}
+                </div>
+                {% endif %}
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form method="POST"
+              hx-post="{% url 'academics:enrollment_create' %}{% if class_instance %}?class_pk={{ class_instance.pk }}{% endif %}"
+              hx-target="#modal-container"
+              hx-swap="innerHTML">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:22px;">
+
+                {# ── Student & Class ── #}
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-user me-1"></i>Student &amp; Class
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">
+                                Student <span class="text-danger">*</span>
+                            </label>
+                            <select name="student" id="id_enroll_student" class="form-select">
+                                <option value="">Search by name or admission number…</option>
+                                {% for student in students %}
+                                <option value="{{ student.pk }}"
+                                        data-adm="{{ student.admission_number }}"
+                                        data-level="{{ student.current_academic_level.name|default:'No Level Assigned' }}"
+                                        {% if form.student.value == student.pk|stringformat:'s' %}selected{% endif %}>
+                                    {{ student.get_full_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if form.student.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.student.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">
+                                Class <span class="text-danger">*</span>
+                            </label>
+                            {% if class_instance %}
+                                <input type="text" class="form-control form-control-sm"
+                                       value="{{ class_instance.get_display_name }} — {{ class_instance.academic_session.name }}"
+                                       disabled>
+                                <input type="hidden" name="class_instance" value="{{ class_instance.pk }}">
+                            {% else %}
+                                {% render_field form.class_instance class="form-select form-select-sm" %}
+                                {% if form.class_instance.errors %}
+                                    <div class="text-danger" style="font-size:11.5px;">{{ form.class_instance.errors.0 }}</div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ── Session & Details ── #}
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-tag me-1"></i>Enrollment Details
+                    </div>
+                    <div class="row g-3">
+                        {% if not class_instance %}
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">
+                                Academic Session <span class="text-danger">*</span>
+                            </label>
+                            {% render_field form.academic_session class="form-select form-select-sm" %}
+                            {% if form.academic_session.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.academic_session.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Enrollment Date</label>
+                            {% render_field form.enrollment_date class="form-control form-control-sm" type="date" %}
+                            {% if form.enrollment_date.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.enrollment_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Enrollment Type</label>
+                            {% render_field form.enrollment_type class="form-select form-select-sm" %}
+                            {% if form.enrollment_type.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.enrollment_type.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ── Options ── #}
+                <div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-cog me-1"></i>Options
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Notes</label>
+                            {% render_field form.enrollment_notes class="form-control form-control-sm" rows="2" placeholder="Optional notes…" %}
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center gap-2">
+                            {% render_field form.auto_create_invoice class="form-check-input" %}
+                            <label class="form-check-label" style="font-size:13px;font-weight:500;">
+                                Generate invoice on enroll
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mt-3 mb-0 py-2" style="font-size:13px;">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div id="duplicate-warning"></div>
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="submit" class="btn btn-success btn-sm" id="enroll-submit-btn">
+                    <i class="fa fa-user-plus me-1"></i>Enroll Student
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    const STUDENT_FIELD_ID = 'id_enroll_student';
+    const classInstancePk  = '{{ class_instance.pk|default:"" }}';
+
+    // ── Duplicate check ──────────────────────────────────────────────────────
+    const classSelect  = document.querySelector('[name="class_instance"]:not([type="hidden"])');
+    const warning      = document.getElementById('duplicate-warning');
+    const submitBtn    = document.getElementById('enroll-submit-btn');
+
+    function checkDuplicate() {
+        const student = document.getElementById(STUDENT_FIELD_ID)?.value;
+        const cls     = classInstancePk || classSelect?.value;
+        if (!student || !cls) { warning.innerHTML = ''; return; }
+
+        fetch(`{% url 'academics:ajax_check_enrollment_duplicate' %}?student_id=${student}&class_id=${cls}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.is_duplicate) {
+                    warning.innerHTML = `
+                        <div class="alert alert-warning py-2 mt-3 mb-0" style="font-size:13px;">
+                            <i class="fa fa-exclamation-triangle me-1"></i>
+                            This student is already enrolled in this class.
+                        </div>`;
+                    if (submitBtn) submitBtn.disabled = true;
+                } else {
+                    warning.innerHTML = '';
+                    if (submitBtn) submitBtn.disabled = false;
+                }
+            })
+            .catch(() => { warning.innerHTML = ''; });
+    }
+
+    if (classSelect) classSelect.addEventListener('change', checkDuplicate);
+
+    // ── Select2 init ────────────────────────────────────────────────────────
+    // Use Bootstrap's shown.bs.modal event — fires after the modal is fully
+    // visible. This is the correct point to init Select2 because:
+    //   1. #dynamicModalWrapper definitely exists
+    //   2. The element is visible (Select2 requires this to measure width)
+    //   3. No race condition with HTMX swap timing
+
+    function initSelect2(modalEl) {
+        if (typeof $ === 'undefined' || !$.fn.select2) return;
+
+        const $field = $('#' + STUDENT_FIELD_ID);
+        if (!$field.length) return;
+
+        // Destroy stale instance if modal was opened before
+        if ($field.hasClass('select2-hidden-accessible')) {
+            $field.select2('destroy');
+        }
+
+        $field.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Search by name or admission number…',
+            allowClear: true,
+            minimumInputLength: 0,
+            dropdownParent: $(modalEl),
+            templateResult: function (opt) {
+                if (!opt.id) return opt.text;
+                var el = opt.element;
+                return $([
+                    '<div style="padding:4px 0;">',
+                    '  <div style="font-weight:600;font-size:13px;color:#0f172a;">' + opt.text + '</div>',
+                    '  <div style="font-size:11px;color:#64748b;margin-top:1px;">',
+                    '    <span style="font-family:monospace;">' + (el.dataset.adm || '') + '</span>',
+                    '    &nbsp;&middot;&nbsp;',
+                    '    <span>' + (el.dataset.level || '') + '</span>',
+                    '  </div>',
+                    '</div>',
+                ].join(''));
+            },
+            templateSelection: function (opt) {
+                if (!opt.id) return opt.text;
+                var el = opt.element;
+                return $([
+                    '<span>',
+                    opt.text,
+                    ' <span style="font-size:11px;color:#64748b;font-family:monospace;">',
+                    '(' + (el.dataset.adm || '') + ')',
+                    '</span></span>',
+                ].join(''));
+            },
+        });
+
+        $field.on('change', checkDuplicate);
+    }
+
+    // Listen on document with { once: true } so it auto-removes after firing
+    document.addEventListener('shown.bs.modal', function (e) {
+        initSelect2(e.target);
+    }, { once: true });
+
+})();
+</script>

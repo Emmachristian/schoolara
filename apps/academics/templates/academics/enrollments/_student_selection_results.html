@@ -1,41 +1,255 @@
 {# academics/templates/academics/enrollments/_student_selection_results.html #}
-{# NOTE: This partial is injected into #student-selection-results via HTMX.      #}
-{# All selection state lives in the parent page (bulk_step1.html) via the        #}
-{# selectedStudents Map. This partial never manages that state directly —         #}
-{# it only calls toggleStudentRow(this) and selectAllVisible() from the parent.  #}
-
-{% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
 
-<!-- Student Selection Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+.sel-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sel-tbl thead th {
+    background: #f8fafc; padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.sel-tbl tbody td {
+    padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle; color: #0f172a;
+}
+.sel-tbl tbody tr:last-child td { border-bottom: none; }
+.sel-tbl tbody tr:hover td      { background: #eff6ff !important; }
+.sel-tbl tbody tr.selected td   { background: #eff6ff; }
+.sel-tbl tbody tr.row-disabled  { opacity: .7; }
+.sel-tbl tbody tr.row-disabled td { background: #fafafa !important; }
+
+/* ── Avatar ── */
+.avatar-wrapper { position: relative; flex-shrink: 0; }
+.student-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover; border: 2px solid #e2e8f0;
+}
+.student-initials {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #eff6ff; color: #1d4ed8;
+    font-size: .85rem; font-weight: 700; text-transform: uppercase;
+}
+.status-dot {
+    position: absolute; bottom: 1px; right: 1px;
+    width: 10px; height: 10px;
+    border-radius: 50%; border: 2px solid #fff;
+}
+.dot-active      { background: #16a34a; animation: pulse-green 2s infinite; }
+.dot-suspended   { background: #dc2626; }
+.dot-graduated   { background: #0891b2; }
+.dot-transferred { background: #2563eb; }
+.dot-withdrawn,
+.dot-dismissed   { background: #64748b; }
+.dot-deferred    { background: #d97706; }
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0   rgba(22,163,74,.6); }
+    70%  { box-shadow: 0 0 0 7px rgba(22,163,74,0);  }
+    100% { box-shadow: 0 0 0 0   rgba(22,163,74,0);  }
+}
+
+/* ── Name / adm ── */
+.stu-name { font-weight: 600; font-size: 13px; color: #0f172a; display: block; line-height: 1.3; }
+.stu-adm  { font-family: 'Courier New', monospace; font-size: 11.5px; color: #64748b; display: block; margin-top: 1px; }
+
+/* ── Gender pill ── */
+.gender-pill { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; vertical-align: middle; }
+.gender-m    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.gender-f    { background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; }
+
+/* ── Enrollment status badges ── */
+.enrol-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 4px; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+}
+.enrol-here  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.enrol-other { background: #fef9c3; color: #92400e; border: 1px solid #fde68a; }
+
+/* ── Level badge ── */
+.level-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+    border-radius: 4px; font-size: 10.5px; font-weight: 700;
+    padding: 1px 6px; white-space: nowrap;
+}
+.level-badge-none {
+    display: inline-flex; align-items: center;
+    background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0;
+    border-radius: 4px; font-size: 10.5px; padding: 1px 6px;
+}
+
+/* ── Status pills ── */
+.s-pill         { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sp-active      { background: #dcfce7; color: #15803d; }
+.sp-suspended   { background: #fee2e2; color: #dc2626; }
+.sp-graduated   { background: #dbeafe; color: #1d4ed8; }
+.sp-transferred { background: #ede9fe; color: #6d28d9; }
+.sp-withdrawn,
+.sp-dismissed   { background: #f1f5f9; color: #64748b; }
+.sp-default     { background: #fef9c3; color: #92400e; }
+
+/* ── Pagination ── */
+.pag-bar {
+    padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; font-size: 12.5px; color: #64748b;
+}
+
+/* ── Empty ── */
+.tbl-empty   { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+</style>
+
+{% if page_obj %}
+<div style="overflow-x:auto;">
+    <table class="sel-tbl">
         <thead>
             <tr>
-                <th width="50">
-                    <input type="checkbox"
-                           class="form-check-input"
-                           id="selectAllStudents"
+                <th style="width:44px;">
+                    <input type="checkbox" class="form-check-input" id="selectAllStudents"
                            onclick="handleSelectAllCheckbox(this)"
-                           title="Select all on this page">
+                           title="Select all eligible on page">
                 </th>
-                <th width="50">#</th>
+                <th style="width:32px;">#</th>
                 <th>Student</th>
-                <th>Admission Number</th>
-                <th>Gender</th>
-                <th>Age</th>
+                <th>Age / Admitted</th>
                 <th>Current Level</th>
-                <th>Status</th>
-                <th>Alerts</th>
+                <th class="text-center">Status</th>
             </tr>
         </thead>
         <tbody id="studentSelectionTableBody">
-            {% if page_obj %}
-                {% for student in page_obj %}
-                <tr class="student-row">
 
-                    <!-- Checkbox — calls toggleStudentRow() defined in bulk_step1.html -->
+            {% for student in page_obj %}
+
+                {% if student.pk in enrolled_in_class_ids %}
+                {# ── Already enrolled in THIS class ── #}
+                <tr class="student-row row-disabled">
+                    <td>
+                        <input type="checkbox" class="form-check-input" disabled
+                               title="Already enrolled in this class">
+                    </td>
+                    <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="avatar-wrapper">
+                                {% if student.photo %}
+                                    <img src="{{ student.photo.url }}" alt="" class="student-avatar">
+                                {% else %}
+                                    <div class="student-initials">
+                                        {{ student.first_name|first }}{{ student.last_name|first }}
+                                    </div>
+                                {% endif %}
+                                <span class="status-dot dot-{{ student.enrollment_status|lower }}"
+                                      data-bs-toggle="tooltip"
+                                      title="{{ student.get_enrollment_status_display }}"></span>
+                            </div>
+                            <div>
+                                <span class="stu-name">
+                                    {{ student.get_full_name }}
+                                    {% if student.gender == 'M' %}<span class="gender-pill gender-m">M</span>
+                                    {% elif student.gender == 'F' %}<span class="gender-pill gender-f">F</span>{% endif %}
+                                    <span class="enrol-badge enrol-here">
+                                        <i class="fa fa-check-circle" style="font-size:9px;"></i>
+                                        Enrolled here
+                                    </span>
+                                </span>
+                                <span class="stu-adm">{{ student.admission_number }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if student.age %}
+                            <div style="font-weight:600;color:#334155;font-size:13px;">Age {{ student.age }}</div>
+                        {% endif %}
+                        {% if student.admission_date %}
+                            <div style="font-size:11.5px;color:#64748b;">Admitted {{ student.admission_date|date:"M Y" }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if student.current_academic_level %}
+                            <span class="level-badge">
+                                <i class="fa fa-chalkboard" style="font-size:9px;"></i>
+                                {{ student.current_academic_level.name }}
+                            </span>
+                        {% else %}
+                            <span class="level-badge-none">No class</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+                    </td>
+                </tr>
+
+                {% elif student.pk in enrolled_in_other_class_ids %}
+                {# ── Enrolled in a DIFFERENT class this session ── #}
+                <tr class="student-row row-disabled">
+                    <td>
+                        <input type="checkbox" class="form-check-input" disabled
+                               title="Already enrolled in another class this session">
+                    </td>
+                    <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="avatar-wrapper">
+                                {% if student.photo %}
+                                    <img src="{{ student.photo.url }}" alt="" class="student-avatar">
+                                {% else %}
+                                    <div class="student-initials">
+                                        {{ student.first_name|first }}{{ student.last_name|first }}
+                                    </div>
+                                {% endif %}
+                                <span class="status-dot dot-{{ student.enrollment_status|lower }}"
+                                      data-bs-toggle="tooltip"
+                                      title="{{ student.get_enrollment_status_display }}"></span>
+                            </div>
+                            <div>
+                                <span class="stu-name">
+                                    {{ student.get_full_name }}
+                                    {% if student.gender == 'M' %}<span class="gender-pill gender-m">M</span>
+                                    {% elif student.gender == 'F' %}<span class="gender-pill gender-f">F</span>{% endif %}
+                                    <span class="enrol-badge enrol-other">
+                                        <i class="fa fa-exclamation-circle" style="font-size:9px;"></i>
+                                        In another class
+                                    </span>
+                                </span>
+                                <span class="stu-adm">{{ student.admission_number }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if student.age %}
+                            <div style="font-weight:600;color:#334155;font-size:13px;">Age {{ student.age }}</div>
+                        {% endif %}
+                        {% if student.admission_date %}
+                            <div style="font-size:11.5px;color:#64748b;">Admitted {{ student.admission_date|date:"M Y" }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if student.current_academic_level %}
+                            <span class="level-badge">
+                                <i class="fa fa-chalkboard" style="font-size:9px;"></i>
+                                {{ student.current_academic_level.name }}
+                            </span>
+                        {% else %}
+                            <span class="level-badge-none">No class</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if student.enrollment_status == 'ACTIVE' %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
+                        {% else %}
+                            <span class="s-pill sp-default">{{ student.get_enrollment_status_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                {% else %}
+                {# ── Available to enroll ── #}
+                <tr class="student-row">
                     <td>
                         <input type="checkbox"
                                class="form-check-input student-checkbox"
@@ -43,373 +257,154 @@
                                data-name="{{ student.get_full_name }}"
                                onchange="toggleStudentRow(this)">
                     </td>
-
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:page_obj.start_index|add:"-1" }}</td>
-
-                    <!-- Student Info -->
+                    <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
                     <td>
-                        <div class="d-flex align-items-center">
-                            {% if student.photo %}
-                                <div class="position-relative me-3 flex-shrink-0">
-                                    <img src="{{ student.photo.url }}"
-                                         class="student-photo"
-                                         alt="{{ student.get_full_name }}">
-                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}"
-                                          title="Status: {{ student.get_enrollment_status_display }}"
-                                          data-bs-toggle="tooltip"></span>
-                                </div>
-                            {% else %}
-                                <div class="position-relative me-3 flex-shrink-0">
-                                    <div class="student-icon {% if student.gender == 'M' %}male{% else %}female{% endif %}">
-                                        <i class="pe-7s-user"></i>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="avatar-wrapper">
+                                {% if student.photo %}
+                                    <img src="{{ student.photo.url }}" alt="" class="student-avatar">
+                                {% else %}
+                                    <div class="student-initials">
+                                        {{ student.first_name|first }}{{ student.last_name|first }}
                                     </div>
-                                    <span class="student-status-indicator {{ student.enrollment_status|lower }}"
-                                          title="Status: {{ student.get_enrollment_status_display }}"
-                                          data-bs-toggle="tooltip"></span>
-                                </div>
-                            {% endif %}
-                            <div>
-                                <h6 class="mb-0">{{ student.get_full_name }}</h6>
-                                {% if student.phone_number %}
-                                    <small class="text-muted">
-                                        <i class="fa fa-phone me-1"></i>{{ student.phone_number }}
-                                    </small>
                                 {% endif %}
+                                <span class="status-dot dot-{{ student.enrollment_status|lower }}"
+                                      data-bs-toggle="tooltip"
+                                      title="{{ student.get_enrollment_status_display }}"></span>
+                            </div>
+                            <div>
+                                <span class="stu-name">
+                                    {{ student.get_full_name }}
+                                    {% if student.gender == 'M' %}<span class="gender-pill gender-m">M</span>
+                                    {% elif student.gender == 'F' %}<span class="gender-pill gender-f">F</span>{% endif %}
+                                </span>
+                                <span class="stu-adm">{{ student.admission_number }}</span>
                             </div>
                         </div>
                     </td>
-
-                    <!-- Admission Number -->
                     <td>
-                        <code class="text-primary fw-bold">{{ student.admission_number }}</code>
+                        {% if student.age %}
+                            <div style="font-weight:600;color:#334155;font-size:13px;">Age {{ student.age }}</div>
+                        {% endif %}
                         {% if student.admission_date %}
-                            <div class="mt-1">
-                                <small class="text-muted">
-                                    <i class="fa fa-calendar me-1"></i>
-                                    {{ student.admission_date|date:"M Y" }}
-                                </small>
-                            </div>
+                            <div style="font-size:11.5px;color:#64748b;">Admitted {{ student.admission_date|date:"M Y" }}</div>
                         {% endif %}
                     </td>
-
-                    <!-- Gender -->
-                    <td>
-                        {% if student.gender == 'M' %}
-                            <span class="badge badge-gender-m">
-                                <i class="fa fa-mars me-1"></i>Male
-                            </span>
-                        {% elif student.gender == 'F' %}
-                            <span class="badge badge-gender-f">
-                                <i class="fa fa-venus me-1"></i>Female
-                            </span>
-                        {% else %}
-                            <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
-
-                    <!-- Age -->
-                    <td>
-                        <strong>{{ student.age }}</strong>
-                        <small class="text-muted">yrs</small>
-                    </td>
-
-                    <!-- Current Level -->
                     <td>
                         {% if student.current_academic_level %}
-                            <span class="badge bg-info">
-                                <i class="fa fa-graduation-cap me-1"></i>
+                            <span class="level-badge">
+                                <i class="fa fa-chalkboard" style="font-size:9px;"></i>
                                 {{ student.current_academic_level.name }}
                             </span>
                         {% else %}
-                            <span class="text-muted">Not Set</span>
+                            <span class="level-badge-none">No class</span>
                         {% endif %}
                     </td>
-
-                    <!-- Enrollment Status -->
                     <td class="text-center">
                         {% if student.enrollment_status == 'ACTIVE' %}
-                            <span class="badge bg-success"><i class="fa fa-check-circle me-1"></i>Active</span>
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
                         {% elif student.enrollment_status == 'SUSPENDED' %}
-                            <span class="badge bg-warning text-dark"><i class="fa fa-ban me-1"></i>Suspended</span>
+                            <span class="s-pill sp-suspended"><i class="fa fa-ban"></i>Suspended</span>
                         {% elif student.enrollment_status == 'GRADUATED' %}
-                            <span class="badge bg-primary"><i class="fa fa-graduation-cap me-1"></i>Graduated</span>
+                            <span class="s-pill sp-graduated"><i class="fa fa-graduation-cap"></i>Graduated</span>
                         {% elif student.enrollment_status == 'TRANSFERRED' %}
-                            <span class="badge bg-info text-dark"><i class="fa fa-exchange-alt me-1"></i>Transferred</span>
+                            <span class="s-pill sp-transferred"><i class="fa fa-exchange-alt"></i>Transferred</span>
                         {% elif student.enrollment_status == 'WITHDRAWN' %}
-                            <span class="badge bg-secondary"><i class="fa fa-times-circle me-1"></i>Withdrawn</span>
+                            <span class="s-pill sp-withdrawn"><i class="fa fa-sign-out-alt"></i>Withdrawn</span>
                         {% elif student.enrollment_status == 'DISMISSED' %}
-                            <span class="badge bg-danger"><i class="fa fa-user-times me-1"></i>Dismissed</span>
-                        {% elif student.enrollment_status == 'DEFERRED' %}
-                            <span class="badge bg-dark"><i class="fa fa-pause-circle me-1"></i>Deferred</span>
+                            <span class="s-pill sp-dismissed"><i class="fa fa-times-circle"></i>Dismissed</span>
                         {% else %}
-                            <span class="badge bg-light text-dark">{{ student.get_enrollment_status_display }}</span>
+                            <span class="s-pill sp-default">{{ student.get_enrollment_status_display }}</span>
                         {% endif %}
                     </td>
-
-                    <!-- Alerts -->
-                    <td>
-                        <div class="d-flex flex-wrap gap-1 align-items-center">
-                            {% if student.has_medical_alert %}
-                                <span class="alert-badge alert-medical"
-                                      title="Medical Alert: {{ student.medical_conditions|default:'See profile' }}"
-                                      data-bs-toggle="tooltip">
-                                    <i class="fa fa-heartbeat"></i>
-                                </span>
-                            {% endif %}
-                            {% if student.has_special_needs %}
-                                <span class="alert-badge alert-special"
-                                      title="Special Needs: {{ student.special_needs_description|default:'See profile' }}"
-                                      data-bs-toggle="tooltip">
-                                    <i class="fa fa-wheelchair"></i>
-                                </span>
-                            {% endif %}
-                            {% if student.transportation_required %}
-                                <span class="alert-badge alert-transport"
-                                      title="Transport: {{ student.transport_route|default:'Required' }}"
-                                      data-bs-toggle="tooltip">
-                                    <i class="fa fa-bus"></i>
-                                </span>
-                            {% endif %}
-                            {% if not student.has_medical_alert and not student.has_special_needs and not student.transportation_required %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </div>
-                    </td>
-
                 </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="9" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <h5 class="mt-3">No Students Found</h5>
-                            <p class="text-muted">Try adjusting your filters to find eligible students.</p>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
+
+                {% endif %}
+
+            {% endfor %}
+
         </tbody>
     </table>
 </div>
 
-<!-- Footer: count + pagination -->
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-
-        <!-- Count display -->
-        <div class="text-muted small">
-            <span id="selectedCountDisplay">0</span> selected on this page
-            {% if total_count %}
-                &nbsp;|&nbsp; Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_count }}
-            {% endif %}
-        </div>
-
-        <!-- Pagination -->
-        {% if page_obj.paginator.num_pages > 1 %}
-        <nav aria-label="Student selection pagination">
-            <ul class="pagination mb-0">
-
-                {% if page_obj.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="#"
-                           hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
-                           hx-target="#student-selection-results"
-                           hx-include="#filterForm"
-                           hx-vals='{"page": "{{ page_obj.previous_page_number }}"}'
-                           aria-label="Previous">«</a>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">«</span>
-                    </li>
-                {% endif %}
-
-                {% for page_num in page_obj.paginator.page_range %}
-                    {% if page_num == page_obj.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > page_obj.number|add:"-3" and page_num < page_obj.number|add:"3" %}
-                        <li class="page-item">
-                            <a class="page-link" href="#"
-                               hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
-                               hx-target="#student-selection-results"
-                               hx-include="#filterForm"
-                               hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</a>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-
-                {% if page_obj.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="#"
-                           hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
-                           hx-target="#student-selection-results"
-                           hx-include="#filterForm"
-                           hx-vals='{"page": "{{ page_obj.next_page_number }}"}'
-                           aria-label="Next">»</a>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">»</span>
-                    </li>
-                {% endif %}
-
-            </ul>
-        </nav>
-        {% endif %}
-
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <div>
+        <span id="selectedCountDisplay">0</span> selected on this page
+        &nbsp;·&nbsp;
+        Showing <strong>{{ page_obj.start_index }}</strong>–<strong>{{ page_obj.end_index }}</strong>
+        of <strong>{{ total_count|intcomma }}</strong> students
     </div>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="#"
+                   hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
+                   hx-target="#student-results"
+                   hx-include="#filterForm"
+                   hx-vals='{"page":"{{ page_obj.previous_page_number }}"}'>«</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for page_num in page_obj.paginator.page_range %}
+                {% if page_num == page_obj.number %}
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                {% elif page_num > page_obj.number|add:"-3" and page_num < page_obj.number|add:"3" %}
+                    <li class="page-item">
+                        <a class="page-link" href="#"
+                           hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
+                           hx-target="#student-results"
+                           hx-include="#filterForm"
+                           hx-vals='{"page":"{{ page_num }}"}'>{{ page_num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="#"
+                   hx-get="{% url 'academics:bulk_enrollment_student_search' %}"
+                   hx-target="#student-results"
+                   hx-include="#filterForm"
+                   hx-vals='{"page":"{{ page_obj.next_page_number }}"}'>»</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
+{% else %}
+<div style="padding:10px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12.5px;color:#64748b;">
+    <span id="selectedCountDisplay">0</span> selected
+    &nbsp;·&nbsp;
+    {{ total_count|intcomma }} student{{ total_count|pluralize }} found
+</div>
+{% endif %}
 
-<style>
-.student-photo {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e9ecef;
-}
-
-.student-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: white;
-    flex-shrink: 0;
-}
-
-.student-icon.male   { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.student-icon.female { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-
-.student-status-indicator {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 2px solid white;
-    z-index: 1;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.student-status-indicator.active {
-    background-color: #28a745;
-    animation: pulse-green 2s infinite;
-}
-
-@keyframes pulse-green {
-    0%   { box-shadow: 0 0 0 0   rgba(40, 167, 69, 0.7); }
-    70%  { box-shadow: 0 0 0 8px rgba(40, 167, 69, 0);   }
-    100% { box-shadow: 0 0 0 0   rgba(40, 167, 69, 0);   }
-}
-
-.badge-gender-m {
-    background-color: #cfe2ff;
-    color: #084298;
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.badge-gender-f {
-    background-color: #f8d7da;
-    color: #842029;
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.alert-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    cursor: help;
-    transition: transform 0.2s ease;
-}
-
-.alert-badge:hover           { transform: scale(1.1); }
-.alert-badge.alert-medical   { background-color: #dc3545; color: white; animation: pulse-red 2s infinite; }
-.alert-badge.alert-special   { background-color: #ffc107; color: #000; }
-.alert-badge.alert-transport { background-color: #0dcaf0; color: #000; }
-
-@keyframes pulse-red {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.8; }
-}
-
-.student-row:has(.student-checkbox:checked) { background-color: #e7f3ff !important; }
-.empty-state-icon { font-size: 4rem; opacity: 0.3; }
-.table-responsive { overflow-x: auto; overflow-y: visible !important; }
-</style>
+{% else %}
+<div class="tbl-empty">
+    <i class="pe-7s-search"></i>
+    <p>No students match your filters.</p>
+    <button type="button" onclick="clearFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+                   font-size:13px;font-weight:500;border-radius:6px;
+                   background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+</div>
+{% endif %}
 
 <script>
-// ============================================================================
-// PARTIAL-LEVEL HELPERS
-// These functions delegate to the parent page (bulk_step1.html) for all state.
-// They must never manage selectedStudents directly.
-// ============================================================================
-
-/**
- * Clicking the "select all on page" checkbox in the thead.
- * Delegates to selectAllVisible() or clearSelection() from the parent.
- */
-function handleSelectAllCheckbox(masterCb) {
-    if (masterCb.checked) {
-        // selectAllVisible is defined in bulk_step1.html
-        if (typeof selectAllVisible === 'function') selectAllVisible();
-    } else {
-        // Only deselect what's visible on this page, not other pages
-        document.querySelectorAll('.student-checkbox').forEach(cb => {
-            if (cb.checked) {
-                cb.checked = false;
-                cb.closest('tr').classList.remove('selected');
-                // Remove from parent Map
-                if (typeof selectedStudents !== 'undefined') {
-                    selectedStudents.delete(cb.value);
-                }
-            }
-        });
-        if (typeof updateSummaryBar     === 'function') updateSummaryBar();
-        if (typeof updateLocalCountDisplay === 'function') updateLocalCountDisplay();
-    }
-}
-
-/**
- * Sync the local "X selected on this page" counter and the master checkbox
- * indeterminate state. Called by restoreCheckboxState() in the parent after
- * each HTMX swap.
- */
-function syncLocalDisplay() {
-    const checked = document.querySelectorAll('.student-checkbox:checked').length;
-    const total   = document.querySelectorAll('.student-checkbox').length;
-
-    const display = document.getElementById('selectedCountDisplay');
-    if (display) display.textContent = checked;
-
-    const master = document.getElementById('selectAllStudents');
-    if (master && total > 0) {
-        master.checked       = checked === total;
-        master.indeterminate = checked > 0 && checked < total;
-    }
-}
-
-// Expose so the parent's restoreCheckboxState() can call it after a swap
-window.syncLocalDisplay = syncLocalDisplay;
-
-// Run on initial partial load (covers the very first HTMX:load trigger)
-document.addEventListener('DOMContentLoaded', syncLocalDisplay);
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    if (typeof restoreCheckboxState === 'function') restoreCheckboxState();
+})();
 </script>

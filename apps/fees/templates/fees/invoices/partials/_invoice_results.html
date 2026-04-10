@@ -1,234 +1,521 @@
 {% load currency_filters %}
 
 <style>
-/* ── Table ── */
-.inv-tbl { width:100%; border-collapse:collapse; font-size:13px; }
-
+.inv-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
 .inv-tbl thead th {
-    background:#f8fafc;
-    padding:11px 14px;
-    font-size:10.5px; font-weight:700; text-transform:uppercase;
-    letter-spacing:.5px; color:#64748b;
-    border-bottom:2px solid #e2e8f0;
-    white-space:nowrap;
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
 }
 .inv-tbl tbody td {
-    padding:12px 14px;
-    border-bottom:1px solid #f1f5f9;
-    vertical-align:middle;
-    color:#0f172a;
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
 }
-.inv-tbl tbody tr:last-child td { border-bottom:none; }
-.inv-tbl tbody tr:hover         { background:#eff6ff !important; }
-.inv-tbl tbody tr.row-muted td  { color:#94a3b8; }
-.inv-tbl tbody tr.row-muted:hover { background:#f8fafc !important; }
+.inv-tbl tbody tr:last-child td      { border-bottom: none; }
+.inv-tbl tbody tr:hover td           { background: #eff6ff !important; }
+.inv-tbl tbody tr.row-muted td       { color: #94a3b8; }
+.inv-tbl tbody tr.row-muted:hover td { background: #f8fafc !important; }
+.inv-tbl tbody tr.row-selected td    { background: #eff6ff !important; }
+
+/* ── Checkbox column ── */
+.inv-tbl th.col-chk,
+.inv-tbl td.col-chk {
+    width: 38px;
+    padding: 11px 10px 11px 14px;
+    display: none;
+}
+body.bulk-mode .inv-tbl th.col-chk,
+body.bulk-mode .inv-tbl td.col-chk {
+    display: table-cell;
+}
+.inv-cb {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: #1d4ed8;
+}
+
+/* ── Bulk toolbar ── */
+#bulk-toolbar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: #1e3a8a;
+    border-radius: 8px;
+    margin: 0 0 12px;
+    animation: slideDown .18s ease;
+    flex-wrap: wrap;
+}
+#bulk-toolbar.visible { display: flex; }
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.bulk-count {
+    color: #bfdbfe;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.bulk-count strong { color: #fff; }
+.bulk-allpages-note {
+    display: none;
+    font-size: 11px;
+    color: #fbbf24;
+    font-weight: 600;
+}
+.bulk-allpages-note.visible { display: inline; }
+.bulk-sep            { flex: 1; min-width: 10px; }
+.bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity .15s;
+}
+.bulk-btn:hover          { opacity: .88; }
+.bulk-btn-finalize       { background: #22c55e; color: #fff; }
+.bulk-btn-clear          { background: rgba(255,255,255,.15); color: #e2e8f0; }
+.bulk-select-page        { background: rgba(255,255,255,.1); color: #bfdbfe; font-size: 11.5px; padding: 5px 11px; }
+.bulk-select-allpages    { background: rgba(251,191,36,.18); color: #fcd34d; font-size: 11.5px; padding: 5px 11px; border: 1px solid rgba(251,191,36,.3); }
 
 /* ── Invoice number ── */
 .inv-num {
-    font-family:'Courier New', monospace;
-    font-weight:700; font-size:12.5px;
-    color:#1d4ed8; text-decoration:none;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: #1d4ed8;
+    text-decoration: none;
 }
-.inv-num:hover { text-decoration:underline; }
+.inv-num:hover { text-decoration: underline; }
 
-/* ── Student / class cell ── */
-.stu-name {
-    font-weight:700; color:#0f172a;
-    text-decoration:none; display:block;
+/* ── FX badge ── */
+.fx-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 3px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    white-space: nowrap;
 }
-.stu-name:hover { color:#1d4ed8; }
-.stu-adm { font-size:11px; color:#94a3b8; font-family:monospace; }
 
+/* ── Flag dots ── */
+.flag-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+    cursor: default;
+}
+
+/* ── Student cell ── */
+.inv-student-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+}
+.inv-student-name:hover { color: #1d4ed8; }
+.inv-student-adm {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    color: #64748b;
+    display: block;
+    margin-top: 1px;
+}
 .cls-badge {
-    display:inline-flex; align-items:center; gap:3px;
-    background:#eff6ff; color:#1d4ed8;
-    border:1px solid #bfdbfe; border-radius:4px;
-    font-size:10.5px; font-weight:700;
-    padding:1px 6px; margin-top:3px;
-    white-space:nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    margin-top: 3px;
+    white-space: nowrap;
 }
 .cls-badge-none {
-    display:inline-flex; align-items:center; gap:3px;
-    background:#f8fafc; color:#94a3b8;
-    border:1px solid #e2e8f0; border-radius:4px;
-    font-size:10.5px; font-weight:600;
-    padding:1px 6px; margin-top:3px;
-    white-space:nowrap;
+    display: inline-flex;
+    align-items: center;
+    background: #f8fafc;
+    color: #94a3b8;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 10.5px;
+    padding: 1px 6px;
+    margin-top: 3px;
 }
 
 /* ── Dates ── */
-.date-issue { font-weight:600; color:#334155; white-space:nowrap; }
-.date-due   { font-size:11.5px; white-space:nowrap; }
-.date-due.ok      { color:#64748b; }
-.date-due.overdue { color:#dc2626; font-weight:600; }
-
-/* ── Academic session tag ── */
+.date-issue       { font-weight: 600; color: #334155; font-size: 13px; white-space: nowrap; }
+.date-due         { font-size: 11.5px; white-space: nowrap; }
+.date-due.ok      { color: #64748b; }
+.date-due.overdue { color: #dc2626; font-weight: 600; }
 .session-tag {
-    display:inline-flex; align-items:center; gap:3px;
-    background:#f5f3ff; color:#6d28d9;
-    border:1px solid #ddd6fe; border-radius:4px;
-    font-size:10.5px; font-weight:700;
-    padding:1px 6px; margin-top:4px;
-    white-space:nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: #f5f3ff;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    margin-top: 4px;
+    white-space: nowrap;
 }
 
 /* ── Money ── */
-.m-total  { font-weight:800; font-size:13.5px; color:#0f172a; }
-.m-owed   { font-weight:800; font-size:13.5px; color:#dc2626; }
-.m-clear  { font-weight:700; font-size:13px;   color:#15803d; }
-.m-credit { font-weight:700; font-size:13px;   color:#1d4ed8; }
-.m-void   { font-weight:600; font-size:13px;   color:#94a3b8; }
+.m-total  { font-weight: 700; font-size: 13px; color: #0f172a; }
+.m-owed   { font-weight: 700; font-size: 13px; color: #dc2626; }
+.m-clear  { font-weight: 600; font-size: 13px; color: #15803d; }
+.m-credit { font-weight: 600; font-size: 13px; color: #1d4ed8; }
+.m-void   { font-weight: 500; font-size: 13px; color: #94a3b8; }
 
 /* ── Status pills ── */
 .s-pill {
-    display:inline-flex; align-items:center; gap:4px;
-    padding:3px 10px; border-radius:20px;
-    font-size:11px; font-weight:700; white-space:nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: #fff;
 }
-.sp-draft     { background:#6c757d; color:#fff; }
-.sp-pending   { background:#f59e0b; color:#fff; }
-.sp-partial   { background:#3b82f6; color:#fff; }
-.sp-paid      { background:#16a34a; color:#fff; }
-.sp-overdue   { background:#dc2626; color:#fff; }
-.sp-void      { background:#1e293b; color:#fff; }
-.sp-cancelled { background:#475569; color:#fff; }
+.sp-draft     { background: #6c757d; }
+.sp-pending   { background: #f7b924; color: #ffffff;}
+.sp-partial   { background: #0d6efd; }
+.sp-paid      { background: #3ac47d; }
+.sp-overdue   { background: #dc3545; }
+.sp-bad-debt  { background: #e85d04; }
+.sp-written   { background: #6f42c1; }
+.sp-void      { background: #e2e8f0; color: #475569; }
+.sp-cancelled { background: #e2e8f0; color: #475569; }
 
-/* ── Scholarship dot ── */
-.sch-dot {
-    display:inline-block; width:7px; height:7px;
-    border-radius:50%; background:#7c3aed;
-    margin-left:4px; vertical-align:middle;
+/* ── Actions button ── */
+.act-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s, border-color .15s, color .15s;
+    padding: 0;
+}
+.act-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
 }
 
 /* ── Empty state ── */
-.tbl-empty { text-align:center; padding:60px 20px; color:#94a3b8; }
-.tbl-empty i { font-size:3rem; display:block; margin-bottom:12px; opacity:.4; }
-.tbl-empty p { font-size:13px; margin:0 0 16px; }
+.tbl-empty   { text-align: center; padding: 64px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0 0 18px; }
 
-/* ── Pagination bar ── */
+/* ── Pagination ── */
 .pag-bar {
-    padding:14px 20px;
-    border-top:1px solid #e2e8f0;
-    background:#f8fafc;
-    display:flex; align-items:center;
-    justify-content:space-between;
-    flex-wrap:wrap; gap:10px;
-    font-size:12.5px; color:#64748b;
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #64748b;
 }
+.pag-bar .page-link {
+    color: #1d4ed8;
+    border-color: #e2e8f0;
+    font-size: 12.5px;
+    padding: 4px 10px;
+}
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
 
-/* ── Stat card (OOB) ── */
+/* ── Dropdown ── */
+.dropdown-menu   { font-size: 0.84rem; min-width: 192px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: 0.68rem; padding: 6px 14px 2px; }
+
+/* ── OOB stat cards ── */
 .stat-card {
-    background:#fff; border:1px solid #e2e8f0; border-radius:10px;
-    padding:18px 22px; display:flex; align-items:center;
-    gap:16px; margin-bottom:20px; transition:box-shadow .2s;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
 }
-.stat-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
 .stat-icon {
-    width:48px; height:48px; border-radius:10px;
-    display:flex; align-items:center; justify-content:center;
-    font-size:20px; color:#fff; flex-shrink:0;
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
 }
 .stat-label {
-    font-size:11px; font-weight:700; text-transform:uppercase;
-    letter-spacing:.6px; color:#64748b; margin-bottom:3px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #64748b; margin-bottom: 3px;
 }
-.stat-value { font-size:22px; font-weight:800; color:#0f172a; line-height:1; }
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
 </style>
 
-<div class="table-responsive" style="overflow-x:auto; overflow-y:visible;">
-<table class="inv-tbl table table-striped table-bordered">
+<!-- JS URL for bulk modal -->
+<script>
+var BULK_FINALIZE_MODAL_URL = "{% url 'fees:invoice_bulk_finalize_modal' %}";
+var _allDraftCount = {{ stats.draft|default:0 }};
+if (typeof window._invAllDraftCount === 'undefined' || _allDraftCount !== window._invAllDraftCount) {
+    window._invAllDraftCount = _allDraftCount;
+}
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     BULK ACTION TOOLBAR
+     ══════════════════════════════════════════════════════════ -->
+<div id="bulk-toolbar" style="margin:12px 16px 0;">
+    <span class="bulk-count">
+        <strong id="bulk-count-num">0</strong> selected
+        <span class="bulk-allpages-note" id="bulk-allpages-note">&nbsp;· all pages</span>
+    </span>
+
+    <button type="button" class="bulk-btn bulk-select-page"
+            onclick="InvBulk.selectAllDraftsOnPage()">
+        <i class="fa fa-filter" style="font-size:10px;"></i>
+        All Drafts on Page
+    </button>
+
+    <button type="button" class="bulk-btn bulk-select-allpages"
+            onclick="InvBulk.selectAllDraftsAllPages()"
+            title="Selects all {{ stats.draft|default:0 }} draft invoices across all pages">
+        <i class="fa fa-globe" style="font-size:10px;"></i>
+        All Drafts (All Pages)
+        {% if stats.draft %}
+        <span style="background:rgba(0,0,0,.25);border-radius:10px;
+                     padding:1px 7px;font-size:10px;margin-left:2px;">
+            {{ stats.draft }}
+        </span>
+        {% endif %}
+    </button>
+
+    <span class="bulk-sep"></span>
+
+    <button type="button" class="bulk-btn bulk-btn-finalize"
+            onclick="InvBulk.openFinalizeModal()">
+        <i class="fa fa-check-double"></i>
+        Finalise Selected
+    </button>
+
+    <button type="button" class="bulk-btn bulk-btn-clear"
+            onclick="InvBulk.clearAll()">
+        <i class="fa fa-times"></i>
+        Clear
+    </button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TABLE
+     ══════════════════════════════════════════════════════════ -->
+<div style="overflow-x:auto;">
+<table class="inv-tbl">
     <thead>
         <tr>
-            <th style="width:38px;">#</th>
-            <th>Invoice No.</th>
+            <th class="col-chk">
+                <input type="checkbox"
+                       class="inv-cb"
+                       id="chk-master"
+                       title="Select/deselect all draft invoices on this page"
+                       onchange="InvBulk.masterToggle(this.checked)">
+            </th>
+            <th>#</th>
+            <th>Invoice</th>
             <th>Student / Class</th>
             <th>Dates / Session</th>
             <th class="text-end">Total</th>
             <th class="text-end">Balance</th>
             <th class="text-center">Status</th>
-            <th class="text-center" style="width:60px;">Actions</th>
+            <th class="text-center" style="width:50px;">Actions</th>
         </tr>
     </thead>
     <tbody>
+
     {% if invoices_page %}
         {% for invoice in invoices_page %}
         {% with student_class=invoice.get_student_class %}
-        <tr class="{% if invoice.status == 'VOID' or invoice.status == 'CANCELLED' %}row-muted{% endif %}">
 
-            <!-- # -->
-            <td style="color:#94a3b8; font-size:12px;">
-                {{ invoices_page.start_index|add:forloop.counter0 }}
-            </td>
+        <tr class="{% if invoice.status == 'VOID' or invoice.status == 'CANCELLED' %}row-muted{% endif %}"
+            data-invoice-pk="{{ invoice.pk }}"
+            data-invoice-status="{{ invoice.status }}">
 
-            <!-- Invoice number + scholarship indicator -->
-            <td>
-                <a href="{% url 'fees:invoice_detail' invoice.pk %}" class="inv-num">
-                    {{ invoice.invoice_number }}
-                </a>
-                {% if invoice.has_scholarships_applied %}
-                    <span class="sch-dot" title="Scholarship applied"></span>
+            <!-- Checkbox (DRAFT only) -->
+            <td class="col-chk">
+                {% if invoice.status == 'DRAFT' %}
+                <input type="checkbox"
+                       class="inv-cb invoice-checkbox"
+                       value="{{ invoice.pk }}"
+                       onchange="InvBulk.onRowCheck()">
                 {% endif %}
             </td>
 
-            <!-- Student name, admission number, class badge -->
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ invoices_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Invoice number + badges -->
+            <td>
+                <a href="{% url 'fees:invoice_detail' invoice.pk %}"
+                   class="inv-num">
+                    {{ invoice.invoice_number }}
+                </a>
+
+                {% if invoice.currency|is_foreign_currency %}
+                <div>
+                    <span class="fx-badge">
+                        <i class="fa fa-exchange-alt" style="font-size:9px;"></i>
+                        {{ invoice.currency }}
+                    </span>
+                </div>
+                {% endif %}
+
+                {% if invoice.has_scholarships_applied %}
+                <span class="flag-dot" style="background:#7c3aed;"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      title="Scholarship applied"></span>
+                {% endif %}
+                {% if invoice.has_discounts_applied %}
+                <span class="flag-dot" style="background:#0891b2;"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      title="Discount applied"></span>
+                {% endif %}
+            </td>
+
+            <!-- Student -->
             <td>
                 <a href="{% url 'students:student_profile' invoice.student.pk %}"
-                   class="stu-name">
+                   class="inv-student-name">
                     {{ invoice.student.get_full_name }}
                 </a>
-                <span class="stu-adm">{{ invoice.student.admission_number }}</span>
+                <span class="inv-student-adm">
+                    {{ invoice.student.admission_number }}
+                </span>
                 <div>
                     {% if student_class %}
-                        <span class="cls-badge">
-                            <i class="fa fa-chalkboard" style="font-size:9px;"></i>
-                            {{ student_class.get_display_name }}
-                        </span>
+                    <span class="cls-badge">
+                        <i class="fa fa-chalkboard" style="font-size:9px;"></i>
+                        {{ student_class.get_display_name }}
+                    </span>
                     {% else %}
-                        <span class="cls-badge-none">
-                            <i class="fa fa-minus" style="font-size:9px;"></i>
-                            No class
-                        </span>
+                    <span class="cls-badge-none">No class</span>
                     {% endif %}
                 </div>
             </td>
 
-            <!-- Issue date / due date / academic session -->
+            <!-- Dates / session -->
             <td>
-                <div class="date-issue">{{ invoice.issue_date|date:"d M Y" }}</div>
+                <div class="date-issue">
+                    {{ invoice.issue_date|date:"d M Y" }}
+                </div>
+
                 {% if invoice.status == 'PAID' or invoice.status == 'VOID' or invoice.status == 'CANCELLED' %}
-                    <div class="date-due ok">Due {{ invoice.due_date|date:"d M Y" }}</div>
+                    <div class="date-due ok">
+                        Due {{ invoice.due_date|date:"d M Y" }}
+                    </div>
                 {% elif invoice.due_date < today %}
                     <div class="date-due overdue">
                         Due {{ invoice.due_date|date:"d M Y" }}
                         <i class="fa fa-exclamation-circle ms-1"></i>
                     </div>
                 {% else %}
-                    <div class="date-due ok">Due {{ invoice.due_date|date:"d M Y" }}</div>
-                {% endif %}
-                {% if invoice.academic_session %}
-                    <div>
-                        <span class="session-tag">
-                            <i class="fa fa-book-open" style="font-size:9px;"></i>
-                            {{ invoice.academic_session.name }}
-                        </span>
+                    <div class="date-due ok">
+                        Due {{ invoice.due_date|date:"d M Y" }}
                     </div>
+                {% endif %}
+
+                {% if invoice.academic_session %}
+                <div>
+                    <span class="session-tag">
+                        <i class="fa fa-book-open" style="font-size:9px;"></i>
+                        {{ invoice.academic_session.name }}
+                    </span>
+                </div>
                 {% endif %}
             </td>
 
             <!-- Total -->
             <td class="text-end">
-                <span class="m-total">{{ invoice.total_amount|money }}</span>
+                <span class="m-total">
+                    {{ invoice.total_amount|format_in_currency:invoice.currency }}
+                </span>
+                {% if invoice.currency|is_foreign_currency %}
+                <div style="font-size:10.5px;color:#94a3b8;margin-top:2px;">
+                    approx. {{ invoice.total_in_school_currency|money }}
+                </div>
+                {% endif %}
             </td>
 
             <!-- Balance -->
             <td class="text-end">
                 {% if invoice.status == 'VOID' or invoice.status == 'CANCELLED' %}
-                    <span class="m-void">—</span>
+                    <span class="m-void">-</span>
                 {% elif invoice.balance > 0 %}
-                    <span class="m-owed">{{ invoice.balance|money }}</span>
+                    <span class="m-owed">
+                        {{ invoice.balance|format_in_currency:invoice.currency }}
+                    </span>
                 {% elif invoice.balance < 0 %}
-                    <span class="m-credit">{{ invoice.balance|abs_value|money }}</span>
-                    <div style="font-size:10.5px; color:#1d4ed8; font-weight:600;">Credit</div>
+                    <span class="m-credit">
+                        {{ invoice.balance|abs_value|format_in_currency:invoice.currency }}
+                        <div style="font-size:10.5px;color:#1d4ed8;font-weight:600;">
+                            Credit
+                        </div>
+                    </span>
                 {% else %}
                     <span class="m-clear">
                         <i class="fa fa-check-circle me-1"></i>Settled
@@ -236,155 +523,210 @@
                 {% endif %}
             </td>
 
-            <!-- Status pill — due date checked before stored status so that
-                 PENDING/PARTIALLY_PAID invoices past their due date correctly
-                 show as Overdue rather than their stored value -->
+            <!-- Status -->
             <td class="text-center">
                 {% if invoice.status == 'VOID' %}
-                    <span class="s-pill sp-void"><i class="fa fa-ban"></i> Void</span>
+                    <span class="s-pill sp-void">
+                        <i class="fa fa-ban"></i> Void
+                    </span>
                 {% elif invoice.status == 'CANCELLED' %}
-                    <span class="s-pill sp-cancelled"><i class="fa fa-times"></i> Cancelled</span>
+                    <span class="s-pill sp-cancelled">
+                        <i class="fa fa-times"></i> Cancelled
+                    </span>
                 {% elif invoice.status == 'PAID' %}
-                    <span class="s-pill sp-paid"><i class="fa fa-check-circle"></i> Paid</span>
+                    <span class="s-pill sp-paid">
+                        <i class="fa fa-check-circle"></i> Paid
+                    </span>
                 {% elif invoice.status == 'DRAFT' %}
-                    <span class="s-pill sp-draft"><i class="fa fa-pencil-alt"></i> Draft</span>
-                {% elif invoice.due_date < today %}
-                    <span class="s-pill sp-overdue"><i class="fa fa-exclamation-circle"></i> Overdue</span>
+                    <span class="s-pill sp-draft">
+                        <i class="fa fa-pencil-alt"></i> Draft
+                    </span>
+                {% elif invoice.status == 'BAD_DEBT' or invoice.status == 'WRITTEN_OFF' or invoice.status == 'UNCOLLECTIBLE' %}
+                    <span class="s-pill sp-bad-debt">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        {{ invoice.get_status_display }}
+                    </span>
+                {% elif invoice.status == 'OVERDUE' or invoice.due_date < today %}
+                    <span class="s-pill sp-overdue">
+                        <i class="fa fa-exclamation-circle"></i> Overdue
+                    </span>
                 {% elif invoice.status == 'PARTIALLY_PAID' %}
-                    <span class="s-pill sp-partial"><i class="fa fa-adjust"></i> Partial</span>
+                    <span class="s-pill sp-partial">
+                        <i class="fa fa-adjust"></i> Partial
+                    </span>
                 {% elif invoice.status == 'PENDING' %}
-                    <span class="s-pill sp-pending"><i class="fa fa-clock"></i> Pending</span>
+                    <span class="s-pill sp-pending">
+                        <i class="fa fa-clock"></i> Pending
+                    </span>
                 {% else %}
-                    <span class="s-pill sp-pending">{{ invoice.get_status_display }}</span>
+                    <span class="s-pill sp-pending">
+                        {{ invoice.get_status_display }}
+                    </span>
                 {% endif %}
             </td>
 
-            <!-- Actions dropdown -->
+            <!-- Actions -->
             <td class="text-center">
                 <div class="dropdown">
                     <button type="button"
-                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                            data-bs-toggle="dropdown">
+                            class="act-btn"
+                            data-bs-toggle="dropdown"
+                            data-bs-boundary="viewport"
+                            aria-expanded="false">
                         <i class="fa fa-ellipsis-v"></i>
                     </button>
-                    <div class="dropdown-menu dropdown-menu-end">
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
 
-                        <a class="dropdown-item"
-                           href="{% url 'fees:invoice_detail' invoice.pk %}">
-                            <i class="fa fa-eye me-2 text-primary"></i>View Details
-                        </a>
-                        <a class="dropdown-item"
-                           href="{% url 'fees:invoice_print' invoice.pk %}"
-                           target="_blank">
-                            <i class="fa fa-print me-2"></i>Print
-                        </a>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:invoice_detail' invoice.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'fees:invoice_print' invoice.pk %}"
+                               target="_blank">
+                                <i class="fa fa-print me-2 text-secondary"></i>Print Invoice
+                            </a>
+                        </li>
 
                         {% if invoice.status == 'DRAFT' %}
-                        <div class="dropdown-divider"></div>
-                        <a class="dropdown-item text-warning"
-                           href="{% url 'fees:invoice_edit' invoice.pk %}">
-                            <i class="fa fa-edit me-2"></i>Edit
-                        </a>
-                        <button class="dropdown-item text-primary"
-                                hx-get="{% url 'fees:invoice_finalize_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-check-circle me-2"></i>Finalize
-                        </button>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Draft Actions</h6></li>
+                        <li>
+                            <button class="dropdown-item text-primary"
+                                    hx-get="{% url 'fees:invoice_finalize_modal' invoice.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-check-circle me-2"></i>Finalise
+                            </button>
+                        </li>
                         {% endif %}
 
                         {% if invoice.status == 'PENDING' and invoice.paid_amount == 0 %}
-                        <button class="dropdown-item"
-                                hx-get="{% url 'fees:invoice_revert_to_draft_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-undo me-2"></i>Revert to Draft
-                        </button>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:invoice_revert_to_draft_modal' invoice.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-undo me-2"></i>Revert to Draft
+                            </button>
+                        </li>
                         {% endif %}
 
                         {% if invoice.status != 'DRAFT' and invoice.status != 'PAID' and invoice.status != 'VOID' and invoice.status != 'CANCELLED' %}
-                        <div class="dropdown-divider"></div>
-                        <a class="dropdown-item text-success"
-                           href="{% url 'fees:payment_create' %}?invoice={{ invoice.pk }}">
-                            <i class="fa fa-credit-card me-2"></i>Record Payment
-                        </a>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Payment</h6></li>
+                        <li>
+                            <a class="dropdown-item text-success"
+                               href="{% url 'fees:payment_create' %}?invoice={{ invoice.pk }}">
+                                <i class="fa fa-credit-card me-2"></i>Record Payment
+                            </a>
+                        </li>
                         {% endif %}
 
                         {% if invoice.status == 'DRAFT' or invoice.status == 'PENDING' %}
-                        <div class="dropdown-divider"></div>
-                        {% if invoice.has_scholarships_applied %}
-                        <button class="dropdown-item"
-                                hx-get="{% url 'fees:remove_scholarship_from_invoice_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-graduation-cap me-2 text-warning"></i>Remove Scholarship
-                        </button>
-                        {% else %}
-                        <button class="dropdown-item"
-                                hx-get="{% url 'fees:apply_scholarship_to_invoice_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-graduation-cap me-2 text-success"></i>Apply Scholarship
-                        </button>
-                        {% endif %}
-                        <button class="dropdown-item"
-                                hx-get="{% url 'fees:apply_discount_to_invoice_select_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-tag me-2 text-success"></i>Apply Discount
-                        </button>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Adjustments</h6></li>
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'fees:apply_discount_to_invoice_modal' invoice.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-tag me-2 text-success"></i>Apply Discount
+                            </button>
+                        </li>
                         {% endif %}
 
-                        <div class="dropdown-divider"></div>
-                        <a class="dropdown-item"
-                           href="{% url 'students:student_profile' invoice.student.pk %}">
-                            <i class="fa fa-user me-2"></i>View Student
-                        </a>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Related</h6></li>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'students:student_profile' invoice.student.pk %}">
+                                <i class="fa fa-user me-2"></i>Student Profile
+                            </a>
+                        </li>
                         {% if student_class %}
-                        <a class="dropdown-item"
-                           href="{% url 'academics:class_detail' student_class.pk %}">
-                            <i class="fa fa-chalkboard me-2"></i>View Class
-                        </a>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'academics:class_detail' student_class.pk %}">
+                                <i class="fa fa-chalkboard me-2"></i>View Class
+                            </a>
+                        </li>
                         {% endif %}
                         {% if invoice.journal_entry %}
-                        <a class="dropdown-item"
-                           href="{% url 'finance:journal_entry_detail' invoice.journal_entry.pk %}">
-                            <i class="fa fa-book me-2"></i>Journal Entry
-                        </a>
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'finance:journal_entry_detail' invoice.journal_entry.pk %}">
+                                <i class="fa fa-book me-2"></i>Journal Entry
+                            </a>
+                        </li>
                         {% endif %}
 
                         {% if invoice.status != 'VOID' and invoice.status != 'CANCELLED' %}
-                        <div class="dropdown-divider"></div>
-                        <button class="dropdown-item text-danger"
-                                hx-get="{% url 'fees:invoice_void_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-ban me-2"></i>Void
-                        </button>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <h6 class="dropdown-header text-danger">Danger Zone</h6>
+                        </li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'fees:invoice_void_modal' invoice.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-ban me-2"></i>Void Invoice
+                            </button>
+                        </li>
                         {% endif %}
 
                         {% if invoice.status == 'DRAFT' and invoice.paid_amount == 0 %}
-                        <button class="dropdown-item text-danger"
-                                hx-get="{% url 'fees:invoice_delete_modal' invoice.pk %}"
-                                hx-target="#modal-container" hx-swap="innerHTML">
-                            <i class="fa fa-trash me-2"></i>Delete
-                        </button>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'fees:invoice_delete_modal' invoice.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete Invoice
+                            </button>
+                        </li>
                         {% endif %}
 
-                    </div>
+                    </ul>
                 </div>
             </td>
 
         </tr>
         {% endwith %}
         {% endfor %}
+
     {% else %}
         <tr>
-            <td colspan="8">
+            <td colspan="9">
                 <div class="tbl-empty">
                     <i class="pe-7s-file"></i>
-                    <p>No invoices found matching your filters.</p>
-                    <a href="{% url 'fees:invoice_create' %}" class="btn btn-sm btn-primary">
-                        <i class="fa fa-plus me-1"></i>Create Invoice
-                    </a>
+                    <p>
+                        {% if request.GET %}
+                            No invoices match your current filters.
+                        {% else %}
+                            No invoices have been created yet.
+                        {% endif %}
+                    </p>
+                    {% if request.GET %}
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'fees:invoice_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;
+                                  padding:7px 16px;font-size:13px;font-weight:500;
+                                  border-radius:6px;background:#fff;color:#64748b;
+                                  text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>
+                            Clear Filters
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </td>
         </tr>
     {% endif %}
+
     </tbody>
 </table>
 </div>
@@ -393,33 +735,44 @@
 {% if invoices_page.paginator.num_pages > 1 %}
 <div class="pag-bar">
     <span>
-        Showing {{ invoices_page.start_index }}–{{ invoices_page.end_index }}
-        of {{ invoices_page.paginator.count|format_number }} invoices
+        Showing
+        <strong>{{ invoices_page.start_index }}</strong>–<strong>{{ invoices_page.end_index }}</strong>
+        of <strong>{{ invoices_page.paginator.count|format_number }}</strong>
+        invoice{{ invoices_page.paginator.count|pluralize }}
     </span>
     <nav>
         <ul class="pagination pagination-sm mb-0">
+
             {% if invoices_page.has_previous %}
             <li class="page-item">
                 <button class="page-link"
                         hx-get="{% url 'fees:invoice_list' %}"
                         hx-target="#invoice-list"
                         hx-include="#searchForm"
-                        hx-vals='{"page":"{{ invoices_page.previous_page_number }}"}'>«</button>
+                        hx-vals='{"page":"{{ invoices_page.previous_page_number }}"}'>
+                    &laquo;
+                </button>
             </li>
             {% else %}
-            <li class="page-item disabled"><span class="page-link">«</span></li>
+            <li class="page-item disabled">
+                <span class="page-link">&laquo;</span>
+            </li>
             {% endif %}
 
             {% for p in invoices_page.paginator.page_range %}
                 {% if p == invoices_page.number %}
-                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    <li class="page-item active">
+                        <span class="page-link">{{ p }}</span>
+                    </li>
                 {% elif p > invoices_page.number|add:"-3" and p < invoices_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'fees:invoice_list' %}"
                                 hx-target="#invoice-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                                hx-vals='{"page":"{{ p }}"}'>
+                            {{ p }}
+                        </button>
                     </li>
                 {% endif %}
             {% endfor %}
@@ -430,65 +783,261 @@
                         hx-get="{% url 'fees:invoice_list' %}"
                         hx-target="#invoice-list"
                         hx-include="#searchForm"
-                        hx-vals='{"page":"{{ invoices_page.next_page_number }}"}'>»</button>
+                        hx-vals='{"page":"{{ invoices_page.next_page_number }}"}'>
+                    &raquo;
+                </button>
             </li>
             {% else %}
-            <li class="page-item disabled"><span class="page-link">»</span></li>
+            <li class="page-item disabled">
+                <span class="page-link">&raquo;</span>
+            </li>
             {% endif %}
+
         </ul>
     </nav>
 </div>
 {% endif %}
 
-<!-- ── OOB stats refresh on HTMX requests ── -->
+<!-- ══════════════════════════════════════════════════════════
+     OOB STATS
+     ══════════════════════════════════════════════════════════ -->
 {% if is_htmx %}
-<div class="row mb-1" id="stats-cards" hx-swap-oob="true">
-    <div class="col-xl-3 col-md-6">
-        <div class="stat-card">
+<div class="row mb-2 flex-nowrap overflow-auto"
+     id="stats-cards"
+     hx-swap-oob="true">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
             <div class="stat-icon bg-primary"><i class="pe-7s-file"></i></div>
             <div>
                 <div class="stat-label">Total Invoices</div>
-                <div class="stat-value">{{ stats.total|default:0|format_number }}</div>
+                <div class="stat-value">
+                    {{ stats.total|default:0|format_number }}
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stat-card">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
+            <div class="stat-icon" style="background:#6c757d;">
+                <i class="pe-7s-edit"></i>
+            </div>
+            <div>
+                <div class="stat-label">Draft</div>
+                <div class="stat-value">
+                    {{ stats.draft|default:0|format_number }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
             <div class="stat-icon bg-warning"><i class="pe-7s-clock"></i></div>
             <div>
                 <div class="stat-label">Pending</div>
-                <div class="stat-value">{{ stats.pending|default:0|format_number }}</div>
+                <div class="stat-value">
+                    {{ stats.pending|default:0|format_number }}
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stat-card">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
             <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
             <div>
                 <div class="stat-label">Paid</div>
-                <div class="stat-value">{{ stats.paid|default:0|format_number }}</div>
+                <div class="stat-value">
+                    {{ stats.paid|default:0|format_number }}
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="stat-card">
+
+    <div class="col d-flex">
+        <div class="stat-card w-100">
             <div class="stat-icon bg-danger"><i class="pe-7s-attention"></i></div>
             <div>
                 <div class="stat-label">Overdue</div>
-                <div class="stat-value">{{ stats.overdue|default:0|format_number }}</div>
+                <div class="stat-value">
+                    {{ stats.overdue|default:0|format_number }}
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<script>
-/* Fixed-strategy popper prevents dropdown clipping inside overflow:auto containers */
-document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
-    new bootstrap.Dropdown(el, {
-        popperConfig: function (d) {
-            return Object.assign({}, d, { strategy: 'fixed' });
-        }
-    });
-});
-</script>
+</div>
 {% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     BULK SELECTION JS
+     ══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+    /* Re-init Bootstrap components after HTMX swap */
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el, { html: true });
+    });
+
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+
+    /* Restore bulk-mode visual state after pagination swap */
+    if (window._invBulkModeActive) {
+        document.body.classList.add('bulk-mode');
+        var lbl = document.getElementById('bulk-mode-toggle-label');
+        if (lbl) lbl.textContent = 'Exit Bulk Select';
+        var toolbar = document.getElementById('bulk-toolbar');
+        if (toolbar && window._invBulkAnySelected) {
+            toolbar.classList.add('visible');
+        }
+    }
+})();
+
+var InvBulk = (function () {
+
+    var _allPagesMode = false;
+
+    function getDraftCount() {
+        return window._invAllDraftCount || 0;
+    }
+
+    function getChecked() {
+        return Array.from(document.querySelectorAll('.invoice-checkbox:checked'));
+    }
+
+    function getAllDraftCbs() {
+        return Array.from(document.querySelectorAll('.invoice-checkbox'));
+    }
+
+    function updateToolbar() {
+        var checked  = getChecked();
+        var toolbar  = document.getElementById('bulk-toolbar');
+        var counter  = document.getElementById('bulk-count-num');
+        var note     = document.getElementById('bulk-allpages-note');
+        var master   = document.getElementById('chk-master');
+        var allDraft = getAllDraftCbs();
+
+        if (_allPagesMode) {
+            counter.textContent = getDraftCount();
+            if (note) note.classList.add('visible');
+        } else {
+            counter.textContent = checked.length;
+            if (note) note.classList.remove('visible');
+        }
+
+        var anySelected = _allPagesMode || checked.length > 0;
+        toolbar.classList.toggle('visible', anySelected);
+        window._invBulkAnySelected = anySelected;
+
+        if (master) {
+            if (_allPagesMode) {
+                master.indeterminate = false;
+                master.checked = true;
+            } else if (checked.length === 0) {
+                master.indeterminate = false;
+                master.checked = false;
+            } else if (allDraft.length > 0 && checked.length === allDraft.length) {
+                master.indeterminate = false;
+                master.checked = true;
+            } else {
+                master.indeterminate = true;
+            }
+        }
+
+        document.querySelectorAll('.invoice-checkbox').forEach(function (cb) {
+            var row = cb.closest('tr');
+            if (row) row.classList.toggle('row-selected', cb.checked || _allPagesMode);
+        });
+    }
+
+    function toggleBulkMode() {
+        var active = document.body.classList.toggle('bulk-mode');
+        window._invBulkModeActive = active;
+        var lbl = document.getElementById('bulk-mode-toggle-label');
+        if (lbl) lbl.textContent = active ? 'Exit Bulk Select' : 'Bulk Select';
+        if (!active) clearAll();
+    }
+
+    function masterToggle(checked) {
+        _allPagesMode = false;
+        getAllDraftCbs().forEach(function (cb) { cb.checked = checked; });
+        updateToolbar();
+    }
+
+    function selectAllDraftsOnPage() {
+        _allPagesMode = false;
+        getAllDraftCbs().forEach(function (cb) { cb.checked = true; });
+        updateToolbar();
+    }
+
+    function selectAllDraftsAllPages() {
+        _allPagesMode = true;
+        getAllDraftCbs().forEach(function (cb) { cb.checked = true; });
+        updateToolbar();
+    }
+
+    function clearAll() {
+        _allPagesMode = false;
+        document.querySelectorAll('.invoice-checkbox').forEach(function (cb) {
+            cb.checked = false;
+        });
+        var master = document.getElementById('chk-master');
+        if (master) {
+            master.checked = false;
+            master.indeterminate = false;
+        }
+        updateToolbar();
+    }
+
+    function onRowCheck() {
+        _allPagesMode = false;
+        updateToolbar();
+    }
+
+    function openFinalizeModal() {
+        var url;
+
+        if (_allPagesMode) {
+            url = BULK_FINALIZE_MODAL_URL + '?all_draft_pages=1';
+        } else {
+            var checked = getChecked();
+            if (checked.length === 0) {
+                alert('Please select at least one invoice.');
+                return;
+            }
+            var params = checked.map(function (cb) {
+                return 'pk=' + encodeURIComponent(cb.value);
+            }).join('&');
+            url = BULK_FINALIZE_MODAL_URL + '?' + params;
+        }
+
+        htmx.ajax('GET', url, {
+            target:  '#modal-container',
+            swap:    'innerHTML',
+            include: '#searchForm',
+        });
+    }
+
+    return {
+        toggleBulkMode:          toggleBulkMode,
+        masterToggle:            masterToggle,
+        selectAllDraftsOnPage:   selectAllDraftsOnPage,
+        selectAllDraftsAllPages: selectAllDraftsAllPages,
+        clearAll:                clearAll,
+        onRowCheck:              onRowCheck,
+        openFinalizeModal:       openFinalizeModal,
+    };
+})();
+</script>

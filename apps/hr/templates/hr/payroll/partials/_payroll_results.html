@@ -1,492 +1,650 @@
-{# hr/templates/hr/payroll/partials/_payroll_results.html #}
-
 {% load static %}
 {% load humanize %}
-{% load widget_tweaks %}
 {% load currency_filters %}
 
-<!-- Payroll Table -->
-<div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-        <thead>
-            <tr>
-                <th width="50" class="text-center">#</th>
-                <th>Staff Member</th>
-                <th>Pay Period</th>
-                <th class="text-end">Gross Pay</th>
-                <th class="text-end">Net Pay</th>
-                <th class="text-center">Status</th>
-                <th width="110" class="text-center">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="payrollTableBody">
-            {% if payrolls_page %}
-                {% for payroll in payrolls_page %}
-                <tr {% if payroll.reversed %}class="payroll-reversed"{% endif %}>
+<style>
+/* ============================================================
+   TABLE CORE — matches inv-tbl pattern
+   ============================================================ */
+.pay-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.pay-tbl thead th {
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.pay-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.pay-tbl tbody tr:last-child td      { border-bottom: none; }
+.pay-tbl tbody tr:hover td           { background: #eff6ff; }
 
-                    <!-- Row Number -->
-                    <td class="text-center text-muted small">
-                        {{ forloop.counter|add:payrolls_page.start_index|add:"-1" }}
-                    </td>
+/* Reversed rows — whole-row muting like invoice voided rows */
+.pay-tbl tbody tr.row-reversed       { opacity: 0.55; }
+.pay-tbl tbody tr.row-reversed:hover td { background: #f8fafc; }
 
-                    <!-- Staff Member -->
-                    <td>
-                        <div class="d-flex align-items-center gap-2">
-                            <div>
-                                <div class="fw-semibold">
-                                    <a href="{% url 'hr:staff_profile' payroll.staff.pk %}"
-                                       class="text-decoration-none text-dark staff-link">
-                                        {{ payroll.staff.full_name }}
-                                    </a>
-                                    {% if payroll.reversed %}
-                                        <span class="badge bg-dark ms-1 small">REVERSED</span>
-                                    {% endif %}
-                                </div>
-                                <div class="d-flex align-items-center gap-2 mt-1">
-                                    <small class="text-muted">{{ payroll.staff.staff_id }}</small>
-                                    {% if payroll.staff.primary_department %}
-                                        <span class="dept-pill">{{ payroll.staff.primary_department.name }}</span>
-                                    {% endif %}
-                                    {% if payroll.is_prorated %}
-                                        <span class="badge bg-warning text-dark small"
-                                              data-bs-toggle="tooltip"
-                                              title="Prorated: {{ payroll.days_worked }}/{{ payroll.total_working_days }} days worked">
-                                            Prorated
-                                        </span>
-                                    {% endif %}
-                                </div>
-                            </div>
+/* ============================================================
+   STAFF CELL
+   ============================================================ */
+.pay-staff-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+}
+.pay-staff-name:hover { color: #1d4ed8; }
+
+.pay-staff-id {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    color: #64748b;
+    display: block;
+    margin-top: 1px;
+}
+
+.dept-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 1px 6px;
+    margin-top: 3px;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   PAY PERIOD CELL
+   ============================================================ */
+.pay-period-label { font-weight: 600; font-size: 13px; color: #334155; }
+.pay-period-freq  { font-size: 11.5px; color: #64748b; }
+.pay-period-paid  { font-size: 11.5px; color: #15803d; margin-top: 2px; }
+
+/* ============================================================
+   MONEY
+   ============================================================ */
+.m-gross { font-weight: 700; font-size: 13px; color: #0f172a; font-family: 'Courier New', monospace; }
+.m-net   { font-weight: 700; font-size: 13px; font-family: 'Courier New', monospace; cursor: default; }
+.m-net.positive { color: #15803d; }
+.m-net.zero     { color: #64748b; }
+.m-net.negative { color: #dc2626; }
+.m-sub   { font-size: 10.5px; color: #94a3b8; margin-top: 2px; }
+
+/* ============================================================
+   PAYMENT PROGRESS — shown on PARTIAL payment rows only
+   ============================================================ */
+.pay-progress-wrap { margin-top: 6px; }
+.pay-progress-track {
+    background: #e2e8f0;
+    border-radius: 4px;
+    height: 5px;
+    overflow: hidden;
+}
+.pay-progress-fill {
+    background: #ffc107;
+    height: 100%;
+    border-radius: 4px;
+    transition: width .3s;
+}
+.pay-progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+}
+.pay-progress-paid { color: #15803d; font-weight: 600; }
+.pay-progress-due  { color: #dc2626; font-weight: 600; }
+
+/* ============================================================
+   STATUS PILLS — solid colours, white text (matches invoice)
+   ============================================================ */
+.s-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: #fff;
+}
+.sp-draft      { background: #6c757d; }
+.sp-approved   { background: #0d6efd; }
+.sp-partial { background: #ffc107; color: #000; }
+.sp-paid       { background: #3fd18d; }
+.sp-cancelled  { background: #e2e8f0; color: #475569; }
+.sp-reversed   { background: #343a40; }
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.tbl-empty { text-align: center; padding: 64px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .35; }
+.tbl-empty p { font-size: 13px; margin: 0 0 18px; }
+
+/* ============================================================
+   PAGINATION BAR — matches invoice pag-bar
+   ============================================================ */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #64748b;
+}
+.pag-bar .page-link {
+    color: #1d4ed8;
+    border-color: #e2e8f0;
+    font-size: 12.5px;
+    padding: 4px 10px;
+}
+.pag-bar .page-link:hover             { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.pag-bar .page-item.active .page-link { background: #1d4ed8; border-color: #1d4ed8; }
+
+/* ============================================================
+   DROPDOWN
+   ============================================================ */
+.dropdown-menu   { font-size: 0.84rem; min-width: 192px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.dropdown-item   { padding: 6px 14px; }
+.dropdown-header { font-size: 0.68rem; padding: 6px 14px 2px; }
+
+/* ============================================================
+   OOB STAT CARDS
+   ============================================================ */
+.stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #64748b; margin-bottom: 3px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="pay-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Staff Member</th>
+            <th>Pay Period</th>
+            <th class="text-end">Gross Pay</th>
+            <th class="text-end">Net Pay</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+
+    {% if payrolls_page %}
+        {% for payroll in payrolls_page %}
+        <tr class="{% if payroll.reversed %}row-reversed{% endif %}">
+
+            <!-- # -->
+            <td style="color:#94a3b8;font-size:12px;">
+                {{ payrolls_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Staff -->
+            <td>
+                <a href="{% url 'hr:staff_profile' payroll.staff.pk %}"
+                   class="pay-staff-name">
+                    {{ payroll.staff.full_name }}
+                    {% if payroll.reversed %}
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#343a40;color:#fff;margin-left:5px;vertical-align:middle;">
+                            Reversed
+                        </span>
+                    {% endif %}
+                </a>
+                <span class="pay-staff-id">{{ payroll.staff.staff_id }}</span>
+                {% if payroll.staff.primary_department %}
+                <div>
+                    <span class="dept-badge">{{ payroll.staff.primary_department.name }}</span>
+                </div>
+                {% endif %}
+                {% if payroll.is_prorated %}
+                <div>
+                    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;margin-top:3px;"
+                          data-bs-toggle="tooltip"
+                          title="Prorated: {{ payroll.days_worked }}/{{ payroll.total_working_days }} days worked">
+                        Prorated
+                    </span>
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Pay Period -->
+            <td>
+                <div class="pay-period-label">
+                    {% if payroll.pay_period_label %}
+                        {{ payroll.pay_period_label }}
+                    {% else %}
+                        {{ payroll.pay_period_start|date:"d M" }} – {{ payroll.pay_period_end|date:"d M Y" }}
+                    {% endif %}
+                </div>
+                <div class="pay-period-freq">{{ payroll.get_pay_frequency_display }}</div>
+                {% if payroll.payment_date %}
+                <div class="pay-period-paid">
+                    <i class="fa fa-check me-1"></i>Paid {{ payroll.payment_date|date:"d M Y" }}
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Gross Pay -->
+            <td class="text-end">
+                <div class="m-gross">{{ payroll.gross_pay|format_currency }}</div>
+                {% if payroll.allowances.count > 0 or payroll.bonuses.count > 0 %}
+                <div class="m-sub">
+                    {% if payroll.allowances.count > 0 %}{{ payroll.allowances.count }} allowance{{ payroll.allowances.count|pluralize }}{% endif %}{% if payroll.bonuses.count > 0 %}{% if payroll.allowances.count > 0 %}, {% endif %}{{ payroll.bonuses.count }} bonus{{ payroll.bonuses.count|pluralize:"es" }}{% endif %}
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Net Pay -->
+            <td class="text-end">
+                <span class="m-net {% if payroll.net_pay > 0 %}positive{% elif payroll.net_pay == 0 %}zero{% else %}negative{% endif %}"
+                      data-bs-toggle="tooltip"
+                      data-bs-html="true"
+                      data-bs-placement="left"
+                      title="
+                        <div class='text-start small'>
+                          <div class='d-flex justify-content-between gap-3'>
+                            <span>Basic</span><span>{{ payroll.basic_salary|amount }}</span>
+                          </div>
+                          <div class='d-flex justify-content-between gap-3'>
+                            <span>Allowances</span><span class='text-success'>+{{ payroll.total_allowances|amount }}</span>
+                          </div>
+                          {% if payroll.total_bonuses %}
+                          <div class='d-flex justify-content-between gap-3'>
+                            <span>Bonuses</span><span class='text-success'>+{{ payroll.total_bonuses|amount }}</span>
+                          </div>
+                          {% endif %}
+                          <div class='d-flex justify-content-between gap-3'>
+                            <span>Deductions</span><span class='text-danger'>{{ payroll.total_deductions|format_with_sign }}</span>
+                          </div>
+                          <hr class='my-1'>
+                          <div class='d-flex justify-content-between gap-3 fw-bold'>
+                            <span>Gross</span><span>{{ payroll.gross_pay|format_currency }}</span>
+                          </div>
+                          <div class='d-flex justify-content-between gap-3 fw-bold'>
+                            <span>Net Pay</span><span>{{ payroll.net_pay|format_currency }}</span>
+                          </div>
+                          {% if payroll.paye_amount %}
+                          <div class='text-center text-muted mt-1' style='font-size:10px;border-top:1px solid rgba(255,255,255,.15);padding-top:6px;'>
+                            PAYE {{ payroll.paye_amount|amount }} · NSSF {{ payroll.nssf_employee|amount }}
+                          </div>
+                          {% endif %}
                         </div>
-                    </td>
+                      ">
+                    {{ payroll.net_pay|format_currency }}
+                </span>
 
-                    <!-- Pay Period -->
-                    <td>
-                        <div class="fw-semibold text-dark">
-                            {% if payroll.pay_period_label %}
-                                {{ payroll.pay_period_label }}
-                            {% else %}
-                                {{ payroll.pay_period_start|date:"M d" }} – {{ payroll.pay_period_end|date:"M d, Y" }}
+                {% if payroll.payment_method %}
+                <div class="m-sub">{{ payroll.payment_method.name }}</div>
+                {% endif %}
+
+                {% if payroll.status == 'PARTIAL' and payroll.total_paid %}
+                {% widthratio payroll.total_paid payroll.net_pay 100 as pct_paid %}
+                <div class="pay-progress-wrap">
+                    <div class="pay-progress-track">
+                        <div class="pay-progress-fill" style="width:{{ pct_paid }}%;"></div>
+                    </div>
+                    <div class="pay-progress-labels">
+                        <span class="pay-progress-paid">
+                            <i class="fa fa-check" style="font-size:9px;"></i>
+                            {{ payroll.total_paid|format_currency }}
+                        </span>
+                        <span class="pay-progress-due">
+                            {{ payroll.balance_due|format_currency }} due
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Status -->
+            <td class="text-center">
+                {% if payroll.reversed %}
+                    <span class="s-pill sp-reversed">
+                        <i class="fa fa-undo"></i> Reversed
+                    </span>
+                {% elif payroll.status == 'DRAFT' %}
+                    <span class="s-pill sp-draft">
+                        <i class="fa fa-pencil-alt"></i> Draft
+                    </span>
+                {% elif payroll.status == 'APPROVED' %}
+                    <span class="s-pill sp-approved">
+                        <i class="fa fa-check"></i> Approved
+                    </span>
+                {% elif payroll.status == 'PARTIAL' %}
+                    <span class="s-pill sp-partial">
+                        <i class="fa fa-adjust"></i> Partially Paid
+                    </span>
+                {% elif payroll.status == 'PAID' %}
+                    <span class="s-pill sp-paid">
+                        <i class="fa fa-check-circle"></i> Paid
+                    </span>
+                {% elif payroll.status == 'CANCELLED' %}
+                    <span class="s-pill sp-cancelled">
+                        <i class="fa fa-times"></i> Cancelled
+                    </span>
+                {% else %}
+                    <span class="s-pill sp-draft">{{ payroll.get_status_display }}</span>
+                {% endif %}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                        <li>
+                            <a class="dropdown-item" href="{% url 'hr:payroll_detail' payroll.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
+                            </a>
+                        </li>
+
+                        {% if not payroll.reversed and payroll.status in 'DRAFT,APPROVED' %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'hr:payroll_edit' payroll.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if not payroll.reversed %}
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Quick Actions</h6></li>
+
+                            {% if payroll.status == 'DRAFT' %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'hr:payroll_approve_modal' payroll.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-check-circle me-2 text-primary"></i>Approve
+                                </button>
+                            </li>
                             {% endif %}
-                        </div>
-                        <small class="text-muted">{{ payroll.get_pay_frequency_display }}</small>
-                        {% if payroll.payment_date %}
-                            <div>
-                                <small class="text-info">
-                                    <i class="fa fa-check me-1"></i>Paid {{ payroll.payment_date|date:"M d, Y" }}
-                                </small>
-                            </div>
-                        {% endif %}
-                    </td>
 
-                    <!-- Gross Pay -->
-                    <td class="text-end">
-                        <div class="money-display fw-semibold text-dark {% if payroll.reversed %}text-muted text-decoration-line-through{% endif %}">
-                            {{ payroll.gross_pay|format_currency }}
-                        </div>
-                        {% if payroll.allowances.count > 0 or payroll.bonuses.count > 0 %}
-                            <small class="text-muted d-block">
-                                {% if payroll.allowances.count > 0 %}{{ payroll.allowances.count }} allowance{{ payroll.allowances.count|pluralize }}{% endif %}{% if payroll.bonuses.count > 0 %}{% if payroll.allowances.count > 0 %}, {% endif %}{{ payroll.bonuses.count }} bonus{{ payroll.bonuses.count|pluralize:"es" }}{% endif %}
-                            </small>
-                        {% endif %}
-                    </td>
+                            {% if payroll.status == 'APPROVED' or payroll.status == 'PARTIAL' %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'hr:payroll_record_payment_modal' payroll.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-money-bill me-2 text-success"></i>
+                                    {% if payroll.status == 'PARTIAL' %}Record Instalment{% else %}Record Payment{% endif %}
+                                </button>
+                            </li>
+                            {% endif %}
 
-                    <!-- Net Pay — tooltip shows full breakdown -->
-                    <td class="text-end">
-                        <div class="net-pay-amount {% if payroll.reversed %}text-muted text-decoration-line-through{% else %}{{ payroll.net_pay|balance_color_class }}{% endif %}"
-                             data-bs-toggle="tooltip"
-                             data-bs-html="true"
-                             data-bs-placement="left"
-                             title="
-                                <div class='text-start small'>
-                                    <div class='d-flex justify-content-between gap-3'><span>Basic</span><span>{{ payroll.basic_salary|amount }}</span></div>
-                                    <div class='d-flex justify-content-between gap-3'><span>Allowances</span><span class='text-success'>+{{ payroll.total_allowances|amount }}</span></div>
-                                    {% if payroll.total_bonuses %}<div class='d-flex justify-content-between gap-3'><span>Bonuses</span><span class='text-success'>+{{ payroll.total_bonuses|amount }}</span></div>{% endif %}
-                                    <div class='d-flex justify-content-between gap-3'><span>Deductions</span><span class='text-danger'>{{ payroll.total_deductions|format_with_sign }}</span></div>
-                                    <hr class='my-1'>
-                                    <div class='d-flex justify-content-between gap-3 fw-bold'><span>Net Pay</span><span>{{ payroll.net_pay|format_currency }}</span></div>
-                                </div>
-                             ">
-                            {{ payroll.net_pay|format_currency }}
-                        </div>
-                        {% if payroll.payment_method %}
-                            <small class="text-muted d-block">{{ payroll.payment_method.name }}</small>
-                        {% endif %}
-                    </td>
-
-                    <!-- Status -->
-                    <td class="text-center">
-                        {% if payroll.reversed %}
-                            <span class="status-badge reversed">Reversed</span>
-                        {% elif payroll.status == 'DRAFT' %}
-                            <span class="status-badge draft">Draft</span>
-                        {% elif payroll.status == 'APPROVED' %}
-                            <span class="status-badge approved">Approved</span>
-                        {% elif payroll.status == 'PROCESSING' %}
-                            <span class="status-badge processing">Processing</span>
-                        {% elif payroll.status == 'PAID' %}
-                            <span class="status-badge paid">Paid</span>
-                        {% elif payroll.status == 'CANCELLED' %}
-                            <span class="status-badge cancelled">Cancelled</span>
-                        {% else %}
-                            <span class="status-badge draft">{{ payroll.get_status_display }}</span>
-                        {% endif %}
-                    </td>
-
-                    <!-- Actions -->
-                    <td class="text-center">
-                        <div class="dropdown">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                <i class="fa fa-ellipsis-v"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'hr:payroll_detail' payroll.pk %}">
-                                        <i class="fa fa-eye me-2 text-success"></i>View Details
-                                    </a>
-                                </li>
-
-                                {% if not payroll.reversed and payroll.status in 'DRAFT,APPROVED' %}
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'hr:payroll_edit' payroll.pk %}">
-                                        <i class="fa fa-edit me-2 text-warning"></i>Edit
-                                    </a>
-                                </li>
-                                {% endif %}
-
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Quick Actions</h6></li>
-
-                                {% if not payroll.reversed %}
-                                    {% if payroll.status == 'DRAFT' %}
-                                    <li>
-                                        <button class="dropdown-item"
-                                                hx-get="{% url 'hr:payroll_approve_modal' payroll.pk %}"
-                                                hx-target="#modal-container"
-                                                hx-swap="innerHTML">
-                                            <i class="fa fa-check-circle me-2 text-primary"></i>Approve
-                                        </button>
-                                    </li>
-                                    {% endif %}
-
-                                    {% if payroll.status == 'APPROVED' %}
-                                    <li>
-                                        <button class="dropdown-item"
-                                                hx-get="{% url 'hr:payroll_mark_paid_modal' payroll.pk %}"
-                                                hx-target="#modal-container"
-                                                hx-swap="innerHTML">
-                                            <i class="fa fa-money-bill me-2 text-success"></i>Mark as Paid
-                                        </button>
-                                    </li>
-                                    {% endif %}
-
-                                    <li>
-                                        <a class="dropdown-item" href="#" target="_blank">
-                                            <i class="fa fa-print me-2 text-secondary"></i>Print Payslip
-                                        </a>
-                                    </li>
-
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><h6 class="dropdown-header">Components</h6></li>
-
-                                    <li>
-                                        <button class="dropdown-item"
-                                                hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
-                                            <i class="fa fa-plus-circle me-2 text-info"></i>Add Allowance
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button class="dropdown-item"
-                                                hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
-                                            <i class="fa fa-minus-circle me-2 text-warning"></i>Add Deduction
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button class="dropdown-item"
-                                                hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
-                                            <i class="fa fa-gift me-2 text-success"></i>Add Bonus
-                                        </button>
-                                    </li>
-                                {% endif %}
-
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header text-danger">Danger Zone</h6></li>
-
-                                {% if not payroll.reversed and payroll.status != 'CANCELLED' %}
-                                <li>
-                                    <button class="dropdown-item text-danger"
-                                            hx-get="{% url 'hr:payroll_reverse_modal' payroll.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-undo me-2"></i>Reverse
-                                    </button>
-                                </li>
-                                {% endif %}
-
-                                {% if payroll.status == 'DRAFT' and not payroll.reversed %}
-                                <li>
-                                    <button class="dropdown-item text-danger"
-                                            hx-get="{% url 'hr:payroll_delete_modal' payroll.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-trash me-2"></i>Delete
-                                    </button>
-                                </li>
-                                {% endif %}
-
-                                {% if payroll.reversed %}
-                                <li>
-                                    <button class="dropdown-item text-info"
-                                            hx-get="{% url 'hr:payroll_reversal_info_modal' payroll.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-info-circle me-2"></i>Reversal Info
-                                    </button>
-                                </li>
-                                {% endif %}
-
-                            </ul>
-                        </div>
-                    </td>
-
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="7" class="text-center py-5">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-icon"></i>
-                            <h5 class="text-muted mt-3 mb-2">No Payroll Records Found</h5>
-                            <p class="text-muted mb-4 small">
-                                {% if request.GET %}
-                                    No records match your current filters.
-                                {% else %}
-                                    No payroll records have been created yet.
-                                {% endif %}
-                            </p>
-                            <div class="d-flex justify-content-center gap-2">
-                                <a href="{% url 'hr:payroll_create' %}" class="btn btn-primary btn-sm">
-                                    <i class="fa fa-plus me-1"></i>Create Payroll
+                            <li>
+                                <a class="dropdown-item" href="#" target="_blank">
+                                    <i class="fa fa-print me-2 text-secondary"></i>Print Payslip
                                 </a>
-                                {% if request.GET %}
-                                    <button onclick="resetFilters()" class="btn btn-outline-secondary btn-sm">
-                                        <i class="fa fa-times me-1"></i>Clear Filters
-                                    </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                            </li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Components</h6></li>
+
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-plus-circle me-2 text-info"></i>Add Allowance
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-minus-circle me-2 text-warning"></i>Add Deduction
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="#" hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-gift me-2 text-success"></i>Add Bonus
+                                </button>
+                            </li>
+
+                        {% endif %}
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header text-danger">Danger Zone</h6></li>
+
+                        {% if not payroll.reversed and payroll.status != 'CANCELLED' %}
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'hr:payroll_reverse_modal' payroll.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-undo me-2"></i>Reverse
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if payroll.status == 'DRAFT' and not payroll.reversed %}
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'hr:payroll_delete_modal' payroll.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if payroll.reversed %}
+                        <li>
+                            <button class="dropdown-item text-info"
+                                    hx-get="{% url 'hr:payroll_reversal_info_modal' payroll.pk %}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="fa fa-info-circle me-2"></i>Reversal Info
+                            </button>
+                        </li>
+                        {% endif %}
+
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+
+    {% else %}
+        <tr>
+            <td colspan="7">
+                <div class="tbl-empty">
+                    <i class="pe-7s-cash"></i>
+                    <p>
+                        {% if request.GET %}
+                            No payrolls match your current filters.
+                        {% else %}
+                            No payroll records have been created yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'hr:payroll_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:600;border-radius:6px;
+                                  background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i> Create Payroll
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'hr:payroll_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                                  font-size:13px;font-weight:500;border-radius:6px;background:#fff;
+                                  color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i> Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+
+    </tbody>
+</table>
 </div>
 
-<!-- Pagination -->
+<!-- Pagination bar -->
 {% if payrolls_page.paginator.num_pages > 1 %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 px-3 py-3 border-top">
-    <small class="text-muted">
+<div class="pag-bar">
+    <span>
         Showing <strong>{{ payrolls_page.start_index }}</strong>–<strong>{{ payrolls_page.end_index }}</strong>
-        of <strong>{{ payrolls_page.paginator.count|intcomma }}</strong> records
-    </small>
-    <nav aria-label="Payroll pagination">
+        of <strong>{{ payrolls_page.paginator.count|intcomma }}</strong>
+        payroll{{ payrolls_page.paginator.count|pluralize }}
+    </span>
+    <nav>
         <ul class="pagination pagination-sm mb-0">
+
             {% if payrolls_page.has_previous %}
-                <li class="page-item">
-                    <button class="page-link"
-                            hx-get="{% url 'hr:payroll_list' %}"
-                            hx-target="#payroll-list"
-                            hx-include="#searchForm"
-                            hx-vals='{"page": "{{ payrolls_page.previous_page_number }}"}'>«</button>
-                </li>
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'hr:payroll_list' %}"
+                        hx-target="#payroll-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ payrolls_page.previous_page_number }}"}'>«</button>
+            </li>
             {% else %}
-                <li class="page-item disabled"><span class="page-link">«</span></li>
+            <li class="page-item disabled"><span class="page-link">«</span></li>
             {% endif %}
 
-            {% for page_num in payrolls_page.paginator.page_range %}
-                {% if page_num == payrolls_page.number %}
-                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
-                {% elif page_num > payrolls_page.number|add:"-3" and page_num < payrolls_page.number|add:"3" %}
+            {% for p in payrolls_page.paginator.page_range %}
+                {% if p == payrolls_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > payrolls_page.number|add:"-3" and p < payrolls_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'hr:payroll_list' %}"
                                 hx-target="#payroll-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</button>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
             {% endfor %}
 
             {% if payrolls_page.has_next %}
-                <li class="page-item">
-                    <button class="page-link"
-                            hx-get="{% url 'hr:payroll_list' %}"
-                            hx-target="#payroll-list"
-                            hx-include="#searchForm"
-                            hx-vals='{"page": "{{ payrolls_page.next_page_number }}"}'>»</button>
-                </li>
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'hr:payroll_list' %}"
+                        hx-target="#payroll-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ payrolls_page.next_page_number }}"}'>»</button>
+            </li>
             {% else %}
-                <li class="page-item disabled"><span class="page-link">»</span></li>
+            <li class="page-item disabled"><span class="page-link">»</span></li>
             {% endif %}
+
         </ul>
     </nav>
 </div>
 {% endif %}
 
-<style>
-/* ── Table ── */
-.table thead th {
-    background: #f8f9fa;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #6c757d;
-    border-bottom: 2px solid #e9ecef;
-    padding: 12px 14px;
-    white-space: nowrap;
-}
-
-.table tbody td {
-    padding: 12px 14px;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.table tbody tr:hover td {
-    background: #fafbfc;
-}
-
-.payroll-reversed td {
-    opacity: 0.55;
-}
-
-/* ── Staff link ── */
-.staff-link:hover {
-    color: #4361ee !important;
-}
-
-/* ── Department pill ── */
-.dept-pill {
-    display: inline-block;
-    font-size: 0.68rem;
-    padding: 1px 7px;
-    border-radius: 10px;
-    background: #e9ecef;
-    color: #495057;
-    font-weight: 500;
-}
-
-/* ── Net pay ── */
-.net-pay-amount,
-.money-display {
-    font-family: 'Courier New', monospace;
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: default;
-}
-
-/* ── Status badges ── */
-.status-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    border: 1px solid transparent;
-    white-space: nowrap;
-}
-.status-badge.draft      { background: #e9ecef; color: #495057; border-color: #ced4da; }
-.status-badge.approved   { background: #d1ecf1; color: #0c5460; border-color: #bee5eb; }
-.status-badge.processing { background: #fff3cd; color: #856404; border-color: #ffeaa7; }
-.status-badge.paid       { background: #d4edda; color: #155724; border-color: #c3e6cb; }
-.status-badge.cancelled  { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-.status-badge.reversed   { background: #343a40; color: #fff;    border-color: #23272b; }
-
-/* ── Empty state ── */
-.empty-state { padding: 40px 20px; }
-.empty-icon  { font-size: 3.5rem; color: #ced4da; }
-
-/* ── Dropdown ── */
-.dropdown-menu {
-    font-size: 0.85rem;
-    min-width: 190px;
-    border: 1px solid #e9ecef;
-}
-.dropdown-item { padding: 6px 14px; }
-.dropdown-header { font-size: 0.7rem; padding: 6px 14px 2px; }
-
-/* ── Pagination ── */
-.page-link {
-    color: #4361ee;
-    border-color: #e9ecef;
-    font-size: 0.82rem;
-    padding: 5px 10px;
-}
-.page-link:hover          { background: #4361ee; color: #fff; border-color: #4361ee; }
-.page-item.active .page-link { background: #4361ee; border-color: #4361ee; }
-</style>
-
-<!-- Tooltip re-init after HTMX swap -->
-<script>
-(function () {
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
-        var existing = bootstrap.Tooltip.getInstance(el);
-        if (existing) existing.dispose();
-        new bootstrap.Tooltip(el, { html: true });
-    });
-})();
-</script>
-
 <!-- OOB stats update -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary"><i class="pe-7s-users"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Total Payrolls</div>
-                <h3>{{ stats.total|default:0|intcomma }}</h3>
-                <div class="stats-subtitle">Active: {{ stats.active|default:0|intcomma }} | Reversed: {{ stats.reversed|default:0|intcomma }}</div>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Total Payrolls</div>
+                <div class="stat-value">{{ stats.total|default:0|intcomma }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success"><i class="pe-7s-check"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Paid Payrolls</div>
-                <h3>{{ stats.paid|default:0|intcomma }}</h3>
-                <div class="stats-subtitle">Total: {{ stats.total_net_pay|money_short }}</div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Paid</div>
+                <div class="stat-value">{{ stats.paid|default:0|intcomma }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning"><i class="pe-7s-note2"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Pending</div>
-                <h3>{{ stats.draft|default:0|intcomma }}</h3>
-                <div class="stats-subtitle">Approved: {{ stats.approved|default:0|intcomma }}</div>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-note2"></i></div>
+            <div>
+                <div class="stat-label">Pending</div>
+                <div class="stat-value">{{ stats.draft|default:0|intcomma }}</div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info"><i class="pe-7s-wallet"></i></div>
-            <div class="stats-content">
-                <div class="stats-label">Avg Net Pay</div>
-                <h3>{{ stats.avg_net_pay|money_short }}</h3>
-                <div class="stats-subtitle">Prorated: {{ stats.prorated_count|default:0|intcomma }}</div>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-wallet"></i></div>
+            <div>
+                <div class="stat-label">Avg Net Pay</div>
+                <div class="stat-value">{{ stats.avg_net_pay|money_short }}</div>
             </div>
         </div>
     </div>
 </div>
 {% endif %}
+
+<!-- Re-init Bootstrap tooltips + dropdowns after every HTMX swap -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el, { html: true });
+    });
+    /* strategy:'fixed' prevents dropdown clipping inside overflow:hidden tables */
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+})();
+</script>

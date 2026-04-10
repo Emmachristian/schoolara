@@ -1,514 +1,546 @@
-{% load static %}
-{% load widget_tweaks %}
 {% load humanize %}
 
-<!-- Sessions Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
-        <thead>
-            <tr>
-                <th width="50">#</th>
-                <th width="200">Session Details</th>
-                <th width="150">Date Range</th>
-                <th width="100" class="text-center">Duration</th>
-                <th width="120">Type</th>
-                <th width="120">Status</th>
-                <th width="120" class="text-center">Progress</th>
-                <th width="120">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="sessionTableBody">
-            {% if sessions_page %}
-                {% for session in sessions_page %}
-                <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:sessions_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Session Details -->
-                    <td>
-                        <div>
-                            <a href="{% url 'academics:session_detail' session.pk %}" class="text-primary fw-bold">
-                                {{ session.name }}
+<style>
+/* ============================================================================
+   TABLE
+   ============================================================================ */
+.ses-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.ses-tbl thead th {
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.ses-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #0f172a;
+}
+.ses-tbl tbody tr:last-child td { border-bottom: none; }
+.ses-tbl tbody tr:hover td { background: #eff6ff !important; }
+.ses-tbl tbody tr.row-muted td { color: #94a3b8; }
+.ses-tbl tbody tr.row-muted:hover td { background: #f8fafc !important; }
+
+/* ── Session name link ── */
+.ses-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+}
+.ses-name:hover { color: #1d4ed8; }
+
+/* ── Inline chips inside the name cell ── */
+.ses-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    margin-top: 3px;
+    white-space: nowrap;
+}
+.chip-current  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.chip-special  { background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
+.chip-type     { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.chip-term     { background: #fafaf9; color: #57534e; border: 1px solid #e7e5e4; }
+.chip-promotes { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.chip-deadline { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+/* ── Status pills ── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.sp-current  { background: #dcfce7; color: #15803d; animation: pulse-green 2s infinite; }
+.sp-active   { background: #dbeafe; color: #1e40af; }
+.sp-upcoming { background: #fef9c3; color: #854d0e; }
+.sp-complete { background: #f1f5f9; color: #475569; }
+.sp-closed   { background: #fee2e2; color: #b91c1c; }
+.sp-inactive { background: #f1f5f9; color: #94a3b8; }
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0   rgba(22,163,74,.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(22,163,74,0);  }
+    100% { box-shadow: 0 0 0 0   rgba(22,163,74,0);  }
+}
+
+/* ── Progress ── */
+.progress-pct { font-weight: 700; font-size: 13px; color: #1d4ed8; }
+.days-left    { font-size: 11px;  color: #64748b; }
+
+/* ── Empty state ── */
+.tbl-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* ── Pagination bar ── */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #64748b;
+}
+
+/* ── Dropdown ── */
+.dropdown-menu {
+    font-size: 0.85rem;
+    min-width: 200px;
+    border: 1px solid #e2e8f0;
+}
+.dropdown-item  { padding: 6px 14px; }
+.dropdown-header { font-size: 0.7rem; padding: 6px 14px 2px; }
+
+/* ── OOB stat cards ── */
+.stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #64748b; margin-bottom: 3px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: #0f172a; line-height: 1; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="ses-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Session</th>
+            <th>Dates</th>
+            <th class="text-center" style="width:100px;">Duration</th>
+            <th class="text-center" style="width:120px;">Status</th>
+            <th class="text-center" style="width:130px;">Progress</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% if sessions_page %}
+        {% for session in sessions_page %}
+        <tr class="{% if not session.is_active and not session.is_academically_closed %}row-muted{% endif %}">
+
+            <!-- # — fixed calculation using forloop.counter0 -->
+            <td style="color:#94a3b8; font-size:12px;">
+                {{ sessions_page.start_index|add:forloop.counter0 }}
+            </td>
+
+            <!-- Session name + contextual chips — all in one cell -->
+            <td>
+                <a href="{% url 'academics:session_detail' session.pk %}" class="ses-name">
+                    {{ session.name }}
+                </a>
+
+                <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                    <!-- Term number chip -->
+                    <span class="ses-chip chip-term">
+                        <i class="fa fa-hashtag" style="font-size:9px;"></i>#{{ session.term_number }}
+                    </span>
+
+                    <!-- Period type chip -->
+                    {% if session.period_type %}
+                    <span class="ses-chip chip-type">
+                        <i class="fa fa-tag" style="font-size:9px;"></i>{{ session.get_period_type_display }}
+                    </span>
+                    {% endif %}
+
+                    <!-- Current flag -->
+                    {% if session.is_current %}
+                    <span class="ses-chip chip-current">
+                        <i class="fa fa-star" style="font-size:8px;"></i> Current
+                    </span>
+                    {% endif %}
+
+                    <!-- Special session flag -->
+                    {% if session.is_special_session %}
+                    <span class="ses-chip chip-special">
+                        <i class="fa fa-bolt" style="font-size:8px;"></i> Special
+                    </span>
+                    {% endif %}
+
+                    <!-- Promotion flag -->
+                    {% if session.allows_promotion %}
+                    <span class="ses-chip chip-promotes">
+                        <i class="fa fa-arrow-up" style="font-size:8px;"></i> Promotes
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Enrollment deadline -->
+                {% if session.enrollment_deadline %}
+                <div class="mt-1">
+                    <span class="ses-chip chip-deadline">
+                        <i class="fa fa-calendar-check" style="font-size:9px;"></i>
+                        Enrol. deadline: {{ session.enrollment_deadline|date:"M d, Y" }}
+                    </span>
+                </div>
+                {% endif %}
+
+                <!-- Description -->
+                {% if session.description %}
+                <div class="mt-1" style="font-size:11px;color:#64748b;font-style:italic;">
+                    <i class="fa fa-info-circle me-1" style="font-size:9px;"></i>
+                    {{ session.description|truncatewords:12 }}
+                </div>
+                {% endif %}
+            </td>
+
+            <!-- Dates -->
+            <td>
+                <div style="font-size:12.5px;">
+                    <i class="fa fa-play-circle text-success me-1" style="font-size:10px;"></i>
+                    {{ session.start_date|date:"M d, Y" }}
+                </div>
+                <div style="font-size:12.5px; margin-top:4px;">
+                    <i class="fa fa-stop-circle text-danger me-1" style="font-size:10px;"></i>
+                    {{ session.end_date|date:"M d, Y" }}
+                </div>
+            </td>
+
+            <!-- Duration -->
+            <td class="text-center">
+                <div style="font-weight:700; font-size:15px; color:#1d4ed8;">
+                    {{ session.total_days }}
+                </div>
+                <div style="font-size:11px; color:#64748b;">days</div>
+                <div style="font-size:11px; color:#94a3b8;">({{ session.get_duration_weeks }}w)</div>
+            </td>
+
+            <!-- Status — colour-coded pill, not nested if/elif chains -->
+            <td class="text-center">
+                {% if session.is_academically_closed %}
+                    <span class="status-pill sp-closed">
+                        <i class="fa fa-lock"></i> Closed
+                    </span>
+                    {% if session.academic_closure_date %}
+                    <div style="font-size:10.5px; color:#94a3b8; margin-top:4px;">
+                        {{ session.academic_closure_date|date:"M d, Y" }}
+                    </div>
+                    {% endif %}
+                {% elif session.is_current %}
+                    <span class="status-pill sp-current">
+                        <i class="fa fa-star"></i> Current
+                    </span>
+                {% elif session.is_active %}
+                    {% if session.is_upcoming %}
+                        <span class="status-pill sp-upcoming">
+                            <i class="fa fa-clock"></i> Upcoming
+                        </span>
+                    {% elif session.is_past %}
+                        <span class="status-pill sp-complete">
+                            <i class="fa fa-check-circle"></i> Completed
+                        </span>
+                    {% else %}
+                        <span class="status-pill sp-active">
+                            <i class="fa fa-play"></i> Active
+                        </span>
+                    {% endif %}
+                {% else %}
+                    <span class="status-pill sp-inactive">
+                        <i class="fa fa-pause"></i> Inactive
+                    </span>
+                {% endif %}
+            </td>
+
+            <!-- Progress — consistent treatment across all states -->
+            <td class="text-center">
+                {% if session.is_academically_closed %}
+                    <div style="color:#b91c1c; font-size:10.5px; font-weight:600;">
+                        <i class="fa fa-lock" style="font-size:1.2rem; display:block; margin-bottom:3px;"></i>
+                        Locked
+                    </div>
+                {% elif session.is_upcoming %}
+                    <div style="color:#854d0e; font-size:10.5px; font-weight:600;">
+                        <i class="fa fa-clock" style="font-size:1.2rem; display:block; margin-bottom:3px;"></i>
+                        Starts in {{ session.days_remaining }}d
+                    </div>
+                {% elif session.is_past or not session.is_active %}
+                    <div style="color:#475569; font-size:10.5px; font-weight:600;">
+                        <i class="fa fa-check-circle" style="font-size:1.2rem; display:block; margin-bottom:3px;"></i>
+                        100%
+                    </div>
+                {% else %}
+                    <div class="progress-pct mb-1">{{ session.progress_percentage }}%</div>
+                    <div class="progress mx-auto" style="height:5px; width:90px; border-radius:3px;">
+                        {% if session.progress_percentage >= 80 %}
+                            <div class="progress-bar bg-warning" style="width:{{ session.progress_percentage }}%;"></div>
+                        {% else %}
+                            <div class="progress-bar bg-primary"  style="width:{{ session.progress_percentage }}%;"></div>
+                        {% endif %}
+                    </div>
+                    <div class="days-left mt-1">{{ session.days_remaining }}d left</div>
+                {% endif %}
+            </td>
+
+            <!-- Actions dropdown — popperConfig fix applied in JS below -->
+            <td class="text-center">
+                <div class="dropdown">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:session_detail' session.pk %}">
+                                <i class="fa fa-eye me-2 text-primary"></i>View Details
                             </a>
-                            {% if session.is_current %}
-                                <span class="badge bg-success ms-2">
-                                    <i class="fa fa-star me-1"></i>CURRENT
-                                </span>
-                            {% endif %}
-                            {% if session.is_special_session %}
-                                <span class="badge bg-purple ms-1">
-                                    <i class="fa fa-bolt me-1"></i>Special
-                                </span>
-                            {% endif %}
-                            
-                            <div class="mt-1">
-                                <small class="text-muted">
-                                    <strong>Year:</strong> {{ session.year_name }}
-                                </small>
-                                <small class="text-muted ms-2">
-                                    <strong>Term:</strong> #{{ session.term_number }}
-                                </small>
-                            </div>
-                            
-                            {% if session.description %}
-                                <div class="mt-1">
-                                    <small class="text-muted">
-                                        <i class="fa fa-info-circle me-1"></i>{{ session.description|truncatewords:15 }}
-                                    </small>
-                                </div>
-                            {% endif %}
-                        </div>
-                    </td>
-                    
-                    <!-- Date Range -->
-                    <td>
-                        <div class="text-dark">
-                            <strong>Start:</strong> {{ session.start_date|date:"M d, Y" }}
-                        </div>
-                        <div class="text-dark mt-1">
-                            <strong>End:</strong> {{ session.end_date|date:"M d, Y" }}
-                        </div>
-                        {% if session.enrollment_deadline %}
-                            <div class="mt-2">
-                                <span class="badge bg-info">
-                                    <i class="fa fa-calendar me-1"></i>Deadline: {{ session.enrollment_deadline|date:"M d" }}
-                                </span>
-                            </div>
+                        </li>
+                        {% if not session.is_academically_closed %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'academics:session_edit' session.pk %}">
+                                <i class="fa fa-edit me-2 text-warning"></i>Edit
+                            </a>
+                        </li>
                         {% endif %}
-                    </td>
-                    
-                    <!-- Duration -->
-                    <td class="text-center">
-                        <div>
-                            <strong class="text-primary" style="font-size: 1.2rem;">{{ session.total_days }}</strong>
-                        </div>
-                        <small class="text-muted">days</small>
-                        <div class="mt-1">
-                            <small class="text-muted">({{ session.get_duration_weeks }} weeks)</small>
-                        </div>
-                    </td>
-                    
-                    <!-- Type -->
-                    <td>
-                        {% if session.period_type == 'term' %}
-                            <span class="badge bg-primary">
-                                <i class="fa fa-calendar me-1"></i>Term
-                            </span>
-                        {% elif session.period_type == 'semester' %}
-                            <span class="badge bg-success">
-                                <i class="fa fa-calendar-check me-1"></i>Semester
-                            </span>
-                        {% elif session.period_type == 'quarter' %}
-                            <span class="badge bg-info">
-                                <i class="fa fa-calendar-alt me-1"></i>Quarter
-                            </span>
-                        {% elif session.period_type == 'holiday_program' %}
-                            <span class="badge bg-warning text-dark">
-                                <i class="fa fa-umbrella-beach me-1"></i>Holiday
-                            </span>
-                        {% elif session.period_type == 'summer_school' %}
-                            <span class="badge" style="background-color: #fd7e14; color: white;">
-                                <i class="fa fa-sun me-1"></i>Summer
-                            </span>
-                        {% elif session.period_type == 'remedial' %}
-                            <span class="badge bg-danger">
-                                <i class="fa fa-book-reader me-1"></i>Remedial
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary">{{ session.get_period_type_display }}</span>
-                        {% endif %}
-                        
-                        {% if session.allows_promotion %}
-                            <div class="mt-1">
-                                <span class="badge bg-success">
-                                    <i class="fa fa-arrow-up me-1"></i>Promotes
-                                </span>
-                            </div>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Status -->
-                    <td class="text-center">
-                        {% if session.is_academically_closed %}
-                            <span class="badge bg-danger status-badge">
-                                <i class="fa fa-lock me-1"></i>Closed
-                            </span>
-                            {% if session.academic_closure_date %}
-                                <div class="mt-1">
-                                    <small class="text-muted">{{ session.academic_closure_date|date:"M d, Y" }}</small>
-                                </div>
-                            {% endif %}
-                        {% elif session.is_current %}
-                            <span class="badge bg-success status-badge animate-pulse">
-                                <i class="fa fa-star me-1"></i>Current
-                            </span>
-                        {% elif session.is_active %}
-                            {% if session.is_upcoming %}
-                                <span class="badge bg-warning status-badge text-dark">
-                                    <i class="fa fa-clock me-1"></i>Upcoming
-                                </span>
-                            {% elif session.is_past %}
-                                <span class="badge bg-secondary status-badge">
-                                    <i class="fa fa-check me-1"></i>Completed
-                                </span>
-                            {% else %}
-                                <span class="badge bg-primary status-badge">
-                                    <i class="fa fa-play me-1"></i>Active
-                                </span>
-                            {% endif %}
-                        {% else %}
-                            <span class="badge bg-secondary status-badge">
-                                <i class="fa fa-pause me-1"></i>Inactive
-                            </span>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Progress -->
-                    <td class="text-center">
-                        {% if not session.is_academically_closed and session.is_active and not session.is_upcoming %}
-                            <div class="mb-2">
-                                <strong class="text-primary">{{ session.progress_percentage }}%</strong>
-                            </div>
-                            <div class="progress" style="height: 8px; max-width: 100px; margin: 0 auto;">
-                                <div class="progress-bar bg-primary" 
-                                     role="progressbar" 
-                                     style="width: {{ session.progress_percentage }}%"
-                                     aria-valuenow="{{ session.progress_percentage }}" 
-                                     aria-valuemin="0" 
-                                     aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="mt-2">
-                                <small class="text-muted">{{ session.days_remaining }} days left</small>
-                            </div>
-                        {% elif session.is_academically_closed %}
-                            <div class="text-danger">
-                                <i class="fa fa-lock" style="font-size: 1.5rem;"></i>
-                                <div class="mt-1">
-                                    <small>Locked</small>
-                                </div>
-                            </div>
-                        {% elif session.is_upcoming %}
-                            <div class="text-warning">
-                                <i class="fa fa-clock" style="font-size: 1.5rem;"></i>
-                                <div class="mt-1">
-                                    <small>Not started</small>
-                                </div>
-                            </div>
-                        {% else %}
-                            <div class="text-secondary">
-                                <i class="fa fa-check" style="font-size: 1.5rem;"></i>
-                                <div class="mt-1">
-                                    <small>Completed</small>
-                                </div>
-                            </div>
-                        {% endif %}
-                    </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i> Actions
+                        <li>
+                            <a class="dropdown-item"
+                               href="{% url 'academics:session_print_detail' session.pk %}"
+                               target="_blank">
+                                <i class="fa fa-print me-2"></i>Print Detail
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Quick Actions</h6></li>
+
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:session_quick_view_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-info-circle me-2"></i>Quick View
                             </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'academics:session_detail' session.pk %}">
-                                    <i class="fa fa-eye me-2"></i> View Details
-                                </a>
-                                
-                                <!-- Edit -->
-                                {% if not session.is_academically_closed %}
-                                    <a class="dropdown-item text-warning" href="{% url 'academics:session_edit' session.pk %}">
-                                        <i class="fa fa-edit me-2"></i> Edit
-                                    </a>
-                                {% endif %}
-                                
-                                <!-- Print -->
-                                <a class="dropdown-item" href="{% url 'academics:session_print_detail' session.pk %}" target="_blank">
-                                    <i class="fa fa-print me-2"></i> Print Details
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Quick Actions -->
-                                <h6 class="dropdown-header">Quick Actions</h6>
-                                
-                                <!-- Quick View -->
-                                <button type="button" class="dropdown-item"
-                                        hx-get="{% url 'academics:session_quick_view_modal' session.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i> Quick View
-                                </button>
-                                
-                                <!-- Set as Current -->
-                                {% if session.is_active and not session.is_current and not session.is_academically_closed %}
-                                    <button type="button" class="dropdown-item"
-                                            hx-get="{% url 'academics:session_set_current_modal' session.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-star me-2"></i> Set as Current
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Toggle Active -->
-                                {% if not session.is_academically_closed %}
-                                    <button type="button" class="dropdown-item"
-                                            hx-get="{% url 'academics:session_toggle_active_modal' session.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-{% if session.is_active %}pause{% else %}play{% endif %} me-2"></i>
-                                        {% if session.is_active %}Deactivate{% else %}Activate{% endif %}
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Close Session -->
-                                {% if session.is_active and not session.is_academically_closed %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'academics:session_close_modal' session.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-lock me-2"></i> Close Session
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- Reopen Session -->
-                                {% if session.is_academically_closed %}
-                                    <button type="button" class="dropdown-item text-warning"
-                                            hx-get="{% url 'academics:session_reopen_modal' session.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-unlock me-2"></i> Reopen Session
-                                    </button>
-                                {% endif %}
-                                
-                                <!-- View Enrollments -->
-                                <a class="dropdown-item" href="{% url 'academics:enrollment_list' %}?session={{ session.id }}">
-                                    <i class="fa fa-users me-2"></i> View Enrollments
-                                </a>
-                                
-                                <!-- View Classes -->
-                                <a class="dropdown-item" href="{% url 'academics:class_list' %}?session={{ session.id }}">
-                                    <i class="fa fa-chalkboard me-2"></i> View Classes
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete -->
-                                {% if not session.is_academically_closed %}
-                                    <button type="button" class="dropdown-item text-danger"
-                                            hx-get="{% url 'academics:session_delete_modal' session.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-trash me-2"></i> Delete
-                                    </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="8" class="text-center text-muted">
-                        <div class="empty-state py-5">
-                            <i class="pe-7s-date empty-state-icon"></i>
-                            <h5 class="mt-3">No Academic Sessions Found</h5>
-                            <p class="text-muted">Try adjusting your filters or create a new session.</p>
-                            <a href="{% url 'academics:session_create' %}" class="btn btn-primary mt-3">
-                                <i class="fa fa-plus me-1"></i> Create Session
-                            </a>
-                        </div>
-                    </td>
-                </tr>
-            {% endif %}
-        </tbody>
-    </table>
+                        </li>
+
+                        {% if session.is_active and not session.is_current and not session.is_academically_closed %}
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:session_set_current_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-star me-2"></i>Set as Current
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if not session.is_academically_closed %}
+                        <li>
+                            <button class="dropdown-item"
+                                    hx-get="{% url 'academics:session_toggle_active_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-{% if session.is_active %}pause{% else %}play{% endif %} me-2"></i>
+                                {% if session.is_active %}Deactivate{% else %}Activate{% endif %}
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if session.is_active and not session.is_academically_closed %}
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'academics:session_close_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-lock me-2"></i>Close Session
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if session.is_academically_closed %}
+                        <li>
+                            <button class="dropdown-item text-warning"
+                                    hx-get="{% url 'academics:session_reopen_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-unlock me-2"></i>Reopen Session
+                            </button>
+                        </li>
+                        {% endif %}
+
+                        {% if not session.is_academically_closed %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger"
+                                    hx-get="{% url 'academics:session_delete_modal' session.pk %}"
+                                    hx-target="#modal-container" hx-swap="innerHTML">
+                                <i class="fa fa-trash me-2"></i>Delete
+                            </button>
+                        </li>
+                        {% endif %}
+
+                    </ul>
+                </div>
+            </td>
+
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr>
+            <td colspan="7">
+                <div class="tbl-empty">
+                    <i class="pe-7s-date"></i>
+                    <p>
+                        {% if request.GET %}
+                            No sessions match your current filters.
+                        {% else %}
+                            No academic sessions have been created yet.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'academics:session_create' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                            <i class="fa fa-plus" style="font-size:11px;"></i>Create Session
+                        </a>
+                        {% if request.GET %}
+                        <a href="{% url 'academics:session_list' %}"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                            <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+    </tbody>
+</table>
 </div>
 
 <!-- Pagination -->
 {% if sessions_page.paginator.num_pages > 1 %}
-<div id="paginationContainer" class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div id="resultsCount" class="text-muted">
-            Showing {{ sessions_page.start_index }} - {{ sessions_page.end_index }} of {{ sessions_page.paginator.count }} sessions
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Session pagination">
-            <ul class="pagination mb-0" id="paginationNav">
-                <!-- Previous Button -->
-                {% if sessions_page.has_previous %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ sessions_page.start_index }}</strong>–<strong>{{ sessions_page.end_index }}</strong>
+        of <strong>{{ sessions_page.paginator.count|intcomma }}</strong> sessions
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if sessions_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:session_list' %}"
+                        hx-target="#session-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ sessions_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in sessions_page.paginator.page_range %}
+                {% if p == sessions_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > sessions_page.number|add:"-3" and p < sessions_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'academics:session_list' %}"
                                 hx-target="#session-list"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ sessions_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">«</span>
-                        </span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in sessions_page.paginator.page_range %}
-                    {% if page_num == sessions_page.number %}
-                        <li class="page-item active" aria-current="page">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > sessions_page.number|add:"-3" and page_num < sessions_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'academics:session_list' %}"
-                                    hx-target="#session-list"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if sessions_page.has_next %}
-                    <li class="page-item">
-                        <button class="page-link"
-                                hx-get="{% url 'academics:session_list' %}"
-                                hx-target="#session-list"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ sessions_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link" aria-disabled="true">
-                            <span aria-hidden="true">»</span>
-                        </span>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if sessions_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'academics:session_list' %}"
+                        hx-target="#session-list"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ sessions_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<style>
-.table-responsive {
-    overflow-x: auto;
-    overflow-y: visible !important;
-}
-
-.table tbody td {
-    position: relative;
-    overflow: visible;
-}
-
-.dropdown-menu {
-    z-index: 1050 !important;
-}
-
-.empty-state {
-    padding: 40px 20px;
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    opacity: 0.3;
-}
-
-.animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: .7;
-    }
-}
-
-.bg-purple {
-    background-color: #6f42c1 !important;
-    color: white;
-}
-
-@media (max-width: 768px) {
-    .table-responsive {
-        overflow-x: scroll;
-        overflow-y: visible;
-    }
-    
-    .dropdown-menu {
-        min-width: 200px;
-        right: 0 !important;
-        left: auto !important;
-    }
-}
-</style>
-
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- OOB stat card refresh — only sent on HTMX requests -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-date"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Sessions</div>
-                <h3>{{ stats.total|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-date"></i></div>
+            <div><div class="stat-label">Total Sessions</div><div class="stat-value">{{ stats.total|default:0 }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active</div>
-                <h3>{{ stats.active|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div><div class="stat-label">Active</div><div class="stat-value">{{ stats.active|default:0 }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-star"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Current</div>
-                <h3>{{ stats.current|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-star"></i></div>
+            <div><div class="stat-label">Current</div><div class="stat-value">{{ stats.current|default:0 }}</div></div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-danger">
-                <i class="pe-7s-lock"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Closed</div>
-                <h3>{{ stats.closed|default:0 }}</h3>
-            </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-lock"></i></div>
+            <div><div class="stat-label">Closed</div><div class="stat-value">{{ stats.closed|default:0 }}</div></div>
         </div>
     </div>
 </div>
 {% endif %}
+
+<!-- Re-init tooltips + dropdowns with fixed positioning after every HTMX swap -->
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+    // ✅ Fixed positioning prevents dropdown clipping inside overflow:hidden table wrappers
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) {
+                return Object.assign({}, d, { strategy: 'fixed' });
+            }
+        });
+    });
+})();
+</script>
+
+enrollment_list

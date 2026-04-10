@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Outstanding Fees Report — {{ school_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a;--ink-2:#334155;--ink-muted:#64748b;--ink-faint:#94a3b8;
+    --surface:#ffffff;--surface-2:#f8fafc;--surface-3:#f1f5f9;--border:#e2e8f0;
+    --accent:#1d4ed8;--accent-lt:#eff6ff;--accent-bd:#bfdbfe;
+    --green:#15803d;--green-lt:#f0fdf4;--amber:#b45309;--amber-lt:#fffbeb;
+    --red:#dc2626;--red-lt:#fef2f2;--purple:#7c3aed;--purple-lt:#f5f3ff;
+    --teal:#0f766e;--teal-lt:#f0fdfa;--radius:10px;
+}
+.filter-bar { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-bottom:22px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.filter-bar label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-muted);display:block;margin-bottom:5px; }
+.filter-bar select { border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;color:var(--ink);background:var(--surface-2);min-width:200px; }
+.filter-bar select:focus { outline:none;border-color:var(--accent); }
+.kpi-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 18px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);transition:box-shadow .2s,transform .15s;height:100%; }
+.kpi-card:hover { box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
+.kpi-badge { position:absolute;top:18px;right:18px;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff; }
+.kpi-red    .kpi-badge { background:var(--red);   box-shadow:0 4px 12px rgba(220,38,38,.25); }
+.kpi-amber  .kpi-badge { background:var(--amber); box-shadow:0 4px 12px rgba(180,83,9,.25); }
+.kpi-accent .kpi-badge { background:var(--accent);box-shadow:0 4px 12px rgba(29,78,216,.25); }
+.kpi-teal   .kpi-badge { background:var(--teal);  box-shadow:0 4px 12px rgba(15,118,110,.25); }
+.kpi-label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);margin-bottom:10px;padding-right:54px; }
+.kpi-value { font-size:26px;font-weight:800;color:var(--ink);line-height:1.1;margin-bottom:6px;font-family:'Poppins',sans-serif;font-variant-numeric:tabular-nums; }
+.kpi-sub   { font-size:11.5px;color:var(--ink-faint); }
+.dash-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.dash-head { padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between; }
+.dash-title { font-size:12.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px; }
+.dash-body  { padding:16px 18px; }
+.dt { width:100%;border-collapse:collapse;font-size:12.5px; }
+.dt thead th { background:var(--surface-2);padding:10px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);border-bottom:1px solid var(--border);white-space:nowrap; }
+.dt tbody td { padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle; }
+.dt tbody tr:last-child td { border-bottom:none; }
+.dt tbody tr:hover td { background:#f8faff; }
+.dt tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+.dt tfoot td { padding:10px 14px;border-top:2px solid var(--border);font-weight:700;font-size:12.5px;background:var(--surface-2); }
+.mono { font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px; }
+.aging-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;text-align:center;transition:box-shadow .15s; }
+.aging-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.08); }
+.aging-label { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:8px; }
+.aging-amount { font-size:20px;font-weight:800;font-family:'Poppins',sans-serif;margin-bottom:4px; }
+.aging-count { font-size:11.5px;color:var(--ink-faint); }
+.stu-cell { display:flex;align-items:center;gap:10px; }
+.stu-av { width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;background:var(--red-lt);color:var(--red);border:1px solid #fecaca;text-transform:uppercase; }
+.s-name { font-weight:600;font-size:12.5px;color:var(--ink);display:block;line-height:1.3; }
+.s-adm  { font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% currency_info as curr %}
+
+<!-- Page Header -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-attention icon-gradient bg-ripe-malin"></i>
+            </div>
+            <div>
+                Outstanding Fees Report
+                <div class="page-title-subheading">Aging analysis &amp; top debtors</div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2">
+            <a href="{% url 'fees:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i>Dashboard
+            </a>
+            <a href="{% url 'fees:collection_report' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-chart-bar me-1"></i>Collection Report
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <form method="GET" style="display:contents;">
+        <div>
+            <label>Academic Session</label>
+            <select name="academic_session">
+                <option value="">All Sessions</option>
+                {% for s in sessions %}
+                <option value="{{ s.id }}" {% if selected_session == s.id|stringformat:"s" %}selected{% endif %}>
+                    {{ s.year_name }} — {{ s.term_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>Fiscal Period</label>
+            <select name="fiscal_period">
+                <option value="">All Periods</option>
+                {% for fp in fiscal_periods %}
+                <option value="{{ fp.id }}" {% if selected_period == fp.id|stringformat:"s" %}selected{% endif %}>
+                    {{ fp.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="padding-bottom:1px;">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa fa-filter me-1"></i>Apply
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-red">
+            <div class="kpi-badge"><i class="fa fa-exclamation-triangle"></i></div>
+            <div class="kpi-label">Total Outstanding</div>
+            <div class="kpi-value">{{ total_outstanding|money_short }}</div>
+            <div class="kpi-sub">Across all unpaid invoices</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-badge"><i class="fa fa-hourglass-half"></i></div>
+            <div class="kpi-label">Overdue (&gt;30 days)</div>
+            <div class="kpi-value">{{ aging.1_30.total|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ aging.1_30.count|default:0 }} invoice{{ aging.1_30.count|default:0|pluralize }}</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-badge"><i class="fa fa-file-invoice"></i></div>
+            <div class="kpi-label">Current (Not Yet Due)</div>
+            <div class="kpi-value">{{ aging.current.total|default:0|money_short }}</div>
+            <div class="kpi-sub">{{ aging.current.count|default:0 }} invoice{{ aging.current.count|default:0|pluralize }}</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-users"></i></div>
+            <div class="kpi-label">Total Debtors</div>
+            <div class="kpi-value">{{ account_stats.debt_analysis.total_debtors|default:0|format_number }}</div>
+            <div class="kpi-sub">Student accounts in arrears</div>
+        </div>
+    </div>
+</div>
+
+<!-- Aging Analysis -->
+<div class="sec-heading" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin:24px 0 14px;display:flex;align-items:center;gap:10px;">
+    Aging Buckets
+    <span style="flex:1;height:1px;background:var(--border);display:block;"></span>
+</div>
+<div class="row g-3 mb-3">
+    <div class="col">
+        <div class="aging-card">
+            <div class="aging-label">Current (Not Due)</div>
+            <div class="aging-amount" style="color:var(--accent);">{{ aging.current.total|default:0|money_short }}</div>
+            <div class="aging-count">{{ aging.current.count|default:0 }} invoices</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="aging-card">
+            <div class="aging-label">1 – 30 Days</div>
+            <div class="aging-amount" style="color:var(--amber);">{{ aging.1_30.total|default:0|money_short }}</div>
+            <div class="aging-count">{{ aging.1_30.count|default:0 }} invoices</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="aging-card">
+            <div class="aging-label">31 – 60 Days</div>
+            <div class="aging-amount" style="color:var(--amber);">{{ aging.31_60.total|default:0|money_short }}</div>
+            <div class="aging-count">{{ aging.31_60.count|default:0 }} invoices</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="aging-card">
+            <div class="aging-label">61 – 90 Days</div>
+            <div class="aging-amount" style="color:var(--red);">{{ aging.61_90.total|default:0|money_short }}</div>
+            <div class="aging-count">{{ aging.61_90.count|default:0 }} invoices</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="aging-card" style="border-color:var(--red);">
+            <div class="aging-label">Over 90 Days</div>
+            <div class="aging-amount" style="color:var(--red);">{{ aging.over_90.total|default:0|money_short }}</div>
+            <div class="aging-count">{{ aging.over_90.count|default:0 }} invoices</div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Debtors -->
+<div class="dash-card mb-3">
+    <div class="dash-head">
+        <span class="dash-title">
+            <i class="fa fa-user-times" style="color:var(--red);"></i>
+            Top 20 Outstanding Accounts
+        </span>
+        <span style="font-size:11px;color:var(--ink-faint);">As of {{ today|date:"d M Y" }} · {{ generated_by }}</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="dt">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Student</th>
+                <th class="text-end">Outstanding</th>
+                <th class="text-center">Invoices</th>
+                <th style="width:100px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in top_debtors %}
+            <tr>
+                <td style="color:var(--ink-faint);font-size:12px;">{{ forloop.counter }}</td>
+                <td>
+                    <div class="stu-cell">
+                        <div class="stu-av">{{ d.student__first_name|first }}{{ d.student__last_name|first }}</div>
+                        <div>
+                            <span class="s-name">{{ d.student__first_name }} {{ d.student__last_name }}</span>
+                            <span class="s-adm">{{ d.student__admission_number }}</span>
+                        </div>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <span class="mono" style="color:var(--red);font-size:13px;">{{ d.total_outstanding|money_short }}</span>
+                </td>
+                <td class="text-center" style="color:var(--ink-muted);font-size:12px;">{{ d.invoice_count }}</td>
+                <td class="text-center">
+                    <a href="{% url 'fees:invoice_list' %}?student={{ d.student__admission_number }}"
+                       class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:3px 10px;">
+                        View →
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" style="text-align:center;padding:40px;color:var(--green);">
+                    <i class="fa fa-check-circle fa-2x" style="opacity:.4;display:block;margin-bottom:8px;"></i>
+                    No outstanding accounts for the selected filters
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="2">Total Outstanding</td>
+                <td class="text-end mono" style="color:var(--red);">{{ total_outstanding|money }}</td>
+                <td colspan="2"></td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+</div>
+{% endblock %}

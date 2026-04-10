@@ -1,661 +1,460 @@
-<!-- uniforms/templates/uniforms/sales/detail.html -->
-{% extends "base.html" %}
+{% extends 'base.html' %}
 {% load static %}
-{% load humanize %}
 {% load currency_filters %}
+{% load custom_filters %}
 
 {% block extra_css %}
 <style>
-    .detail-section {
-        background: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .detail-section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 18px;
-        padding-bottom: 14px;
-        border-bottom: 2px solid #e9ecef;
-    }
-    .detail-section-header h5 {
-        margin: 0;
-        font-weight: 600;
-        color: #495057;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .detail-section-header h5 i { color: #007bff; font-size: 1.2rem; }
+:root {
+    --ink:       #0f172a; --ink-muted: #64748b; --ink-faint: #94a3b8;
+    --surface:   #ffffff; --surface-2: #f8fafc; --surface-3: #f1f5f9;
+    --border:    #e2e8f0; --accent: #1d4ed8; --accent-lt: #eff6ff;
+    --green:     #15803d; --green-lt: #f0fdf4;
+    --amber:     #b45309; --amber-lt: #fffbeb;
+    --red:       #dc2626; --red-lt: #fef2f2;
+    --radius:    10px;
+}
 
-    .status-badge {
-        display: inline-block;
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-    }
-    .status-DRAFT     { background:#e9ecef; color:#495057; }
-    .status-PENDING   { background:#fff3cd; color:#856404; }
-    .status-PAID      { background:#d4edda; color:#155724; }
-    .status-PARTIAL   { background:#cce5ff; color:#004085; }
-    .status-ISSUED    { background:#d1ecf1; color:#0c5460; }
-    .status-CANCELLED { background:#f8d7da; color:#721c24; }
-    .status-RETURNED  { background:#e2e3e5; color:#383d41; }
+.sale-hero { background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:var(--radius); padding:26px 30px 22px; margin-bottom:24px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:start; }
+.hero-num  { font-family:'Courier New',monospace; font-size:24px; font-weight:900; color:var(--ink); }
+.hero-top  { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.hero-meta { display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; }
+.hero-meta-item  { display:flex; flex-direction:column; gap:2px; }
+.hero-meta-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-faint); }
+.hero-meta-value { font-size:13px; font-weight:600; color:var(--ink); }
 
-    .info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 16px;
-    }
-    .info-item {
-        padding: 12px 16px;
-        background: #f8f9fa;
-        border-radius: 6px;
-        border-left: 3px solid #007bff;
-    }
-    .info-item label {
-        display: block;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #6c757d;
-        margin-bottom: 4px;
-        font-weight: 600;
-    }
-    .info-item span { font-size: 0.95rem; font-weight: 500; color: #212529; }
+.st-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:700; white-space:nowrap; text-transform:uppercase; letter-spacing:.4px; }
+.sp-draft     { background:var(--surface-3); color:#64748b; border:1px solid #cbd5e1; }
+.sp-pending   { background:var(--amber-lt); color:var(--amber); border:1px solid #fde68a; }
+.sp-paid      { background:var(--accent-lt); color:var(--accent); border:1px solid #bfdbfe; }
+.sp-partial   { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.sp-issued    { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; }
+.sp-cancelled { background:var(--red-lt); color:var(--red); border:1px solid #fecaca; }
+.sp-returned  { background:#fdf4ff; color:#a21caf; border:1px solid #f0abfc; }
 
-    .items-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .items-table thead th {
-        background: #f8f9fa;
-        padding: 10px 14px;
-        text-align: left;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #6c757d;
-        font-weight: 700;
-        border-bottom: 2px solid #dee2e6;
-    }
-    .items-table tbody tr { border-bottom: 1px solid #f0f0f0; transition: background 0.15s; }
-    .items-table tbody tr:hover { background: #f8f9fa; }
-    .items-table tbody td { padding: 12px 14px; vertical-align: middle; }
-    .items-table tfoot td { padding: 10px 14px; font-weight: 600; border-top: 2px solid #dee2e6; }
+.stat-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:16px; margin-bottom:24px; }
+.strip-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; }
+.strip-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); margin-bottom:4px; }
+.strip-value { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.strip-sub   { font-size:11px; color:var(--ink-faint); margin-top:3px; }
 
-    .totals-panel {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 6px;
-        padding: 16px 20px;
-        min-width: 280px;
-    }
-    .totals-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 5px 0;
-        font-size: 0.9rem;
-        color: #495057;
-    }
-    .totals-row.total-final {
-        border-top: 2px solid #dee2e6;
-        margin-top: 8px;
-        padding-top: 10px;
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: #212529;
-    }
+.det-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+.det-card-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.det-card-title { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); display:flex; align-items:center; gap:8px; margin:0; }
 
-    .empty-items { text-align: center; padding: 50px 20px; color: #6c757d; }
-    .empty-items i { font-size: 3rem; margin-bottom: 12px; display: block; opacity: 0.4; }
+.tab-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--ink-muted); cursor:pointer; transition:all .15s; white-space:nowrap; }
+.tab-btn:hover  { background:var(--surface-3); color:var(--ink); }
+.tab-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.tab-count { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:18px; padding:0 5px; border-radius:10px; font-size:10.5px; font-weight:700; background:rgba(255,255,255,.25); }
+.tab-btn:not(.active) .tab-count { background:var(--surface-3); color:var(--ink-muted); }
 
-    .sidebar-sticky { position: sticky; top: 20px; }
-    .action-btn-group { display: flex; flex-direction: column; gap: 8px; }
-    .action-btn-group .btn { text-align: left; display: flex; align-items: center; gap: 8px; }
+.sidebar-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+.sidebar-head { background:var(--surface-2); padding:12px 18px; border-bottom:1px solid var(--border); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); display:flex; align-items:center; gap:7px; }
+.sidebar-body { padding:14px 18px; }
+.side-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.side-row:last-child { border-bottom:none; }
+.s-label { color:var(--ink-muted); font-size:12.5px; }
+.s-value { font-weight:700; color:var(--ink); }
+.s-value.green  { color:var(--green); }
+.s-value.red    { color:var(--red); }
+.s-value.accent { color:var(--accent); }
+.s-value.amber  { color:var(--amber); }
+.s-value.muted  { color:var(--ink-muted); font-weight:500; }
 
-    .audit-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px solid #f0f0f0;
-        font-size: 0.875rem;
-    }
-    .audit-row:last-child { border-bottom: none; }
-    .audit-row label { color: #6c757d; font-weight: 600; min-width: 130px; }
+@media (max-width:768px) { .sale-hero { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
 
-
 {% block content %}
 
-<!-- Page Header -->
 <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
             <div class="page-title-icon">
-                <i class="pe-7s-shopbag icon-gradient bg-happy-itmeo"></i>
+                <i class="pe-7s-server icon-gradient bg-happy-itmeo"></i>
             </div>
             <div>
                 {{ sale.sale_number }}
                 <div class="page-title-subheading">
-                    {{ sale.student.get_full_name }} &mdash;
-                    <span class="status-badge status-{{ sale.status }}">
-                        {% if sale.cancelled %}CANCELLED
-                        {% elif sale.returned %}RETURNED
-                        {% else %}{{ sale.get_status_display }}
-                        {% endif %}
-                    </span>
+                    {{ sale.student.get_full_name }} &mdash; {{ sale.sale_date|date:"d M Y" }}
                 </div>
             </div>
         </div>
-        <div class="page-title-actions d-flex gap-2 flex-wrap">
-            <a href="{% url 'uniforms:uniform_sale_list' %}" class="btn btn-secondary">
-                <i class="fa fa-arrow-left"></i> Back to List
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:uniform_sale_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
             </a>
+
             {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
-            <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}" class="btn btn-outline-primary">
-                <i class="fa fa-edit"></i> Edit Sale
+            <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
             </a>
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    hx-get="{% url 'uniforms:uniform_sale_finalize_modal' sale.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-1"></i>Finalise
+            </button>
+            {% elif sale.status in 'PENDING,PARTIAL' and not sale.cancelled %}
+            <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}"
+               class="btn btn-sm btn-success me-1">
+                <i class="fa fa-money-bill me-1"></i>Record Payment
+            </a>
+            {% elif sale.status in 'PAID' and not sale.cancelled %}
+            <button class="btn btn-sm btn-info me-1"
+                    hx-get="{% url 'uniforms:uniform_sale_issue_modal' sale.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-box-open me-1"></i>Issue Items
+            </button>
+            {% elif sale.status == 'ISSUED' and not sale.returned %}
+            <button class="btn btn-sm btn-outline-warning me-1"
+                    hx-get="{% url 'uniforms:uniform_sale_return_modal' sale.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-undo me-1"></i>Return
+            </button>
             {% endif %}
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"><i class="fa fa-ellipsis-v"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'uniforms:uniform_sale_print_invoice' sale.pk %}" target="_blank">
+                            <i class="fa fa-file-invoice me-2"></i>Print Invoice
+                        </a>
+                    </li>
+                    {% if not sale.cancelled and not sale.returned and sale.status != 'ISSUED' %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:uniform_sale_cancel_modal' sale.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-times me-2"></i>Cancel Sale
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
         </div>
     </div>
 </div>
 
-{% if messages %}
-{% for message in messages %}
-<div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-    {{ message }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:uniform_sale_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-receipt me-1"></i>Sales
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'students:student_profile' sale.student.pk %}" style="color:#64748b;text-decoration:none;">
+                {{ sale.student.get_full_name }}
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">{{ sale.sale_number }}</li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="sale-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-num">{{ sale.sale_number }}</span>
+            {% if sale.cancelled %}
+                <span class="st-pill sp-cancelled"><i class="fa fa-times-circle"></i>Cancelled</span>
+            {% elif sale.returned %}
+                <span class="st-pill sp-returned"><i class="fa fa-undo"></i>Returned</span>
+            {% elif sale.status == 'DRAFT' %}
+                <span class="st-pill sp-draft"><i class="fa fa-pencil-alt"></i>Draft</span>
+            {% elif sale.status == 'PENDING' %}
+                <span class="st-pill sp-pending"><i class="fa fa-clock"></i>Pending Payment</span>
+            {% elif sale.status == 'PAID' %}
+                <span class="st-pill sp-paid"><i class="fa fa-check"></i>Paid</span>
+            {% elif sale.status == 'PARTIAL' %}
+                <span class="st-pill sp-partial"><i class="fa fa-adjust"></i>Partial Payment</span>
+            {% elif sale.status == 'ISSUED' %}
+                <span class="st-pill sp-issued"><i class="fa fa-check-circle"></i>Issued</span>
+            {% endif %}
+            <span style="background:var(--surface-3);color:var(--ink-muted);border:1px solid var(--border);border-radius:4px;font-size:11.5px;font-weight:700;padding:3px 9px;">
+                {{ sale.get_sale_type_display }}
+            </span>
+        </div>
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Student</span>
+                <span class="hero-meta-value">
+                    <a href="{% url 'students:student_profile' sale.student.pk %}"
+                       style="color:inherit;text-decoration:none;">{{ sale.student.get_full_name }}</a>
+                </span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Admission No.</span>
+                <span class="hero-meta-value" style="font-family:'Courier New',monospace;">{{ sale.student.admission_number }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Sale Date</span>
+                <span class="hero-meta-value">{{ sale.sale_date|date:"d M Y" }}</span>
+            </div>
+            {% if sale.fiscal_period %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Period</span>
+                <span class="hero-meta-value">{{ sale.fiscal_period.name }}</span>
+            </div>
+            {% endif %}
+            {% if sale.payment_method %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Payment</span>
+                <span class="hero-meta-value">{{ sale.payment_method.name }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">Total Amount</div>
+        <div style="font-size:36px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink);">
+            {{ sale.total_amount|money_short }}
+        </div>
+        {% if sale.balance and sale.balance > 0 %}
+        <div style="font-size:12px;color:var(--red);font-weight:700;margin-top:3px;">
+            <i class="fa fa-exclamation-triangle me-1" style="font-size:10px;"></i>
+            {{ sale.balance|money }} balance due
+        </div>
+        {% endif %}
+    </div>
 </div>
-{% endfor %}
-{% endif %}
+
+{# ── Stat strip ── #}
+<div class="stat-strip">
+    <div class="strip-card">
+        <div class="strip-label">Line Items</div>
+        <div class="strip-value">{{ stats.item_count }}</div>
+        <div class="strip-sub">{{ stats.total_qty }} total units</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Amount Paid</div>
+        <div class="strip-value" style="font-size:16px;color:var(--green);">{{ sale.paid_amount|money }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Balance Due</div>
+        <div class="strip-value" style="font-size:16px;{% if sale.balance > 0 %}color:var(--red);{% else %}color:var(--green);{% endif %}">
+            {% if sale.balance > 0 %}{{ sale.balance|money }}{% else %}Paid in full{% endif %}
+        </div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Discount</div>
+        <div class="strip-value" style="font-size:16px;">{{ sale.discount_amount|default:0|money }}</div>
+        {% if sale.discount_reason %}<div class="strip-sub">{{ sale.discount_reason }}</div>{% endif %}
+    </div>
+</div>
 
 <div class="row">
-
-    <!-- ======================================================================
-         LEFT COLUMN
-    ====================================================================== -->
     <div class="col-lg-8">
+        <div class="det-card">
+            <div class="det-card-head">
+                <div class="d-flex gap-1" id="sale-tabs">
+                    <button id="tab-items" class="tab-btn active"
+                            onclick="switchTab('items')"
+                            hx-get="{% url 'uniforms:uniform_sale_items_partial' sale.pk %}"
+                            hx-target="#tab-content" hx-swap="innerHTML">
+                        <i class="fa fa-list"></i>Line Items
+                        <span class="tab-count">{{ stats.item_count }}</span>
+                    </button>
+                    <button id="tab-audit" class="tab-btn"
+                            onclick="switchTab('audit')"
+                            hx-get="{% url 'uniforms:uniform_sale_audit_partial' sale.pk %}"
+                            hx-target="#tab-content" hx-swap="innerHTML">
+                        <i class="fa fa-history"></i>Audit Trail
+                        <span class="tab-count">{{ stats.audit_entries }}</span>
+                    </button>
+                </div>
+            </div>
+            <div id="tab-content"
+                 hx-get="{% url 'uniforms:uniform_sale_items_partial' sale.pk %}"
+                 hx-trigger="load" hx-swap="innerHTML">
+                <div style="padding:40px;text-align:center;color:#94a3b8;">
+                    <i class="fa fa-spinner fa-spin fa-2x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <!-- Sale Information -->
-        <div class="detail-section">
-            <div class="detail-section-header">
-                <h5><i class="pe-7s-info"></i> Sale Information</h5>
-            </div>
-            <div class="info-grid">
-                <div class="info-item">
-                    <label>Sale Number</label>
-                    <span>{{ sale.sale_number }}</span>
+    <div class="col-lg-4">
+
+        {# Financial detail #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-calculator"></i>Financial Detail</div>
+            <div class="sidebar-body">
+                <div class="side-row">
+                    <span class="s-label">Subtotal</span>
+                    <span class="s-value">{{ sale.subtotal|money }}</span>
                 </div>
-                <div class="info-item">
-                    <label>Student</label>
-                    <span>{{ sale.student.get_full_name }}</span>
-                </div>
-                <div class="info-item">
-                    <label>Sale Type</label>
-                    <span>{{ sale.get_sale_type_display }}</span>
-                </div>
-                <div class="info-item">
-                    <label>Sale Date</label>
-                    <span>{{ sale.sale_date|date:"d M Y" }}</span>
-                </div>
-                <div class="info-item">
-                    <label>Academic Session</label>
-                    <span>{{ sale.academic_session }}</span>
-                </div>
-                <div class="info-item">
-                    <label>Fiscal Period</label>
-                    <span>{{ sale.fiscal_period|default:"—" }}</span>
-                </div>
-                {% if sale.sale_type == 'LOAN' and sale.return_date %}
-                <div class="info-item">
-                    <label>Return Date</label>
-                    <span>{{ sale.return_date|date:"d M Y" }}</span>
+                {% if sale.discount_amount %}
+                <div class="side-row">
+                    <span class="s-label">Discount</span>
+                    <span class="s-value red">−{{ sale.discount_amount|money }}</span>
                 </div>
                 {% endif %}
-                {% if sale.payment_method %}
-                <div class="info-item">
-                    <label>Payment Method</label>
-                    <span>{{ sale.payment_method }}</span>
+                {% if sale.tax_amount %}
+                <div class="side-row">
+                    <span class="s-label">Tax</span>
+                    <span class="s-value">{{ sale.tax_amount|money }}</span>
                 </div>
                 {% endif %}
-                {% if sale.payment_reference %}
-                <div class="info-item">
-                    <label>Payment Reference</label>
-                    <span>{{ sale.payment_reference }}</span>
+                <div class="side-row">
+                    <span class="s-label">Total</span>
+                    <span class="s-value accent" style="font-size:15px;">{{ sale.total_amount|money }}</span>
                 </div>
-                {% endif %}
+                <div class="side-row">
+                    <span class="s-label">Amount Paid</span>
+                    <span class="s-value green">{{ sale.paid_amount|money }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Balance Due</span>
+                    <span class="s-value {% if sale.balance > 0 %}red{% else %}green{% endif %}">
+                        {% if sale.balance > 0 %}{{ sale.balance|money }}{% else %}Nil{% endif %}
+                    </span>
+                </div>
             </div>
-            {% if sale.notes %}
-            <div class="mt-3 p-3" style="background:#f8f9fa;border-radius:6px;font-size:0.9rem;color:#495057;">
-                <strong><i class="fa fa-sticky-note me-1"></i> Notes:</strong> {{ sale.notes }}
-            </div>
-            {% endif %}
         </div>
 
-        <!-- Uniform Items — read-only -->
-        <div class="detail-section">
-            <div class="detail-section-header">
-                <h5>
-                    <i class="pe-7s-cart"></i>
-                    Uniform Items
-                    <span class="badge bg-secondary">{{ sale.items.count }}</span>
-                </h5>
-            </div>
-
-            {% if sale.items.exists %}
-            <div class="table-responsive">
-                <table class="items-table">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th>Size</th>
-                            <th class="text-center">Qty</th>
-                            <th class="text-end">Unit Price</th>
-                            <th class="text-end">Tax</th>
-                            <th class="text-end">Line Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in sale.items.all %}
-                        <tr>
-                            <td>
-                                <strong>{{ item.uniform_item.name }}</strong>
-                                {% if item.uniform_item.code %}
-                                <br><small class="text-muted">{{ item.uniform_item.code }}</small>
-                                {% endif %}
-                            </td>
-                            <td>{{ item.size.name|default:"—" }}</td>
-                            <td class="text-center">{{ item.quantity }}</td>
-                            <td class="text-end">{{ item.unit_price|amount }}</td>
-                            <td class="text-end">
-                                {% if item.tax_percentage %}{{ item.tax_percentage|format_percentage }}
-                                {% else %}—{% endif %}
-                            </td>
-                            <td class="text-end"><strong>{{ item.total_price|amount }}</strong></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="5" class="text-end text-muted" style="font-weight:400;font-size:0.85rem;">Subtotal</td>
-                            <td class="text-end">{{ sale.subtotal|amount }}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-
-            <div class="d-flex justify-content-end mt-3">
-                <div class="totals-panel">
-                    <div class="totals-row">
-                        <span>Subtotal</span>
-                        <span>{{ sale.subtotal|format_currency }}</span>
-                    </div>
-                    {% if sale.discount_amount %}
-                    <div class="totals-row" style="color:#28a745;">
-                        <span>Discount{% if sale.discount_reason %} ({{ sale.discount_reason }}){% endif %}</span>
-                        <span>-{{ sale.discount_amount|amount }}</span>
-                    </div>
-                    {% endif %}
-                    {% if sale.tax_amount %}
-                    <div class="totals-row text-muted">
-                        <span>Tax</span>
-                        <span>{{ sale.tax_amount|amount }}</span>
-                    </div>
-                    {% endif %}
-                    <div class="totals-row total-final">
-                        <span>Total</span>
-                        <span>{{ sale.total_amount|format_currency }}</span>
-                    </div>
-                    {% if sale.paid_amount %}
-                    <div class="totals-row" style="color:#28a745;">
-                        <span>Paid</span>
-                        <span>{{ sale.paid_amount|format_currency }}</span>
-                    </div>
-                    <div class="totals-row" style="color:#dc3545;">
-                        <span>Balance</span>
-                        <span>{{ sale.balance|format_currency }}</span>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            {% else %}
-            <div class="empty-items">
-                <i class="pe-7s-box1"></i>
-                <p class="mb-1"><strong>No items on this sale</strong></p>
-                {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
-                <p class="text-muted">
-                    Click <strong>Edit Sale</strong> above to add items.
-                </p>
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Financial Records -->
-        {% if sale.fee_invoice or sale.journal_entry %}
-        <div class="detail-section">
-            <div class="detail-section-header">
-                <h5><i class="pe-7s-calculator"></i> Financial Records</h5>
-            </div>
-            <div class="row">
+        {# References #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-link"></i>References</div>
+            <div class="sidebar-body">
                 {% if sale.fee_invoice %}
-                <div class="col-md-6">
-                    <div class="info-item mb-2">
-                        <label>Invoice</label>
-                        <span>
+                <div class="side-row">
+                    <span class="s-label">Fee Invoice</span>
+                    <span class="s-value">
+                        <a href="{% url 'fees:invoice_detail' sale.fee_invoice.pk %}"
+                           style="color:var(--accent);font-size:12px;">
                             {{ sale.fee_invoice.invoice_number }}
-                            <span class="badge bg-secondary ms-1">{{ sale.fee_invoice.status }}</span>
-                        </span>
-                    </div>
+                        </a>
+                    </span>
                 </div>
                 {% endif %}
                 {% if sale.journal_entry %}
-                <div class="col-md-6">
-                    <div class="info-item mb-2">
-                        <label>Journal Entry</label>
-                        <span>
+                <div class="side-row">
+                    <span class="s-label">Journal Entry</span>
+                    <span class="s-value">
+                        <a href="{% url 'finance:journal_entry_detail' sale.journal_entry.pk %}"
+                           style="color:var(--accent);font-size:12px;">
                             {{ sale.journal_entry.entry_number }}
-                            <span class="badge bg-secondary ms-1">{{ sale.journal_entry.status }}</span>
-                        </span>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Cancellation Details -->
-        {% if sale.cancelled %}
-        <div class="detail-section" style="border-color:#dc3545;">
-            <div class="detail-section-header">
-                <h5 class="text-danger"><i class="fa fa-ban"></i> Cancellation Details</h5>
-            </div>
-            <div class="info-grid">
-                <div class="info-item" style="border-color:#dc3545;">
-                    <label>Cancelled On</label>
-                    <span>{{ sale.cancelled_on|date:"d M Y H:i" }}</span>
-                </div>
-                <div class="info-item" style="border-color:#dc3545;">
-                    <label>Reason</label>
-                    <span>{{ sale.cancellation_reason }}</span>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Return Details -->
-        {% if sale.returned %}
-        <div class="detail-section" style="border-color:#ffc107;">
-            <div class="detail-section-header">
-                <h5 class="text-warning"><i class="fa fa-undo"></i> Return Details</h5>
-            </div>
-            <div class="info-grid">
-                <div class="info-item" style="border-color:#ffc107;">
-                    <label>Returned On</label>
-                    <span>{{ sale.returned_on|date:"d M Y H:i" }}</span>
-                </div>
-                <div class="info-item" style="border-color:#ffc107;">
-                    <label>Reason</label>
-                    <span>{{ sale.return_reason }}</span>
-                </div>
-                <div class="info-item" style="border-color:#ffc107;">
-                    <label>Condition</label>
-                    <span>{{ sale.get_return_condition_display }}</span>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Audit Trail -->
-        <div class="detail-section">
-            <div class="detail-section-header">
-                <h5><i class="pe-7s-clock"></i> Audit Trail</h5>
-            </div>
-            <div class="audit-row">
-                <label>Created At</label>
-                <span>{{ audit_trail.created_at|date:"d M Y H:i" }}</span>
-            </div>
-            <div class="audit-row">
-                <label>Created By</label>
-                <span>{{ audit_trail.created_by_name }}</span>
-            </div>
-            {% if audit_trail.created_from_ip %}
-            <div class="audit-row">
-                <label>Created From IP</label>
-                <span>{{ audit_trail.created_from_ip }}</span>
-            </div>
-            {% endif %}
-            <div class="audit-row">
-                <label>Last Updated</label>
-                <span>{{ audit_trail.updated_at|date:"d M Y H:i" }}</span>
-            </div>
-            <div class="audit-row">
-                <label>Updated By</label>
-                <span>{{ audit_trail.updated_by_name }}</span>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- ======================================================================
-         RIGHT COLUMN — SIDEBAR
-    ====================================================================== -->
-    <div class="col-lg-4">
-        <div class="sidebar-sticky">
-
-            <!-- Actions -->
-            <div class="detail-section">
-                <div class="detail-section-header">
-                    <h5><i class="pe-7s-tools"></i> Actions</h5>
-                </div>
-                <div class="action-btn-group">
-
-                    {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
-
-                        {% if sale.items.exists %}
-                        <form method="post" action="{% url 'uniforms:uniform_sale_finalize' sale.pk %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-success w-100">
-                                <i class="fa fa-check me-1"></i>Finalize Sale
-                            </button>
-                        </form>
-                        {% else %}
-                        <button class="btn btn-success w-100" disabled>
-                            <i class="fa fa-check me-1"></i>Finalize Sale
-                        </button>
-                        <small class="text-muted d-block text-center">
-                            Add items via <strong>Edit Sale</strong> first
-                        </small>
-                        {% endif %}
-
-                        <button class="btn btn-outline-danger w-100"
-                                hx-get="{% url 'uniforms:uniform_sale_delete_modal' sale.pk %}"
-                                hx-target="#modal-container"
-                                hx-swap="innerHTML">
-                            <i class="fa fa-trash me-1"></i>Delete Sale
-                        </button>
-
-                    {% elif sale.status == 'PENDING' or sale.status == 'PARTIAL' %}
-                        {% if not sale.cancelled and not sale.returned %}
-
-                        {% if sale.fee_invoice %}
-                        <a href="{% url 'fees:invoice_detail' sale.fee_invoice.pk %}"
-                           class="btn btn-success w-100">
-                            <i class="fa fa-money-bill-wave me-1"></i>Record Payment
                         </a>
-                        <small class="text-muted d-block text-center">
-                            Via invoice {{ sale.fee_invoice.invoice_number }}
-                        </small>
-                        {% endif %}
-
-                        <button class="btn btn-primary w-100"
-                                hx-get="{% url 'uniforms:uniform_sale_issue_modal' sale.pk %}"
-                                hx-target="#modal-container"
-                                hx-swap="innerHTML">
-                            <i class="fa fa-box-open me-1"></i>Issue to Student
-                        </button>
-
-                        {% endif %}
-
-                    {% elif sale.status == 'PAID' and not sale.cancelled and not sale.returned %}
-                        <button class="btn btn-primary w-100"
-                                hx-get="{% url 'uniforms:uniform_sale_issue_modal' sale.pk %}"
-                                hx-target="#modal-container"
-                                hx-swap="innerHTML">
-                            <i class="fa fa-box-open me-1"></i>Issue to Student
-                        </button>
-
-                    {% elif sale.status == 'ISSUED' and not sale.returned %}
-                        <button class="btn btn-warning w-100"
-                                hx-get="{% url 'uniforms:uniform_sale_return_modal' sale.pk %}"
-                                hx-target="#modal-container"
-                                hx-swap="innerHTML">
-                            <i class="fa fa-undo me-1"></i>Process Return
-                        </button>
-                    {% endif %}
-
-                    {% if not sale.cancelled and not sale.returned and sale.status != 'ISSUED' %}
-                    <button class="btn btn-outline-secondary w-100"
-                            hx-get="{% url 'uniforms:uniform_sale_cancel_modal' sale.pk %}"
-                            hx-target="#modal-container"
-                            hx-swap="innerHTML">
-                        <i class="fa fa-ban me-1"></i>Cancel Sale
-                    </button>
-                    {% endif %}
-
-                </div>
-            </div>
-
-            <!-- Summary -->
-            <div class="detail-section">
-                <div class="detail-section-header">
-                    <h5><i class="pe-7s-graph1"></i> Summary</h5>
-                </div>
-                <div class="audit-row">
-                    <label>Status</label>
-                    <span class="status-badge status-{{ sale.status }}">
-                        {% if sale.cancelled %}CANCELLED
-                        {% elif sale.returned %}RETURNED
-                        {% else %}{{ sale.get_status_display }}
-                        {% endif %}
                     </span>
                 </div>
-                <div class="audit-row">
-                    <label>Items</label>
-                    <span>{{ sale.items.count }} item(s)</span>
-                </div>
-                <div class="audit-row">
-                    <label>Total Amount</label>
-                    <span>{{ sale.total_amount|format_currency }}</span>
-                </div>
-                {% if sale.paid_amount %}
-                <div class="audit-row">
-                    <label>Paid</label>
-                    <span>{{ sale.paid_amount|format_currency }}</span>
-                </div>
-                <div class="audit-row">
-                    <label>Balance</label>
-                    <span class="{{ sale.balance|balance_color_class }}">{{ sale.balance|format_currency }}</span>
+                {% endif %}
+                {% if sale.payment_reference %}
+                <div class="side-row">
+                    <span class="s-label">Payment Ref</span>
+                    <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;">{{ sale.payment_reference }}</span>
                 </div>
                 {% endif %}
-
-            </div>
-
-            {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
-            <div class="detail-section" style="border-color:#007bff;">
-                <div class="detail-section-header">
-                    <h5><i class="pe-7s-notebook"></i> Next Steps</h5>
+                {% if sale.return_date %}
+                <div class="side-row">
+                    <span class="s-label">Return Date</span>
+                    <span class="s-value">{{ sale.return_date|date:"d M Y" }}</span>
                 </div>
-                <ol class="ps-3 mb-0" style="font-size:0.875rem;color:#495057;line-height:1.8;">
-                    <li>Click <strong>Edit Sale</strong> to add or modify items</li>
-                    <li>Review totals and quantities</li>
-                    <li>Click <strong>Finalize Sale</strong> — this creates the invoice</li>
-                    <li>Record payment via the <strong>linked invoice</strong> in the Fees module</li>
-                    <li>Click <strong>Issue to Student</strong> when handing over items</li>
-                </ol>
+                {% endif %}
+                {% if sale.notes %}
+                <div style="padding-top:10px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:5px;">Notes</div>
+                    <div style="font-size:12.5px;color:var(--ink-muted);">{{ sale.notes }}</div>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
+        </div>
 
+        {# Quick actions #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+            <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+                {% if sale.status == 'DRAFT' and not sale.cancelled and not sale.returned %}
+                <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}"
+                   class="btn btn-sm btn-outline-warning w-100 text-start">
+                    <i class="fa fa-edit me-2"></i>Edit Sale
+                </a>
+                {% endif %}
+                {% if sale.status in 'PENDING,PARTIAL' and not sale.cancelled %}
+                <a href="{% url 'uniforms:uniform_sale_edit' sale.pk %}"
+                   class="btn btn-sm btn-outline-success w-100 text-start">
+                    <i class="fa fa-money-bill me-2"></i>Record Payment
+                </a>
+                {% endif %}
+                {% if sale.status in 'PAID' and not sale.cancelled %}
+                <button class="btn btn-sm btn-outline-info w-100 text-start"
+                        hx-get="{% url 'uniforms:uniform_sale_issue_modal' sale.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-box-open me-2"></i>Issue Uniform Items
+                </button>
+                {% endif %}
+                <a href="{% url 'uniforms:uniform_sale_print_invoice' sale.pk %}" target="_blank"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-file-invoice me-2"></i>Print Invoice
+                </a>
+                <a href="{% url 'students:student_profile' sale.student.pk %}"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-user me-2"></i>Student Profile
+                </a>
+            </div>
         </div>
     </div>
+</div>
 
-</div><!-- .row -->
-
-
-<!-- HTMX Modal Container -->
 <div id="modal-container"></div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+}
+
 let currentModal = null;
 
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'modal-container') {
-        const modalContainer = document.getElementById('modal-container');
-        const modalDialog = modalContainer.querySelector('.modal-dialog');
-        if (!modalDialog) return;
-
-        let modalWrapper = document.getElementById('dynamicModalWrapper');
-        if (modalWrapper) {
-            const existing = bootstrap.Modal.getInstance(modalWrapper);
-            if (existing) existing.dispose();
-            modalWrapper.remove();
-        }
-
-        modalWrapper = document.createElement('div');
-        modalWrapper.className = 'modal fade';
-        modalWrapper.id = 'dynamicModalWrapper';
-        modalWrapper.setAttribute('tabindex', '-1');
-        modalWrapper.setAttribute('aria-hidden', 'true');
-        modalWrapper.appendChild(modalDialog);
-        document.body.appendChild(modalWrapper);
-
-        currentModal = new bootstrap.Modal(modalWrapper, { backdrop: true, keyboard: true });
-        currentModal.show();
-
-        modalWrapper.addEventListener('hidden.bs.modal', function() {
-            modalWrapper.remove();
-            modalContainer.innerHTML = '';
-            currentModal = null;
-        });
-    }
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null;
+    });
 });
 
-document.body.addEventListener('htmx:beforeSwap', function(event) {
-    const xhr = event.detail.xhr;
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
     const message = xhr.getResponseHeader('HX-Alert-Message');
-    const type = xhr.getResponseHeader('HX-Alert-Type') || 'success';
-    const title = xhr.getResponseHeader('HX-Alert-Title');
-
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title   = xhr.getResponseHeader('HX-Alert-Title');
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
     if (message && typeof Swal !== 'undefined') {
         setTimeout(() => {
             Swal.fire({
-                icon: type,
-                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
-                text: message,
-                confirmButtonText: 'OK',
-                timer: type === 'success' ? 3000 : null,
-                timerProgressBar: type === 'success'
+                icon: type, title: title || (type.charAt(0).toUpperCase() + type.slice(1)), text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
             });
         }, 300);
     }
+});
 
-    if (xhr.getResponseHeader('HX-Close-Modal') === 'true' && currentModal) {
-        currentModal.hide();
-    }
-
-    if (xhr.getResponseHeader('HX-Redirect')) {
-        window.location.href = xhr.getResponseHeader('HX-Redirect');
-    }
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, { popperConfig: d => Object.assign({}, d, { strategy: 'fixed' }) });
+    });
 });
 </script>
 {% endblock %}

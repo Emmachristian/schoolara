@@ -1,0 +1,749 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --teal:      #0f766e;
+    --teal-lt:   #f0fdfa;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.detail-hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 22px; }
+.hero-title  { font-size: 20px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+.hero-sub    { font-size: 13px; color: var(--ink-muted); margin-bottom: 14px; }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.hero-badge  { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted); }
+.hero-badge.active   { background: #dcfce7; border-color: #bbf7d0; color: var(--green); }
+.hero-badge.inactive { background: var(--red-lt); border-color: #fecaca; color: var(--red); }
+.hero-badge.accent   { background: var(--accent-lt); border-color: var(--accent-bd); color: var(--accent); }
+.hero-badge.amber    { background: var(--amber-lt); border-color: #fde68a; color: var(--amber); }
+.hero-badge.purple   { background: var(--purple-lt); border-color: #ddd6fe; color: var(--purple); }
+
+/* ── Stat strip ── */
+.stat-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card  { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.stat-card-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 5px; }
+.stat-card-val   { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.stat-card-val.green  { color: var(--green); }
+.stat-card-val.amber  { color: var(--amber); }
+.stat-card-val.accent { color: var(--accent); }
+.stat-card-sub   { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Cards ── */
+.detail-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.detail-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.detail-card-head-left { display: flex; align-items: center; gap: 8px; }
+.head-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.head-icon.blue   { background: var(--accent-lt); color: var(--accent); }
+.head-icon.green  { background: #dcfce7; color: var(--green); }
+.head-icon.amber  { background: var(--amber-lt); color: var(--amber); }
+.head-icon.purple { background: var(--purple-lt); color: var(--purple); }
+.head-icon.teal   { background: var(--teal-lt); color: var(--teal); }
+.head-icon.muted  { background: var(--surface-3); color: var(--ink-muted); }
+.head-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.head-sub   { font-size: 11px; color: var(--ink-muted); }
+.detail-card-body { padding: 20px; }
+
+/* ── KV grid ── */
+.kv-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
+.kv-grid.cols-3 { grid-template-columns: repeat(3,1fr); }
+.kv-grid.cols-4 { grid-template-columns: repeat(4,1fr); }
+.kv-item-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.kv-item-val   { font-size: 13px; font-weight: 600; color: var(--ink); }
+.kv-item-val.muted { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+
+/* ── Value highlight ── */
+.value-highlight { display: flex; align-items: center; gap: 14px; background: linear-gradient(135deg, var(--green-lt) 0%, var(--accent-lt) 100%); border: 1px solid var(--accent-bd); border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
+.value-highlight-number { font-size: 28px; font-weight: 900; color: var(--accent); line-height: 1; }
+.value-highlight-label  { font-size: 12px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Structures table ── */
+.struct-table { width: 100%; border-collapse: collapse; }
+.struct-table thead { background: var(--surface-2); }
+.struct-table th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted); padding: 10px 14px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.struct-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: middle; }
+.struct-table tr:last-child td { border-bottom: none; }
+.struct-table tr:hover td { background: var(--surface-2); }
+
+/* ── Status pill ── */
+.s-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.sp-active   { background: #dcfce7; color: var(--green); }
+.sp-inactive { background: var(--surface-3); color: var(--ink-muted); }
+
+/* ── GL routing box ── */
+.gl-box { background: var(--surface-2); border: 1px solid var(--border); border-left: 4px solid var(--teal); border-radius: 0 8px 8px 0; padding: 14px 18px; font-size: 12.5px; font-family: 'Courier New', monospace; color: var(--teal); line-height: 1.7; word-break: break-word; }
+
+/* ── Type chips (re-used from list) ── */
+.type-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.tc-tuition  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.tc-boarding { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.tc-meals    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.tc-exam     { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+.tc-transport{ background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.tc-other    { background: var(--surface-2); color: #475569; border: 1px solid #cbd5e1; }
+
+/* ── Empty state ── */
+.empty-state { padding: 40px 20px; text-align: center; color: var(--ink-faint); }
+.empty-state i { font-size: 2.4rem; margin-bottom: 12px; display: block; opacity: .4; }
+.empty-state p { font-size: 13px; margin: 0; }
+
+/* ── Sidebar ── */
+.sidebar-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.sidebar-card-head { background: var(--surface-2); padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+.sidebar-card-body { padding: 14px 16px; }
+.sidebar-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.sidebar-row:last-child { border-bottom: none; }
+.sidebar-row-label { color: var(--ink-muted); flex-shrink: 0; margin-right: 10px; }
+.sidebar-row-val   { font-weight: 600; color: var(--ink); text-align: right; word-break: break-word; }
+
+.action-btn-group { display: flex; flex-direction: column; gap: 8px; }
+.action-btn { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; transition: all .15s; width: 100%; }
+.action-btn:hover { background: var(--surface-2); color: var(--ink); text-decoration: none; }
+.action-btn.danger  { color: var(--red);   border-color: #fecaca; }
+.action-btn.danger:hover  { background: var(--red-lt); }
+.action-btn.warning { color: var(--amber); border-color: #fde68a; }
+.action-btn.warning:hover { background: var(--amber-lt); }
+.action-btn.success { color: var(--green); border-color: #bbf7d0; }
+.action-btn.success:hover { background: var(--green-lt); }
+.action-btn i { width: 16px; text-align: center; flex-shrink: 0; }
+
+@media (max-width: 992px) {
+    .stat-strip { grid-template-columns: repeat(2,1fr); }
+    .kv-grid.cols-3, .kv-grid.cols-4 { grid-template-columns: repeat(2,1fr); }
+}
+@media (max-width: 576px) {
+    .stat-strip { grid-template-columns: 1fr; }
+    .kv-grid, .kv-grid.cols-3, .kv-grid.cols-4 { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Hero ── -->
+<div class="detail-hero">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div style="flex:1;min-width:0;">
+            <div class="hero-title">
+                <i class="fa fa-tag me-2" style="color:var(--accent);"></i>{{ category.name }}
+            </div>
+            <div class="hero-sub">
+                <span style="font-family:'Courier New',monospace;background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--ink-muted);">
+                    {{ category.code }}
+                </span>
+                &nbsp;·&nbsp; {{ category.get_category_type_display }}
+                {% if category.display_group %}
+                &nbsp;·&nbsp; <a href="{% url 'fees:display_group_detail' category.display_group.pk %}"
+                                  style="color:var(--accent-bd);text-decoration:none;font-weight:600;">
+                    {{ category.display_group.name }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="hero-badges">
+                {% if category.is_active %}
+                    <span class="hero-badge active"><i class="fa fa-check-circle"></i> Active</span>
+                {% else %}
+                    <span class="hero-badge inactive"><i class="fa fa-times-circle"></i> Inactive</span>
+                {% endif %}
+                {% if category.is_recurring %}
+                    <span class="hero-badge accent"><i class="fa fa-repeat"></i> Recurring</span>
+                {% else %}
+                    <span class="hero-badge"><i class="fa fa-minus-circle"></i> Non-recurring</span>
+                {% endif %}
+                <span class="hero-badge">
+                    <i class="fa fa-calendar"></i> {{ category.get_frequency_display }}
+                </span>
+                <span class="hero-badge">
+                    <i class="fa fa-users"></i> {{ category.get_applicability_display }}
+                </span>
+                {% if category.is_mandatory %}
+                    <span class="hero-badge amber"><i class="fa fa-star"></i> Mandatory</span>
+                {% else %}
+                    <span class="hero-badge"><i class="fa fa-star-o"></i> Optional</span>
+                {% endif %}
+                {% if category.is_taxable %}
+                    <span class="hero-badge purple"><i class="fa fa-receipt"></i> Taxable {{ category.default_tax_rate }}%</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+            <a href="{% url 'fees:category_edit' category.pk %}"
+               class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-edit" style="font-size:11px;"></i> Edit Category
+            </a>
+            <a href="{% url 'fees:category_list' %}"
+               class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-arrow-left" style="font-size:11px;"></i> All Categories
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ── Stat strip ── -->
+<div class="stat-strip">
+    <div class="stat-card">
+        <div class="stat-card-label">In Structures</div>
+        <div class="stat-card-val {% if structure_count > 0 %}accent{% endif %}">{{ structure_count }}</div>
+        <div class="stat-card-sub">Fee structures using this category</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Invoice Lines</div>
+        <div class="stat-card-val {% if invoice_item_count > 0 %}green{% endif %}">{{ invoice_item_count }}</div>
+        <div class="stat-card-sub">Invoice line items generated</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Display Order</div>
+        <div class="stat-card-val">{{ category.display_order }}</div>
+        <div class="stat-card-sub">Position within its group</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Tax Rate</div>
+        <div class="stat-card-val {% if category.is_taxable %}amber{% endif %}">
+            {% if category.is_taxable %}{{ category.default_tax_rate }}%{% else %}—{% endif %}
+        </div>
+        <div class="stat-card-sub">{% if category.is_taxable %}Taxable{% else %}No tax applicable{% endif %}</div>
+    </div>
+</div>
+
+<div class="row">
+
+<!-- ══════════════════════════ LEFT COLUMN ══════════════════════════ -->
+<div class="col-lg-8">
+
+    <!-- ── Configuration ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon blue"><i class="pe-7s-ribbon"></i></div>
+                <div>
+                    <div class="head-title">Category Configuration</div>
+                    <div class="head-sub">Type, billing rules and payment options</div>
+                </div>
+            </div>
+            <a href="{% url 'fees:category_edit' category.pk %}"
+               class="btn btn-xs btn-outline-primary d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-edit"></i> Edit
+            </a>
+        </div>
+        <div class="detail-card-body">
+
+            <!-- Category type highlight -->
+            <div class="value-highlight">
+                <div>
+                    {% with t=category.category_type %}
+                    {% if t == 'TUITION' %}
+                        <div class="value-highlight-number"><i class="fa fa-graduation-cap"></i></div>
+                    {% elif t == 'BOARDING' %}
+                        <div class="value-highlight-number"><i class="fa fa-home"></i></div>
+                    {% elif t == 'MEALS' %}
+                        <div class="value-highlight-number"><i class="fa fa-utensils"></i></div>
+                    {% elif t == 'TRANSPORT' %}
+                        <div class="value-highlight-number"><i class="fa fa-bus"></i></div>
+                    {% elif t == 'EXAM' %}
+                        <div class="value-highlight-number"><i class="fa fa-pen"></i></div>
+                    {% elif t == 'DEPOSIT' %}
+                        <div class="value-highlight-number"><i class="fa fa-piggy-bank"></i></div>
+                    {% else %}
+                        <div class="value-highlight-number"><i class="fa fa-tag"></i></div>
+                    {% endif %}
+                    {% endwith %}
+                    <div class="value-highlight-label">{{ category.get_category_type_display }}</div>
+                </div>
+                <div style="flex:1;"></div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:4px;">Frequency</div>
+                    <div style="font-weight:700;font-size:13px;">{{ category.get_frequency_display }}</div>
+                    <div style="font-size:11px;color:var(--ink-muted);margin-top:8px;margin-bottom:4px;">Applies To</div>
+                    <div style="font-weight:700;font-size:13px;">{{ category.get_applicability_display }}</div>
+                </div>
+            </div>
+
+            <div class="kv-grid cols-4">
+                <div>
+                    <div class="kv-item-label">Mandatory</div>
+                    <div class="kv-item-val">
+                        {% if category.is_mandatory %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive">Optional</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Refundable</div>
+                    <div class="kv-item-val">
+                        {% if category.is_refundable %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Partial Payment</div>
+                    <div class="kv-item-val">
+                        {% if category.allows_partial_payment %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Taxable</div>
+                    <div class="kv-item-val">
+                        {% if category.is_taxable %}
+                            <span class="s-pill" style="background:var(--amber-lt);color:var(--amber);font-size:11px;padding:2px 8px;">
+                                {{ category.default_tax_rate }}%
+                            </span>
+                        {% else %}
+                            <span class="s-pill sp-inactive">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Recurring</div>
+                    <div class="kv-item-val">
+                        {% if category.is_recurring %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Display Order</div>
+                    <div class="kv-item-val">{{ category.display_order }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Currency</div>
+                    <div class="kv-item-val">
+                        {% if category.currency %}
+                            <code style="background:var(--surface-2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:12px;">{{ category.currency }}</code>
+                        {% else %}
+                            <span class="kv-item-val muted">School default</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Display Group</div>
+                    <div class="kv-item-val">
+                        {% if category.display_group %}
+                            <a href="{% url 'fees:display_group_detail' category.display_group.pk %}"
+                               style="color:var(--accent);text-decoration:none;font-size:12.5px;">
+                                {{ category.display_group.name }}
+                            </a>
+                        {% else %}
+                            <span class="kv-item-val muted">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if category.description %}
+            <div style="margin-top:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12.5px;color:var(--ink);line-height:1.7;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px;">
+                    <i class="fa fa-align-left me-1"></i>Description
+                </div>
+                {{ category.description|linebreaksbr }}
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <!-- ── GL Routing ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon teal"><i class="pe-7s-network"></i></div>
+                <div>
+                    <div class="head-title">General Ledger Routing</div>
+                    <div class="head-sub">Where this category posts in the chart of accounts</div>
+                </div>
+            </div>
+        </div>
+        <div class="detail-card-body">
+            {% if category.is_liability_type %}
+            <div style="background:var(--amber-lt);border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:0 8px 8px 0;padding:12px 16px;font-size:12.5px;color:#78350f;margin-bottom:14px;display:flex;gap:10px;line-height:1.6;">
+                <i class="fa fa-exclamation-triangle" style="flex-shrink:0;margin-top:1px;"></i>
+                <div>
+                    <strong>DEPOSIT — routes to a LIABILITY account.</strong>
+                    Invoice generators and GL routing code must call <code>is_liability_type()</code>
+                    before routing. Booking a deposit to a revenue account is an accounting error.
+                </div>
+            </div>
+            {% endif %}
+            <div class="kv-item-label" style="margin-bottom:8px;">Suggested Account</div>
+            <div class="gl-box">{{ category.get_suggested_gl_account }}</div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">
+                For actual routing use <code>FinancialSettings.get_revenue_account()</code> or
+                <code>CoreAccountMappings.get_revenue_account(category)</code>. Do not derive
+                accounts from this string programmatically.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Fee Structures using this category ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon amber"><i class="pe-7s-albums"></i></div>
+                <div>
+                    <div class="head-title">Used in Fee Structures</div>
+                    <div class="head-sub">
+                        {{ structure_count }} structure{{ structure_count|pluralize }} include this category
+                    </div>
+                </div>
+            </div>
+            {% if structure_count > 0 %}
+            <a href="{% url 'fees:structure_list' %}?fee_category={{ category.pk }}"
+               class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-external-link"></i> View All
+            </a>
+            {% endif %}
+        </div>
+
+        {% if structure_items %}
+        <div style="overflow-x:auto;">
+        <table class="struct-table">
+            <thead>
+                <tr>
+                    <th>Structure</th>
+                    <th>Type</th>
+                    <th class="text-end">Amount</th>
+                    <th class="text-center">Mandatory</th>
+                    <th class="text-center">Scholarship</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center" style="width:50px;">Link</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in structure_items %}
+            <tr>
+                <td>
+                    <div style="font-weight:600;font-size:13px;color:var(--ink);">
+                        {{ item.fee_structure.name }}
+                    </div>
+                    {% if item.fee_structure.academic_year %}
+                    <div style="font-size:11px;color:var(--ink-muted);">
+                        {{ item.fee_structure.academic_year }}
+                    </div>
+                    {% endif %}
+                </td>
+                <td>
+                    <span style="font-size:12px;color:var(--ink-muted);">
+                        {{ item.fee_structure.get_structure_type_display }}
+                    </span>
+                </td>
+                <td class="text-end">
+                    {% if item.use_variable_amount %}
+                        <span style="color:var(--ink-muted);font-style:italic;font-size:12px;">Variable</span>
+                    {% else %}
+                        <span style="font-weight:700;font-size:13px;">{{ item.amount|money }}</span>
+                    {% endif %}
+                    {% if item.tax_percentage > 0 %}
+                    <div style="font-size:10.5px;color:var(--amber);">+ {{ item.tax_percentage }}% tax</div>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if item.is_mandatory %}
+                        <span class="s-pill sp-active" style="font-size:10.5px;padding:2px 7px;"><i class="fa fa-check-circle" style="font-size:8px;"></i> Yes</span>
+                    {% else %}
+                        <span class="s-pill sp-inactive" style="font-size:10.5px;padding:2px 7px;">No</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if item.scholarship_eligible %}
+                        <span class="s-pill sp-active" style="font-size:10.5px;padding:2px 7px;"><i class="fa fa-check-circle" style="font-size:8px;"></i> Yes</span>
+                    {% else %}
+                        <span class="s-pill sp-inactive" style="font-size:10.5px;padding:2px 7px;">No</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if item.fee_structure.is_active %}
+                        <span class="s-pill sp-active" style="font-size:10.5px;padding:2px 7px;">Active</span>
+                    {% else %}
+                        <span class="s-pill sp-inactive" style="font-size:10.5px;padding:2px 7px;">Inactive</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    <a href="{% url 'fees:structure_detail' item.fee_structure.pk %}"
+                       class="btn btn-xs btn-outline-primary"
+                       style="font-size:10.5px;padding:3px 8px;">
+                        <i class="fa fa-arrow-right"></i>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% if structure_count > structure_items|length %}
+        <div style="padding:10px 16px;text-align:center;font-size:12px;color:var(--ink-muted);border-top:1px solid var(--border);">
+            Showing {{ structure_items|length }} of {{ structure_count }} —
+            <a href="{% url 'fees:structure_list' %}?fee_category={{ category.pk }}" style="color:var(--accent);">View all</a>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <i class="pe-7s-albums"></i>
+            <p>Not yet added to any fee structure.</p>
+            <div style="margin-top:14px;">
+                <a href="{% url 'fees:structure_list' %}"
+                   style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:13px;font-weight:600;border-radius:6px;background:var(--accent);color:#fff;text-decoration:none;">
+                    <i class="fa fa-layer-group" style="font-size:11px;"></i>Browse Structures
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+</div>{# /col-lg-8 #}
+
+<!-- ══════════════════════════ RIGHT COLUMN ══════════════════════════ -->
+<div class="col-lg-4">
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-bar-chart"></i> Stats</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">In Structures</span>
+                <span class="sidebar-row-val" style="color:var(--accent);">{{ structure_count }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Invoice Lines</span>
+                <span class="sidebar-row-val" style="color:var(--green);">{{ invoice_item_count }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Category Type</span>
+                <span class="sidebar-row-val" style="font-size:12px;">{{ category.get_category_type_display }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Frequency</span>
+                <span class="sidebar-row-val">{{ category.get_frequency_display }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Applies To</span>
+                <span class="sidebar-row-val" style="font-size:12px;">{{ category.get_applicability_display }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Display Order</span>
+                <span class="sidebar-row-val">{{ category.display_order }}</span>
+            </div>
+            {% if category.display_group %}
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Display Group</span>
+                <span class="sidebar-row-val">{{ category.display_group.name }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-money-bill-wave"></i> Payment Rules</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Mandatory</span>
+                <span class="sidebar-row-val" style="color:{% if category.is_mandatory %}var(--amber){% else %}var(--ink-muted){% endif %};">
+                    {{ category.is_mandatory|yesno:"Yes,No" }}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Refundable</span>
+                <span class="sidebar-row-val" style="color:{% if category.is_refundable %}var(--green){% else %}var(--red){% endif %};">
+                    {{ category.is_refundable|yesno:"Yes,No" }}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Partial Payment</span>
+                <span class="sidebar-row-val">{{ category.allows_partial_payment|yesno:"Yes,No" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Taxable</span>
+                <span class="sidebar-row-val"
+                      style="color:{% if category.is_taxable %}var(--amber){% else %}var(--ink-muted){% endif %};">
+                    {% if category.is_taxable %}Yes — {{ category.default_tax_rate }}%{% else %}No{% endif %}
+                </span>
+            </div>
+            {% if category.currency %}
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Currency</span>
+                <span class="sidebar-row-val" style="font-family:'Courier New',monospace;">{{ category.currency }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-cog"></i> Actions</div>
+        <div class="sidebar-card-body">
+            <div class="action-btn-group">
+                <a href="{% url 'fees:category_edit' category.pk %}" class="action-btn">
+                    <i class="fa fa-edit"></i> Edit Category
+                </a>
+                <a href="{% url 'fees:structure_list' %}?fee_category={{ category.pk }}" class="action-btn">
+                    <i class="fa fa-layer-group"></i> View in Structures
+                </a>
+                {% if invoice_item_count > 0 %}
+                <a href="{% url 'fees:invoice_list' %}?fee_category={{ category.pk }}" class="action-btn">
+                    <i class="fa fa-file-invoice"></i> View Invoices
+                </a>
+                {% endif %}
+                <button type="button" class="action-btn warning"
+                        hx-get="{% url 'fees:category_toggle_active_modal' category.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    {% if category.is_active %}
+                        <i class="fa fa-pause-circle"></i> Deactivate
+                    {% else %}
+                        <i class="fa fa-play-circle"></i> Activate
+                    {% endif %}
+                </button>
+                {% if not category.structure_items.exists and not category.feeinvoiceitem_set.exists %}
+                <button type="button" class="action-btn danger"
+                        hx-get="{% url 'fees:category_delete_modal' category.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-trash"></i> Delete Category
+                </button>
+                {% else %}
+                <button type="button" class="action-btn"
+                        style="cursor:not-allowed;opacity:.5;"
+                        disabled
+                        data-bs-toggle="tooltip"
+                        title="In use — remove from all structures and invoices before deleting">
+                    <i class="fa fa-trash"></i> Delete Category
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-info-circle"></i> Record Info</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Code</span>
+                <span class="sidebar-row-val" style="font-family:'Courier New',monospace;font-size:12px;">{{ category.code }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Status</span>
+                <span class="sidebar-row-val">
+                    {% if category.is_active %}
+                        <span style="color:var(--green);font-weight:700;">Active</span>
+                    {% else %}
+                        <span style="color:var(--red);font-weight:700;">Inactive</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Created</span>
+                <span class="sidebar-row-val">{{ category.created_at|date:"d M Y" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Last Updated</span>
+                <span class="sidebar-row-val">{{ category.updated_at|date:"d M Y" }}</span>
+            </div>
+        </div>
+    </div>
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+<!-- ── HTMX modal shell ── -->
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    var currentModal = null;
+
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target.id !== 'modal-container') return;
+        var dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+        if (!dialog) return;
+        document.getElementById('dynamicModalWrapper')?.remove();
+        var wrapper = document.createElement('div');
+        wrapper.className = 'modal fade';
+        wrapper.id = 'dynamicModalWrapper';
+        wrapper.setAttribute('tabindex', '-1');
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(dialog);
+        document.body.appendChild(wrapper);
+        currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+        wrapper.addEventListener('hidden.bs.modal', function () {
+            wrapper.remove();
+            document.getElementById('modal-container').innerHTML = '';
+            currentModal = null;
+        });
+    });
+
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        var xhr      = e.detail.xhr;
+        var message  = xhr.getResponseHeader('HX-Alert-Message');
+        var type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+        var title    = xhr.getResponseHeader('HX-Alert-Title');
+        var close    = xhr.getResponseHeader('HX-Close-Modal');
+        var redirect = xhr.getResponseHeader('HX-Redirect');
+        if (close === 'true' && currentModal) currentModal.hide();
+        if (message && typeof Swal !== 'undefined') {
+            setTimeout(function () {
+                Swal.fire({
+                    icon: type,
+                    title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                    text: message,
+                    confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                    timer: type === 'success' ? 3000 : null,
+                    timerProgressBar: type === 'success',
+                }).then(function () {
+                    if (redirect) window.location.href = redirect;
+                    else if (type === 'success') window.location.reload();
+                });
+            }, 300);
+        }
+    });
+
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>
+{% endblock %}

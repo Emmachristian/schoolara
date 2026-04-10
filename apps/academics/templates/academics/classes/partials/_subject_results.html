@@ -1,0 +1,298 @@
+{# academics/templates/academics/classes/partials/_subject_results.html #}
+{% load humanize %}
+
+<style>
+.subj-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.subj-tbl thead th {
+    background: #f8fafc; padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.subj-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.subj-tbl tbody tr:last-child td { border-bottom: none; }
+.subj-tbl tbody tr:hover td { background: #eff6ff !important; }
+.subj-tbl tbody tr.row-muted td { color: #94a3b8; }
+.subj-tbl tbody tr.row-muted:hover td { background: #f8fafc !important; }
+
+/* ── Subject name / code ── */
+.subj-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; line-height: 1.3; }
+.subj-name:hover { color: #1d4ed8; }
+.subj-code { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 2px; display: block; }
+
+/* ── Type chips ── */
+.type-chip { display: inline-flex; align-items: center; gap: 3px; border-radius: 4px; font-size: 10.5px; font-weight: 700; padding: 2px 7px; white-space: nowrap; margin-top: 3px; }
+.type-math   { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.type-lang   { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.type-sci    { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.type-social { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.type-arts   { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+.type-pe     { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.type-voc    { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.type-other  { background: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; }
+
+/* ── Compulsory / optional chip ── */
+.cp-pill       { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.cp-compulsory { background: #eff6ff; color: #1d4ed8; }
+.cp-optional   { background: #fffbeb; color: #b45309; }
+
+/* ── Teacher cell ── */
+.teacher-avatar {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem; font-weight: 700; color: #1d4ed8;
+    background: #eff6ff; border: 2px solid #bfdbfe;
+}
+.teacher-name { font-size: 12.5px; font-weight: 600; color: #0f172a; display: block; }
+.teacher-id   { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; }
+.no-teacher   { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── Weight split bar ── */
+.weight-bar { width: 80px; height: 6px; border-radius: 6px; background: #e2e8f0; overflow: hidden; margin-top: 4px; }
+.weight-ca   { height: 100%; background: #1d4ed8; border-radius: 6px; }
+.weight-vals { font-size: 10.5px; color: #64748b; display: flex; justify-content: space-between; width: 80px; }
+.weight-ca-val { color: #1d4ed8; font-weight: 700; }
+.weight-ex-val { color: #15803d; font-weight: 700; }
+
+/* ── Active status ── */
+.stat-pill   { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; }
+.sp-active   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sp-inactive { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── Pagination ── */
+.pag-bar {
+    padding: 12px 16px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: #64748b;
+}
+
+/* ── Empty ── */
+.tbl-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.dropdown-menu   { font-size: .85rem; min-width: 185px; border: 1px solid #e2e8f0; }
+.dropdown-item   { padding: 6px 13px; }
+.dropdown-header { font-size: .7rem; padding: 6px 13px 2px; }
+</style>
+
+{% if subjects %}
+<div style="overflow-x:auto;">
+    <table class="subj-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Subject</th>
+                <th>Teacher</th>
+                <th class="text-center">Hrs/Week</th>
+                <th class="text-center">Assessment Split</th>
+                <th class="text-center">Type</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cs in subjects %}
+            <tr class="{% if not cs.is_active %}row-muted{% endif %}">
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+
+                {# ── Subject ── #}
+                <td>
+                    <a href="{% url 'academics:subject_detail' cs.subject.pk %}" class="subj-name">
+                        {{ cs.subject.name }}
+                    </a>
+                    <span class="subj-code">
+                        <i class="fa fa-hashtag" style="font-size:9px;"></i> {{ cs.subject.code }}
+                    </span>
+                    {% with t=cs.subject.subject_type %}
+                    {% if t == "MATH" or t == "NUMERACY" %}
+                        <span class="type-chip type-math"><i class="fa fa-calculator" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% elif t == "LANG_ARTS" or t == "LITERACY" or t == "MOTHER_TONGUE" or t == "FOREIGN_LANG" %}
+                        <span class="type-chip type-lang"><i class="fa fa-language" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% elif t == "SCIENCES" or t == "SCIENCE_ENV" %}
+                        <span class="type-chip type-sci"><i class="fa fa-flask" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% elif t == "SOCIAL" or t == "RELIGION" or t == "RELIGIOUS" or t == "GUIDANCE" %}
+                        <span class="type-chip type-social"><i class="fa fa-globe" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% elif t == "ARTS_CRAFTS" or t == "MUSIC" or t == "CREATIVE" %}
+                        <span class="type-chip type-arts"><i class="fa fa-palette" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% elif t == "PE" %}
+                        <span class="type-chip type-pe"><i class="fa fa-running" style="font-size:9px;"></i>PE</span>
+                    {% elif t == "TECHNICAL" or t == "BUSINESS" or t == "AGRICULTURE" or t == "HOME_ECON" or t == "COMPUTER" or t == "LIFE_SKILLS" %}
+                        <span class="type-chip type-voc"><i class="fa fa-tools" style="font-size:9px;"></i>{{ cs.subject.get_subject_type_display }}</span>
+                    {% else %}
+                        <span class="type-chip type-other">{{ cs.subject.get_subject_type_display }}</span>
+                    {% endif %}
+                    {% endwith %}
+                </td>
+
+                {# ── Teacher ── #}
+                <td>
+                    {% if cs.teacher %}
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="teacher-avatar">
+                                {{ cs.teacher.staff.first_name|first }}{{ cs.teacher.staff.last_name|first }}
+                            </div>
+                            <div>
+                                <span class="teacher-name">{{ cs.teacher.staff.full_name }}</span>
+                                <span class="teacher-id">{{ cs.teacher.staff.staff_id }}</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <span class="no-teacher">
+                            <i class="fa fa-exclamation-circle" style="font-size:9px;"></i>Not assigned
+                        </span>
+                    {% endif %}
+                </td>
+
+                {# ── Hours/week ── #}
+                <td class="text-center">
+                    {% if cs.hours_per_week %}
+                        <span style="font-weight:700;font-size:15px;color:#0f172a;">{{ cs.hours_per_week }}</span>
+                        <span style="font-size:10.5px;color:#94a3b8;display:block;">hrs/week</span>
+                    {% else %}
+                        <span style="color:#94a3b8;">—</span>
+                    {% endif %}
+                </td>
+
+                {# ── Assessment split ── #}
+                <td class="text-center">
+                    <div class="weight-vals">
+                        <span class="weight-ca-val">CA {{ cs.continuous_assessment_weight }}%</span>
+                        <span class="weight-ex-val">Ex {{ cs.final_exam_weight }}%</span>
+                    </div>
+                    <div class="weight-bar">
+                        <div class="weight-ca" style="width:{{ cs.continuous_assessment_weight }}%;"></div>
+                    </div>
+                </td>
+
+                {# ── Compulsory / optional ── #}
+                <td class="text-center">
+                    {% if cs.is_optional %}
+                        <span class="cp-pill cp-optional"><i class="fa fa-circle" style="font-size:7px;"></i>Optional</span>
+                    {% else %}
+                        <span class="cp-pill cp-compulsory"><i class="fa fa-star" style="font-size:7px;"></i>Compulsory</span>
+                    {% endif %}
+                </td>
+
+                {# ── Active status ── #}
+                <td class="text-center">
+                    {% if cs.is_active %}
+                        <span class="stat-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i>Active</span>
+                    {% else %}
+                        <span class="stat-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i>Inactive</span>
+                    {% endif %}
+                </td>
+
+                {# ── Actions ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><h6 class="dropdown-header">Edit</h6></li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'academics:class_subject_detail' cs.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
+                                </a>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'academics:class_subject_edit' cs.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit Assignment
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'academics:class_subject_delete_modal' cs.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Remove
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if subjects.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>Showing <strong>{{ subjects.start_index }}</strong>–<strong>{{ subjects.end_index }}</strong> of <strong>{{ subjects.paginator.count }}</strong> subjects</span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if subjects.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'academics:class_subjects_partial' class_instance.pk %}"
+                    hx-target="#tab-content" hx-include="#subjectFilterForm"
+                    hx-vals='{"page":"{{ subjects.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+
+        {% for p in subjects.paginator.page_range %}
+            {% if p == subjects.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > subjects.number|add:"-3" and p < subjects.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'academics:class_subjects_partial' class_instance.pk %}"
+                            hx-target="#tab-content" hx-include="#subjectFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if subjects.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'academics:class_subjects_partial' class_instance.pk %}"
+                    hx-target="#tab-content" hx-include="#subjectFilterForm"
+                    hx-vals='{"page":"{{ subjects.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-book-open"></i>
+    <p>
+        {% if request.GET.q or request.GET.is_optional or request.GET.has_teacher %}
+            No subjects match your filters.
+        {% else %}
+            No subjects assigned to this class yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.is_optional or request.GET.has_teacher %}
+    <button type="button" onclick="clearSubjectFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <button class="btn btn-sm btn-outline-success"
+            hx-get="{% url 'academics:class_subject_create' %}?class_pk={{ class_instance.pk }}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+        <i class="fa fa-plus me-1"></i>Add Subject
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

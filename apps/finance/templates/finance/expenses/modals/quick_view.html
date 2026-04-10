@@ -1,0 +1,131 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#e8eaf6;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa fa-bolt" style="color:#3949ab;font-size:15px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">
+                        Quick View
+                    </h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;">
+                        <span class="font-monospace">{{ expense.expense_number }}</span>
+                        &mdash; {{ expense.category.name }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:0;">
+
+            <!-- STATUS + AMOUNT HERO -->
+            <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:14px;font-weight:600;color:#334155;">{{ expense.description }}</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:3px;">
+                        <i class="fa fa-calendar me-1"></i>{{ expense.expense_date|date:"d M Y" }}
+                        {% if expense.payee_name %}
+                        &nbsp;·&nbsp;<i class="fa fa-user me-1"></i>{{ expense.payee_name }}
+                        {% endif %}
+                        {% if expense.fiscal_period %}
+                        &nbsp;·&nbsp;<i class="fa fa-folder me-1"></i>{{ expense.fiscal_period.name }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    {% if expense.status == 'DRAFT' %}
+                        <span style="background:#f1f5f9;color:#475569;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-pencil me-1"></i>Draft</span>
+                    {% elif expense.status == 'PENDING_APPROVAL' %}
+                        <span style="background:#fef9c3;color:#92400e;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-clock-o me-1"></i>Pending</span>
+                    {% elif expense.status == 'APPROVED' %}
+                        <span style="background:#dbeafe;color:#1d4ed8;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-check-circle me-1"></i>Approved</span>
+                    {% elif expense.status == 'PAID' %}
+                        <span style="background:#dcfce7;color:#15803d;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-check me-1"></i>Paid</span>
+                    {% elif expense.status == 'REJECTED' %}
+                        <span style="background:#fee2e2;color:#b91c1c;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-times-circle me-1"></i>Rejected</span>
+                    {% elif expense.status == 'CANCELLED' %}
+                        <span style="background:#f1f5f9;color:#64748b;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fa fa-ban me-1"></i>Cancelled</span>
+                    {% endif %}
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{{ expense.total_amount|money }}</div>
+                    {% if expense.subtotal_amount != expense.total_amount %}
+                    <div style="font-size:11px;color:#64748b;">Subtotal: {{ expense.subtotal_amount|money }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- LINE ITEMS -->
+            {% if expense.lines.exists %}
+            <div style="padding:14px 22px 0;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:10px;">
+                    <i class="fa fa-list me-1"></i>Line Items
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:14px;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <th style="padding:6px 8px 8px 0;color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">Description</th>
+                            <th style="padding:6px 8px 8px;color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;text-align:right;">Qty</th>
+                            <th style="padding:6px 8px 8px;color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">UoM</th>
+                            <th style="padding:6px 0 8px 8px;color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;text-align:right;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in expense.lines.all %}
+                        <tr style="border-bottom:1px solid #f8fafc;">
+                            <td style="padding:7px 8px 7px 0;color:#334155;">{{ line.description }}</td>
+                            <td style="padding:7px 8px;color:#334155;text-align:right;">{{ line.quantity }}</td>
+                            <td style="padding:7px 8px;color:#64748b;">{{ line.unit_of_measure.abbreviation|default:"—" }}</td>
+                            <td style="padding:7px 0 7px 8px;font-weight:600;color:#0f172a;text-align:right;font-family:monospace;">{{ line.amount|money }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0;">
+                            <td colspan="3" style="padding:8px 8px 4px 0;font-weight:700;color:#334155;font-size:12px;">Total</td>
+                            <td style="padding:8px 0 4px 8px;font-weight:800;color:#0f172a;text-align:right;font-family:monospace;font-size:13px;">{{ expense.total_amount|money }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- PAYEE + NOTES -->
+            {% if expense.payee_name or expense.vendor_reference or expense.notes %}
+            <div style="padding:14px 22px;border-bottom:1px solid #f1f5f9;display:flex;gap:20px;flex-wrap:wrap;">
+                {% if expense.payee_name %}
+                <div style="flex:1;min-width:160px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:4px;">Payee</div>
+                    <div style="font-size:13px;font-weight:600;color:#334155;">{{ expense.payee_name }}</div>
+                    {% if expense.payee_contact %}
+                    <div style="font-size:12px;color:#64748b;">{{ expense.payee_contact }}</div>
+                    {% endif %}
+                    {% if expense.vendor_reference %}
+                    <div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:2px;">Ref: {{ expense.vendor_reference }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if expense.notes %}
+                <div style="flex:2;min-width:200px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:4px;">Notes</div>
+                    <div style="font-size:12.5px;color:#475569;line-height:1.6;">{{ expense.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:12px 20px;justify-content:space-between;">
+            <a href="{% url 'finance:expense_detail' expense.pk %}" class="btn btn-outline-primary btn-sm">
+                <i class="fa fa-eye me-1"></i> Full Details
+            </a>
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+
+    </div>
+</div>

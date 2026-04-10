@@ -1,0 +1,1080 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Financial Summary — {{ school_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-2:     #334155;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --teal:      #0f766e;
+    --teal-lt:   #f0fdfa;
+    --radius:    10px;
+}
+
+/* ── Session bar ── */
+.session-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 22px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.session-bar label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); white-space: nowrap; margin: 0; }
+.session-bar select { border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 13px; color: var(--ink); background: var(--surface-2); flex: 1; min-width: 220px; max-width: 360px; cursor: pointer; }
+.session-bar select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(29,78,216,.1); }
+
+/* ── KPI cards ── */
+.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 22px 18px; position: relative; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.04); transition: box-shadow .2s, transform .15s; height: 100%; }
+.kpi-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,.10); transform: translateY(-2px); }
+.kpi-badge { position: absolute; top: 18px; right: 18px; width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; flex-shrink: 0; }
+.kpi-accent .kpi-badge { background: var(--accent); box-shadow: 0 4px 12px rgba(29,78,216,.25); }
+.kpi-green  .kpi-badge { background: var(--green);  box-shadow: 0 4px 12px rgba(21,128,61,.25); }
+.kpi-red    .kpi-badge { background: var(--red);    box-shadow: 0 4px 12px rgba(220,38,38,.25); }
+.kpi-amber  .kpi-badge { background: var(--amber);  box-shadow: 0 4px 12px rgba(180,83,9,.25); }
+.kpi-teal   .kpi-badge { background: var(--teal);   box-shadow: 0 4px 12px rgba(15,118,110,.25); }
+.kpi-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-muted); margin-bottom: 10px; padding-right: 54px; }
+.kpi-value { font-size: 26px; font-weight: 800; color: var(--ink); line-height: 1.1; margin-bottom: 6px; font-family: 'Poppins', sans-serif; font-variant-numeric: tabular-nums; word-break: break-all; }
+.kpi-delta { font-size: 11.5px; display: flex; align-items: center; gap: 4px; }
+.kpi-delta.up   { color: var(--green); }
+.kpi-delta.down { color: var(--red); }
+
+/* ── Dash card ── */
+.dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.dash-head { padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; }
+.dash-title { font-size: 12.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.dash-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: var(--accent-lt); color: var(--accent); border: 1px solid var(--accent-bd); }
+.dash-body  { padding: 16px 18px; }
+
+/* ── Progress bars ── */
+.prog-outer { background: var(--surface-3); border-radius: 4px; height: 6px; overflow: hidden; }
+.prog-inner { height: 100%; border-radius: 4px; transition: width .6s ease; }
+
+/* ── Metric rows ── */
+.metric-row { margin-bottom: 18px; }
+.metric-row:last-child { margin-bottom: 0; }
+.metric-labels { display: flex; justify-content: space-between; margin-bottom: 6px; align-items: baseline; }
+.metric-name { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.metric-pct  { font-size: 13px; font-weight: 800; font-family: 'Poppins', sans-serif; }
+.metric-sub  { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+
+/* ── Data tables ── */
+.dt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dt thead th { background: var(--surface-2); padding: 10px 14px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-faint); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.dt tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.dt tbody tr:last-child td { border-bottom: none; }
+.dt tbody tr { transition: background .12s; }
+.dt tbody tr:hover td { background: #f8faff; }
+.dt tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.dt tfoot td { padding: 10px 14px; border-top: 2px solid var(--border); font-weight: 700; font-size: 12.5px; background: var(--surface-2); }
+
+/* ── Rate pills ── */
+.rate-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 700; }
+.rate-good { background: var(--green-lt); color: var(--green); }
+.rate-ok   { background: var(--amber-lt); color: var(--amber); }
+.rate-bad  { background: var(--red-lt);   color: var(--red); }
+
+/* ── Trend tabs ── */
+.fs-tabs { display: flex; gap: 2px; background: var(--surface-3); padding: 4px; border-radius: 8px; }
+.fs-tab  { padding: 6px 16px; border-radius: 6px; border: none; background: transparent; font-size: 12px; font-weight: 600; color: var(--ink-muted); cursor: pointer; transition: all .15s; }
+.fs-tab.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+/* ── Section divider ── */
+.sec-heading { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-faint); margin: 24px 0 14px; display: flex; align-items: center; gap: 10px; }
+.sec-heading::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── Legend rows ── */
+.legend-item { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.legend-item:last-child { border-bottom: none; }
+.legend-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-label { flex: 1; color: var(--ink-2); }
+.legend-amt  { font-weight: 700; font-family: 'Poppins', sans-serif; font-size: 13px; color: var(--ink); }
+.legend-pct  { font-size: 11px; color: var(--ink-faint); margin-left: 6px; }
+
+/* ── Mono ── */
+.mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px; }
+
+@media (max-width: 576px) { .kpi-value { font-size: 20px; } }
+</style>
+{% endblock %}
+
+
+{% block content %}
+{% currency_info as curr %}
+
+<!-- Django flash messages -->
+{% if messages %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    {% for message in messages %}
+        {% if 'sweetalert' in message.tags %}
+            {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}showSuccess('{{ message|escapejs }}');
+            {% elif message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}showError('{{ message|escapejs }}');
+            {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}showWarning('{{ message|escapejs }}');
+            {% else %}showInfo('{{ message|escapejs }}');
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+});
+</script>
+{% endif %}
+
+<!-- ── Page Header ── -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-graph1 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Financial Summary
+                <div class="page-title-subheading">Revenue, expenses &amp; fee collection analysis</div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2 flex-wrap">
+            <a href="{% url 'fees:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i>Dashboard
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="modal" data-bs-target="#incomeStatementModal">
+                <i class="fa fa-file-alt me-1"></i>Income Statement
+            </button>
+            <a href="{% url 'fees:collection_report' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-chart-bar me-1"></i>Collection Report
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ── Session Selector ── -->
+<div class="session-bar">
+    <label><i class="fa fa-calendar-alt me-2"></i>Academic Session</label>
+    <form action="" method="GET" style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap;">
+        <select name="academic_session" onchange="this.form.submit()">
+            {% for session in academic_sessions %}
+                <option value="{{ session.id }}" {% if this_session.id == session.id %}selected{% endif %}>
+                    {{ session.year_name }} — {{ session.term_name }}
+                </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary" style="white-space:nowrap;">
+            <i class="fa fa-filter me-1"></i>Apply
+        </button>
+    </form>
+    {% if this_session %}
+    <span style="font-size:11.5px;color:var(--ink-muted);white-space:nowrap;">
+        Showing: <strong style="color:var(--ink);">{{ this_session }}</strong>
+    </span>
+    {% endif %}
+</div>
+
+<!-- ══════════════════════════════════════
+     KPI CARDS
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-badge"><i class="fa fa-money-bill-wave"></i></div>
+            <div class="kpi-label">Total Revenue</div>
+            <div class="kpi-value">{{ total_paid|money }}</div>
+            <div class="kpi-delta {% if revenue_change >= 0 %}up{% else %}down{% endif %}">
+                <i class="fa fa-arrow-{% if revenue_change >= 0 %}up{% else %}down{% endif %}"></i>
+                {{ revenue_change|abs_value|floatformat:1 }}% from previous period
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-red">
+            <div class="kpi-badge"><i class="fa fa-file-invoice-dollar"></i></div>
+            <div class="kpi-label">Total Expenses</div>
+            <div class="kpi-value">{{ total_expenditure|money }}</div>
+            <div class="kpi-delta {% if expense_change <= 0 %}up{% else %}down{% endif %}">
+                <i class="fa fa-arrow-{% if expense_change >= 0 %}up{% else %}down{% endif %}"></i>
+                {{ expense_change|abs_value|floatformat:1 }}% from previous period
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card {% if total_profit >= 0 %}kpi-accent{% else %}kpi-amber{% endif %}">
+            <div class="kpi-badge"><i class="fa fa-chart-line"></i></div>
+            <div class="kpi-label">Net {% if total_profit >= 0 %}Profit{% else %}Loss{% endif %}</div>
+            <div class="kpi-value">{{ total_profit|money }}</div>
+            <div class="kpi-delta {% if profit_change >= 0 %}up{% else %}down{% endif %}">
+                <i class="fa fa-arrow-{% if profit_change >= 0 %}up{% else %}down{% endif %}"></i>
+                {{ profit_change|abs_value|floatformat:1 }}% from previous period
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-percent"></i></div>
+            <div class="kpi-label">Fee Collection Rate</div>
+            <div class="kpi-value">{{ fees_coverage_percentage|floatformat:1 }}%</div>
+            <div style="margin-top:8px;">
+                <div class="prog-outer">
+                    <div class="prog-inner"
+                         style="width:{{ fees_coverage_percentage|floatformat:0 }}%;background:var(--teal);"></div>
+                </div>
+                <div style="font-size:11px;color:var(--ink-faint);margin-top:5px;">
+                    {{ fees_collected|money }} of {{ fees_billed|money }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAYMENT TREND + PERFORMANCE METRICS
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-chart-area" style="color:var(--accent);"></i>
+                    Payment Collection Trend
+                </span>
+                {% if this_session %}<span class="dash-badge">{{ this_session }}</span>{% endif %}
+            </div>
+            <div class="dash-body">
+                <div id="paymentTrendChart" style="height:280px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-tachometer-alt" style="color:var(--purple);"></i>
+                    Performance Metrics
+                </span>
+            </div>
+            <div class="dash-body">
+                <div class="metric-row">
+                    <div class="metric-labels">
+                        <span class="metric-name">Budget Utilization</span>
+                        <span class="metric-pct" style="color:{% if total_utilization > 80 %}var(--red){% elif total_utilization > 60 %}var(--amber){% else %}var(--green){% endif %};">
+                            {{ total_utilization|floatformat:1 }}%
+                        </span>
+                    </div>
+                    <div class="prog-outer">
+                        <div class="prog-inner" style="width:{{ total_utilization|floatformat:0 }}%;background:{% if total_utilization > 80 %}var(--red){% elif total_utilization > 60 %}var(--amber){% else %}var(--green){% endif %};"></div>
+                    </div>
+                    <div class="metric-sub">{% if total_utilization > 80 %}High — review spending{% elif total_utilization > 60 %}Moderate{% else %}Good{% endif %}</div>
+                </div>
+                <div class="metric-row">
+                    <div class="metric-labels">
+                        <span class="metric-name">Fees Coverage</span>
+                        <span class="metric-pct" style="color:{% if fees_coverage_percentage >= 85 %}var(--green){% elif fees_coverage_percentage >= 65 %}var(--amber){% else %}var(--red){% endif %};">
+                            {{ fees_coverage_percentage|floatformat:1 }}%
+                        </span>
+                    </div>
+                    <div class="prog-outer">
+                        <div class="prog-inner" style="width:{{ fees_coverage_percentage|floatformat:0 }}%;background:{% if fees_coverage_percentage >= 85 %}var(--green){% elif fees_coverage_percentage >= 65 %}var(--amber){% else %}var(--red){% endif %};"></div>
+                    </div>
+                    <div class="metric-sub">{{ fees_collected|money }} of {{ fees_billed|money }}</div>
+                </div>
+                <div class="metric-row">
+                    <div class="metric-labels">
+                        <span class="metric-name">Student Payment Completion</span>
+                        <span class="metric-pct" style="color:{% if pupil_payment_completion_rate >= 85 %}var(--green){% elif pupil_payment_completion_rate >= 60 %}var(--amber){% else %}var(--red){% endif %};">
+                            {{ pupil_payment_completion_rate|floatformat:1 }}%
+                        </span>
+                    </div>
+                    <div class="prog-outer">
+                        <div class="prog-inner" style="width:{{ pupil_payment_completion_rate|floatformat:0 }}%;background:{% if pupil_payment_completion_rate >= 85 %}var(--green){% elif pupil_payment_completion_rate >= 60 %}var(--amber){% else %}var(--red){% endif %};"></div>
+                    </div>
+                    <div class="metric-sub">{{ fully_paid_pupils }} of {{ total_pupils_with_invoices }} students fully paid</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     REVENUE / EXPENSE / PROFIT TRENDS
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-chart-bar" style="color:var(--accent);"></i>
+                    Financial Trends
+                </span>
+                <div class="fs-tabs" id="trendTabs">
+                    <button class="fs-tab active" data-chart="revenue">Revenue</button>
+                    <button class="fs-tab" data-chart="expenses">Expenses</button>
+                    <button class="fs-tab" data-chart="profit">Profit / Loss</button>
+                </div>
+            </div>
+            <div class="dash-body">
+                <div id="revenueTrendChart"  style="height:260px;"></div>
+                <div id="expenseTrendChart"  style="height:260px;display:none;"></div>
+                <div id="profitTrendChart"   style="height:260px;display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     REVENUE & EXPENSE BREAKDOWN
+     ══════════════════════════════════════ -->
+<div class="sec-heading">Revenue &amp; Expense Breakdown</div>
+<div class="row g-3 mb-3">
+
+    <div class="col-xl-6">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-chart-pie" style="color:var(--green);"></i> Revenue Breakdown</span>
+                <span style="font-size:12px;font-weight:700;color:var(--green);">{{ total_revenue|money }}</span>
+            </div>
+            <div class="dash-body">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-5">
+                        <canvas id="revenueDonut" style="max-height:220px;"></canvas>
+                    </div>
+                    <div class="col-md-7" style="overflow-x:auto;">
+                        <table class="dt">
+                            <thead><tr><th>Source</th><th class="text-end">Amount</th><th class="text-end">%</th></tr></thead>
+                            <tbody>
+                                {% for item in revenue_breakdown %}
+                                <tr>
+                                    <td>
+                                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:hsl({{ forloop.counter0|mul:37 }},65%,50%);"></span>
+                                        {{ item.source }}
+                                    </td>
+                                    <td class="text-end mono">{{ item.amount|money }}</td>
+                                    <td class="text-end" style="color:var(--ink-muted);font-size:11.5px;">{{ item.percentage|floatformat:1 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot><tr><td>Total</td><td class="text-end mono">{{ total_revenue|money }}</td><td class="text-end">100%</td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-chart-pie" style="color:var(--red);"></i> Expense Breakdown</span>
+                <span style="font-size:12px;font-weight:700;color:var(--red);">{{ total_expenses|money }}</span>
+            </div>
+            <div class="dash-body">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-5">
+                        <canvas id="expenseDonut" style="max-height:220px;"></canvas>
+                    </div>
+                    <div class="col-md-7" style="overflow-x:auto;">
+                        <table class="dt">
+                            <thead><tr><th>Category</th><th class="text-end">Amount</th><th class="text-end">%</th></tr></thead>
+                            <tbody>
+                                {% for item in expense_breakdown %}
+                                <tr>
+                                    <td>
+                                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:hsl({{ forloop.counter0|mul:37|add:10 }},60%,48%);"></span>
+                                        {{ item.category }}
+                                    </td>
+                                    <td class="text-end mono">{{ item.amount|money }}</td>
+                                    <td class="text-end" style="color:var(--ink-muted);font-size:11.5px;">{{ item.percentage|floatformat:1 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot><tr><td>Total</td><td class="text-end mono">{{ total_expenses|money }}</td><td class="text-end">100%</td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     FEE COLLECTION BY CATEGORY
+     ══════════════════════════════════════ -->
+<div class="sec-heading">Fee Collection Analysis</div>
+<div class="row g-3 mb-3">
+
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-money-check-alt" style="color:var(--accent);"></i> Collection by Fee Category</span>
+                {% if this_session %}<span class="dash-badge">{{ this_session.year_name }} — {{ this_session.term_name }}</span>{% endif %}
+            </div>
+            <div class="dash-body">
+                <canvas id="feeCategoryChart" style="max-height:280px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-list-alt" style="color:var(--teal);"></i> Category Summary</span>
+            </div>
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead><tr><th>Fee Type</th><th class="text-end">Rate</th></tr></thead>
+                <tbody>
+                    {% for item in fee_collection_data %}
+                    <tr>
+                        <td>
+                            <div style="font-weight:600;font-size:12px;">{{ item.fee_type_name }}</div>
+                            <div style="font-size:10.5px;color:var(--ink-faint);">{{ item.collected|money }} / {{ item.expected|money }}</div>
+                        </td>
+                        <td class="text-end">
+                            <span class="rate-pill {% if item.rate >= 85 %}rate-good{% elif item.rate >= 65 %}rate-ok{% else %}rate-bad{% endif %}">{{ item.rate }}%</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>Overall</td>
+                        <td class="text-end"><span class="rate-pill {% if overall_rate >= 85 %}rate-good{% elif overall_rate >= 65 %}rate-ok{% else %}rate-bad{% endif %}">{{ overall_rate }}%</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     CLASS-WISE COLLECTION
+     ══════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-school" style="color:var(--accent);"></i> Class-wise Fee Collection</span>
+                {% if this_session %}<span class="dash-badge">{{ this_session.year_name }} — {{ this_session.term_name }}</span>{% endif %}
+            </div>
+            <div style="padding:0;">
+                <div class="row g-0">
+                    <div class="col-xl-7" style="padding:16px 18px;border-right:1px solid var(--border);">
+                        <canvas id="classCollectionChart" style="max-height:300px;"></canvas>
+                    </div>
+                    <div class="col-xl-5">
+                        <div style="overflow-x:auto;max-height:360px;overflow-y:auto;">
+                        <table class="dt">
+                            <thead><tr><th>Class</th><th class="text-center">Students</th><th class="text-end">Outstanding</th><th class="text-end">Rate</th></tr></thead>
+                            <tbody>
+                                {% for item in class_fee_collection %}
+                                <tr>
+                                    <td style="font-weight:600;font-size:12px;">{{ item.class_level }}</td>
+                                    <td class="text-center" style="color:var(--ink-muted);font-size:12px;">{{ item.student_count }}</td>
+                                    <td class="text-end" style="font-size:12px;font-weight:700;color:{% if item.outstanding_amount > 0 %}var(--red){% else %}var(--green){% endif %};">
+                                        {{ item.outstanding_amount|money }}
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="rate-pill {% if item.collection_rate >= 85 %}rate-good{% elif item.collection_rate >= 65 %}rate-ok{% else %}rate-bad{% endif %}">{{ item.collection_rate|floatformat:1 }}%</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td>Total</td>
+                                    <td class="text-center">{{ total_students }}</td>
+                                    <td class="text-end" style="color:var(--red);">{{ total_outstanding|money }}</td>
+                                    <td class="text-end"><span class="rate-pill {% if overall_collection_rate >= 85 %}rate-good{% elif overall_collection_rate >= 65 %}rate-ok{% else %}rate-bad{% endif %}">{{ overall_collection_rate|floatformat:1 }}%</span></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     BUDGET VS ACTUAL
+     ══════════════════════════════════════ -->
+<div class="sec-heading">Budget vs Actual Expenses</div>
+<div class="row g-3 mb-3">
+
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-balance-scale" style="color:var(--purple);"></i> Budget vs Expenditure</span>
+            </div>
+            <div class="dash-body">
+                <div id="budgetChart" style="height:420px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-table" style="color:var(--amber);"></i> Variance Summary</span>
+            </div>
+            <div style="overflow-x:auto;">
+            <table class="dt">
+                <thead><tr><th>Category</th><th class="text-end">Budget</th><th class="text-end">Actual</th><th class="text-end">Var</th></tr></thead>
+                <tbody>
+                    {% with rows="|Staff Salaries,employee_salaries_budget_total,total_employee_salaries,employee_salaries_variance|Food Purchases,food_purchases_budget_total,food_purchases_expenses_total,food_purchases_variance|Examinations,examination_budget_total,examination_expenses_total,examination_variance|Structural Repairs,structural_repairs_budget_total,structural_repairs_total,structural_repairs_variance|Capital Expenditure,capital_budget_total,capital_expenditure_total,capital_variance|Scholastic Materials,scholastic_materials_budget_total,scholastic_materials_total,scholastic_materials_variance|Administration,administration_budget_total,administration_expenses_total,administration_variance|Transport,transport_budget_total,transport_expenses_total,transport_variance|Medical Supplies,medical_supplies_budget_total,medical_supplies_total,medical_supplies_variance|Sports,sports_facilitation_budget_total,sports_facilitation_total,sports_facilitation_variance|Legal Compliance,legal_compliance_budget_total,legal_compliance_expenses_total,legal_compliance_variance" %}{% endwith %}
+                    <tr>
+                        <td style="font-size:11.5px;">Staff Salaries</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ employee_salaries_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ total_employee_salaries|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if employee_salaries_variance == "—" %}rate-ok{% elif employee_salaries_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if employee_salaries_variance == "—" %}—{% else %}{{ employee_salaries_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Food Purchases</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ food_purchases_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ food_purchases_expenses_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if food_purchases_variance == "—" %}rate-ok{% elif food_purchases_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if food_purchases_variance == "—" %}—{% else %}{{ food_purchases_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Examinations</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ examination_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ examination_expenses_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if examination_variance == "—" %}rate-ok{% elif examination_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if examination_variance == "—" %}—{% else %}{{ examination_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Structural Repairs</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ structural_repairs_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ structural_repairs_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if structural_repairs_variance == "—" %}rate-ok{% elif structural_repairs_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if structural_repairs_variance == "—" %}—{% else %}{{ structural_repairs_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Capital Expenditure</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ capital_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ capital_expenditure_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if capital_variance == "—" %}rate-ok{% elif capital_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if capital_variance == "—" %}—{% else %}{{ capital_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Scholastic Materials</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ scholastic_materials_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ scholastic_materials_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if scholastic_materials_variance == "—" %}rate-ok{% elif scholastic_materials_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if scholastic_materials_variance == "—" %}—{% else %}{{ scholastic_materials_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Administration</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ administration_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ administration_expenses_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if administration_variance == "—" %}rate-ok{% elif administration_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if administration_variance == "—" %}—{% else %}{{ administration_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Transport</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ transport_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ transport_expenses_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if transport_variance == "—" %}rate-ok{% elif transport_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if transport_variance == "—" %}—{% else %}{{ transport_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Medical Supplies</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ medical_supplies_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ medical_supplies_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if medical_supplies_variance == "—" %}rate-ok{% elif medical_supplies_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if medical_supplies_variance == "—" %}—{% else %}{{ medical_supplies_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Sports</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ sports_facilitation_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ sports_facilitation_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if sports_facilitation_variance == "—" %}rate-ok{% elif sports_facilitation_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if sports_facilitation_variance == "—" %}—{% else %}{{ sports_facilitation_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-size:11.5px;">Legal Compliance</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ legal_compliance_budget_total|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ legal_compliance_expenses_total|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if legal_compliance_variance == "—" %}rate-ok{% elif legal_compliance_variance < 0 %}rate-good{% else %}rate-bad{% endif %}">{% if legal_compliance_variance == "—" %}—{% else %}{{ legal_compliance_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>Total</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ total_budget|money_short }}</td>
+                        <td class="text-end mono" style="font-size:11px;">{{ total_expenditure|money_short }}</td>
+                        <td class="text-end"><span class="rate-pill {% if total_budget_variance == "—" %}rate-ok{% elif total_expenditure < total_budget %}rate-good{% else %}rate-bad{% endif %}">{% if total_budget_variance == "—" %}—{% else %}{{ total_budget_variance|floatformat:1 }}%{% endif %}</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     CROSS-SESSION PAYMENTS + UNIFORM SALES
+     ══════════════════════════════════════ -->
+<div class="sec-heading">Payment Analysis &amp; Uniform Sales</div>
+<div class="row g-3 mb-3">
+
+    <!-- Cross-session -->
+    <div class="col-xl-6">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-exchange-alt" style="color:var(--accent);"></i> Cross-Session Fee Payments</span>
+                <span style="font-size:11px;color:var(--ink-faint);">Excludes uniform sales</span>
+            </div>
+            <div class="dash-body">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-5">
+                        <canvas id="crossSessionChart" style="max-height:200px;"></canvas>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background:#1d4ed8;"></div>
+                            <div class="legend-label">
+                                <strong>Current Session</strong>
+                                <div style="font-size:10.5px;color:var(--ink-faint);">{{ this_session }}</div>
+                            </div>
+                            <div>
+                                <span class="legend-amt">{{ current_session_payments|money }}</span>
+                                <span class="legend-pct">{{ current_session_percentage|floatformat:1 }}%</span>
+                            </div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background:#15803d;"></div>
+                            <div class="legend-label">
+                                <strong>Past Recoveries</strong>
+                                <div style="font-size:10.5px;color:var(--ink-faint);">Previous sessions</div>
+                            </div>
+                            <div>
+                                <span class="legend-amt">{{ past_session_recoveries|money }}</span>
+                                <span class="legend-pct">{{ past_session_percentage|floatformat:1 }}%</span>
+                            </div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background:#b45309;"></div>
+                            <div class="legend-label">
+                                <strong>Future Advances</strong>
+                                <div style="font-size:10.5px;color:var(--ink-faint);">Upcoming sessions</div>
+                            </div>
+                            <div>
+                                <span class="legend-amt">{{ future_session_advance_payments|money }}</span>
+                                <span class="legend-pct">{{ future_session_percentage|floatformat:1 }}%</span>
+                            </div>
+                        </div>
+                        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                            <span style="font-size:11.5px;font-weight:700;color:var(--ink-muted);">Total Collected</span>
+                            <span style="font-size:14px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--ink);">{{ total_payments_in_session|money }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:14px;padding:10px 14px;border-radius:8px;border-left:3px solid;font-size:12px;
+                    {% if past_session_percentage > 15 %}background:var(--amber-lt);border-color:var(--amber);color:#78350f;
+                    {% elif future_session_percentage > 10 %}background:var(--green-lt);border-color:var(--green);color:#14532d;
+                    {% else %}background:var(--accent-lt);border-color:var(--accent);color:#1e3a8a;{% endif %}">
+                    {% if past_session_percentage > 15 %}
+                        <strong>Notable:</strong> {{ past_session_percentage|floatformat:1 }}% of payments are recovering past-term arrears.
+                    {% elif future_session_percentage > 10 %}
+                        <strong>Positive:</strong> {{ future_session_percentage|floatformat:1 }}% of payments are advance fees.
+                    {% else %}
+                        <strong>Typical pattern:</strong> {{ current_session_percentage|floatformat:1 }}% of payments are for the current session.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Uniform sales -->
+    <div class="col-xl-6">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title"><i class="fa fa-tshirt" style="color:var(--purple);"></i> Uniform Sales</span>
+                <span style="font-size:12px;font-weight:700;color:var(--purple);">{{ total_uniform_revenue|money }}</span>
+            </div>
+            <div class="dash-body">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-5">
+                        <canvas id="uniformChart" style="max-height:200px;"></canvas>
+                    </div>
+                    <div class="col-md-7" style="overflow-x:auto;">
+                        <table class="dt">
+                            <thead><tr><th>Uniform Type</th><th class="text-end">Units</th><th class="text-end">Revenue</th></tr></thead>
+                            <tbody>
+                                {% for item in uniform_sales_data %}
+                                <tr>
+                                    <td style="font-size:12px;">{{ item.uniform_type }}</td>
+                                    <td class="text-end" style="color:var(--ink-muted);font-size:12px;">{{ item.units_sold }}</td>
+                                    <td class="text-end mono">{{ item.revenue|money }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot><tr><td>Total</td><td class="text-end">{{ total_units }}</td><td class="text-end mono">{{ total_uniform_revenue|money }}</td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     INCOME STATEMENT MODAL
+     ══════════════════════════════════════ -->
+<div class="modal fade" id="incomeStatementModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:var(--surface-2);border-bottom:1px solid var(--border);">
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;">
+                        <i class="fa fa-file-alt text-primary me-2"></i>Income Statement
+                    </h5>
+                    {% if this_session %}
+                    <div style="font-size:12px;color:var(--ink-muted);margin-top:3px;">
+                        {{ this_session.year_name }} — {{ this_session.term_name }}
+                        {% if this_session.start_date %} &middot; {{ this_session.start_date|date:"d M Y" }} – {{ this_session.end_date|date:"d M Y" }}{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-sm btn-success" onclick="printIncomeStatement()">
+                        <i class="fa fa-print me-1"></i>Print
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body" id="incomeStatementPrint">
+
+                <!-- Revenue -->
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin-bottom:10px;">Revenue</div>
+                <table class="dt" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px;">
+                    <thead><tr><th>Revenue Source</th><th class="text-end">Amount</th><th class="text-end">%</th></tr></thead>
+                    <tbody>
+                        {% for item in revenue_breakdown %}
+                        <tr><td>{{ item.source }}</td><td class="text-end mono">{{ item.amount|money }}</td><td class="text-end" style="color:var(--ink-muted);">{{ item.percentage|floatformat:1 }}%</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot><tr><td><strong>Total Revenue</strong></td><td class="text-end mono"><strong>{{ total_revenue|money }}</strong></td><td class="text-end">100%</td></tr></tfoot>
+                </table>
+
+                <!-- Expenses -->
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin-bottom:10px;">Expenses</div>
+                <table class="dt" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px;">
+                    <thead><tr><th>Expense Category</th><th class="text-end">Amount</th><th class="text-end">%</th></tr></thead>
+                    <tbody>
+                        {% for item in expense_breakdown %}
+                        <tr><td>{{ item.category }}</td><td class="text-end mono">{{ item.amount|money }}</td><td class="text-end" style="color:var(--ink-muted);">{{ item.percentage|floatformat:1 }}%</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot><tr><td><strong>Total Expenses</strong></td><td class="text-end mono"><strong>{{ total_expenses|money }}</strong></td><td class="text-end">100%</td></tr></tfoot>
+                </table>
+
+                <!-- Net income -->
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin-bottom:10px;">Net Income Summary</div>
+                <table class="dt" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px;">
+                    <tbody>
+                        <tr><td style="font-weight:600;">Total Revenue</td><td class="text-end mono">{{ total_revenue|money }}</td></tr>
+                        <tr><td style="font-weight:600;">Total Expenses</td><td class="text-end mono">{{ total_expenses|money }}</td></tr>
+                        <tr style="background:{% if total_profit >= 0 %}var(--green-lt){% else %}var(--red-lt){% endif %};">
+                            <td style="font-weight:800;color:{% if total_profit >= 0 %}var(--green){% else %}var(--red){% endif %};">Net Income (Profit/Loss)</td>
+                            <td class="text-end mono" style="font-weight:800;color:{% if total_profit >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ total_profit|money }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Key metrics -->
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);margin-bottom:10px;">Key Financial Metrics</div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+                            <div style="font-size:10.5px;color:var(--ink-muted);margin-bottom:4px;">Fee Collection Rate</div>
+                            <div style="font-size:20px;font-weight:800;font-family:'Poppins',sans-serif;">{{ overall_rate|floatformat:1 }}%</div>
+                            <div class="prog-outer" style="margin-top:8px;"><div class="prog-inner" style="width:{{ overall_rate }}%;background:{% if overall_rate >= 90 %}var(--green){% elif overall_rate >= 70 %}var(--amber){% else %}var(--red){% endif %};"></div></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+                            <div style="font-size:10.5px;color:var(--ink-muted);margin-bottom:4px;">Student Payment Completion</div>
+                            <div style="font-size:20px;font-weight:800;font-family:'Poppins',sans-serif;">{{ pupil_payment_completion_rate|floatformat:1 }}%</div>
+                            <div style="font-size:11px;color:var(--ink-faint);margin-top:6px;">{{ fully_paid_pupils }} of {{ total_pupils_with_invoices }} students</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+                            <div style="font-size:10.5px;color:var(--ink-muted);margin-bottom:4px;">Budget Utilization</div>
+                            <div style="font-size:20px;font-weight:800;font-family:'Poppins',sans-serif;">{{ total_utilization|floatformat:1 }}%</div>
+                            <div style="font-size:11px;color:var(--ink-faint);margin-top:6px;">{{ total_expenditure|money }} of {{ total_budget|money }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Print-only signature block -->
+                <div class="d-none d-print-block" style="margin-top:50px;">
+                    <div style="display:flex;justify-content:space-between;padding:0 40px;">
+                        <div style="text-align:center;"><div style="border-top:1px solid #000;width:180px;padding-top:8px;margin:0 auto;">Bursar's Signature</div></div>
+                        <div style="text-align:center;"><div style="border-top:1px solid #000;width:180px;padding-top:8px;margin:0 auto;">Financial Officer's Signature</div></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var currency = '{{ school_currency|escapejs }}';
+
+    function fmt(n) {
+        if (!n && n !== 0) return '0';
+        return new Intl.NumberFormat('en-UG').format(Math.round(n));
+    }
+    function fmtShort(n) {
+        if (Math.abs(n) >= 1000000) return currency + ' ' + (n / 1000000).toFixed(1) + 'M';
+        if (Math.abs(n) >= 1000)    return currency + ' ' + (n / 1000).toFixed(0) + 'K';
+        return currency + ' ' + fmt(n);
+    }
+
+    /* 1. Payment trend (ApexCharts area) */
+    (function () {
+        var series = JSON.parse('{{ chart_data|escapejs }}');
+        new ApexCharts(document.getElementById('paymentTrendChart'), {
+            series: [{ name: 'Amount Collected', data: series.amounts }],
+            chart: { type: 'area', height: 280, toolbar: { show: false } },
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 2 },
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: .3, opacityTo: .02 } },
+            colors: ['#1d4ed8'],
+            xaxis: { categories: series.dates, labels: { style: { fontSize: '10px' } } },
+            yaxis: { labels: { formatter: fmtShort, style: { fontSize: '10px' } } },
+            grid: { borderColor: '#e2e8f0', strokeDashArray: 4 },
+            tooltip: { y: { formatter: function (v) { return currency + ' ' + fmt(v); } } },
+        }).render();
+    }());
+
+    /* 2. Trend tab charts (Chart.js) */
+    var months      = {{ months|safe }};
+    var revenueData = {{ revenue_data|safe }};
+    var expenseData = {{ expense_data|safe }};
+    var profitData  = {{ profit_data|safe }};
+
+    function lineChart(id, data, color, label) {
+        var ctx = document.getElementById(id).getContext('2d');
+        return new Chart(ctx, {
+            type: 'line',
+            data: { labels: months, datasets: [{ label: label, data: data, backgroundColor: color + '22', borderColor: color, borderWidth: 2, tension: .4, fill: true, pointRadius: 3 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + currency + ' ' + fmt(c.raw); } } } },
+                scales: { y: { beginAtZero: true, ticks: { callback: fmtShort, font: { size: 10 } }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+            }
+        });
+    }
+    function barChart(id, data, label) {
+        var ctx = document.getElementById(id).getContext('2d');
+        return new Chart(ctx, {
+            type: 'bar',
+            data: { labels: months, datasets: [{ label: label, data: data, backgroundColor: data.map(function (v) { return v >= 0 ? 'rgba(29,78,216,.6)' : 'rgba(220,38,38,.6)'; }), borderWidth: 1, borderRadius: 4 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + currency + ' ' + fmt(c.raw); } } } },
+                scales: { y: { beginAtZero: true, ticks: { callback: fmtShort, font: { size: 10 } }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+            }
+        });
+    }
+    lineChart('revenueTrendChart', revenueData, '#15803d', 'Revenue');
+    lineChart('expenseTrendChart', expenseData, '#dc2626', 'Expenses');
+    barChart('profitTrendChart',   profitData,             'Profit/Loss');
+
+    document.getElementById('trendTabs').addEventListener('click', function (e) {
+        var btn = e.target.closest('.fs-tab');
+        if (!btn) return;
+        document.querySelectorAll('.fs-tab').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var charts = { revenue: 'revenueTrendChart', expenses: 'expenseTrendChart', profit: 'profitTrendChart' };
+        Object.values(charts).forEach(function (id) { document.getElementById(id).style.display = 'none'; });
+        document.getElementById(charts[btn.dataset.chart]).style.display = '';
+    });
+
+    /* 3. Revenue donut */
+    (function () {
+        var ctx     = document.getElementById('revenueDonut').getContext('2d');
+        var sources = {{ revenue_sources|safe }};
+        var amounts = {{ revenue_amounts|safe }};
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: sources, datasets: [{ data: amounts, backgroundColor: sources.map(function (_, i) { return 'hsl(' + (i * 37) + ',65%,50%)'; }), borderWidth: 2, borderColor: '#fff' }] },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { var t = c.dataset.data.reduce(function (a, b) { return a + b; }, 0); return c.label + ': ' + currency + ' ' + fmt(c.raw) + ' (' + Math.round(c.raw / t * 100) + '%)'; } } } } }
+        });
+    }());
+
+    /* 4. Expense donut */
+    (function () {
+        var ctx  = document.getElementById('expenseDonut').getContext('2d');
+        var cats = {{ expense_categories|safe }};
+        var amts = {{ expense_amounts|safe }};
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: cats, datasets: [{ data: amts, backgroundColor: cats.map(function (_, i) { return 'hsl(' + (i * 37 + 10) + ',60%,48%)'; }), borderWidth: 2, borderColor: '#fff' }] },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { var t = c.dataset.data.reduce(function (a, b) { return a + b; }, 0); return c.label + ': ' + currency + ' ' + fmt(c.raw) + ' (' + Math.round(c.raw / t * 100) + '%)'; } } } } }
+        });
+    }());
+
+    /* 5. Fee category grouped bar */
+    (function () {
+        var ctx       = document.getElementById('feeCategoryChart').getContext('2d');
+        var types     = {{ fee_types_json|safe }};
+        var expected  = {{ expected_amounts_json|safe }};
+        var collected = {{ collected_amounts_json|safe }};
+        new Chart(ctx, {
+            type: 'bar',
+            data: { labels: types, datasets: [
+                { label: 'Expected',  data: expected,  backgroundColor: 'rgba(29,78,216,.15)', borderColor: '#1d4ed8', borderWidth: 1, borderRadius: 4 },
+                { label: 'Collected', data: collected, backgroundColor: 'rgba(21,128,61,.55)',  borderColor: '#15803d', borderWidth: 1, borderRadius: 4 },
+            ]},
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { font: { size: 11 } } }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + currency + ' ' + fmt(c.raw); } } } },
+                scales: { y: { beginAtZero: true, ticks: { callback: fmtShort, font: { size: 10 } }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+            }
+        });
+    }());
+
+    /* 6. Class collection grouped bar */
+    (function () {
+        var ctx         = document.getElementById('classCollectionChart').getContext('2d');
+        var levels      = {{ class_levels|safe }};
+        var expected    = {{ expected_amounts|safe }};
+        var collected   = {{ collected_amounts|safe }};
+        var outstanding = {{ outstanding_amounts|safe }};
+        new Chart(ctx, {
+            type: 'bar',
+            data: { labels: levels, datasets: [
+                { label: 'Expected',    data: expected,    backgroundColor: 'rgba(100,116,139,.2)', borderColor: '#64748b', borderWidth: 1, borderRadius: 3 },
+                { label: 'Collected',   data: collected,   backgroundColor: 'rgba(21,128,61,.6)',   borderColor: '#15803d', borderWidth: 1, borderRadius: 3 },
+                { label: 'Outstanding', data: outstanding, backgroundColor: 'rgba(220,38,38,.5)',   borderColor: '#dc2626', borderWidth: 1, borderRadius: 3 },
+            ]},
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { font: { size: 11 } } }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + currency + ' ' + fmt(c.raw); } } } },
+                scales: { y: { beginAtZero: true, ticks: { callback: fmtShort, font: { size: 10 } }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+            }
+        });
+    }());
+
+    /* 7. Budget vs Actual (ECharts horizontal) */
+    (function () {
+        var chart = echarts.init(document.getElementById('budgetChart'));
+        var cats  = ['Employee Salaries','Food Purchases','Examinations','Administration',
+                     'Transport','Structural Repairs','Capital Expenditure','Scholastic Materials',
+                     'PTA Meetings','Medical Supplies','Sports','Drawings','Legal Compliance'];
+        var budgets = [{{ employee_salaries_budget_total }},{{ food_purchases_budget_total }},{{ examination_budget_total }},{{ administration_budget_total }},{{ transport_budget_total }},{{ structural_repairs_budget_total }},{{ capital_budget_total }},{{ scholastic_materials_budget_total }},{{ parent_teacher_association_budget_total }},{{ medical_supplies_budget_total }},{{ sports_facilitation_budget_total }},{{ drawings_budget_total }},{{ legal_compliance_budget_total }}];
+        var actuals = [{{ total_employee_salaries }},{{ food_purchases_expenses_total }},{{ examination_expenses_total }},{{ administration_expenses_total }},{{ transport_expenses_total }},{{ structural_repairs_total }},{{ capital_expenditure_total }},{{ scholastic_materials_total }},{{ parent_teacher_association_total }},{{ medical_supplies_total }},{{ sports_facilitation_total }},{{ drawings_total }},{{ legal_compliance_expenses_total }}];
+        chart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: function (params) { return params.map(function (p) { return p.marker + p.seriesName + ': ' + currency + ' ' + fmt(p.value); }).join('<br>'); } },
+            legend: { top: 0, textStyle: { fontSize: 11 } },
+            grid: { left: '26%', right: '4%', top: 36, bottom: 10 },
+            xAxis: { type: 'value', axisLabel: { formatter: fmtShort, fontSize: 10 }, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+            yAxis: { type: 'category', data: cats, axisLabel: { fontSize: 10 } },
+            series: [
+                { name: 'Budget', type: 'bar', data: budgets, itemStyle: { color: '#bfdbfe', borderRadius: [0,3,3,0] }, barMaxWidth: 16 },
+                { name: 'Actual', type: 'bar', data: actuals, itemStyle: { color: '#dc2626', borderRadius: [0,3,3,0] }, barMaxWidth: 16 },
+            ]
+        });
+        window.addEventListener('resize', function () { chart.resize(); });
+    }());
+
+    /* 8. Cross-session donut */
+    (function () {
+        var ctx = document.getElementById('crossSessionChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: ['Current Session','Past Recoveries','Future Advances'], datasets: [{ data: [{{ current_session_percentage|floatformat:1 }},{{ past_session_percentage|floatformat:1 }},{{ future_session_percentage|floatformat:1 }}], backgroundColor: ['#1d4ed8','#15803d','#b45309'], borderWidth: 2, borderColor: '#fff' }] },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.label + ': ' + c.raw + '%'; } } } } }
+        });
+    }());
+
+    /* 9. Uniform sales donut */
+    (function () {
+        var ctx     = document.getElementById('uniformChart').getContext('2d');
+        var types   = {{ uniform_types|safe }};
+        var amounts = {{ uniform_revenue_amounts|safe }}.map(parseFloat);
+        var colors  = ['#7c3aed','#1d4ed8','#0f766e','#15803d','#b45309','#dc2626'];
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: types, datasets: [{ data: amounts, backgroundColor: colors.slice(0, types.length), borderWidth: 2, borderColor: '#fff' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } }, tooltip: { callbacks: { label: function (c) { var t = c.dataset.data.reduce(function (a, b) { return a + b; }, 0); return c.label + ': ' + currency + ' ' + fmt(c.raw) + ' (' + Math.round(c.raw / t * 100) + '%)'; } } } } }
+        });
+    }());
+
+    /* HTMX handlers */
+    var currentModal = null;
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target.id !== 'modal-container') return;
+        var dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+        if (!dialog) return;
+        var old = document.getElementById('dynamicModalWrapper');
+        if (old) { var ex = bootstrap.Modal.getInstance(old); if (ex) ex.dispose(); old.remove(); }
+        var wrapper = document.createElement('div');
+        wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+        wrapper.setAttribute('tabindex', '-1'); wrapper.appendChild(dialog); document.body.appendChild(wrapper);
+        currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+        wrapper.addEventListener('hidden.bs.modal', function () { wrapper.remove(); document.getElementById('modal-container').innerHTML = ''; currentModal = null; });
+    });
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        var xhr = e.detail.xhr;
+        var msg   = xhr.getResponseHeader('HX-Alert-Message');
+        var type  = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+        var title = xhr.getResponseHeader('HX-Alert-Title');
+        var close = xhr.getResponseHeader('HX-Close-Modal');
+        if (close === 'true' && currentModal) currentModal.hide();
+        if (msg && typeof Swal !== 'undefined') {
+            setTimeout(function () { Swal.fire({ icon: type, title: title || (type.charAt(0).toUpperCase() + type.slice(1)), text: msg, confirmButtonColor: type === 'success' ? '#15803d' : '#dc2626', timer: type === 'success' ? 3000 : null, timerProgressBar: type === 'success' }); }, 300);
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) { new bootstrap.Tooltip(el); });
+    });
+
+}());
+</script>
+
+<script>
+function printIncomeStatement() {
+    var content = document.getElementById('incomeStatementPrint').innerHTML;
+    var win = window.open('', '_blank');
+    win.document.write('<html><head><title>Income Statement</title><style>body{font-family:sans-serif;padding:20px;color:#0f172a;}table{width:100%;border-collapse:collapse;margin-bottom:20px;}th,td{padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;}th{background:#f8fafc;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.5px;}tfoot td{font-weight:700;border-top:2px solid #e2e8f0;}.d-none{display:none!important;}</style></head><body>' + content + '</body></html>');
+    win.document.close();
+    win.onload = function () { win.print(); win.onafterprint = function () { win.close(); }; };
+}
+</script>
+{% endblock %}

@@ -1299,10 +1299,9 @@ class UserProfile(DefaultDatabaseModel):
 
     @property
     def age(self):
-        """Calculate user's age"""
         if self.date_of_birth:
-            from django.utils import timezone
-            today = timezone.now().date()
+            from core.utils import get_school_today
+            today = get_school_today()
             return (
                 today.year - self.date_of_birth.year
                 - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
@@ -1311,10 +1310,9 @@ class UserProfile(DefaultDatabaseModel):
 
     @property
     def years_of_service(self):
-        """Calculate years of service"""
         if self.date_of_appointment:
-            from django.utils import timezone
-            today = timezone.now().date()
+            from core.utils import get_school_today
+            today = get_school_today()
             years = (
                 today.year - self.date_of_appointment.year
                 - ((today.month, today.day) < (self.date_of_appointment.month, self.date_of_appointment.day))

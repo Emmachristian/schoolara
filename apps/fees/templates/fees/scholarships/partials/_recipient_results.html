@@ -1,0 +1,322 @@
+{# fees/templates/fees/scholarships/partials/_recipient_results.html #}
+{% load humanize %}
+{% load currency_filters %}
+
+<style>
+.rec-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rec-tbl thead th {
+    background: #f8fafc; padding: 10px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #64748b;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+.rec-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; }
+.rec-tbl tbody tr:last-child td { border-bottom: none; }
+.rec-tbl tbody tr:hover td { background: #eff6ff !important; }
+
+.stu-initials {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #eff6ff; color: #1d4ed8; border: 2px solid #bfdbfe;
+    font-size: .8rem; font-weight: 700;
+}
+.stu-name { font-weight: 600; font-size: 13px; color: #0f172a; text-decoration: none; display: block; line-height: 1.3; }
+.stu-name:hover { color: #1d4ed8; }
+.stu-adm  { font-family: 'Courier New', monospace; font-size: 11px; color: #64748b; margin-top: 1px; display: block; }
+
+/* ── Status pills ── */
+.s-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.s-active     { background: #dcfce7; color: #15803d; }
+.s-suspended  { background: #fef9c3; color: #92400e; }
+.s-terminated { background: #fee2e2; color: #b91c1c; }
+.s-completed  { background: #dbeafe; color: #1d4ed8; }
+.s-pending    { background: #f1f5f9; color: #475569; }
+
+/* ── Discount mode pills ── */
+.dm-global { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.dm-cat    { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+
+/* ── Amount bar ── */
+.amt-track { height: 5px; background: #e2e8f0; border-radius: 5px; overflow: hidden; width: 80px; margin-top: 4px; }
+.amt-fill  { height: 100%; border-radius: 5px; }
+
+/* ── Exhausted badge ── */
+.exhausted-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── Pagination ── */
+.pag-bar {
+    padding: 12px 16px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: #64748b;
+}
+
+/* ── Empty ── */
+.tbl-empty { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.tbl-empty i { font-size: 2.4rem; display: block; margin-bottom: 10px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 12px; }
+
+.dropdown-menu   { font-size: .85rem; min-width: 195px; border: 1px solid #e2e8f0; }
+.dropdown-item   { padding: 6px 13px; }
+.dropdown-header { font-size: .7rem; padding: 6px 13px 2px; }
+</style>
+
+{% if recipients %}
+<div style="overflow-x:auto;">
+    <table class="rec-tbl">
+        <thead>
+            <tr>
+                <th style="width:38px;">#</th>
+                <th>Student</th>
+                <th class="text-center">Discount Mode</th>
+                <th class="text-right">Awarded</th>
+                <th class="text-right">Used</th>
+                <th class="text-center">Period</th>
+                <th class="text-center">Status</th>
+                <th class="text-center" style="width:50px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sch in recipients %}
+            <tr>
+                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+
+                {# ── Student ── #}
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stu-initials">
+                            {{ sch.student.first_name|first }}{{ sch.student.last_name|first }}
+                        </div>
+                        <div>
+                            <a href="{% url 'students:student_profile' sch.student.pk %}" class="stu-name">
+                                {{ sch.student.get_full_name }}
+                            </a>
+                            <span class="stu-adm">{{ sch.student.admission_number }}</span>
+                        </div>
+                    </div>
+                </td>
+
+                {# ── Discount mode ── #}
+                <td class="text-center">
+                    {% if sch.use_category_specific_discounts %}
+                        <span class="s-pill dm-cat">
+                            <i class="fa fa-list-alt" style="font-size:8px;"></i>Category
+                        </span>
+                    {% else %}
+                        <span class="s-pill dm-global">
+                            <i class="fa fa-percent" style="font-size:8px;"></i>Global
+                        </span>
+                    {% endif %}
+                </td>
+
+                {# ── Awarded ── #}
+                <td class="text-right">
+                    {% if sch.amount_awarded > 0 %}
+                        <span style="font-weight:600;font-size:12.5px;">{{ sch.amount_awarded|money }}</span>
+                        {% if sch.is_exhausted %}
+                            <div><span class="exhausted-badge"><i class="fa fa-exclamation-circle" style="font-size:8px;"></i>Exhausted</span></div>
+                        {% endif %}
+                    {% else %}
+                        <span style="color:#94a3b8;font-size:12px;">Policy-based</span>
+                    {% endif %}
+                </td>
+
+                {# ── Used / remaining ── #}
+                <td class="text-right">
+                    {% if sch.amount_awarded > 0 %}
+                        <div>
+                            <span style="font-size:12.5px;font-weight:600;">{{ sch.total_amount_used|money }}</span>
+                            <div class="amt-track">
+                                <div class="amt-fill"
+                                     style="width:{% widthratio sch.total_amount_used sch.amount_awarded 100 %}%;
+                                            background:{% if sch.is_exhausted %}#dc2626{% else %}#1d4ed8{% endif %};"></div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <span style="color:#94a3b8;font-size:12px;">—</span>
+                    {% endif %}
+                </td>
+
+                {# ── Period ── #}
+                <td class="text-center" style="font-size:11.5px;color:#64748b;">
+                    {{ sch.start_date|date:"M d, Y" }}
+                    {% if sch.end_date %}
+                        <br><span style="font-size:10.5px;">– {{ sch.end_date|date:"M d, Y" }}</span>
+                    {% else %}
+                        <br><span style="font-size:10.5px;color:#94a3b8;">No end date</span>
+                    {% endif %}
+                </td>
+
+                {# ── Status ── #}
+                <td class="text-center">
+                    {% if sch.status == 'ACTIVE' %}
+                        <span class="s-pill s-active"><i class="fa fa-circle" style="font-size:7px;"></i>Active</span>
+                    {% elif sch.status == 'SUSPENDED' %}
+                        <span class="s-pill s-suspended"><i class="fa fa-pause" style="font-size:7px;"></i>Suspended</span>
+                    {% elif sch.status == 'TERMINATED' %}
+                        <span class="s-pill s-terminated"><i class="fa fa-times" style="font-size:7px;"></i>Terminated</span>
+                    {% elif sch.status == 'COMPLETED' %}
+                        <span class="s-pill s-completed"><i class="fa fa-check" style="font-size:7px;"></i>Completed</span>
+                    {% else %}
+                        <span class="s-pill s-pending">{{ sch.get_status_display }}</span>
+                    {% endif %}
+                </td>
+
+                {# ── Actions ── #}
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><h6 class="dropdown-header">View</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'fees:student_scholarship_detail' sch.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>Scholarship Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'students:student_profile' sch.student.pk %}">
+                                    <i class="fa fa-user me-2 text-secondary"></i>Student Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Manage</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'fees:student_scholarship_edit' sch.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit Scholarship
+                                </a>
+                            </li>
+                            {% if sch.status == 'ACTIVE' %}
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:student_scholarship_suspend_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-pause me-2 text-warning"></i>Suspend
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:student_scholarship_complete_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-check-circle me-2 text-success"></i>Mark Completed
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:student_scholarship_terminate_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-times me-2"></i>Terminate
+                                </button>
+                            </li>
+                            {% elif sch.status == 'SUSPENDED' %}
+                            <li>
+                                <button class="dropdown-item text-success"
+                                        hx-get="{% url 'fees:student_scholarship_reactivate_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-play me-2"></i>Reactivate
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:student_scholarship_terminate_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-times me-2"></i>Terminate
+                                </button>
+                            </li>
+                            {% elif sch.status in 'TERMINATED,COMPLETED' %}
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:student_scholarship_delete_modal' sch.pk %}"
+                                        hx-target="#modal-container" hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if recipients.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ recipients.start_index }}</strong>–<strong>{{ recipients.end_index }}</strong>
+        of <strong>{{ recipients.paginator.count|intcomma }}</strong> recipients
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+        {% if recipients.has_previous %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+                    hx-target="#tab-content" hx-include="#recipientFilterForm"
+                    hx-vals='{"page":"{{ recipients.previous_page_number }}"}'>«</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">«</span></li>{% endif %}
+
+        {% for p in recipients.paginator.page_range %}
+            {% if p == recipients.number %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p > recipients.number|add:"-3" and p < recipients.number|add:"3" %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+                            hx-target="#tab-content" hx-include="#recipientFilterForm"
+                            hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if recipients.has_next %}
+        <li class="page-item">
+            <button class="page-link"
+                    hx-get="{% url 'fees:scholarship_program_recipients_partial' program.pk %}"
+                    hx-target="#tab-content" hx-include="#recipientFilterForm"
+                    hx-vals='{"page":"{{ recipients.next_page_number }}"}'>»</button>
+        </li>
+        {% else %}<li class="page-item disabled"><span class="page-link">»</span></li>{% endif %}
+    </ul></nav>
+</div>
+{% endif %}
+
+{% else %}
+<div class="tbl-empty">
+    <i class="fa fa-user-graduate"></i>
+    <p>
+        {% if request.GET.q or request.GET.discount_mode or request.GET.status %}
+            No recipients match your filters.
+        {% else %}
+            No scholarship recipients yet.
+        {% endif %}
+    </p>
+    {% if request.GET.q or request.GET.discount_mode or request.GET.status %}
+    <button type="button" onclick="clearRecipientFilters()"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;border:1px solid #e2e8f0;cursor:pointer;">
+        <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+    </button>
+    {% else %}
+    <a href="{% url 'fees:student_scholarship_create' %}?program={{ program.pk }}"
+       style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#15803d;color:#fff;border:none;cursor:pointer;text-decoration:none;">
+        <i class="fa fa-user-plus" style="font-size:11px;"></i>Award Scholarship
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function() {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function(d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>

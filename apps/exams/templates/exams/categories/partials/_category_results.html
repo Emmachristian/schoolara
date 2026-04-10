@@ -1,214 +1,378 @@
 {# exams/templates/exams/categories/partials/_category_results.html #}
+{# No <script> blocks here — the parent list.html owns all JS. #}
 
 {% load static %}
 
-<!-- Categories Table -->
-<div class="table-responsive" style="overflow: visible;">
-    <table class="table table-hover table-striped table-bordered">
+<style>
+/* ── Scoped to this partial ───────────────────────────────────────────────── */
+
+.cat-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.cat-tbl thead th {
+    background: var(--surface-2, #f8fafc);
+    padding: 11px 14px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--ink-muted, #64748b);
+    border-bottom: 2px solid var(--border, #e2e8f0);
+    white-space: nowrap;
+}
+
+.cat-tbl tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: var(--ink, #0f172a);
+}
+.cat-tbl tbody tr:last-child td { border-bottom: none; }
+.cat-tbl tbody tr:hover td      { background: #eff6ff !important; }
+
+/* Category code */
+.cat-code {
+    font-family: 'Courier New', monospace;
+    font-weight: 600; font-size: 12px;
+    background: var(--surface-2, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 4px;
+    padding: 2px 7px;
+    color: var(--ink, #0f172a);
+}
+
+/* Category name */
+.cat-name {
+    font-weight: 600; font-size: 13px; color: var(--ink, #0f172a);
+    text-decoration: none; display: block; line-height: 1.3;
+}
+.cat-name:hover { color: var(--accent, #1d4ed8); }
+.cat-abbr {
+    font-size: 11.5px; color: var(--ink-muted, #64748b); display: block; margin-top: 1px;
+}
+
+/* Type badges */
+.type-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.type-formative   { background: #dbeafe; color: #1d4ed8; }
+.type-summative   { background: #dcfce7; color: #15803d; }
+.type-diagnostic  { background: #fef9c3; color: #92400e; }
+.type-benchmark   { background: #f3e8ff; color: #6d28d9; }
+.type-standardized{ background: #e0f2fe; color: #075985; }
+.type-internal    { background: #e0f2fe; color: #0369a1; }
+.type-external    { background: #fee2e2; color: #b91c1c; }
+.type-mock        { background: #f1f5f9; color: #475569; }
+.type-continuous  { background: #fef3c7; color: #92400e; }
+.type-final       { background: #fce7f3; color: #9d174d; }
+
+/* Frequency badge */
+.freq-badge {
+    display: inline-flex; align-items: center;
+    background: #f5f3ff; color: #6d28d9;
+    border: 1px solid #ddd6fe; border-radius: 4px;
+    font-size: 10.5px; font-weight: 700;
+    padding: 2px 7px; white-space: nowrap;
+}
+
+/* Weight badge */
+.weight-badge {
+    display: inline-flex; align-items: center;
+    background: var(--surface-2, #f8fafc);
+    color: var(--ink, #0f172a);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 4px;
+    font-size: 12px; font-weight: 700;
+    padding: 2px 8px;
+}
+
+/* Requirement pills */
+.req-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 600;
+    margin-right: 3px; margin-bottom: 2px;
+    white-space: nowrap;
+}
+.req-reg  { background: #fef9c3; color: #92400e; }
+.req-pay  { background: #e0f2fe; color: #0369a1; }
+
+/* Status pills */
+.s-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.sp-active   { background: #dcfce7; color: #15803d; }
+.sp-inactive { background: #fee2e2; color: #b91c1c; }
+
+/* Exam count chip */
+.exam-count {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #eff6ff; color: #1d4ed8;
+    border: 1px solid #bfdbfe; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px;
+}
+
+/* Empty state */
+.tbl-empty { text-align: center; padding: 60px 20px; color: var(--ink-faint, #94a3b8); }
+.tbl-empty i { font-size: 3rem; display: block; margin-bottom: 12px; opacity: .4; }
+.tbl-empty p { font-size: 13px; margin: 0 0 16px; }
+
+/* Pagination bar */
+.pag-bar {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border, #e2e8f0);
+    background: var(--surface-2, #f8fafc);
+    display: flex; align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+    font-size: 12.5px; color: var(--ink-muted, #64748b);
+}
+
+/* OOB stat cards (duplicate of list.html — needed for out-of-band swap) */
+.stat-card {
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius, 10px);
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px;
+    transition: box-shadow .2s;
+}
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.stat-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+}
+.stat-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--ink-muted, #64748b); margin-bottom: 3px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: var(--ink, #0f172a); line-height: 1; }
+
+/* Dropdown */
+.dropdown-menu { font-size: .85rem; min-width: 195px; border: 1px solid var(--border, #e2e8f0); }
+.dropdown-item  { padding: 6px 14px; }
+.dropdown-header { font-size: .7rem; padding: 6px 14px 2px; }
+</style>
+
+<div style="overflow-x: auto;">
+    <table class="cat-tbl table table-striped">
         <thead>
             <tr>
-                <th width="50">#</th>
+                <th style="width:38px;">#</th>
                 <th>Code</th>
-                <th>Category Name</th>
+                <th>Category</th>
                 <th>Type</th>
                 <th>Frequency</th>
-                <th>Weight %</th>
+                <th>Weight</th>
                 <th>Requirements</th>
-                <th>Status</th>
-                <th>Exams</th>
-                <th width="120">Actions</th>
+                <th class="text-center">Status</th>
+                <th class="text-center">Exams</th>
+                <th class="text-center" style="width:60px;">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% if categories_page %}
                 {% for category in categories_page %}
                 <tr>
-                    <!-- Row Number -->
-                    <td>{{ forloop.counter|add:categories_page.start_index|add:"-1" }}</td>
-                    
-                    <!-- Category Code -->
-                    <td>
-                        <span class="category-code">{{ category.code }}</span>
+                    <td style="color:var(--ink-faint,#94a3b8);font-size:12px;">
+                        {{ categories_page.start_index|add:forloop.counter0 }}
                     </td>
-                    
-                    <!-- Category Name & Description -->
+
+                    <!-- Code -->
+                    <td><span class="cat-code">{{ category.code }}</span></td>
+
+                    <!-- Name + abbreviation + description -->
                     <td>
-                        <div>
-                            <h6 class="mb-0">{{ category.name }}</h6>
-                            <small class="text-muted">{{ category.abbreviation }}</small>
-                            {% if category.description %}
-                                <div>
-                                    <small class="text-muted">{{ category.description|truncatewords:10 }}</small>
-                                </div>
-                            {% endif %}
-                        </div>
+                        <a href="{% url 'exams:category_detail' category.pk %}" class="cat-name">
+                            {{ category.name }}
+                        </a>
+                        <span class="cat-abbr">{{ category.abbreviation }}</span>
+                        {% if category.description %}
+                            <span class="cat-abbr">{{ category.description|truncatewords:10 }}</span>
+                        {% endif %}
                     </td>
-                    
-                    <!-- Category Type -->
+
+                    <!-- Type badge -->
                     <td>
-                        <span class="category-type-badge {{ category.category_type|lower }}">
+                        <span class="type-badge type-{{ category.category_type|lower }}">
                             {{ category.get_category_type_display }}
                         </span>
                     </td>
-                    
+
                     <!-- Frequency -->
                     <td>
-                        <span class="frequency-badge">
-                            {{ category.get_frequency_display }}
-                        </span>
+                        <span class="freq-badge">{{ category.get_frequency_display }}</span>
                     </td>
-                    
-                    <!-- Weight Percentage -->
+
+                    <!-- Weight -->
                     <td>
-                        <span class="weight-badge">
-                            <strong>{{ category.weight_percentage }}%</strong>
-                        </span>
+                        <span class="weight-badge">{{ category.weight_percentage }}%</span>
                     </td>
-                    
+
                     <!-- Requirements -->
                     <td>
                         {% if category.requires_registration %}
-                            <span class="requirement-badge registration" data-bs-toggle="tooltip" 
-                                  title="Registration required {{ category.registration_deadline_days }} days before">
-                                <i class="fa fa-user-check me-1"></i>Registration
+                            <span class="req-pill req-reg"
+                                  data-bs-toggle="tooltip"
+                                  title="Registration required {{ category.registration_deadline_days }} day(s) before">
+                                <i class="fa fa-user-check" style="font-size:9px;"></i>Registration
                             </span>
                         {% endif %}
-                        
                         {% if category.required_payment_percentage > 0 %}
-                            <span class="requirement-badge payment" data-bs-toggle="tooltip" 
+                            <span class="req-pill req-pay"
+                                  data-bs-toggle="tooltip"
                                   title="{{ category.required_payment_percentage }}% payment required">
-                                <i class="fa fa-money-bill me-1"></i>{{ category.required_payment_percentage }}% Payment
+                                <i class="fa fa-money-bill-wave" style="font-size:9px;"></i>{{ category.required_payment_percentage }}% Paid
                             </span>
                         {% endif %}
-                        
                         {% if not category.requires_registration and category.required_payment_percentage == 0 %}
-                            <small class="text-muted">None</small>
+                            <span style="font-size:11.5px;color:var(--ink-faint,#94a3b8);">None</span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Status Badge -->
-                    <td>
+
+                    <!-- Status -->
+                    <td class="text-center">
                         {% if category.is_active %}
-                            <span class="status-badge active">Active</span>
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle"></i>Active</span>
                         {% else %}
-                            <span class="status-badge inactive">Inactive</span>
+                            <span class="s-pill sp-inactive"><i class="fa fa-times-circle"></i>Inactive</span>
                         {% endif %}
                     </td>
-                    
-                    <!-- Exams Count -->
-                    <td>
-                        <span class="weight-badge">
-                            <i class="fa fa-file-alt me-1"></i>
+
+                    <!-- Exam count -->
+                    <td class="text-center">
+                        <span class="exam-count">
+                            <i class="fa fa-file-alt" style="font-size:10px;"></i>
                             {{ category.examinations.count|default:0 }}
                         </span>
                     </td>
-                    
-                    <!-- Actions Dropdown -->
-                    <td>
-                        <div class="dropdown" style="position: static;">
-                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa fa-ellipsis-v me-1"></i>
+
+                    <!-- Actions -->
+                    <td class="text-center">
+                        <div class="dropdown">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                <i class="fa fa-ellipsis-v"></i>
                             </button>
-                            <div class="dropdown-menu dropdown-menu-end">
-                                <!-- View Details -->
-                                <a class="dropdown-item text-success" href="{% url 'exams:category_detail' category.pk %}">
-                                    <i class="fa fa-eye me-2"></i>View Details
-                                </a>
-                                
-                                <!-- Quick View Modal -->
-                                <button type="button" class="dropdown-item text-info"
-                                        hx-get="{% url 'exams:category_quick_view_modal' category.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-info-circle me-2"></i>Quick View
-                                </button>
-                                
-                                <!-- Edit -->
-                                <a class="dropdown-item text-warning" href="{% url 'exams:category_edit' category.pk %}">
-                                    <i class="fa fa-edit me-2"></i>Edit
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Status Actions -->
-                                <h6 class="dropdown-header">Status Actions</h6>
-                                
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                                <li>
+                                    <a class="dropdown-item"
+                                       href="{% url 'exams:category_detail' category.pk %}">
+                                        <i class="fa fa-eye me-2 text-primary"></i>View Details
+                                    </a>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item text-info"
+                                            hx-get="{% url 'exams:category_quick_view_modal' category.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-info-circle me-2"></i>Quick View
+                                    </button>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item text-warning"
+                                       href="{% url 'exams:category_edit' category.pk %}">
+                                        <i class="fa fa-edit me-2"></i>Edit
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider"></li>
+                                <li><h6 class="dropdown-header">Status</h6></li>
+
                                 {% if category.is_active %}
-                                    <button type="button" class="dropdown-item text-warning"
-                                            hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
-                                            hx-target="#modal-container"
-                                            hx-swap="innerHTML">
-                                        <i class="fa fa-pause-circle me-2"></i>Deactivate
-                                    </button>
+                                    <li>
+                                        <button class="dropdown-item text-warning"
+                                                hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
+                                                hx-target="#modal-container"
+                                                hx-swap="innerHTML">
+                                            <i class="fa fa-pause-circle me-2"></i>Deactivate
+                                        </button>
+                                    </li>
                                 {% else %}
-                                    <button type="button" class="dropdown-item text-success"
-                                            hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
+                                    <li>
+                                        <button class="dropdown-item text-success"
+                                                hx-get="{% url 'exams:category_toggle_active_modal' category.pk %}"
+                                                hx-target="#modal-container"
+                                                hx-swap="innerHTML">
+                                            <i class="fa fa-check-circle me-2"></i>Activate
+                                        </button>
+                                    </li>
+                                {% endif %}
+
+                                <li><hr class="dropdown-divider"></li>
+                                <li><h6 class="dropdown-header">Features</h6></li>
+
+                                <li>
+                                    <span class="dropdown-item-text" style="font-size:11.5px;">
+                                        {% if category.allows_retakes %}
+                                            <i class="fa fa-check-circle text-success me-1"></i>Retakes allowed (max {{ category.max_retakes }})
+                                        {% else %}
+                                            <i class="fa fa-times-circle text-muted me-1"></i>No retakes
+                                        {% endif %}
+                                    </span>
+                                </li>
+                                <li>
+                                    <span class="dropdown-item-text" style="font-size:11.5px;">
+                                        {% if category.includes_in_report_cards %}
+                                            <i class="fa fa-check-circle text-success me-1"></i>In report cards
+                                        {% else %}
+                                            <i class="fa fa-times-circle text-muted me-1"></i>Not in report cards
+                                        {% endif %}
+                                    </span>
+                                </li>
+                                {% if category.public_results %}
+                                <li>
+                                    <span class="dropdown-item-text" style="font-size:11.5px;">
+                                        <i class="fa fa-globe text-info me-1"></i>Public results
+                                    </span>
+                                </li>
+                                {% endif %}
+
+                                <li><hr class="dropdown-divider"></li>
+
+                                <li>
+                                    <button class="dropdown-item text-danger"
+                                            hx-get="{% url 'exams:category_delete_modal' category.pk %}"
                                             hx-target="#modal-container"
                                             hx-swap="innerHTML">
-                                        <i class="fa fa-check-circle me-2"></i>Activate
+                                        <i class="fa fa-trash me-2"></i>Delete
                                     </button>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Category Features -->
-                                <h6 class="dropdown-header">Features</h6>
-                                
-                                {% if category.allows_retakes %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-success">
-                                            <i class="fa fa-check-circle me-1"></i>Allows Retakes (Max: {{ category.max_retakes }})
-                                        </small>
-                                    </div>
-                                {% endif %}
-                                
-                                {% if category.includes_in_report_cards %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-success">
-                                            <i class="fa fa-check-circle me-1"></i>Included in Report Cards
-                                        </small>
-                                    </div>
-                                {% endif %}
-                                
-                                {% if category.public_results %}
-                                    <div class="dropdown-item-text">
-                                        <small class="text-info">
-                                            <i class="fa fa-globe me-1"></i>Public Results
-                                        </small>
-                                    </div>
-                                {% endif %}
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Print -->
-                                <a class="dropdown-item text-primary" 
-                                   href="{% url 'exams:category_print_detail' category.pk %}" 
-                                   target="_blank">
-                                    <i class="fa fa-print me-2"></i>Print Details
-                                </a>
-                                
-                                <hr class="dropdown-divider">
-                                
-                                <!-- Delete Action -->
-                                <button type="button" class="dropdown-item text-danger"
-                                        hx-get="{% url 'exams:category_delete_modal' category.pk %}"
-                                        hx-target="#modal-container"
-                                        hx-swap="innerHTML">
-                                    <i class="fa fa-trash me-2"></i>Delete
-                                </button>
-                            </div>
+                                </li>
+                            </ul>
                         </div>
                     </td>
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="10" class="text-center py-5">
-                        <div class="empty-state">
-                            <i class="pe-7s-search empty-state-icon"></i>
-                            <p class="mt-2 mb-0 text-muted">No exam categories found matching your filters.</p>
-                            <small class="text-muted">Try adjusting your search criteria or create a new category.</small>
+                    <td colspan="10">
+                        <div class="tbl-empty">
+                            <i class="pe-7s-search"></i>
+                            <p>
+                                {% if request.GET %}
+                                    No exam categories match your current filters.
+                                {% else %}
+                                    No exam categories have been created yet.
+                                {% endif %}
+                            </p>
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{% url 'exams:category_create' %}"
+                                   style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#1d4ed8;color:#fff;text-decoration:none;">
+                                    <i class="fa fa-plus" style="font-size:11px;"></i>Create Category
+                                </a>
+                                {% if request.GET %}
+                                <a href="{% url 'exams:category_list' %}"
+                                   style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;border-radius:6px;background:#fff;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;">
+                                    <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                                </a>
+                                {% endif %}
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -219,140 +383,93 @@
 
 <!-- Pagination -->
 {% if categories_page.paginator.num_pages > 1 %}
-<div class="mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <!-- Results Count -->
-        <div class="text-muted">
-            Showing {{ categories_page.start_index }} - {{ categories_page.end_index }} of {{ categories_page.paginator.count }} categories
-        </div>
-        
-        <!-- Pagination Navigation -->
-        <nav aria-label="Category pagination">
-            <ul class="pagination mb-0">
-                <!-- Previous Button -->
-                {% if categories_page.has_previous %}
-                    <li class="page-item">
-                        <button class="page-link" 
-                                hx-get="{% url 'exams:category_list' %}" 
-                                hx-target="#category-results"
-                                hx-include="#searchForm"
-                                hx-vals='{"page": "{{ categories_page.previous_page_number }}"}'
-                                aria-label="Previous">
-                            <span aria-hidden="true">«</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">«</span>
-                    </li>
-                {% endif %}
-                
-                <!-- Page Numbers -->
-                {% for page_num in categories_page.paginator.page_range %}
-                    {% if page_num == categories_page.number %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_num }}</span>
-                        </li>
-                    {% elif page_num > categories_page.number|add:"-3" and page_num < categories_page.number|add:"3" %}
-                        <li class="page-item">
-                            <button class="page-link"
-                                    hx-get="{% url 'exams:category_list' %}"
-                                    hx-target="#category-results"
-                                    hx-include="#searchForm"
-                                    hx-vals='{"page": "{{ page_num }}"}'>
-                                {{ page_num }}
-                            </button>
-                        </li>
-                    {% endif %}
-                {% endfor %}
-                
-                <!-- Next Button -->
-                {% if categories_page.has_next %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ categories_page.start_index }}</strong>–<strong>{{ categories_page.end_index }}</strong>
+        of <strong>{{ categories_page.paginator.count }}</strong> categories
+    </span>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if categories_page.has_previous %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'exams:category_list' %}"
+                        hx-target="#category-results"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ categories_page.previous_page_number }}"}'>«</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for p in categories_page.paginator.page_range %}
+                {% if p == categories_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p > categories_page.number|add:"-3" and p < categories_page.number|add:"3" %}
                     <li class="page-item">
                         <button class="page-link"
                                 hx-get="{% url 'exams:category_list' %}"
                                 hx-target="#category-results"
                                 hx-include="#searchForm"
-                                hx-vals='{"page": "{{ categories_page.next_page_number }}"}'
-                                aria-label="Next">
-                            <span aria-hidden="true">»</span>
-                        </button>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">»</span>
+                                hx-vals='{"page":"{{ p }}"}'>{{ p }}</button>
                     </li>
                 {% endif %}
-            </ul>
-        </nav>
-    </div>
+            {% endfor %}
+
+            {% if categories_page.has_next %}
+            <li class="page-item">
+                <button class="page-link"
+                        hx-get="{% url 'exams:category_list' %}"
+                        hx-target="#category-results"
+                        hx-include="#searchForm"
+                        hx-vals='{"page":"{{ categories_page.next_page_number }}"}'>»</button>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
 </div>
 {% endif %}
 
-<!-- ✅ OUT OF BAND UPDATE FOR STATS (Only if is_htmx) -->
+<!-- Out-of-band stats update on HTMX filter swap -->
 {% if is_htmx %}
 <div class="row mb-2" id="stats-cards" hx-swap-oob="true">
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-primary">
-                <i class="pe-7s-folder"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Total Categories</div>
-                <h3>{{ stats.total|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-folder"></i></div>
+            <div>
+                <div class="stat-label">Total Categories</div>
+                <div class="stat-value">{{ stats.total|default:0 }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-success">
-                <i class="pe-7s-check"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Active Categories</div>
-                <h3>{{ stats.active|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value">{{ stats.active|default:0 }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-info">
-                <i class="pe-7s-note2"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Formative</div>
-                <h3>{{ stats.formative|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-note2"></i></div>
+            <div>
+                <div class="stat-label">Formative</div>
+                <div class="stat-value">{{ stats.formative|default:0 }}</div>
             </div>
         </div>
     </div>
-    
     <div class="col-xl-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-icon bg-warning">
-                <i class="pe-7s-medal"></i>
-            </div>
-            <div class="stats-content">
-                <div class="stats-label">Summative</div>
-                <h3>{{ stats.summative|default:0 }}</h3>
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-medal"></i></div>
+            <div>
+                <div class="stat-label">Summative</div>
+                <div class="stat-value">{{ stats.summative|default:0 }}</div>
             </div>
         </div>
     </div>
 </div>
 {% endif %}
-
-<!-- Reinitialize tooltips after HTMX swap -->
-<script>
-if (typeof htmx !== 'undefined') {
-    htmx.on('htmx:afterSwap', function(event) {
-        if (event.detail.target.id === 'category-results') {
-            // Reinitialize Bootstrap tooltips
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(function (tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
-        }
-    });
-}
-</script>

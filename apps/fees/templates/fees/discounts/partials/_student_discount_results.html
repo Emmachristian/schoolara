@@ -1,0 +1,379 @@
+{% load humanize %}
+{% load currency_filters %}
+
+<div style="overflow-x:auto;">
+<table class="disc-tbl">
+    <thead>
+        <tr>
+            <th style="width:38px;">#</th>
+            <th>Student</th>
+            <th>Policy</th>
+            <th>Value / Override</th>
+            <th>Period</th>
+            <th class="text-end">Applied</th>
+            <th class="text-end">Total Discounted</th>
+            <th class="text-center">Status</th>
+            <th class="text-center" style="width:60px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if discounts_page %}
+            {% for discount in discounts_page %}
+            <tr>
+
+                <!-- Row number -->
+                <td style="color:#94a3b8; font-size:12px;">
+                    {{ forloop.counter|add:discounts_page.start_index|add:"-1" }}
+                </td>
+
+                <!-- Student -->
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="student-initials">
+                            {{ discount.student.first_name|first }}{{ discount.student.last_name|first }}
+                        </div>
+                        <div>
+                            <a href="{% url 'students:student_profile' discount.student.pk %}"
+                               class="stu-name">
+                                {{ discount.student.get_full_name }}
+                            </a>
+                            <span class="stu-adm">{{ discount.student.admission_number }}</span>
+                        </div>
+                    </div>
+                </td>
+
+                <!-- Policy -->
+                <td>
+                    <a href="{% url 'fees:discount_detail' discount.policy.pk %}"
+                       style="font-weight:600; font-size:13px; color:var(--ink); text-decoration:none;"
+                       data-bs-toggle="tooltip"
+                       title="{{ discount.policy.get_category_display }} — {{ discount.policy.get_value_mode_display }}">
+                        {{ discount.policy.name }}
+                    </a>
+                    <div>
+                        <span class="mode-badge">
+                            {{ discount.policy.get_value_mode_display }}
+                        </span>
+                    </div>
+                </td>
+
+                <!-- Value / Override -->
+                <td>
+                    {% if discount.override_percentage is not None %}
+                        <span style="font-weight:600; color:#0891b2;">
+                            {{ discount.override_percentage }}% override
+                        </span>
+                    {% elif discount.override_fixed_amount is not None %}
+                        <span style="font-weight:600; color:#0891b2;">
+                            {{ discount.override_fixed_amount|money }} override
+                        </span>
+                    {% else %}
+                        {% if discount.policy.value_mode == 'FLAT_PERCENTAGE' %}
+                            <span style="font-weight:600; color:var(--ink);">
+                                {{ discount.policy.flat_percentage }}%
+                            </span>
+                        {% elif discount.policy.value_mode == 'FLAT_FIXED' %}
+                            <span style="font-weight:600; color:var(--ink);">
+                                {{ discount.policy.flat_fixed_amount|money }}
+                            </span>
+                        {% elif discount.policy.value_mode == 'FLAT_WAIVER' %}
+                            <span style="font-weight:600; color:#15803d;">100% waiver</span>
+                        {% elif discount.policy.value_mode == 'TIERED' %}
+                            <span style="color:#64748b; font-size:12px;">
+                                Tiered ({{ discount.policy.tier_dimension|default:"—" }})
+                            </span>
+                        {% elif discount.policy.value_mode == 'CATEGORY_MATRIX' %}
+                            <span style="color:#64748b; font-size:12px;">Category matrix</span>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    {% endif %}
+                    {% if discount.dimension_context %}
+                        <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                            {% for k, v in discount.dimension_context.items %}
+                                <span>{{ k }}: {{ v }}</span>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </td>
+
+                <!-- Period -->
+                <td>
+                    <div style="font-size:12.5px; color:var(--ink);">
+                        {{ discount.start_date|date:"d M Y" }}
+                    </div>
+                    {% if discount.end_date %}
+                        <div style="font-size:11.5px; color:#64748b;">
+                            → {{ discount.end_date|date:"d M Y" }}
+                        </div>
+                    {% else %}
+                        <div style="font-size:11.5px; color:#94a3b8;">No expiry</div>
+                    {% endif %}
+                </td>
+
+                <!-- Applied count -->
+                <td class="text-end">
+                    <span style="font-weight:600; font-size:13px;">
+                        {{ discount.application_count|default:0|intcomma }}
+                    </span>
+                    <div style="font-size:11px; color:#94a3b8;">invoice(s)</div>
+                </td>
+
+                <!-- Total Discounted -->
+                <td class="text-end">
+                    <span style="font-weight:600; font-size:13px; color:#15803d;">
+                        {{ discount.total_discounted|default:0|money }}
+                    </span>
+                </td>
+
+                <!-- Status -->
+                <td class="text-center">
+                    {% if discount.status == 'ACTIVE' %}
+                        <span class="s-pill sp-active"><i class="fa fa-check-circle"></i> Active</span>
+                    {% elif discount.status == 'SUSPENDED' %}
+                        <span class="s-pill sp-suspended"><i class="fa fa-pause-circle"></i> Suspended</span>
+                    {% elif discount.status == 'EXPIRED' %}
+                        <span class="s-pill sp-expired"><i class="fa fa-clock-o"></i> Expired</span>
+                    {% elif discount.status == 'REVOKED' %}
+                        <span class="s-pill sp-revoked"><i class="fa fa-ban"></i> Revoked</span>
+                    {% elif discount.status == 'PENDING' %}
+                        <span class="s-pill sp-pending"><i class="fa fa-hourglass-half"></i> Pending</span>
+                    {% else %}
+                        <span class="s-pill sp-default">{{ discount.get_status_display }}</span>
+                    {% endif %}
+                </td>
+
+                <!-- Actions -->
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:student_discount_detail' discount.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Detail
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="{% url 'fees:student_discount_edit' discount.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                </a>
+                            </li>
+
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:student_discount_quick_view_modal' discount.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-info-circle me-2 text-info"></i>Quick View
+                                </button>
+                            </li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Status Actions</h6></li>
+
+                            {% if discount.status == 'ACTIVE' %}
+                                <li>
+                                    <button class="dropdown-item text-warning"
+                                            hx-get="{% url 'fees:student_discount_suspend_modal' discount.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-pause-circle me-2"></i>Suspend
+                                    </button>
+                                </li>
+                            {% endif %}
+
+                            {% if discount.status != 'REVOKED' %}
+                                <li>
+                                    <button class="dropdown-item text-danger"
+                                            hx-get="{% url 'fees:student_discount_revoke_modal' discount.pk %}"
+                                            hx-target="#modal-container"
+                                            hx-swap="innerHTML">
+                                        <i class="fa fa-ban me-2"></i>Revoke
+                                    </button>
+                                </li>
+                            {% endif %}
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <li>
+                                <button class="dropdown-item text-danger"
+                                        hx-get="{% url 'fees:student_discount_delete_modal' discount.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-trash me-2"></i>Delete
+                                </button>
+                            </li>
+
+                        </ul>
+                    </div>
+                </td>
+
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="9">
+                    <div class="tbl-empty">
+                        <i class="pe-7s-ticket"></i>
+                        <p>
+                            {% if request.GET %}
+                                No discount awards match your current filters.
+                            {% else %}
+                                No discount awards have been created yet.
+                            {% endif %}
+                        </p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{% url 'fees:student_discount_create' %}"
+                            class="btn btn-primary me-1 d-inline-flex align-items-center gap-1">
+                                <i class="fa fa-plus" style="font-size:11px; line-height:1;"></i>
+                                Award Discount
+                            </a>
+                            {% if request.GET %}
+                                <a href="{% url 'fees:student_discount_list' %}"
+                                   style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px;
+                                          font-size:13px; font-weight:500; border-radius:6px;
+                                          background:#fff; color:#64748b; text-decoration:none;
+                                          border:1px solid #e2e8f0;">
+                                    <i class="fa fa-times" style="font-size:11px;"></i>Clear Filters
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+</div>
+
+<!-- Pagination -->
+{% if discounts_page.paginator.num_pages > 1 %}
+<div class="pag-bar">
+    <span>
+        Showing <strong>{{ discounts_page.start_index }}</strong>–<strong>{{ discounts_page.end_index }}</strong>
+        of <strong>{{ discounts_page.paginator.count|intcomma }}</strong> awards
+    </span>
+    <nav aria-label="Discount award pagination">
+        <ul class="pagination pagination-sm mb-0">
+            {% if discounts_page.has_previous %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'fees:student_discount_list' %}"
+                            hx-target="#discount-list"
+                            hx-include="#filterForm"
+                            hx-vals='{"page": "{{ discounts_page.previous_page_number }}"}'>«</button>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for page_num in discounts_page.paginator.page_range %}
+                {% if page_num == discounts_page.number %}
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                {% elif page_num > discounts_page.number|add:"-3" and page_num < discounts_page.number|add:"3" %}
+                    <li class="page-item">
+                        <button class="page-link"
+                                hx-get="{% url 'fees:student_discount_list' %}"
+                                hx-target="#discount-list"
+                                hx-include="#filterForm"
+                                hx-vals='{"page": "{{ page_num }}"}'>{{ page_num }}</button>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if discounts_page.has_next %}
+                <li class="page-item">
+                    <button class="page-link"
+                            hx-get="{% url 'fees:student_discount_list' %}"
+                            hx-target="#discount-list"
+                            hx-include="#filterForm"
+                            hx-vals='{"page": "{{ discounts_page.next_page_number }}"}'>»</button>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
+<!-- OOB stats update on HTMX requests -->
+{% if is_htmx %}
+<div class="row mb-2" id="stats-cards" hx-swap-oob="true">
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-ticket"></i></div>
+            <div>
+                <div class="stat-label">Total Awards</div>
+                <div class="stat-value">{{ stats.total|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-check"></i></div>
+            <div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value">{{ stats.active|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning"><i class="pe-7s-attention"></i></div>
+            <div>
+                <div class="stat-label">Suspended</div>
+                <div class="stat-value">{{ stats.suspended|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-danger"><i class="pe-7s-close-circle"></i></div>
+            <div>
+                <div class="stat-label">Revoked</div>
+                <div class="stat-value">{{ stats.revoked|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-secondary"><i class="pe-7s-clock"></i></div>
+            <div>
+                <div class="stat-label">Expired</div>
+                <div class="stat-value">{{ stats.expired|default:0|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Total Discounted</div>
+                <div class="stat-value" style="font-size:15px;">
+                    {{ stats.total_discounted|money_short }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Re-init tooltips after HTMX swap -->
+<script>
+(function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        var ex = bootstrap.Tooltip.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Tooltip(el);
+    });
+})();
+</script>

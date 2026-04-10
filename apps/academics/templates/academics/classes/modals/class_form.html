@@ -1,0 +1,195 @@
+{# academics/templates/academics/classes/modals/class_form.html #}
+{% load widget_tweaks %}
+
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:16px 22px;">
+            <div>
+                <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#0f172a;">
+                    <i class="fa fa-chalkboard me-2" style="color:#64748b;"></i>
+                    {% if class_instance %}Edit Class — {{ class_instance.get_display_name }}{% else %}Create New Class{% endif %}
+                </h5>
+                {% if class_instance %}
+                <div style="font-size:11.5px;color:#64748b;margin-top:3px;">
+                    {{ class_instance.academic_session.name }}
+                </div>
+                {% endif %}
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form method="POST"
+              hx-post="{% if class_instance %}{% url 'academics:class_edit' class_instance.pk %}{% else %}{% url 'academics:class_create' %}{% endif %}"
+              hx-target="#modal-container"
+              hx-swap="innerHTML">
+            {% csrf_token %}
+            {% if level_pk %}
+            <input type="hidden" name="prefill_level" value="{{ level_pk }}">
+            {% endif %}
+
+            <div class="modal-body" style="padding:22px;">
+
+                {# ── Identity ── #}
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-tag me-1"></i>Identity
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">
+                                Academic Level <span class="text-danger">*</span>
+                            </label>
+                            {% render_field form.academic_level class="form-select form-select-sm" id="id_academic_level" %}
+                            {% if form.academic_level.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.academic_level.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-3" id="section-field-wrapper">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Section</label>
+                            {% render_field form.section class="form-control form-control-sm" placeholder="e.g. A, B, C" %}
+                            {% if form.section.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.section.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">
+                                Academic Session <span class="text-danger">*</span>
+                            </label>
+                            {% render_field form.academic_session class="form-select form-select-sm" %}
+                            {% if form.academic_session.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.academic_session.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Level metadata for JS — which levels have sections #}
+                    <script id="level-sections-data" type="application/json">
+                    {
+                        {% for level in form.academic_level.field.queryset %}
+                        "{{ level.pk }}": {{ level.has_sections|yesno:"true,false" }}{% if not forloop.last %},{% endif %}
+                        {% endfor %}
+                    }
+                    </script>
+                </div>
+
+                {# ── Teachers ── #}
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-user-tie me-1"></i>Teachers
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Class Teacher</label>
+                            {% render_field form.class_teacher class="form-select form-select-sm" %}
+                            {% if form.class_teacher.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.class_teacher.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Assistant Teacher</label>
+                            {% render_field form.assistant_teacher class="form-select form-select-sm" %}
+                            {% if form.assistant_teacher.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.assistant_teacher.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ── Capacity & Room ── #}
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-door-open me-1"></i>Capacity &amp; Room
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Max Students</label>
+                            {% render_field form.max_students class="form-control form-control-sm" %}
+                            {% if form.max_students.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.max_students.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Classroom</label>
+                            {% render_field form.classroom class="form-select form-select-sm" %}
+                            {% if form.classroom.errors %}
+                                <div class="text-danger" style="font-size:11.5px;">{{ form.classroom.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Start Time</label>
+                            {% render_field form.start_time class="form-control form-control-sm" %}
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">End Time</label>
+                            {% render_field form.end_time class="form-control form-control-sm" %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ── Optional ── #}
+                <div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+                        <i class="fa fa-ellipsis-h me-1"></i>Optional
+                    </div>
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Class Motto</label>
+                            {% render_field form.class_motto class="form-control form-control-sm" placeholder="Optional motto" %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" style="font-size:12.5px;">Class Colors</label>
+                            {% render_field form.class_colors class="form-control form-control-sm" placeholder="e.g. Blue and White" %}
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center gap-2 pt-3">
+                            {% render_field form.is_active class="form-check-input" %}
+                            <label class="form-check-label" style="font-size:13px;font-weight:500;">Active</label>
+                        </div>
+                    </div>
+                </div>
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mt-3 mb-0 py-2" style="font-size:13px;">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i>Cancel
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm">
+                    {% if class_instance %}
+                        <i class="fa fa-save me-1"></i>Save Changes
+                    {% else %}
+                        <i class="fa fa-plus me-1"></i>Create Class
+                    {% endif %}
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    const levelSelect    = document.getElementById('id_academic_level');
+    const sectionWrapper = document.getElementById('section-field-wrapper');
+    const sectionInput   = sectionWrapper ? sectionWrapper.querySelector('input') : null;
+    const levelsData     = JSON.parse(document.getElementById('level-sections-data')?.textContent || '{}');
+
+    function toggleSection() {
+        if (!levelSelect || !sectionWrapper) return;
+        const hasSections = levelsData[levelSelect.value] === true;
+        sectionWrapper.style.display = hasSections ? '' : 'none';
+        if (!hasSections && sectionInput) sectionInput.value = '';
+    }
+
+    if (levelSelect) {
+        levelSelect.addEventListener('change', toggleSection);
+        toggleSection();
+    }
+})();
+</script>

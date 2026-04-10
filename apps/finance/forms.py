@@ -448,500 +448,685 @@ class ExpenseCategoryFilterForm(BootstrapFormMixin, forms.Form):
         ], attrs={'class': 'form-select'})
     )
 
-
 # =============================================================================
-# EXPENSE FORMS
+# EXPENSE FORM
 # =============================================================================
 
 class ExpenseForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """
-    Form for creating/editing expenses.
-    Uses school timezone for date validations. ⭐
+    Form for creating and editing expenses.
+ 
+    FIELD AUTO-SET POLICY
+    ─────────────────────
+    expense_date     → not shown. expense_pre_save sets it via get_school_today().
+    fiscal_period    → not shown. expense_pre_save sets it via
+                       FiscalPeriod.get_current_fiscal_period().
+    academic_session → removed from model. Access via:
+                       expense.fiscal_period.related_academic_session
+ 
+    TOTALS POLICY
+    ─────────────
+    total_amount / subtotal_amount → not shown. Maintained by the ExpenseLine
+    post_save signal as sum(lines) + tax_amount. Never user-entered.
+ 
+    tax_amount → the only financial field the user touches. Optional.
+ 
+    PAYEE
+    ─────
+    payee_type drives what the payee section means:
+    - SUPPLIER → name is a vendor/shop, reference is an invoice number
+    - STAFF    → name is a staff member, reference is an approval/trip ref
+    - PETTY    → small cash purchase, name usually left blank
+    - OTHER    → bank charges, government fees, etc.
+ 
+    ⭐ All date comparisons use get_school_today() (school timezone).
     """
-    
+ 
     class Meta:
-        model = Expense
+        model  = Expense
         fields = [
-            'expense_date', 'description', 'category',
-            'academic_session', 'fiscal_period',
-            'total_amount', 'tax_amount',
-            'vendor_name', 'vendor_contact', 'vendor_reference',
-            'preferred_payment_method', 'expense_account',
+            # Basic
+            'description', 'category',
+            # Financial — tax only; totals are signal-driven
+            'tax_amount',
+            # Payment
+            'preferred_payment_method',
+            # Payee
+            'payee_type', 'payee_name', 'payee_contact', 'vendor_reference',
+            # Budget
             'budget_line', 'budget_override_reason',
-            'receipt_image', 'notes', 'is_recurring', 'auto_create_journal_entry'
+            # Supporting docs
+            'receipt_image', 'notes',
         ]
         widgets = {
-            'expense_date': DatePickerInput(),
             'description': forms.TextInput(attrs={
-                'placeholder': 'Brief description of expense...'
+                'placeholder': 'Brief description of expense…',
             }),
-            'category': forms.Select(attrs={'class': 'form-select'}),
-            'academic_session': forms.Select(attrs={'class': 'form-select'}),
-            'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
-            'total_amount': MoneyInput(),
+            'category': forms.Select(attrs={
+                'class': 'form-select',
+            }),
             'tax_amount': MoneyInput(),
-            'vendor_name': forms.TextInput(attrs={
-                'placeholder': 'Vendor/Supplier name'
+            'preferred_payment_method': forms.Select(attrs={
+                'class': 'form-select',
             }),
-            'vendor_contact': forms.TextInput(attrs={
-                'placeholder': 'Phone or email'
+            'payee_type': forms.Select(attrs={
+                'class': 'form-select',
+                'id':    'id_payee_type',
+            }),
+            'payee_name': forms.TextInput(attrs={
+                'placeholder': 'Name of supplier, staff member, etc.',
+                'id':          'id_payee_name',
+            }),
+            'payee_contact': forms.TextInput(attrs={
+                'placeholder': 'Phone or email — optional',
             }),
             'vendor_reference': forms.TextInput(attrs={
-                'placeholder': 'Invoice or reference number'
+                'placeholder': 'Invoice no., receipt ref., trip approval ref…',
             }),
-            'preferred_payment_method': forms.Select(attrs={'class': 'form-select'}),
-            'expense_account': forms.Select(attrs={'class': 'form-select'}),
-            'budget_line': forms.Select(attrs={'class': 'form-select'}),
+            'budget_line': forms.Select(attrs={
+                'class': 'form-select',
+            }),
             'budget_override_reason': forms.Textarea(attrs={
                 'rows': 2,
-                'placeholder': 'Reason for exceeding budget (if applicable)...'
+                'placeholder': 'Required if expense exceeds budget limit…',
             }),
             'notes': forms.Textarea(attrs={
                 'rows': 3,
-                'placeholder': 'Additional notes...'
+                'placeholder': 'Verbal approvals, delivery notes, references…',
             }),
         }
-    
+ 
+    # ── __init__ ──────────────────────────────────────────────────────────────
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
+        # payee_name is optional — depends on payee_type
+        self.fields['payee_name'].required    = False
+        self.fields['payee_contact'].required = False
+
+        # FIX: replace Django's default "----------" empty option.
+        # empty_label is a ModelChoiceField attribute — it cannot be set
+        # via widget attrs, only here in __init__.
+        # preferred_payment_method is a plain <select> with no Select2,
+        # so this is the only place its placeholder can be set.
+        # category and budget_line also get proper labels as a fallback
+        # for when Select2 isn't loaded.
+        self.fields['preferred_payment_method'].empty_label = '— Select payment method —'
+        self.fields['category'].empty_label                 = '— Select a category —'
+        self.fields['budget_line'].empty_label              = '— No budget line —'
+
         try:
+            from core.models import FinancialSettings
+            settings = FinancialSettings.get_instance()
+
+            # Only show tax_amount if school has tax enabled in Financial Settings
+            if not settings or not settings.include_tax_in_prices:
+                self.fields.pop('tax_amount', None)
+
             self.fields['category'].queryset = ExpenseCategory.objects.filter(
-                is_active=True
-            ).order_by('category_type', 'name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
-                status__in=['OPEN', 'CURRENT']
-            ).order_by('-start_date')
-            
-            self.fields['preferred_payment_method'].queryset = PaymentMethod.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['expense_account'].queryset = Account.objects.filter(
                 is_active=True,
-                is_expense_account=True
-            ).order_by('account_number')
-            
+            ).order_by('category_type', 'name')
+
+            self.fields['preferred_payment_method'].queryset = PaymentMethod.objects.filter(
+                is_active=True,
+            ).order_by('name')
+
             self.fields['budget_line'].queryset = BudgetLine.objects.filter(
                 budget__status='ACTIVE',
-                line_type='EXPENSE'
-            ).select_related('budget', 'account').order_by('budget__name', 'account__name')
+                line_type='EXPENSE',
+            ).select_related('budget', 'account').order_by(
+                'budget__name', 'account__name',
+            )
+
         except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        if not self.is_bound:
-            self.fields['expense_date'].initial = get_school_today()  # ⭐ SCHOOL TIMEZONE
-    
+            logger.error(f"ExpenseForm: error in __init__: {e}")
+            self.fields.pop('tax_amount', None)  # safe default if settings unavailable
+ 
+    # ── clean ─────────────────────────────────────────────────────────────────
+ 
     def clean(self):
-        """Validate expense data using school timezone ⭐"""
         cleaned_data = super().clean()
-        
-        expense_date = cleaned_data.get('expense_date')
-        fiscal_period = cleaned_data.get('fiscal_period')
-        
-        today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-        
-        if expense_date and expense_date > today:
-            raise ValidationError({
-                'expense_date': 'Expense date cannot be in the future.'
-            })
-        
-        if expense_date and fiscal_period:
-            if expense_date < fiscal_period.start_date or expense_date > fiscal_period.end_date:
-                self.add_error('fiscal_period',
-                    'Expense date must fall within the selected fiscal period.'
-                )
-        
-        total_amount = cleaned_data.get('total_amount')
-        tax_amount = cleaned_data.get('tax_amount')
-        
-        if total_amount and tax_amount:
-            if tax_amount > total_amount:
-                raise ValidationError({
-                    'tax_amount': 'Tax amount cannot exceed total amount.'
-                })
-        
+ 
+        tax_amount  = cleaned_data.get('tax_amount')
+        payee_type  = cleaned_data.get('payee_type')
+        payee_name  = cleaned_data.get('payee_name', '').strip()
+ 
+        # Tax cannot be negative
+        if tax_amount is not None and tax_amount < 0:
+            self.add_error('tax_amount', 'Tax amount cannot be negative.')
+ 
+        # Supplier and Staff expenses should have a payee name
+        # Petty cash and Other can leave it blank
+        if payee_type in ('SUPPLIER', 'STAFF') and not payee_name:
+            self.add_error(
+                'payee_name',
+                'Please enter a name for the '
+                + ('supplier.' if payee_type == 'SUPPLIER' else 'staff member.'),
+            )
+ 
         return cleaned_data
 
 
+# =============================================================================
+# EXPENSE LINE FORM
+# =============================================================================
+
 class ExpenseLineForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
-    """Form for expense line items (inline formset use)"""
-    
+    """
+    Form for individual expense line items — used inside ExpenseLineFormSet.
+
+    FIELD NOTES
+    ───────────
+    description  → required. Staff must describe what was purchased on every
+                   line — e.g. "Box of chalk", "Ream of paper".
+
+    amount       → readonly in the template. Calculated server-side in clean()
+                   as quantity × unit_price. Never trusted from the browser.
+
+    expense_account → REMOVED. All lines belong to the same category and post
+                   to the same GL account resolved at the Expense level.
+
+    tax_rate /
+    tax_amount   → removed from model and form. Not applicable in a Ugandan
+                   school context. Use Expense.tax_amount for header-level tax.
+
+    notes        → removed from model and form.
+    """
+
     class Meta:
-        model = ExpenseLine
+        model  = ExpenseLine
         fields = [
-            'description', 'quantity', 'unit_of_measure', 'unit_price', 'amount',
-            'expense_account', 'tax_rate', 'tax_amount', 'notes'
+            'description', 'quantity', 'unit_of_measure',
+            'unit_price', 'amount',
         ]
         widgets = {
             'description': forms.TextInput(attrs={
-                'placeholder': 'Line item description...'
+                'placeholder': 'e.g. Box of chalk, Ream of paper…',
             }),
-            'quantity': forms.NumberInput(attrs={'min': '0.01', 'step': '0.01'}),
-            'unit_of_measure': forms.Select(attrs={'class': 'form-select'}),
+            'quantity': forms.NumberInput(attrs={
+                'min':  '0.01',
+                'step': '0.01',
+            }),
+            # FIX: added 'uom-select' class so the template JS can target
+            # this field specifically for Select2 initialization in formset rows.
+            # The 'form-select' class is still applied by the template's
+            # |add_class filter so it does not need to be duplicated here.
+            'unit_of_measure': forms.Select(attrs={
+                'class': 'uom-select',
+            }),
             'unit_price': MoneyInput(),
-            'amount': MoneyInput(),
-            'expense_account': forms.Select(attrs={'class': 'form-select'}),
-            'tax_rate': forms.Select(attrs={'class': 'form-select'}),
-            'tax_amount': MoneyInput(),
-            'notes': forms.Textarea(attrs={'rows': 2}),
+            'amount':     MoneyInput(attrs={'readonly': True}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
+        self.fields['amount'].required = False
+
+        # FIX: replace the default "----------" empty label with something
+        # meaningful. empty_label is a ModelChoiceField attribute — it cannot
+        # be set via the widget attrs dict, only here in __init__.
+        self.fields['unit_of_measure'].empty_label = '— Select unit —'
+
         try:
             self.fields['unit_of_measure'].queryset = UnitOfMeasure.objects.filter(
-                is_active=True
-            ).order_by('name')
-            
-            self.fields['expense_account'].queryset = Account.objects.filter(
                 is_active=True,
-                is_expense_account=True
-            ).order_by('account_number')
-            
-            self.fields['tax_rate'].queryset = TaxRate.objects.filter(
-                is_active=True
             ).order_by('name')
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
 
+        except Exception as e:
+            logger.error(f"ExpenseLineForm: error setting querysets: {e}")
+
+    def clean(self):
+        """Recalculate amount server-side — never trust the readonly browser value."""
+        cleaned_data = super().clean()
+
+        quantity   = cleaned_data.get('quantity')
+        unit_price = cleaned_data.get('unit_price')
+
+        if quantity is not None and unit_price is not None:
+            if quantity <= 0:
+                self.add_error('quantity', 'Quantity must be greater than zero.')
+            if unit_price <= 0:
+                self.add_error('unit_price', 'Unit price must be greater than zero.')
+            if quantity > 0 and unit_price > 0:
+                cleaned_data['amount'] = quantity * unit_price
+
+        return cleaned_data
+
+
+# =============================================================================
+# EXPENSE FILTER FORM
+# =============================================================================
 
 class ExpenseFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
     """
-    Filter form for expense search.
-    Uses school timezone for date filters. ⭐
+    Filter form for the expense list view.
+ 
+    academic_session → removed. Not on Expense model. Filter by fiscal_period
+                       which carries the session via related_academic_session.
     """
-    
+ 
     q = forms.CharField(
         label='Search',
         required=False,
         widget=SearchInput(attrs={
-            'placeholder': 'Search by number, description, vendor...'
-        })
+            'placeholder': 'Search by number, description, payee…',
+        }),
     )
-    
+ 
     category = forms.ModelChoiceField(
         label='Category',
         queryset=None,
         required=False,
         empty_label="All Categories",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
-    academic_session = forms.ModelChoiceField(
-        label='Academic Session',
-        queryset=None,
+ 
+    payee_type = forms.ChoiceField(
+        label='Payee Type',
+        choices=[('', 'All Payee Types')] + list(Expense.PAYEE_TYPE_CHOICES),
         required=False,
-        empty_label="All Sessions",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+ 
     fiscal_period = forms.ModelChoiceField(
         label='Fiscal Period',
         queryset=None,
         required=False,
         empty_label="All Periods",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+ 
     status = forms.ChoiceField(
         label='Status',
         choices=[('', 'All Statuses')] + list(Expense.STATUS_CHOICES),
         required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+ 
     expense_date_from = forms.DateField(
-        label='Expense Date From',
+        label='Date From',
         required=False,
-        widget=DatePickerInput()
+        widget=DatePickerInput(),
     )
-    
+ 
     expense_date_to = forms.DateField(
-        label='Expense Date To',
+        label='Date To',
         required=False,
-        widget=DatePickerInput()
+        widget=DatePickerInput(),
     )
-    
-    min_amount = MoneyField(
-        label='Min Amount',
-        required=False
-    )
-    
-    max_amount = MoneyField(
-        label='Max Amount',
-        required=False
-    )
-    
+ 
+    min_amount = MoneyField(label='Min Amount', required=False)
+    max_amount = MoneyField(label='Max Amount', required=False)
+ 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+ 
         try:
             self.fields['category'].queryset = ExpenseCategory.objects.filter(
-                is_active=True
+                is_active=True,
             ).order_by('category_type', 'name')
-            
-            self.fields['academic_session'].queryset = AcademicSession.objects.filter(
-                is_active=True
-            ).order_by('-start_date')
-            
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
+ 
+            # All periods including closed — needed for historical filtering
+            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by(
+                '-start_date',
+            )
+ 
         except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
+            logger.error(f"ExpenseFilterForm: error setting querysets: {e}")
 
+
+# =============================================================================
+# EXPENSE APPROVAL FORM
+# =============================================================================
 
 class ExpenseApprovalForm(RequiredFieldsMixin, BootstrapFormMixin, forms.Form):
-    """Form for approving/rejecting expenses"""
-    
+    """Form for approving or rejecting an expense."""
+
     DECISION_CHOICES = [
-        ('', '-- Select Decision --'),
+        ('',        '— Select Decision —'),
         ('APPROVE', 'Approve Expense'),
-        ('REJECT', 'Reject Expense'),
+        ('REJECT',  'Reject Expense'),
     ]
-    
+
     decision = forms.ChoiceField(
         label='Decision',
         choices=DECISION_CHOICES,
         required=True,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+
     notes = forms.CharField(
-        label='Approval/Rejection Notes',
+        label='Notes',
         required=False,
         widget=forms.Textarea(attrs={
             'rows': 3,
-            'placeholder': 'Enter notes...'
-        })
+            'placeholder': 'Approval or rejection notes…',
+        }),
     )
-    
-    def clean_decision(self):
-        """Ensure a decision is selected"""
-        decision = self.cleaned_data.get('decision')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        decision = cleaned_data.get('decision')
+        notes    = cleaned_data.get('notes', '').strip()
+
         if not decision:
-            raise ValidationError('Please select a decision.')
-        return decision
-    
+            self.add_error('decision', 'Please select a decision.')
+
+        # Rejection without a reason is useless — enforce it here
+        if decision == 'REJECT' and not notes:
+            self.add_error(
+                'notes',
+                'Please provide a reason for rejecting this expense.',
+            )
+
+        return cleaned_data
+
 # =============================================================================
-# EXPENSE PAYMENT FORMS
+# EXPENSE PAYMENT FORM
 # =============================================================================
 
 class ExpensePaymentForm(RequiredFieldsMixin, MoneyFieldsMixin, BootstrapFormMixin, forms.ModelForm):
     """
     Form for recording expense payments.
-    
-    Features:
-    - Uses school timezone for date validations
-    - Auto-calculates total disbursement (amount + fees)
-    - Validates against approved expenses
-    - Restricts editing of reversed payments
+
+    FIELD AUTO-SET POLICY
+    ─────────────────────
+    payment_date  → removed from form. payment_pre_save signal sets it via
+                    get_school_today() (school timezone). Never user-entered.
+
+    fiscal_period → removed from form. payment_pre_save signal sets it via
+                    FiscalPeriod.get_period_for_date(payment_date) after
+                    payment_date is resolved. Never user-entered.
+
+    DYNAMIC FIELD VISIBILITY (template JS)
+    ───────────────────────────────────────
+    reference_number / transaction_id / processing_fee / bank_charges are
+    shown/hidden based on the selected payment method type (cash, mobile_money,
+    bank, cheque, other). The template JS reads payment_methods_json passed by
+    the modal view to determine which type each method is.
+
+    OVERPAYMENT VALIDATION
+    ──────────────────────
+    clean() validates that the payment amount does not exceed the outstanding
+    balance on the expense (accounting for any prior active payments).
+    The service layer enforces the same rule server-side as a second guard.
     """
-    
-    amount = MoneyField(label="Payment Amount")
+
+    amount         = MoneyField(label="Payment Amount")
     processing_fee = MoneyField(label="Processing Fee", required=False)
-    bank_charges = MoneyField(label="Bank Charges", required=False)
-    
+    bank_charges   = MoneyField(label="Bank Charges",   required=False)
+
     class Meta:
-        model = ExpensePayment
+        model  = ExpensePayment
         fields = [
-            'expense', 'payment_date', 'amount', 'fiscal_period',
-            'payment_method', 'account', 'processing_fee', 'bank_charges',
-            'reference_number', 'transaction_id', 'batch_number', 'check_number',
-            'payment_details', 'receipt_number', 'notes'
+            # Core
+            'expense', 'amount',
+            # Method + account
+            'payment_method', 'account',
+            # Reference fields (shown conditionally by JS)
+            'reference_number', 'transaction_id', 'check_number', 'batch_number',
+            # Fees (shown conditionally by JS)
+            'processing_fee', 'bank_charges',
+            # Currency (foreign-currency payments)
+            'currency', 'exchange_rate',
+            # Supporting info
+            'receipt_number', 'payment_details', 'notes',
         ]
         widgets = {
-            'expense': forms.Select(attrs={'class': 'form-select'}),
-            'payment_date': DatePickerInput(),
-            'fiscal_period': forms.Select(attrs={'class': 'form-select'}),
-            'payment_method': forms.Select(attrs={'class': 'form-select'}),
-            'account': forms.Select(attrs={'class': 'form-select'}),
+            'expense': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'payment_method': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'account': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            # Currency widgets
+            'currency': forms.TextInput(attrs={
+                'class':       'form-control text-uppercase',
+                'placeholder': 'Leave blank for school currency',
+                'maxlength':   '3',
+                'id':          'id_expense_payment_currency',
+            }),
+            'exchange_rate': forms.NumberInput(attrs={
+                'class':       'form-control',
+                'step':        '0.000001',
+                'placeholder': '1.000000',
+                'id':          'id_expense_payment_exchange_rate',
+            }),
+            # Reference fields
             'reference_number': forms.TextInput(attrs={
-                'placeholder': 'Payment reference number'
+                'placeholder': 'Payment reference number',
             }),
             'transaction_id': forms.TextInput(attrs={
-                'placeholder': 'Bank/mobile money transaction ID'
+                'placeholder': 'Bank / mobile money transaction ID',
             }),
             'batch_number': forms.TextInput(attrs={
-                'placeholder': 'Batch number (for grouped payments)'
+                'placeholder': 'Batch number (for grouped payments)',
             }),
             'check_number': forms.TextInput(attrs={
-                'placeholder': 'Cheque/Check number (if applicable)'
-            }),
-            'payment_details': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Additional payment details (JSON format)...'
+                'placeholder': 'Cheque number (if applicable)',
             }),
             'receipt_number': forms.TextInput(attrs={
-                'placeholder': 'Receipt number from vendor/supplier'
+                'placeholder': 'Receipt number from vendor / supplier',
+            }),
+            'payment_details': forms.Textarea(attrs={
+                'rows': 2, 'placeholder': 'Additional payment details…',
             }),
             'notes': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Payment notes...'
+                'rows': 3, 'placeholder': 'Payment notes…',
             }),
         }
-    
+
+    # ── __init__ ──────────────────────────────────────────────────────────────
+
     def __init__(self, *args, **kwargs):
         expense = kwargs.pop('expense', None)
         super().__init__(*args, **kwargs)
-        
+
+        # ── Resolve school currency once ──────────────────────────────────────
         try:
-            # Only show approved expenses (ready for payment)
+            from core.models import FinancialSettings
+            school_currency = FinancialSettings.get_school_currency() or 'UGX'
+        except Exception:
+            school_currency = 'UGX'
+        self._school_currency = school_currency
+
+        try:
+            # FIX: empty_label replaces the default "----------" on all FK selects
             self.fields['expense'].queryset = Expense.objects.filter(
                 status='APPROVED'
             ).order_by('-expense_date')
-            
-            # Only open fiscal periods
-            self.fields['fiscal_period'].queryset = FiscalPeriod.objects.filter(
-                is_closed=False
-            ).order_by('-start_date')
-            
-            # Only active payment methods
+            self.fields['expense'].empty_label = '— Select expense —'
+
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True
             ).order_by('name')
-            
-            # Only cash/bank/mobile money accounts
+            self.fields['payment_method'].empty_label = '— Select payment method —'
+
             self.fields['account'].queryset = Account.objects.filter(
                 Q(is_bank_account=True) | Q(is_cash_account=True) | Q(is_mobile_money_account=True),
-                is_active=True
+                is_active=True,
             ).order_by('account_number')
-            
-            # Add helpful labels
-            self.fields['account'].label = "Payment From Account"
-            self.fields['account'].help_text = "Bank/cash account to disburse funds from"
-            
+            self.fields['account'].empty_label = '— Select account —'
+            self.fields['account'].label       = 'Payment From Account'
+            self.fields['account'].help_text   = 'Bank / cash account to disburse funds from'
+
         except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Pre-populate if expense provided
+            logger.error(f"ExpensePaymentForm: error setting querysets: {e}")
+
+        # ── Currency field setup ──────────────────────────────────────────────
+        self.fields['currency'].required  = False
+        self.fields['currency'].help_text = (
+            f'Currency the payment was made in. '
+            f'Leave blank for {school_currency} (school currency). '
+            f'Example: USD for a school paying a foreign supplier.'
+        )
+
+        self.fields['exchange_rate'].required  = False
+        self.fields['exchange_rate'].help_text = (
+            f'Rate to {school_currency} at time of payment. '
+            f'Pre-filled from today\'s rates — confirm or override. '
+            f'Stored permanently once saved.'
+        )
+        if not self.fields['exchange_rate'].initial:
+            self.fields['exchange_rate'].initial = Decimal('1.000000')
+
+        # Pre-fill exchange rate for new foreign-currency payments
+        if not self.instance.pk:
+            selected_currency = self.initial.get('currency', '')
+            if selected_currency and selected_currency.upper() != school_currency:
+                try:
+                    from core.models import ExchangeRate
+                    rate = ExchangeRate.get_rate(selected_currency.upper(), school_currency)
+                    if rate:
+                        self.fields['exchange_rate'].initial = rate
+                except Exception:
+                    pass
+
+        # ── Pre-populate from expense ─────────────────────────────────────────
         if expense:
             self.fields['expense'].initial = expense
-            self.fields['amount'].initial = expense.total_amount
-        
-        # Set default payment date (school timezone) ⭐
-        if not self.is_bound:
-            from core.utils import get_school_today
-            self.fields['payment_date'].initial = get_school_today()
-        
-        # Disable editing if payment is reversed
+            self.fields['amount'].initial  = expense.total_amount
+
+        # ── Lock fields for reversed / verified payments ──────────────────────
         if self.instance.pk:
             if self.instance.reversed:
-                # Make all fields read-only for reversed payments
                 for field in self.fields:
-                    self.fields[field].disabled = True
-                    self.fields[field].help_text = "Cannot edit reversed payment"
-            
+                    self.fields[field].disabled  = True
+                    self.fields[field].help_text = 'Cannot edit reversed payment'
+
             elif self.instance.status in ['VERIFIED', 'PROCESSED']:
-                # Restrict editing for verified/processed payments (only notes allowed)
-                restricted_fields = [
-                    'expense', 'amount', 'payment_date', 'payment_method',
-                    'account', 'processing_fee', 'bank_charges'
-                ]
-                for field in restricted_fields:
+                for field in [
+                    'expense', 'amount', 'payment_method', 'account',
+                    'processing_fee', 'bank_charges', 'currency', 'exchange_rate',
+                ]:
                     if field in self.fields:
-                        self.fields[field].disabled = True
-                        self.fields[field].help_text = "Cannot modify verified/processed payment"
-    
+                        self.fields[field].disabled  = True
+                        self.fields[field].help_text = 'Cannot modify verified / processed payment'
+
+    # ── Field-level validation ────────────────────────────────────────────────
+
+    def clean_currency(self):
+        code = self.cleaned_data.get('currency', '').upper().strip()
+        if code and len(code) != 3:
+            raise ValidationError('Currency code must be exactly 3 characters (ISO 4217).')
+        return code or self._school_currency
+
+    def clean_exchange_rate(self):
+        rate = self.cleaned_data.get('exchange_rate')
+        if rate is not None and rate <= 0:
+            raise ValidationError('Exchange rate must be greater than zero.')
+        return rate or Decimal('1.000000')
+
+    # ── Cross-field validation ────────────────────────────────────────────────
+
     def clean(self):
-        """Validate payment data using school timezone ⭐"""
-        cleaned_data = super().clean()
-        
-        payment_date = cleaned_data.get('payment_date')
-        
-        if payment_date:
-            from core.utils import get_school_today
-            today = get_school_today()  # ⭐ SCHOOL TIMEZONE
-            
-            # Payment date cannot be in the future
-            if payment_date > today:
-                raise ValidationError({
-                    'payment_date': 'Payment date cannot be in the future.'
-                })
-            
-            # Reasonable past date check
-            if payment_date < (today - timedelta(days=365)):
-                raise ValidationError({
-                    'payment_date': 'Payment date seems too far in the past (over 1 year).'
-                })
-        
-        # Validate amount against expense
-        expense = cleaned_data.get('expense')
-        amount = cleaned_data.get('amount')
-        
-        if expense and amount:
-            if amount <= 0:
-                raise ValidationError({
-                    'amount': 'Payment amount must be greater than zero.'
-                })
-            
-            # Check if exceeds expense total
-            if amount > expense.total_amount:
-                raise ValidationError({
-                    'amount': f'Payment amount cannot exceed expense total of {expense.total_amount:,.2f}.'
-                })
-            
-            # Check if expense already fully paid
-            total_paid = sum(
-                p.amount for p in expense.payments.all()
-                if p.is_active  # Only count non-reversed payments
+        cleaned_data  = super().clean()
+
+        currency      = cleaned_data.get('currency') or self._school_currency
+        exchange_rate = cleaned_data.get('exchange_rate') or Decimal('1.000000')
+        amount        = cleaned_data.get('amount')
+
+        # FIX: processing_fee and bank_charges arrive as None when the JS hides
+        # and clears those fields (empty string → MoneyField(required=False) → None).
+        # The model's clean() does `if self.processing_fee < 0` which crashes on None.
+        # Coerce to Decimal('0.00') so the model always sees a valid value.
+        for fee_field in ('processing_fee', 'bank_charges'):
+            if not cleaned_data.get(fee_field):
+                cleaned_data[fee_field] = Decimal('0.00')
+
+        # Foreign currency requires a real exchange rate
+        if currency != self._school_currency and exchange_rate == Decimal('1.000000'):
+            self.add_error(
+                'exchange_rate',
+                f'Currency is {currency} but rate is 1.000000. '
+                f'Enter the actual rate to {self._school_currency}.',
             )
-            
+
+        # Compute amount_in_school_currency for overpayment check and save()
+        if amount and exchange_rate and exchange_rate > 0:
+            cleaned_data['amount_in_school_currency'] = (
+                Decimal(str(amount)) * Decimal(str(exchange_rate))
+            ).quantize(Decimal('0.01'))
+
+        # ── Amount must be positive (checked independently — 0 is falsy) ──────
+        if amount is not None and amount <= 0:
+            self.add_error('amount', 'Payment amount must be greater than zero.')
+
+        # ── Overpayment validation ────────────────────────────────────────────
+        expense = cleaned_data.get('expense')
+        if expense and amount and amount > 0:
+            # Sum all active (non-reversed) payments already on this expense
+            total_paid = sum(
+                p.amount_in_school_currency
+                for p in expense.payments.all()
+                if p.is_active and (not self.instance.pk or p.pk != self.instance.pk)
+            )
+            new_amount_sc = cleaned_data.get(
+                'amount_in_school_currency',
+                Decimal(str(amount)) * Decimal(str(exchange_rate)),
+            )
             remaining = expense.total_amount - total_paid
-            
-            if amount > remaining:
-                raise ValidationError({
-                    'amount': (
-                        f'Payment amount exceeds remaining balance of {remaining:,.2f}. '
-                        f'Already paid: {total_paid:,.2f} out of {expense.total_amount:,.2f}.'
-                    )
-                })
-        
-        # Validate fees are non-negative
-        processing_fee = cleaned_data.get('processing_fee', Decimal('0.00'))
-        bank_charges = cleaned_data.get('bank_charges', Decimal('0.00'))
-        
-        if processing_fee < 0:
-            raise ValidationError({
-                'processing_fee': 'Processing fee cannot be negative.'
-            })
-        
-        if bank_charges < 0:
-            raise ValidationError({
-                'bank_charges': 'Bank charges cannot be negative.'
-            })
-        
-        # Validate fiscal period is not closed
-        fiscal_period = cleaned_data.get('fiscal_period')
-        if fiscal_period and hasattr(fiscal_period, 'is_closed'):
-            if fiscal_period.is_closed:
-                raise ValidationError({
-                    'fiscal_period': (
-                        f'Cannot create payment in closed period: {fiscal_period.name}. '
-                        'Please select an open fiscal period.'
-                    )
-                })
-        
+
+            if new_amount_sc > remaining:
+                self.add_error(
+                    'amount',
+                    f'Payment of {new_amount_sc:,.2f} {self._school_currency} exceeds the '
+                    f'outstanding balance of {remaining:,.2f} {self._school_currency}. '
+                    f'Already paid: {total_paid:,.2f} of {expense.total_amount:,.2f}.',
+                )
+
+        # Fees must be non-negative (None already coerced to 0 above)
+        for fee_field, label in [
+            ('processing_fee', 'Processing fee'),
+            ('bank_charges',   'Bank charges'),
+        ]:
+            val = cleaned_data.get(fee_field, Decimal('0.00'))
+            if val < 0:
+                self.add_error(fee_field, f'{label} cannot be negative.')
+
         return cleaned_data
 
+    # ── save ─────────────────────────────────────────────────────────────────
+
+    def save(self, commit=True):
+        """Set amount_in_school_currency and default currency before saving."""
+        instance = super().save(commit=False)
+
+        amount_sc = self.cleaned_data.get('amount_in_school_currency')
+        if amount_sc is not None:
+            instance.amount_in_school_currency = amount_sc
+
+        if not instance.currency:
+            instance.currency = self._school_currency
+
+        # payment_date and fiscal_period are set by payment_pre_save signal —
+        # do not set them here so the signal always uses the school timezone.
+
+        if commit:
+            instance.save()
+        return instance
+
+
+# =============================================================================
+# EXPENSE PAYMENT REVERSAL FORM
+# =============================================================================
 
 class ExpensePaymentReversalForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Form):
     """
     Form for reversing an expense payment (internal correction).
-    
-    Use this when:
+
+    Use when:
     - Payment was posted to wrong expense
     - Duplicate payment entry
     - Wrong amount entered
     - Wrong vendor paid
-    - Other data entry errors
     """
-    
+
     reversal_reason = forms.CharField(
         label="Reversal Reason",
         widget=forms.Textarea(attrs={
@@ -953,18 +1138,18 @@ class ExpensePaymentReversalForm(BootstrapFormMixin, RequiredFieldsMixin, forms.
                 '- Was wrong amount paid?\n'
                 '- Was wrong vendor paid?\n'
                 '- Other specific details...'
-            )
+            ),
         }),
-        help_text="Detailed explanation required for audit trail"
+        help_text="Detailed explanation required for audit trail",
     )
-    
+
     requires_approval = forms.BooleanField(
         label="This reversal requires manager approval",
         required=False,
         initial=True,
-        help_text="Large or verified payments require approval for reversal"
+        help_text="Large or verified payments require approval for reversal",
     )
-    
+
     confirm_reversal = forms.BooleanField(
         label="I confirm this is an internal correction (payment was entered incorrectly)",
         required=True,
@@ -974,367 +1159,344 @@ class ExpensePaymentReversalForm(BootstrapFormMixin, RequiredFieldsMixin, forms.
             "• The expense will be updated to reflect unpaid/partially paid status\n"
             "• Account balances will be adjusted\n"
             "• This action will be logged in the audit trail"
-        )
+        ),
     )
-    
+
     def __init__(self, expense_payment, user, *args, **kwargs):
         self.expense_payment = expense_payment
         self.user = user
         super().__init__(*args, **kwargs)
-        
-        # Add payment details to help text
+
         self.fields['reversal_reason'].help_text = (
-            f"Reversing payment {expense_payment.reference_number} - "
-            f"Amount: {expense_payment.amount:,.2f} - "
-            f"Date: {expense_payment.payment_date} - "
+            f"Reversing payment {expense_payment.reference_number} — "
+            f"Amount: {expense_payment.amount:,.2f} {expense_payment.currency or ''} "
+            f"({expense_payment.amount_in_school_currency:,.2f} school currency) — "
+            f"Date: {expense_payment.payment_date} — "
             f"Expense: {expense_payment.expense.expense_number}"
         )
-        
-        # Auto-set approval requirement based on payment status
+
         if expense_payment.is_verified or expense_payment.amount > Decimal('1000000.00'):
-            self.fields['requires_approval'].initial = True
+            self.fields['requires_approval'].initial  = True
             self.fields['requires_approval'].disabled = True
             self.fields['requires_approval'].help_text = (
-                "REQUIRED: This payment is verified or exceeds 1M UGX threshold"
+                "REQUIRED: This payment is verified or exceeds 1M threshold"
             )
-    
+
     def clean(self):
         cleaned_data = super().clean()
-        
-        # Validate payment can be reversed
         can_reverse, reason = self.expense_payment.can_be_reversed()
         if not can_reverse:
             raise ValidationError(f"Cannot reverse this payment: {reason}")
-        
-        # Ensure reason is meaningful
-        reversal_reason = cleaned_data.get('reversal_reason', '').strip()
-        if len(reversal_reason) < 20:
+        if len((cleaned_data.get('reversal_reason') or '').strip()) < 20:
             raise ValidationError({
-                'reversal_reason': 'Please provide a detailed reason (at least 20 characters).'
+                'reversal_reason': 'Please provide a detailed reason (at least 20 characters).',
             })
-        
         return cleaned_data
 
 
+# =============================================================================
+# EXPENSE PAYMENT FILTER FORM
+# =============================================================================
+
 class ExpensePaymentFilterForm(DateRangeFormMixin, BootstrapFormMixin, forms.Form):
-    """
-    Filter form for expense payment search.
-    Uses school timezone for date filters. ⭐
-    """
-    
+    """Filter form for expense payment search. Uses school timezone for date filters."""
+
     q = forms.CharField(
-        label='Search',
-        required=False,
+        label='Search', required=False,
         widget=SearchInput(attrs={
-            'placeholder': 'Search by reference, transaction ID, expense number...'
-        })
+            'placeholder': 'Search by reference, transaction ID, expense number...',
+        }),
     )
-    
+
     fiscal_period = forms.ModelChoiceField(
-        label='Fiscal Period',
-        queryset=None,
-        required=False,
+        label='Fiscal Period', queryset=None, required=False,
         empty_label="All Periods",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+
     payment_method = forms.ModelChoiceField(
-        label='Payment Method',
-        queryset=None,
-        required=False,
+        label='Payment Method', queryset=None, required=False,
         empty_label="All Methods",
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
+
     account = forms.ModelChoiceField(
-        label='Payment Account',
-        queryset=None,
-        required=False,
+        label='Payment Account', queryset=None, required=False,
         empty_label="All Accounts",
         widget=forms.Select(attrs={'class': 'form-select'}),
-        help_text="Account from which payment was made"
+        help_text="Account from which payment was made",
     )
-    
+
     status = forms.ChoiceField(
-        label='Status',
+        label='Status', required=False,
         choices=[('', 'All Statuses')] + list(ExpensePayment.STATUS_CHOICES),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    
-    # NEW: Filter by reversal state ⭐
+
     payment_state = forms.ChoiceField(
-        label='Payment State',
+        label='Payment State', required=False,
         choices=[
             ('', 'All Payments'),
-            ('active', 'Active Only'),
+            ('active',   'Active Only'),
             ('reversed', 'Reversed Only'),
         ],
-        required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
-        help_text="Filter by reversal status"
+        help_text="Filter by reversal status",
     )
-    
+
+    # ── CURRENCY ──────────────────────────────────────────────────────────────
+    currency = forms.ChoiceField(
+        label='Currency', required=False,
+        choices=[],   # populated in __init__ from live data
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Filter by currency the payment was made in.',
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     is_verified = forms.NullBooleanField(
-        label='Verification',
-        required=False,
-        widget=forms.Select(choices=[
-            ('', 'All'),
-            ('true', 'Verified'),
-            ('false', 'Unverified')
-        ], attrs={'class': 'form-select'})
+        label='Verification', required=False,
+        widget=forms.Select(
+            choices=[('', 'All'), ('true', 'Verified'), ('false', 'Unverified')],
+            attrs={'class': 'form-select'},
+        ),
     )
-    
+
     payment_date_from = forms.DateField(
-        label='Payment Date From',
-        required=False,
-        widget=DatePickerInput()
+        label='Payment Date From', required=False, widget=DatePickerInput(),
     )
-    
+
     payment_date_to = forms.DateField(
-        label='Payment Date To',
-        required=False,
-        widget=DatePickerInput()
+        label='Payment Date To', required=False, widget=DatePickerInput(),
     )
-    
-    min_amount = MoneyField(
-        label='Min Amount',
-        required=False
-    )
-    
-    max_amount = MoneyField(
-        label='Max Amount',
-        required=False
-    )
-    
+
+    min_amount = MoneyField(label='Min Amount', required=False)
+    max_amount = MoneyField(label='Max Amount', required=False)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         try:
             self.fields['fiscal_period'].queryset = FiscalPeriod.objects.all().order_by('-start_date')
-            
+
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True
             ).order_by('name')
-            
-            # Only show cash/bank accounts
+
             self.fields['account'].queryset = Account.objects.filter(
                 Q(is_bank_account=True) | Q(is_cash_account=True) | Q(is_mobile_money_account=True),
                 is_active=True
             ).order_by('account_number')
-            
-        except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
 
+        except Exception as e:
+            logger.error(f"ExpensePaymentFilterForm: error setting querysets: {e}")
+
+        # ── Currency choices from live ExpensePayment data ────────────────────
+        self.fields['currency'].choices = self._build_currency_choices()
+
+    @staticmethod
+    def _build_currency_choices():
+        choices = [('', 'All Currencies')]
+        try:
+            from core.models import FinancialSettings
+            school_currency = FinancialSettings.get_school_currency() or 'UGX'
+        except Exception:
+            school_currency = 'UGX'
+
+        choices.append((school_currency, f'{school_currency} (School Currency)'))
+
+        try:
+            others = (
+                ExpensePayment.objects
+                .exclude(currency=school_currency)
+                .exclude(currency='')
+                .values_list('currency', flat=True)
+                .distinct()
+                .order_by('currency')
+            )
+            for code in others:
+                if code:
+                    choices.append((code, code))
+        except Exception:
+            pass
+
+        return choices
+
+
+# =============================================================================
+# BULK EXPENSE PAYMENT FORM
+# =============================================================================
 
 class BulkExpensePaymentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.Form):
     """
     Form for processing multiple expense payments at once.
-    
+
     Used when paying multiple approved expenses in a single batch
     (e.g., monthly vendor payments).
     """
-    
-    expense_ids = forms.CharField(
-        widget=forms.HiddenInput(),
-        required=True
-    )
-    
+
+    expense_ids = forms.CharField(widget=forms.HiddenInput(), required=True)
+
     payment_date = forms.DateField(
-        label="Payment Date",
-        widget=DatePickerInput(),
-        help_text="Date when payments were actually made"
+        label="Payment Date", widget=DatePickerInput(),
+        help_text="Date when payments were actually made",
     )
-    
+
     payment_method = forms.ModelChoiceField(
-        label="Payment Method",
-        queryset=None,
+        label="Payment Method", queryset=None,
         widget=forms.Select(attrs={'class': 'form-select'}),
-        help_text="How all payments will be made"
+        help_text="How all payments will be made",
     )
-    
+
     account = forms.ModelChoiceField(
-        label="Payment From Account",
-        queryset=None,
+        label="Payment From Account", queryset=None,
         widget=forms.Select(attrs={'class': 'form-select'}),
-        help_text="Bank/cash account to disburse funds from"
+        help_text="Bank/cash account to disburse funds from",
     )
-    
+
     batch_number = forms.CharField(
-        label="Batch Number",
-        max_length=50,
-        widget=forms.TextInput(attrs={
-            'placeholder': 'E.g., BATCH-2024-01 or upload reference'
-        }),
-        help_text="Reference number for this payment batch"
+        label="Batch Number", max_length=50,
+        widget=forms.TextInput(attrs={'placeholder': 'E.g., BATCH-2024-01 or upload reference'}),
+        help_text="Reference number for this payment batch",
     )
-    
+
     payment_notes = forms.CharField(
         label="Payment Notes",
-        widget=forms.Textarea(attrs={
-            'rows': 3,
-            'placeholder': 'Any notes about this payment batch...'
-        }),
-        required=False
+        widget=forms.Textarea(attrs={'rows': 3, 'placeholder': 'Any notes about this payment batch...'}),
+        required=False,
     )
-    
+
     confirm_payment = forms.BooleanField(
         label="I confirm all selected expenses will be paid",
         required=True,
-        help_text="Money will be disbursed from the selected account"
+        help_text="Money will be disbursed from the selected account",
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         try:
-            # Only active payment methods
             self.fields['payment_method'].queryset = PaymentMethod.objects.filter(
                 is_active=True
             ).order_by('name')
-            
-            # Only cash/bank accounts
+
             self.fields['account'].queryset = Account.objects.filter(
                 Q(is_bank_account=True) | Q(is_cash_account=True) | Q(is_mobile_money_account=True),
                 is_active=True
             ).order_by('account_number')
-            
+
         except Exception as e:
-            logger.error(f"Error setting querysets: {e}")
-        
-        # Set default payment date
+            logger.error(f"BulkExpensePaymentForm: error setting querysets: {e}")
+
         if not self.is_bound:
             from core.utils import get_school_today
             self.fields['payment_date'].initial = get_school_today()
-    
+
     def clean_expense_ids(self):
-        """Validate and parse expense IDs"""
         ids_string = self.cleaned_data.get('expense_ids', '')
-        
         try:
-            expense_ids = [int(id.strip()) for id in ids_string.split(',') if id.strip()]
+            expense_ids = [int(i.strip()) for i in ids_string.split(',') if i.strip()]
         except ValueError:
             raise ValidationError("Invalid expense IDs")
-        
+
         if not expense_ids:
             raise ValidationError("No expenses selected")
-        
-        # Validate all expenses exist and are APPROVED
+
         expenses = Expense.objects.filter(id__in=expense_ids)
-        
+
         if expenses.count() != len(expense_ids):
             raise ValidationError("Some selected expenses do not exist")
-        
+
         non_approved = expenses.exclude(status='APPROVED')
         if non_approved.exists():
             raise ValidationError(
-                f"{non_approved.count()} expense(s) are not APPROVED and cannot be paid. "
-                "Only approved expenses can be paid."
+                f"{non_approved.count()} expense(s) are not APPROVED and cannot be paid."
             )
-        
-        # Check for fully paid expenses
+
+        # Use amount_in_school_currency for consistent comparison
         for expense in expenses:
             total_paid = sum(
-                p.amount for p in expense.payments.all()
-                if p.is_active  # Only count non-reversed payments
+                p.amount_in_school_currency
+                for p in expense.payments.all()
+                if p.is_active
             )
-            
             if total_paid >= expense.total_amount:
                 raise ValidationError(
                     f"Expense {expense.expense_number} is already fully paid. "
                     "Please deselect it from the batch."
                 )
-        
+
         return expense_ids
-    
+
     def clean_payment_date(self):
-        """Validate payment date"""
         payment_date = self.cleaned_data.get('payment_date')
-        
         if payment_date:
             from core.utils import get_school_today
             today = get_school_today()
-            
             if payment_date > today:
                 raise ValidationError(
-                    "Payment date cannot be in the future. "
-                    "Use actual date when payment was/will be made."
+                    "Payment date cannot be in the future."
                 )
-            
             if payment_date < (today - timedelta(days=90)):
-                raise ValidationError(
-                    "Payment date seems too far in the past. Please verify."
-                )
-        
+                raise ValidationError("Payment date seems too far in the past. Please verify.")
         return payment_date
 
 
+# =============================================================================
+# BULK EXPENSE PAYMENT VERIFICATION FORM
+# =============================================================================
+
 class BulkExpensePaymentVerificationForm(BootstrapFormMixin, forms.Form):
-    """
-    Form for verifying multiple expense payments at once.
-    
-    Used by finance manager to mark payments as verified after reconciliation.
-    """
-    
-    payment_ids = forms.CharField(
-        widget=forms.HiddenInput(),
-        required=True
-    )
-    
+    """Form for verifying multiple expense payments at once."""
+
+    payment_ids = forms.CharField(widget=forms.HiddenInput(), required=True)
+
     verification_notes = forms.CharField(
         label="Verification Notes",
         widget=forms.Textarea(attrs={
-            'rows': 3,
-            'placeholder': 'Any notes for this verification batch...'
+            'rows': 3, 'placeholder': 'Any notes for this verification batch...',
         }),
-        required=False
+        required=False,
     )
-    
+
     confirm_verification = forms.BooleanField(
         label="I confirm all selected payments have been verified",
         required=True,
-        help_text="All selected payments will be marked as verified"
+        help_text="All selected payments will be marked as verified",
     )
-    
+
     def clean_payment_ids(self):
-        """Validate and parse payment IDs"""
         ids_string = self.cleaned_data.get('payment_ids', '')
-        
         try:
-            payment_ids = [int(id.strip()) for id in ids_string.split(',') if id.strip()]
+            payment_ids = [int(i.strip()) for i in ids_string.split(',') if i.strip()]
         except ValueError:
             raise ValidationError("Invalid payment IDs")
-        
+
         if not payment_ids:
             raise ValidationError("No payments selected")
-        
-        # Validate all payments exist
+
         payments = ExpensePayment.objects.filter(id__in=payment_ids)
-        
+
         if payments.count() != len(payment_ids):
             raise ValidationError("Some selected payments do not exist")
-        
-        # Check for already verified
+
         already_verified = payments.filter(is_verified=True)
         if already_verified.exists():
             raise ValidationError(
                 f"{already_verified.count()} payment(s) are already verified"
             )
-        
-        # Check for reversed
+
         reversed_payments = payments.filter(reversed=True)
         if reversed_payments.exists():
             raise ValidationError(
                 f"{reversed_payments.count()} payment(s) are reversed and cannot be verified"
             )
-        
-        # Check status
+
         non_processed = payments.exclude(status__in=['PROCESSED', 'VERIFIED'])
         if non_processed.exists():
             raise ValidationError(
                 f"{non_processed.count()} payment(s) are not processed and cannot be verified"
             )
-        
+
         return payment_ids
 
 # =============================================================================

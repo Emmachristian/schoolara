@@ -1,0 +1,100 @@
+{% extends 'print_base.html' %}
+{% load static %}
+
+{% block page_title %}{{ title|default:"Fiscal Years Report" }}{% endblock %}
+
+{% block print_orientation %}
+    size: {% if landscape %}A4 landscape{% else %}A4 portrait{% endif %};
+{% endblock %}
+
+{% block doc_title %}{{ title|default:"Fiscal Years Report" }}{% endblock %}
+
+{% block record_count %}{{ fiscal_years|length }}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total Years</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.closed|default:0 }}</span>
+        <span class="stat-label">Closed</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.locked|default:0 }}</span>
+        <span class="stat-label">Locked</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% for fy in fiscal_years %}
+<tr>
+    <td>{{ forloop.counter }}</td>
+    {% for field in selected_fields %}
+        {% if field == 'name' %}
+            <td><strong>{{ fy.name }}</strong></td>
+        {% elif field == 'code' %}
+            <td><span class="chip-code">{{ fy.code }}</span></td>
+        {% elif field == 'start_date' %}
+            <td>{{ fy.start_date|date:"d M Y" }}</td>
+        {% elif field == 'end_date' %}
+            <td>{{ fy.end_date|date:"d M Y" }}</td>
+        {% elif field == 'status' %}
+            <td>
+                <span class="badge s-{{ fy.status|lower }}">
+                    {{ fy.get_status_display }}
+                </span>
+            </td>
+        {% elif field == 'is_active' %}
+            <td class="ctr">
+                {% if fy.is_active %}
+                    <span class="bool-yes">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'is_closed' %}
+            <td class="ctr">
+                {% if fy.is_closed %}
+                    <span class="text-warn">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'is_locked' %}
+            <td class="ctr">
+                {% if fy.is_locked %}
+                    <span class="text-danger">✓ Yes</span>
+                {% else %}
+                    <span class="bool-no">No</span>
+                {% endif %}
+            </td>
+        {% elif field == 'period_count' %}
+            <td class="num">{{ fy.period_count|default:fy.get_period_count }}</td>
+        {% elif field == 'duration_days' %}
+            <td class="num">{{ fy.get_duration_days }}</td>
+        {% elif field == 'progress_percentage' %}
+            <td class="num">{{ fy.get_progress_percentage }}%</td>
+        {% else %}
+            <td class="text-muted">—</td>
+        {% endif %}
+    {% endfor %}
+</tr>
+{% empty %}
+<tr>
+    <td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state">
+            <p>No fiscal years found matching the current filters.</p>
+        </div>
+    </td>
+</tr>
+{% endfor %}
+{% endblock %}

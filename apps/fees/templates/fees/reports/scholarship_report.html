@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block title %}Scholarship Report — {{ school_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a;--ink-2:#334155;--ink-muted:#64748b;--ink-faint:#94a3b8;
+    --surface:#ffffff;--surface-2:#f8fafc;--surface-3:#f1f5f9;--border:#e2e8f0;
+    --accent:#1d4ed8;--accent-lt:#eff6ff;--accent-bd:#bfdbfe;
+    --green:#15803d;--green-lt:#f0fdf4;--amber:#b45309;--amber-lt:#fffbeb;
+    --red:#dc2626;--red-lt:#fef2f2;--purple:#7c3aed;--purple-lt:#f5f3ff;
+    --teal:#0f766e;--teal-lt:#f0fdfa;--radius:10px;
+}
+.kpi-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 18px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);transition:box-shadow .2s,transform .15s;height:100%; }
+.kpi-card:hover { box-shadow:0 8px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
+.kpi-badge { position:absolute;top:18px;right:18px;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff; }
+.kpi-purple .kpi-badge { background:var(--purple);box-shadow:0 4px 12px rgba(124,58,237,.25); }
+.kpi-green  .kpi-badge { background:var(--green); box-shadow:0 4px 12px rgba(21,128,61,.25); }
+.kpi-accent .kpi-badge { background:var(--accent);box-shadow:0 4px 12px rgba(29,78,216,.25); }
+.kpi-teal   .kpi-badge { background:var(--teal);  box-shadow:0 4px 12px rgba(15,118,110,.25); }
+.kpi-label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);margin-bottom:10px;padding-right:54px; }
+.kpi-value { font-size:26px;font-weight:800;color:var(--ink);line-height:1.1;margin-bottom:6px;font-family:'Poppins',sans-serif;font-variant-numeric:tabular-nums; }
+.kpi-sub   { font-size:11.5px;color:var(--ink-faint); }
+.dash-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.dash-head { padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between; }
+.dash-title { font-size:12.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px; }
+.dash-badge { font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--purple-lt);color:var(--purple);border:1px solid #ddd6fe; }
+.dash-body  { padding:16px 18px; }
+.dt { width:100%;border-collapse:collapse;font-size:12.5px; }
+.dt thead th { background:var(--surface-2);padding:10px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);border-bottom:1px solid var(--border);white-space:nowrap; }
+.dt tbody td { padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle; }
+.dt tbody tr:last-child td { border-bottom:none; }
+.dt tbody tr:hover td { background:#faf8ff; }
+.dt tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--purple); }
+.dt tfoot td { padding:10px 14px;border-top:2px solid var(--border);font-weight:700;font-size:12.5px;background:var(--surface-2); }
+.mono { font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px; }
+.prog-outer { background:var(--surface-3);border-radius:4px;height:6px;overflow:hidden; }
+.prog-inner { height:100%;border-radius:4px;transition:width .6s ease; }
+.type-badge { display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% currency_info as curr %}
+
+<!-- Page Header -->
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-star icon-gradient bg-love-kiss"></i>
+            </div>
+            <div>
+                Scholarship Report
+                <div class="page-title-subheading">Program utilisation &amp; recipient overview</div>
+            </div>
+        </div>
+        <div class="page-title-actions d-flex gap-2">
+            <a href="{% url 'fees:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-arrow-left me-1"></i>Dashboard
+            </a>
+            <a href="{% url 'fees:student_scholarship_list' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-graduation-cap me-1"></i>Manage Scholarships
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+{% with ss=scholarship_stats %}
+<div class="row g-3 mb-3">
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-purple">
+            <div class="kpi-badge"><i class="fa fa-graduation-cap"></i></div>
+            <div class="kpi-label">Active Recipients</div>
+            <div class="kpi-value">{{ ss.recipients.active|default:0|format_number }}</div>
+            <div class="kpi-sub">Currently receiving scholarship aid</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-badge"><i class="fa fa-donate"></i></div>
+            <div class="kpi-label">Total Disbursed</div>
+            <div class="kpi-value">{{ ss.budget.total_disbursed|default:0|money_short }}</div>
+            <div class="kpi-sub">All-time scholarship value applied</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-badge"><i class="fa fa-folder-open"></i></div>
+            <div class="kpi-label">Active Programs</div>
+            <div class="kpi-value">{{ ss.programs.active|default:0|format_number }}</div>
+            <div class="kpi-sub">Currently running programs</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-badge"><i class="fa fa-clock"></i></div>
+            <div class="kpi-label">Pending Applications</div>
+            <div class="kpi-value">{{ ss.applications.pending|default:0|format_number }}</div>
+            <div class="kpi-sub">Awaiting review &amp; decision</div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+
+<!-- Applications summary -->
+{% with ss=scholarship_stats %}
+<div class="row g-3 mb-3">
+    <div class="col-xl-4">
+        <div class="dash-card" style="height:100%;">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-clipboard-list" style="color:var(--purple);"></i>
+                    Application Status
+                </span>
+            </div>
+            <div class="dash-body">
+                <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12.5px;">Submitted</span>
+                    <span style="font-weight:700;">{{ ss.applications.submitted|default:0 }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12.5px;">Under Review</span>
+                    <span style="font-weight:700;color:var(--amber);">{{ ss.applications.under_review|default:0 }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12.5px;">Approved</span>
+                    <span style="font-weight:700;color:var(--green);">{{ ss.applications.approved|default:0 }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12.5px;">Rejected</span>
+                    <span style="font-weight:700;color:var(--red);">{{ ss.applications.rejected|default:0 }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:9px 0;">
+                    <span style="font-size:12.5px;font-weight:700;">Total</span>
+                    <span style="font-weight:800;font-family:'Poppins',sans-serif;">{{ ss.applications.total|default:0 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="dash-card">
+            <div class="dash-head">
+                <span class="dash-title">
+                    <i class="fa fa-chart-bar" style="color:var(--purple);"></i>
+                    Budget Overview
+                </span>
+            </div>
+            <div class="dash-body">
+                <div class="row g-3">
+                    <div class="col-md-4 text-center">
+                        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:8px;">Total Budget</div>
+                        <div style="font-size:22px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--ink);">{{ ss.budget.total_budget|default:0|money_short }}</div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:8px;">Disbursed</div>
+                        <div style="font-size:22px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--purple);">{{ ss.budget.total_disbursed|default:0|money_short }}</div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:8px;">Remaining</div>
+                        <div style="font-size:22px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--green);">{{ ss.budget.remaining|default:0|money_short }}</div>
+                    </div>
+                </div>
+                {% if ss.budget.total_budget %}
+                <div style="margin-top:20px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:12px;font-weight:600;color:var(--ink-2);">Budget Utilisation</span>
+                        <span style="font-size:13px;font-weight:800;font-family:'Poppins',sans-serif;color:var(--purple);">
+                            {{ ss.budget.total_disbursed|default:0|div:ss.budget.total_budget|mul:100|floatformat:1 }}%
+                        </span>
+                    </div>
+                    <div class="prog-outer" style="height:10px;">
+                        <div class="prog-inner" style="width:{{ ss.budget.total_disbursed|default:0|div:ss.budget.total_budget|mul:100|floatformat:0 }}%;background:var(--purple);"></div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+
+<!-- Programs table -->
+<div class="dash-card mb-3">
+    <div class="dash-head">
+        <span class="dash-title">
+            <i class="fa fa-list-alt" style="color:var(--purple);"></i>
+            Top Programs by Disbursement
+        </span>
+        <span class="dash-badge">{{ programs|length }} program{{ programs|length|pluralize }}</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="dt">
+        <thead>
+            <tr>
+                <th>Program</th>
+                <th>Type</th>
+                <th class="text-center">Recipients</th>
+                <th class="text-end">Disbursed</th>
+                <th style="width:20%;">Utilisation</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prog in programs %}
+            <tr>
+                <td>
+                    <div style="font-weight:700;font-size:12.5px;color:var(--ink);">{{ prog.name }}</div>
+                    <div style="font-size:10.5px;color:var(--ink-faint);">{{ prog.code }}</div>
+                </td>
+                <td>
+                    <span style="font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--purple-lt);color:var(--purple);">
+                        {{ prog.get_scholarship_type_display }}
+                    </span>
+                </td>
+                <td class="text-center" style="font-weight:700;">{{ prog.active_recipients|default:0 }}</td>
+                <td class="text-end">
+                    <span class="mono" style="color:var(--purple);">{{ prog.total_disbursed|default:0|money_short }}</span>
+                </td>
+                <td>
+                    {% if prog.total_budget_amount %}
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="prog-outer" style="flex:1;">
+                            <div class="prog-inner" style="width:{{ prog.total_disbursed|default:0|div:prog.total_budget_amount|mul:100|floatformat:0 }}%;background:var(--purple);"></div>
+                        </div>
+                        <span style="font-size:11px;color:var(--ink-muted);width:36px;text-align:right;">
+                            {{ prog.total_disbursed|default:0|div:prog.total_budget_amount|mul:100|floatformat:1 }}%
+                        </span>
+                    </div>
+                    {% else %}
+                    <span style="font-size:11px;color:var(--ink-faint);">No budget cap</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" style="text-align:center;padding:40px;color:var(--ink-faint);">
+                    No active scholarship programs found
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<div style="font-size:11px;color:var(--ink-faint);text-align:right;padding:4px 0 16px;">
+    Generated {{ generated_at }} by {{ generated_by }}
+</div>
+{% endblock %}

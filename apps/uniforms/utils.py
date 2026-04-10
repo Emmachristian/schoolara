@@ -11,18 +11,26 @@ Provides helper functions for:
 - Measurement conversions
 - Sale cancellation and return processing
 
-CHANGES FROM PREVIOUS VERSION:
-- Fixed: return_uniform_sale unsized item branch now goes through UniformStock
-  (get_or_create with size=None + stock.save()) instead of writing
-  current_stock directly on UniformItem. The signal syncs current_stock
-  after stock.save(); writing it directly bypassed the signal entirely.
-- Fixed: bulk_adjust_stock unsized item branch has the same fix applied —
-  now creates/updates the UniformStock record instead of touching
-  current_stock directly.
-- Fixed: check_stock_availability now reads available_quantity from
-  UniformStock for unsized items instead of falling back to
-  current_stock, so the check reflects the same source of truth as
-  the rest of the stock system.
+CHANGES FROM ORIGINAL:
+- Removed generate_measurement_session_code() — MeasurementSession model
+  has been removed. Measurement sessions are no longer a concept in this app.
+- Fixed export_stock_levels_to_csv() — removed reference to item.category
+  which no longer exists on UniformItem. Now uses item.get_item_type_display().
+- Fixed apply_growth_allowance() — uses get_school_today() from core.utils
+  instead of timezone.now().date() for consistent timezone behaviour.
+- Fixed check_stock_availability() — unsized items read available_quantity
+  from UniformStock (size=None) not from item.current_stock, so the check
+  reflects reserved quantities correctly.
+- Fixed bulk_adjust_stock() — unsized item branch routes through UniformStock
+  (get_or_create size=None + stock.save()) instead of writing current_stock
+  directly on UniformItem. Writing current_stock directly bypassed the signal.
+- Fixed return_uniform_sale() — unsized item branch routes through UniformStock
+  so the uniform_stock_post_save signal keeps current_stock accurate. Also
+  added entry_number to JournalEntry creation to match the pattern used in
+  _create_purchase_order_journal_entry in signals.py.
+- Stock only moves on issue/return — cancel_uniform_sale() does not restore
+  stock because stock is only decremented when items are physically issued
+  (status → ISSUED). A cancelled pre-issue sale has no stock to restore.
 """
 
 from django.db import transaction
@@ -40,11 +48,9 @@ logger = logging.getLogger(__name__)
 
 def generate_uniform_sale_number():
     """
-    Generate unique uniform sale number.
-    Format: US-YYYY-NNNNN (e.g., US-2024-00001)
-
-    Returns:
-        str: Unique sale number
+    Generate a unique uniform sale number.
+    Format: US-YYYY-NNNNN (e.g. US-2024-00001)
+    Thread-safe via select_for_update.
     """
     from .models import UniformSale
 
@@ -52,18 +58,23 @@ def generate_uniform_sale_number():
     prefix = f"US-{current_year}-"
 
     with transaction.atomic():
-        queryset = UniformSale.objects.filter(
-            sale_number__startswith=prefix
-        ).select_for_update()
-
-        result = queryset.aggregate(max_number=Max('sale_number'))
+        result = (
+            UniformSale.objects
+            .filter(sale_number__startswith=prefix)
+            .select_for_update()
+            .aggregate(max_number=Max('sale_number'))
+        )
 
         if result['max_number']:
             try:
                 last_number = int(result['max_number'].split('-')[-1])
-                new_number = last_number + 1
+                new_number  = last_number + 1
             except (ValueError, IndexError):
-                new_number = queryset.count() + 1
+                new_number = (
+                    UniformSale.objects
+                    .filter(sale_number__startswith=prefix)
+                    .count() + 1
+                )
         else:
             new_number = 1
 
@@ -72,11 +83,9 @@ def generate_uniform_sale_number():
 
 def generate_purchase_order_number():
     """
-    Generate unique purchase order number.
-    Format: PO-YYYY-NNNNN (e.g., PO-2024-00001)
-
-    Returns:
-        str: Unique PO number
+    Generate a unique purchase order number.
+    Format: PO-YYYY-NNNNN (e.g. PO-2024-00001)
+    Thread-safe via select_for_update.
     """
     from .models import UniformPurchaseOrder
 
@@ -84,56 +93,36 @@ def generate_purchase_order_number():
     prefix = f"PO-{current_year}-"
 
     with transaction.atomic():
-        queryset = UniformPurchaseOrder.objects.filter(
-            po_number__startswith=prefix
-        ).select_for_update()
-
-        result = queryset.aggregate(max_number=Max('po_number'))
+        result = (
+            UniformPurchaseOrder.objects
+            .filter(po_number__startswith=prefix)
+            .select_for_update()
+            .aggregate(max_number=Max('po_number'))
+        )
 
         if result['max_number']:
             try:
                 last_number = int(result['max_number'].split('-')[-1])
-                new_number = last_number + 1
+                new_number  = last_number + 1
             except (ValueError, IndexError):
-                new_number = queryset.count() + 1
+                new_number = (
+                    UniformPurchaseOrder.objects
+                    .filter(po_number__startswith=prefix)
+                    .count() + 1
+                )
         else:
             new_number = 1
 
         return f"{prefix}{new_number:05d}"
 
 
-def generate_measurement_session_code():
-    """
-    Generate unique measurement session code.
-    Format: MS-YYYY-MM-NNN (e.g., MS-2024-09-001)
-
-    Returns:
-        str: Unique session code
-    """
-    from .models import MeasurementSession
-
-    current_date = timezone.now()
-    prefix = f"MS-{current_date.year}-{current_date.month:02d}-"
-
-    with transaction.atomic():
-        queryset = MeasurementSession.objects.filter(
-            session_name__startswith=prefix
-        ).select_for_update()
-
-        count = queryset.count()
-        new_number = count + 1
-
-        return f"{prefix}{new_number:03d}"
-
-
 def generate_cash_receipt_number():
     """
-    Generate unique cash receipt number for cash payments.
-    Called automatically by signals when payment_method is CASH.
-    Format: RCP-YYYY-NNNNN (e.g., RCP-2025-00001)
-
-    Returns:
-        str: Unique receipt number
+    Generate a unique cash receipt number for cash payments.
+    Called automatically by the uniform_sale_pre_save signal when
+    the payment method is CASH and no reference has been set.
+    Format: RCP-YYYY-NNNNN (e.g. RCP-2025-00001)
+    Thread-safe via select_for_update.
     """
     from .models import UniformSale
 
@@ -141,18 +130,23 @@ def generate_cash_receipt_number():
     prefix = f"RCP-{current_year}-"
 
     with transaction.atomic():
-        queryset = UniformSale.objects.filter(
-            payment_reference__startswith=prefix
-        ).select_for_update()
-
-        result = queryset.aggregate(max_ref=Max('payment_reference'))
+        result = (
+            UniformSale.objects
+            .filter(payment_reference__startswith=prefix)
+            .select_for_update()
+            .aggregate(max_ref=Max('payment_reference'))
+        )
 
         if result['max_ref']:
             try:
                 last_number = int(result['max_ref'].split('-')[-1])
-                new_number = last_number + 1
+                new_number  = last_number + 1
             except (ValueError, IndexError):
-                new_number = queryset.count() + 1
+                new_number = (
+                    UniformSale.objects
+                    .filter(payment_reference__startswith=prefix)
+                    .count() + 1
+                )
         else:
             new_number = 1
 
@@ -160,196 +154,232 @@ def generate_cash_receipt_number():
 
 
 # =============================================================================
-# SIZE RECOMMENDATION ALGORITHMS
+# SIZE RECOMMENDATION
 # =============================================================================
 
 def recommend_size_from_measurements(student, uniform_item):
     """
-    Recommend uniform size based on student measurements.
+    Recommend a uniform size for a student based on their current measurements.
+
+    Scores every available size for the item against the student's current
+    measurements. HEIGHT, CHEST, and WAIST are the primary signals. Each
+    measurement is scored 0–100 depending on how well it falls within the
+    size's configured range, with partial credit for values that are close
+    but outside the range. The best-scoring size is recommended.
+
+    The recommendation algorithm reads measurement_type.code to look up
+    HEIGHT, CHEST, and WAIST — this is why MeasurementType.code values
+    must follow those conventions.
 
     Args:
-        student: Student instance
+        student:      Student instance
         uniform_item: UniformItem instance
 
     Returns:
         dict: {
-            'recommended_size': UniformSize instance or None,
-            'confidence': 'HIGH', 'MEDIUM', or 'LOW',
-            'alternative_sizes': List of UniformSize instances,
-            'reason': str explanation
+            'recommended_size':  UniformSize or None,
+            'confidence':        'HIGH' | 'MEDIUM' | 'LOW',
+            'alternative_sizes': list of UniformSize (up to 3),
+            'reason':            str explanation,
         }
     """
-    from .models import StudentMeasurement, UniformSize
+    from .models import StudentMeasurement
 
-    # Get current measurements
+    no_recommendation = {
+        'recommended_size':  None,
+        'confidence':        'LOW',
+        'alternative_sizes': [],
+        'reason':            '',
+    }
+
+    # Fetch the student's current measurements, keyed by measurement type code.
     measurements = StudentMeasurement.objects.filter(
         student=student,
-        is_current=True
+        is_current=True,
     ).select_related('measurement_type')
 
     if not measurements.exists():
-        return {
-            'recommended_size': None,
-            'confidence': 'LOW',
-            'alternative_sizes': [],
-            'reason': 'No measurements available for student'
-        }
+        no_recommendation['reason'] = 'No measurements recorded for this student'
+        return no_recommendation
 
-    # Build measurement dict
-    measurement_dict = {}
-    for m in measurements:
-        code = m.measurement_type.code.upper()
-        measurement_dict[code] = float(m.value)
+    measurement_dict = {
+        m.measurement_type.code.upper(): float(m.value)
+        for m in measurements
+    }
 
-    # Get available sizes for this item
-    available_sizes = uniform_item.available_sizes.all()
+    # Get all active sizes available for this item.
+    available_sizes = uniform_item.available_sizes.filter(is_active=True).order_by(
+        'display_order'
+    )
 
     if not available_sizes.exists():
-        return {
-            'recommended_size': None,
-            'confidence': 'LOW',
-            'alternative_sizes': [],
-            'reason': 'No sizes configured for this item'
-        }
+        no_recommendation['reason'] = 'No sizes configured for this item'
+        return no_recommendation
 
-    # Score each size
+    # ── Score each size ───────────────────────────────────────────────────────
+
     size_scores = []
 
     for size in available_sizes:
-        score = 0
-        matches = 0
-        total_checks = 0
+        score        = 0
+        matches      = 0   # measurements that fall perfectly in range
+        total_checks = 0   # measurements we had data + range for
 
-        # Check height
+        def _score_dimension(value, lo, hi):
+            """
+            Score a single measurement against a size range.
+            Perfect fit = 100, just outside = 70, further out = 40, far = 0.
+            """
+            if lo is None or hi is None:
+                return None  # no range defined for this dimension
+            if lo <= value <= hi:
+                return 100
+            tolerance_1 = (hi - lo) * 0.1   # 10 % of range width
+            tolerance_2 = (hi - lo) * 0.25  # 25 % of range width
+            if (lo - tolerance_1) <= value <= (hi + tolerance_1):
+                return 70
+            if (lo - tolerance_2) <= value <= (hi + tolerance_2):
+                return 40
+            return 0
+
+        # Height
         if 'HEIGHT' in measurement_dict:
-            height = measurement_dict['HEIGHT']
-            total_checks += 1
-
-            if size.min_height and size.max_height:
-                if size.min_height <= height <= size.max_height:
-                    score += 100
-                    matches += 1
-                elif size.min_height - 5 <= height <= size.max_height + 5:
-                    score += 70
-                elif size.min_height - 10 <= height <= size.max_height + 10:
-                    score += 40
-
-        # Check chest
-        if 'CHEST' in measurement_dict:
-            chest = measurement_dict['CHEST']
-            total_checks += 1
-
-            if size.min_chest and size.max_chest:
-                if size.min_chest <= chest <= size.max_chest:
-                    score += 100
-                    matches += 1
-                elif size.min_chest - 3 <= chest <= size.max_chest + 3:
-                    score += 70
-                elif size.min_chest - 6 <= chest <= size.max_chest + 6:
-                    score += 40
-
-        # Check waist
-        if 'WAIST' in measurement_dict:
-            waist = measurement_dict['WAIST']
-            total_checks += 1
-
-            if size.min_waist and size.max_waist:
-                if size.min_waist <= waist <= size.max_waist:
-                    score += 100
-                    matches += 1
-                elif size.min_waist - 3 <= waist <= size.max_waist + 3:
-                    score += 70
-                elif size.min_waist - 6 <= waist <= size.max_waist + 6:
-                    score += 40
-
-        # Check age if available
-        if hasattr(student, 'date_of_birth') and student.date_of_birth:
-            age = (timezone.now().date() - student.date_of_birth).days // 365
-
-            if size.min_age and size.max_age:
+            result = _score_dimension(
+                measurement_dict['HEIGHT'],
+                float(size.min_height) if size.min_height else None,
+                float(size.max_height) if size.max_height else None,
+            )
+            if result is not None:
                 total_checks += 1
-                if size.min_age <= age <= size.max_age:
-                    score += 50
+                score += result
+                if result == 100:
+                    matches += 1
+
+        # Chest
+        if 'CHEST' in measurement_dict:
+            result = _score_dimension(
+                measurement_dict['CHEST'],
+                float(size.min_chest) if size.min_chest else None,
+                float(size.max_chest) if size.max_chest else None,
+            )
+            if result is not None:
+                total_checks += 1
+                score += result
+                if result == 100:
+                    matches += 1
+
+        # Waist
+        if 'WAIST' in measurement_dict:
+            result = _score_dimension(
+                measurement_dict['WAIST'],
+                float(size.min_waist) if size.min_waist else None,
+                float(size.max_waist) if size.max_waist else None,
+            )
+            if result is not None:
+                total_checks += 1
+                score += result
+                if result == 100:
                     matches += 1
 
         if total_checks > 0:
             avg_score = score / total_checks
             size_scores.append({
-                'size': size,
-                'score': avg_score,
-                'matches': matches,
-                'total_checks': total_checks
+                'size':         size,
+                'avg_score':    avg_score,
+                'matches':      matches,
+                'total_checks': total_checks,
             })
 
     if not size_scores:
-        return {
-            'recommended_size': None,
-            'confidence': 'LOW',
-            'alternative_sizes': [],
-            'reason': 'Could not match measurements to available sizes'
-        }
+        no_recommendation['reason'] = (
+            'No size ranges are configured — add height/chest/waist ranges '
+            'to the available sizes for this item'
+        )
+        return no_recommendation
 
-    # Sort by score descending
-    size_scores.sort(key=lambda x: (x['score'], x['matches']), reverse=True)
+    # Sort: highest average score first, then most perfect matches.
+    size_scores.sort(key=lambda x: (x['avg_score'], x['matches']), reverse=True)
 
-    best_match = size_scores[0]
-    recommended_size = best_match['size']
+    best          = size_scores[0]
+    best_size     = best['size']
+    avg_score     = best['avg_score']
+    matches       = best['matches']
+    total_checks  = best['total_checks']
 
-    # Determine confidence level
-    if best_match['matches'] == best_match['total_checks']:
+    # ── Confidence level ──────────────────────────────────────────────────────
+
+    if matches == total_checks and total_checks > 0:
         confidence = 'HIGH'
-        reason = f"All {best_match['matches']} measurements match perfectly"
-    elif best_match['score'] >= 80:
+        reason = f"All {matches} measurement(s) fall perfectly within this size's ranges"
+    elif avg_score >= 80:
         confidence = 'HIGH'
-        reason = f"Strong match: {best_match['matches']}/{best_match['total_checks']} measurements in range"
-    elif best_match['score'] >= 60:
+        reason = (
+            f"Strong match — {matches}/{total_checks} measurement(s) in range, "
+            f"others very close"
+        )
+    elif avg_score >= 50:
         confidence = 'MEDIUM'
-        reason = f"Good match: {best_match['matches']}/{best_match['total_checks']} measurements in range"
+        reason = (
+            f"Good match — {matches}/{total_checks} measurement(s) in range"
+        )
     else:
         confidence = 'LOW'
-        reason = f"Weak match: Only {best_match['matches']}/{best_match['total_checks']} measurements in range"
+        reason = (
+            f"Weak match — only {matches}/{total_checks} measurement(s) in range. "
+            f"Consider fitting the student manually."
+        )
 
-    # Top 3 alternatives (excluding the recommended)
+    # Up to 3 alternatives (excluding the recommended size).
     alternative_sizes = [s['size'] for s in size_scores[1:4]]
 
     return {
-        'recommended_size': recommended_size,
-        'confidence': confidence,
+        'recommended_size':  best_size,
+        'confidence':        confidence,
         'alternative_sizes': alternative_sizes,
-        'reason': reason
+        'reason':            reason,
     }
 
 
-def apply_growth_allowance(recommended_size, student, uniform_item, months=6):
+def apply_growth_allowance(recommended_size, student, uniform_item):
     """
-    Apply growth allowance to recommended size.
-    For young students, recommend a larger size to account for growth.
+    Suggest one size up to account for expected growth.
+
+    Applied automatically by the student_measurement_post_save signal for
+    students below age 15. Uses get_school_today() for consistent timezone
+    behaviour rather than timezone.now().date().
 
     Args:
         recommended_size: Currently recommended UniformSize
-        student: Student instance
-        uniform_item: UniformItem instance
-        months: Number of months to plan for (default: 6)
+        student:          Student instance
+        uniform_item:     UniformItem instance
 
     Returns:
-        UniformSize: Size with growth allowance applied (may be same as input)
+        UniformSize: One size up if applicable, otherwise the input size.
     """
-    if not hasattr(student, 'date_of_birth') or not student.date_of_birth:
+    from core.utils import get_school_today
+
+    if not getattr(student, 'date_of_birth', None):
         return recommended_size
 
-    age = (timezone.now().date() - student.date_of_birth).days // 365
+    today = get_school_today()
+    age   = (today - student.date_of_birth).days // 365
 
-    # Minimal growth expected above age 15
-    if age > 15:
+    # Students 15 and older are unlikely to need a growth allowance.
+    if age >= 15:
         return recommended_size
 
-    available_sizes = uniform_item.available_sizes.all().order_by('display_order')
+    sizes = list(
+        uniform_item.available_sizes.filter(is_active=True).order_by('display_order')
+    )
 
     try:
-        size_list = list(available_sizes)
-        current_index = size_list.index(recommended_size)
-        if current_index < len(size_list) - 1:
-            return size_list[current_index + 1]
+        idx = sizes.index(recommended_size)
+        if idx < len(sizes) - 1:
+            logger.debug(
+                f"Growth allowance applied for {student.get_full_name()} "
+                f"(age {age}): {recommended_size.name} → {sizes[idx + 1].name}"
+            )
+            return sizes[idx + 1]
     except (ValueError, IndexError):
         pass
 
@@ -357,108 +387,86 @@ def apply_growth_allowance(recommended_size, student, uniform_item, months=6):
 
 
 # =============================================================================
-# STOCK AVAILABILITY CHECKS
+# STOCK AVAILABILITY
 # =============================================================================
 
 def check_stock_availability(uniform_item, size=None, quantity=1):
     """
-    Check if sufficient stock is available.
+    Check whether sufficient stock is available for a sale line item.
 
-    CHANGED: unsized items now read available_quantity from UniformStock
-    (size=None) instead of current_stock on the item. This keeps the check
-    consistent with the rest of the stock system — current_stock is a derived
-    cache value and may not reflect reserved quantities.
+    Reads available_quantity from the UniformStock record — not from
+    item.current_stock — so that reserved quantities are correctly
+    reflected for both sized and unsized items.
 
     Args:
         uniform_item: UniformItem instance
-        size: UniformSize instance (optional)
-        quantity: Quantity required
+        size:         UniformSize instance (or None for unsized items)
+        quantity:     Units required
 
     Returns:
         dict: {
-            'available': bool,
+            'available':          bool,
             'quantity_available': int,
             'quantity_requested': int,
-            'message': str
+            'message':            str,
         }
     """
     from .models import UniformStock
 
-    if uniform_item.requires_sizing and size:
-        try:
-            stock = UniformStock.objects.get(
-                uniform_item=uniform_item,
-                size=size
-            )
-            available_qty = stock.available_quantity
-        except UniformStock.DoesNotExist:
-            available_qty = 0
-    else:
-        # CHANGED: read from the stock record, not current_stock on the item
-        try:
-            stock = UniformStock.objects.get(
-                uniform_item=uniform_item,
-                size__isnull=True
-            )
-            available_qty = stock.available_quantity
-        except UniformStock.DoesNotExist:
-            available_qty = 0
+    try:
+        if uniform_item.requires_sizing and size:
+            stock = UniformStock.objects.get(uniform_item=uniform_item, size=size)
+        else:
+            stock = UniformStock.objects.get(uniform_item=uniform_item, size__isnull=True)
+        available_qty = stock.available_quantity
+    except UniformStock.DoesNotExist:
+        available_qty = 0
 
     is_available = available_qty >= quantity
 
     if is_available:
-        message = f"{available_qty} units available"
+        message = f"{available_qty} unit(s) available"
     else:
         shortage = quantity - available_qty
-        message = (
+        message  = (
             f"Insufficient stock: {available_qty} available, "
             f"{quantity} requested (short by {shortage})"
         )
 
     return {
-        'available': is_available,
+        'available':          is_available,
         'quantity_available': available_qty,
         'quantity_requested': quantity,
-        'message': message
+        'message':            message,
     }
 
 
 def get_low_stock_items(threshold=None):
     """
-    Get list of uniform items with low stock.
-
-    Args:
-        threshold: Custom threshold (uses item's reorder_level if None)
-
-    Returns:
-        QuerySet: UniformItem instances with low stock
+    Return active UniformItems at or below the given stock threshold.
+    If threshold is None, each item's own reorder_level is used.
     """
     from .models import UniformItem
 
     if threshold is not None:
         return UniformItem.objects.filter(
             is_active=True,
-            current_stock__lte=threshold
+            current_stock__lte=threshold,
         ).order_by('current_stock')
-    else:
-        return UniformItem.objects.filter(
-            is_active=True,
-            current_stock__lte=F('reorder_level')
-        ).order_by('current_stock')
+
+    return UniformItem.objects.filter(
+        is_active=True,
+        current_stock__lte=F('reorder_level'),
+    ).order_by('current_stock')
 
 
 def get_out_of_stock_items():
-    """
-    Get list of uniform items that are out of stock.
-
-    Returns:
-        QuerySet: UniformItem instances with zero stock
-    """
+    """Return active UniformItems with zero stock."""
     from .models import UniformItem
 
     return UniformItem.objects.filter(
         is_active=True,
-        current_stock=0
+        current_stock=0,
     ).order_by('name')
 
 
@@ -468,101 +476,92 @@ def get_out_of_stock_items():
 
 def calculate_uniform_bundle_price(items_with_quantities):
     """
-    Calculate total price for a bundle of uniform items.
+    Calculate the total price for a bundle of uniform items.
 
     Args:
-        items_with_quantities: List of dicts [
-            {'uniform_item': UniformItem, 'quantity': int},
-            ...
-        ]
+        items_with_quantities: list of dicts:
+            [{'uniform_item': UniformItem, 'quantity': int}, ...]
 
     Returns:
         dict: {
-            'subtotal': Decimal,
-            'tax_amount': Decimal,
-            'total_amount': Decimal,
-            'items_breakdown': list
+            'subtotal':        Decimal,
+            'tax_amount':      Decimal,
+            'total_amount':    Decimal,
+            'items_breakdown': list of dicts,
         }
     """
     from core.models import FinancialSettings
 
-    settings = FinancialSettings.get_instance()
-    default_tax_rate = settings.default_tax_rate if settings else Decimal('18.00')
+    settings          = FinancialSettings.get_instance()
+    default_tax_rate  = settings.default_tax_rate if settings else Decimal('18.00')
 
-    subtotal = Decimal('0.00')
-    tax_amount = Decimal('0.00')
+    subtotal        = Decimal('0.00')
+    tax_amount      = Decimal('0.00')
     items_breakdown = []
 
     for item_data in items_with_quantities:
         uniform_item = item_data['uniform_item']
-        quantity = item_data['quantity']
-
-        line_total = uniform_item.selling_price * quantity
-        subtotal += line_total
+        quantity     = item_data['quantity']
+        line_total   = uniform_item.selling_price * quantity
+        subtotal    += line_total
 
         if uniform_item.is_taxable:
-            if uniform_item.tax_rate:
-                tax_rate = uniform_item.tax_rate.rate
-            else:
-                tax_rate = default_tax_rate
-
-            line_tax = (line_total * tax_rate) / 100
+            rate       = uniform_item.tax_rate.rate if uniform_item.tax_rate else default_tax_rate
+            line_tax   = (line_total * rate) / 100
             tax_amount += line_tax
         else:
             line_tax = Decimal('0.00')
 
         items_breakdown.append({
-            'item': uniform_item,
-            'quantity': quantity,
+            'item':       uniform_item,
+            'quantity':   quantity,
             'unit_price': uniform_item.selling_price,
             'line_total': line_total,
-            'tax_amount': line_tax
+            'tax_amount': line_tax,
         })
 
     return {
-        'subtotal': subtotal,
-        'tax_amount': tax_amount,
-        'total_amount': subtotal + tax_amount,
-        'items_breakdown': items_breakdown
+        'subtotal':        subtotal,
+        'tax_amount':      tax_amount,
+        'total_amount':    subtotal + tax_amount,
+        'items_breakdown': items_breakdown,
     }
 
 
 def apply_discount_to_amount(amount, discount_percentage=None, discount_amount=None):
     """
-    Apply discount to an amount.
+    Apply either a percentage or a fixed discount to an amount.
 
     Args:
-        amount: Original amount
-        discount_percentage: Percentage discount (0-100)
-        discount_amount: Fixed discount amount
+        amount:              Original amount (numeric or Decimal)
+        discount_percentage: Percentage discount (0–100), or None
+        discount_amount:     Fixed discount amount, or None
 
     Returns:
         dict: {
             'original_amount': Decimal,
             'discount_amount': Decimal,
-            'final_amount': Decimal
+            'final_amount':    Decimal,  (floored at 0)
         }
     """
-    original_amount = Decimal(str(amount))
+    original = Decimal(str(amount))
 
     if discount_percentage:
-        discount_amt = (original_amount * Decimal(str(discount_percentage))) / 100
+        discount = (original * Decimal(str(discount_percentage))) / 100
     elif discount_amount:
-        discount_amt = Decimal(str(discount_amount))
+        discount = Decimal(str(discount_amount))
     else:
-        discount_amt = Decimal('0.00')
+        discount = Decimal('0.00')
 
-    final_amount = original_amount - discount_amt
-
-    # Ensure final amount is not negative
-    if final_amount < 0:
-        final_amount = Decimal('0.00')
-        discount_amt = original_amount
+    final = original - discount
+    if final < 0:
+        discount = original
+        final    = Decimal('0.00')
 
     return {
-        'original_amount': original_amount,
-        'discount_amount': discount_amt,
-        'final_amount': final_amount
+        'original_amount': original,
+        'discount_amount': discount,
+        'final_amount':    final,
     }
 
 
@@ -572,40 +571,45 @@ def apply_discount_to_amount(amount, discount_percentage=None, discount_amount=N
 
 def convert_measurement(value, from_unit, to_unit):
     """
-    Convert measurement from one unit to another.
+    Convert a measurement value between two UnitOfMeasure instances.
 
     Args:
-        value: Measurement value
+        value:     Numeric measurement value
         from_unit: UnitOfMeasure instance (source)
-        to_unit: UnitOfMeasure instance (target)
+        to_unit:   UnitOfMeasure instance (target)
 
     Returns:
         Decimal: Converted value
+
+    Raises:
+        ValueError: If the units belong to different measurement types.
     """
     if from_unit == to_unit:
         return Decimal(str(value))
 
     if from_unit.uom_type != to_unit.uom_type:
-        raise ValueError("Cannot convert between different measurement types")
+        raise ValueError(
+            f"Cannot convert between '{from_unit.uom_type}' and "
+            f"'{to_unit.uom_type}' — incompatible measurement types"
+        )
 
-    value_decimal = Decimal(str(value))
-    base_value = value_decimal * from_unit.conversion_factor
+    base_value = Decimal(str(value)) * from_unit.conversion_factor
     return base_value / to_unit.conversion_factor
 
 
 def validate_measurement_value(measurement_type, value):
     """
-    Validate if a measurement value is within acceptable range.
+    Check whether a value is within the acceptable range for a MeasurementType.
 
     Args:
         measurement_type: MeasurementType instance
-        value: Measurement value to validate
+        value:            Measurement value to check
 
     Returns:
         dict: {
-            'valid': bool,
-            'message': str,
-            'warnings': list of str
+            'valid':    bool,
+            'message':  str,
+            'warnings': list of str,
         }
     """
     warnings = []
@@ -613,45 +617,44 @@ def validate_measurement_value(measurement_type, value):
     try:
         value_decimal = Decimal(str(value))
     except (ValueError, TypeError):
+        return {'valid': False, 'message': 'Invalid numeric value', 'warnings': []}
+
+    unit_abbr = measurement_type.unit.abbreviation
+
+    if measurement_type.min_value is not None and value_decimal < measurement_type.min_value:
         return {
-            'valid': False,
-            'message': 'Invalid numeric value',
-            'warnings': []
+            'valid':    False,
+            'message':  (
+                f"{measurement_type.name} value {value_decimal} is below the "
+                f"minimum of {measurement_type.min_value} {unit_abbr}"
+            ),
+            'warnings': [],
         }
 
-    if measurement_type.min_value and value_decimal < measurement_type.min_value:
+    if measurement_type.max_value is not None and value_decimal > measurement_type.max_value:
         return {
-            'valid': False,
-            'message': f'Value {value} is below minimum {measurement_type.min_value}',
-            'warnings': []
+            'valid':    False,
+            'message':  (
+                f"{measurement_type.name} value {value_decimal} is above the "
+                f"maximum of {measurement_type.max_value} {unit_abbr}"
+            ),
+            'warnings': [],
         }
 
-    if measurement_type.max_value and value_decimal > measurement_type.max_value:
-        return {
-            'valid': False,
-            'message': f'Value {value} is above maximum {measurement_type.max_value}',
-            'warnings': []
-        }
-
-    if measurement_type.min_value:
-        limit_10_percent = measurement_type.min_value * Decimal('1.1')
-        if value_decimal < limit_10_percent:
+    # Soft warnings when within 10 % of a bound.
+    if measurement_type.min_value is not None:
+        if value_decimal < measurement_type.min_value * Decimal('1.1'):
             warnings.append(
-                f'Value is close to minimum limit ({measurement_type.min_value})'
+                f"Value is close to the minimum ({measurement_type.min_value} {unit_abbr})"
             )
 
-    if measurement_type.max_value:
-        limit_10_percent = measurement_type.max_value * Decimal('0.9')
-        if value_decimal > limit_10_percent:
+    if measurement_type.max_value is not None:
+        if value_decimal > measurement_type.max_value * Decimal('0.9'):
             warnings.append(
-                f'Value is close to maximum limit ({measurement_type.max_value})'
+                f"Value is close to the maximum ({measurement_type.max_value} {unit_abbr})"
             )
 
-    return {
-        'valid': True,
-        'message': 'Measurement value is valid',
-        'warnings': warnings
-    }
+    return {'valid': True, 'message': 'Value is within acceptable range', 'warnings': warnings}
 
 
 # =============================================================================
@@ -660,21 +663,19 @@ def validate_measurement_value(measurement_type, value):
 
 def bulk_update_uniform_prices(uniform_items, price_increase_percentage):
     """
-    Bulk update uniform prices by a percentage.
+    Increase (or decrease) selling prices for multiple items by a percentage.
 
     Args:
-        uniform_items: QuerySet or list of UniformItem instances
-        price_increase_percentage: Percentage to increase (can be negative)
+        uniform_items:            QuerySet or iterable of UniformItem instances
+        price_increase_percentage: Percentage change (negative = price reduction)
 
     Returns:
         dict: {
             'updated_count': int,
-            'items_updated': list of dicts with old/new prices
+            'items_updated': list of dicts with old/new prices,
         }
     """
-    percentage = Decimal(str(price_increase_percentage))
-    multiplier = 1 + (percentage / 100)
-
+    multiplier    = 1 + (Decimal(str(price_increase_percentage)) / 100)
     items_updated = []
     updated_count = 0
 
@@ -687,131 +688,104 @@ def bulk_update_uniform_prices(uniform_items, price_increase_percentage):
             item.save()
 
             items_updated.append({
-                'item': item,
+                'item':      item,
                 'old_price': old_price,
                 'new_price': new_price,
-                'increase': new_price - old_price
+                'change':    new_price - old_price,
             })
-
             updated_count += 1
 
     logger.info(
-        f"Bulk updated prices for {updated_count} uniform items "
+        f"Bulk price update: {updated_count} item(s) "
         f"by {price_increase_percentage}%"
     )
-
-    return {
-        'updated_count': updated_count,
-        'items_updated': items_updated
-    }
+    return {'updated_count': updated_count, 'items_updated': items_updated}
 
 
 def bulk_adjust_stock(adjustments):
     """
-    Bulk adjust stock levels.
+    Adjust stock levels for multiple items in a single transaction.
 
-    CHANGED: unsized item branch now goes through UniformStock (get_or_create
-    with size=None) instead of writing current_stock directly on the item.
-    The signal syncs current_stock automatically after stock.save().
+    All adjustments go through UniformStock.save() so the
+    uniform_stock_post_save signal keeps UniformItem.current_stock accurate
+    for both sized and unsized items. Never writes current_stock directly
+    on UniformItem.
 
     Args:
-        adjustments: List of dicts [
-            {
-                'uniform_item': UniformItem,
-                'size': UniformSize (optional),
-                'adjustment': int (positive or negative)
-            },
-            ...
-        ]
+        adjustments: list of dicts:
+            [
+                {
+                    'uniform_item': UniformItem,
+                    'size':         UniformSize or None,
+                    'adjustment':   int (positive = add, negative = remove),
+                },
+                ...
+            ]
 
     Returns:
         dict: {
-            'adjusted_count': int,
-            'adjustments_made': list
+            'adjusted_count':   int,
+            'adjustments_made': list of dicts,
         }
     """
     from .models import UniformStock
 
     adjustments_made = []
-    adjusted_count = 0
+    adjusted_count   = 0
 
     with transaction.atomic():
         for adj in adjustments:
             uniform_item = adj['uniform_item']
-            size = adj.get('size')
-            adjustment = adj['adjustment']
+            size         = adj.get('size')
+            adjustment   = adj['adjustment']
 
-            if uniform_item.requires_sizing and size:
-                stock, _ = UniformStock.objects.get_or_create(
-                    uniform_item=uniform_item,
-                    size=size
-                )
-                old_quantity = stock.quantity
-                stock.quantity = max(0, stock.quantity + adjustment)
-                stock.save()
+            stock, _ = UniformStock.objects.get_or_create(
+                uniform_item=uniform_item,
+                size=size,
+                defaults={'quantity': 0},
+            )
 
-                adjustments_made.append({
-                    'item': uniform_item,
-                    'size': size,
-                    'old_quantity': old_quantity,
-                    'new_quantity': stock.quantity,
-                    'adjustment': adjustment
-                })
-            else:
-                # CHANGED: route through UniformStock so the signal keeps
-                # current_stock in sync instead of writing it directly.
-                stock, _ = UniformStock.objects.get_or_create(
-                    uniform_item=uniform_item,
-                    size=None,
-                    defaults={'quantity': uniform_item.current_stock},
-                )
-                old_quantity = stock.quantity
-                stock.quantity = max(0, stock.quantity + adjustment)
-                stock.save()
-                # Signal syncs uniform_item.current_stock after save()
+            old_quantity    = stock.quantity
+            stock.quantity  = max(0, stock.quantity + adjustment)
+            stock.save()
+            # Signal syncs uniform_item.current_stock after save().
 
-                adjustments_made.append({
-                    'item': uniform_item,
-                    'size': None,
-                    'old_quantity': old_quantity,
-                    'new_quantity': stock.quantity,
-                    'adjustment': adjustment
-                })
-
+            adjustments_made.append({
+                'item':         uniform_item,
+                'size':         size,
+                'old_quantity': old_quantity,
+                'new_quantity': stock.quantity,
+                'adjustment':   adjustment,
+            })
             adjusted_count += 1
 
-    logger.info(f"Bulk adjusted stock for {adjusted_count} items")
-
-    return {
-        'adjusted_count': adjusted_count,
-        'adjustments_made': adjustments_made
-    }
+    logger.info(f"Bulk stock adjustment: {adjusted_count} record(s) updated")
+    return {'adjusted_count': adjusted_count, 'adjustments_made': adjustments_made}
 
 
 # =============================================================================
 # REPORTING UTILITIES
 # =============================================================================
 
-def get_uniform_sales_summary(start_date, end_date, by='day'):
+def get_uniform_sales_summary(start_date, end_date):
     """
-    Get summary of uniform sales for a date range.
+    Aggregate uniform sales statistics for a date range.
 
     Args:
-        start_date: Start date
-        end_date: End date
-        by: Grouping ('day', 'week', 'month')
+        start_date: date
+        end_date:   date
 
     Returns:
-        dict: Summary statistics
+        dict: totals and margin percentage.
     """
-    from django.db.models import Avg
     from .models import UniformSale
+    from django.db.models import Avg
 
     sales = UniformSale.objects.filter(
         sale_date__range=[start_date, end_date],
         status__in=['PAID', 'PARTIAL', 'ISSUED'],
         cancelled=False,
-        returned=False
+        returned=False,
     )
 
     summary = sales.aggregate(
@@ -819,94 +793,94 @@ def get_uniform_sales_summary(start_date, end_date, by='day'):
         total_cost=Sum('total_cost'),
         total_profit=Sum('gross_profit'),
         count=Count('id'),
-        avg_sale=Avg('total_amount')
+        avg_sale=Avg('total_amount'),
     )
 
-    if summary['total_sales'] and summary['total_sales'] > 0:
-        summary['margin_percentage'] = (
-            (summary['total_profit'] or 0) / summary['total_sales']
-        ) * 100
-    else:
-        summary['margin_percentage'] = 0
+    total_sales  = summary.get('total_sales') or Decimal('0.00')
+    total_profit = summary.get('total_profit') or Decimal('0.00')
 
+    summary['margin_percentage'] = (
+        (total_profit / total_sales * 100) if total_sales else Decimal('0.00')
+    )
     return summary
 
 
 def get_best_selling_items(start_date, end_date, limit=10):
     """
-    Get best-selling uniform items for a date range.
+    Return the top-selling uniform items for a date range.
 
     Args:
-        start_date: Start date
-        end_date: End date
-        limit: Number of items to return
+        start_date: date
+        end_date:   date
+        limit:      Maximum number of items to return
 
     Returns:
-        list: List of dicts with item and sales data
+        list of dicts with item identifiers and sales totals.
     """
     from .models import UniformSaleItem
 
-    items = UniformSaleItem.objects.filter(
-        sale__sale_date__range=[start_date, end_date],
-        sale__status__in=['PAID', 'PARTIAL', 'ISSUED'],
-        sale__cancelled=False,
-        sale__returned=False
-    ).values(
-        'uniform_item__id',
-        'uniform_item__name',
-        'uniform_item__code'
-    ).annotate(
-        total_quantity=Sum('quantity'),
-        total_revenue=Sum('total_price'),
-        sale_count=Count('sale__id', distinct=True)
-    ).order_by('-total_quantity')[:limit]
-
-    return list(items)
+    return list(
+        UniformSaleItem.objects.filter(
+            sale__sale_date__range=[start_date, end_date],
+            sale__status__in=['PAID', 'PARTIAL', 'ISSUED'],
+            sale__cancelled=False,
+            sale__returned=False,
+        )
+        .values('uniform_item__id', 'uniform_item__name', 'uniform_item__code')
+        .annotate(
+            total_quantity=Sum('quantity'),
+            total_revenue=Sum('total_price'),
+            sale_count=Count('sale__id', distinct=True),
+        )
+        .order_by('-total_quantity')[:limit]
+    )
 
 
 def get_inventory_valuation():
     """
-    Calculate total inventory valuation.
+    Calculate total inventory value at cost and at selling price.
 
     Returns:
         dict: {
-            'cost_value': Decimal (at cost price),
-            'selling_value': Decimal (at selling price),
-            'potential_profit': Decimal,
-            'items_count': int
+            'cost_value':      Decimal,
+            'selling_value':   Decimal,
+            'potential_profit':Decimal,
+            'items_count':     int,
         }
     """
     from .models import UniformItem
 
-    items = UniformItem.objects.filter(is_active=True)
-
-    valuation = items.aggregate(
+    valuation = UniformItem.objects.filter(is_active=True).aggregate(
         cost_value=Sum(F('current_stock') * F('unit_cost')),
         selling_value=Sum(F('current_stock') * F('selling_price')),
-        items_count=Count('id')
+        items_count=Count('id'),
     )
 
-    cost_value = valuation['cost_value'] or Decimal('0.00')
+    cost_value    = valuation['cost_value']    or Decimal('0.00')
     selling_value = valuation['selling_value'] or Decimal('0.00')
 
     return {
-        'cost_value': cost_value,
-        'selling_value': selling_value,
+        'cost_value':       cost_value,
+        'selling_value':    selling_value,
         'potential_profit': selling_value - cost_value,
-        'items_count': valuation['items_count'] or 0
+        'items_count':      valuation['items_count'] or 0,
     }
 
 
 # =============================================================================
-# DATA IMPORT/EXPORT UTILITIES
+# EXPORT UTILITIES
 # =============================================================================
 
 def export_stock_levels_to_csv():
     """
-    Export current stock levels to CSV format.
+    Export current stock levels to a CSV string.
+
+    Uses item.get_item_type_display() instead of the removed item.category
+    field. Groups sized items by their per-size stock records and unsized
+    items by their single size=None stock record.
 
     Returns:
-        str: CSV data as string
+        str: CSV data
     """
     from .models import UniformItem
     import csv
@@ -916,38 +890,47 @@ def export_stock_levels_to_csv():
     writer = csv.writer(output)
 
     writer.writerow([
-        'Item Code', 'Item Name', 'Category', 'Size',
+        'Item Code', 'Item Name', 'Item Type', 'Size',
         'Quantity', 'Reserved', 'Available',
         'Unit Cost', 'Selling Price',
-        'Stock Value (Cost)', 'Stock Value (Selling)', 'Status'
+        'Stock Value (Cost)', 'Stock Value (Selling)', 'Status',
     ])
 
     items = UniformItem.objects.filter(
         is_active=True
-    ).prefetch_related('stock_records__size')
+    ).prefetch_related('stock_records__size').order_by('item_type', 'name')
 
     for item in items:
-        if item.requires_sizing:
-            for stock in item.stock_records.all():
+        item_type_display = item.get_item_type_display()
+        status_label      = 'Low Stock' if item.is_low_stock else 'OK'
+
+        stock_records = item.stock_records.all()
+
+        if stock_records.exists():
+            for stock in stock_records:
+                size_label = stock.size.name if stock.size else 'N/A'
                 writer.writerow([
-                    item.code, item.name, item.category,
-                    stock.size.name if stock.size else 'No Size',
-                    stock.quantity, stock.reserved_quantity, stock.available_quantity,
-                    item.unit_cost, item.selling_price,
+                    item.code,
+                    item.name,
+                    item_type_display,
+                    size_label,
+                    stock.quantity,
+                    stock.reserved_quantity,
+                    stock.available_quantity,
+                    item.unit_cost,
+                    item.selling_price,
                     stock.quantity * item.unit_cost,
                     stock.quantity * item.selling_price,
-                    'Low Stock' if item.is_low_stock else 'OK'
+                    status_label,
                 ])
         else:
-            for stock in item.stock_records.filter(size__isnull=True):
-                writer.writerow([
-                    item.code, item.name, item.category, 'N/A',
-                    stock.quantity, stock.reserved_quantity, stock.available_quantity,
-                    item.unit_cost, item.selling_price,
-                    stock.quantity * item.unit_cost,
-                    stock.quantity * item.selling_price,
-                    'Low Stock' if item.is_low_stock else 'OK'
-                ])
+            # Item exists but has no stock records yet.
+            writer.writerow([
+                item.code, item.name, item_type_display, 'N/A',
+                0, 0, 0,
+                item.unit_cost, item.selling_price,
+                0, 0, status_label,
+            ])
 
     return output.getvalue()
 
@@ -958,55 +941,57 @@ def export_stock_levels_to_csv():
 
 def validate_uniform_sale_data(sale_data):
     """
-    Validate uniform sale data before creating sale.
+    Validate a uniform sale data dict before creating the sale.
 
     Args:
-        sale_data: Dict with sale information
+        sale_data: dict with 'student', 'items' (list), and optionally
+                   'discount_amount'
 
     Returns:
         dict: {
-            'valid': bool,
-            'errors': list of str,
-            'warnings': list of str
+            'valid':    bool,
+            'errors':   list of str,
+            'warnings': list of str,
         }
     """
-    errors = []
+    errors   = []
     warnings = []
 
     if 'student' not in sale_data:
         errors.append("Student is required")
 
-    if 'items' not in sale_data or not sale_data['items']:
+    items = sale_data.get('items', [])
+    if not items:
         errors.append("At least one item is required")
 
-    if 'items' in sale_data:
-        for idx, item in enumerate(sale_data['items']):
-            if 'uniform_item' not in item:
-                errors.append(f"Item {idx + 1}: uniform_item is required")
-                continue
+    for idx, item_data in enumerate(items, start=1):
+        prefix       = f"Item {idx}"
+        uniform_item = item_data.get('uniform_item')
 
-            uniform_item = item['uniform_item']
+        if not uniform_item:
+            errors.append(f"{prefix}: uniform_item is required")
+            continue
 
-            if uniform_item.requires_sizing and 'size' not in item:
-                errors.append(f"Item {idx + 1}: {uniform_item.name} requires a size")
+        if uniform_item.requires_sizing and 'size' not in item_data:
+            errors.append(f"{prefix}: {uniform_item.name} requires a size")
 
-            quantity = item.get('quantity', 1)
-            if quantity <= 0:
-                errors.append(f"Item {idx + 1}: quantity must be positive")
+        quantity = item_data.get('quantity', 1)
+        if quantity <= 0:
+            errors.append(f"{prefix}: quantity must be greater than zero")
 
-            size = item.get('size')
-            availability = check_stock_availability(uniform_item, size, quantity)
-            if not availability['available']:
-                errors.append(f"Item {idx + 1}: {availability['message']}")
+        size         = item_data.get('size')
+        availability = check_stock_availability(uniform_item, size, quantity)
+        if not availability['available']:
+            errors.append(f"{prefix}: {availability['message']}")
 
-    if 'discount_amount' in sale_data:
-        if sale_data['discount_amount'] < 0:
-            errors.append("Discount amount cannot be negative")
+    discount = sale_data.get('discount_amount', 0)
+    if discount < 0:
+        errors.append("Discount amount cannot be negative")
 
     return {
-        'valid': len(errors) == 0,
-        'errors': errors,
-        'warnings': warnings
+        'valid':    len(errors) == 0,
+        'errors':   errors,
+        'warnings': warnings,
     }
 
 
@@ -1015,62 +1000,68 @@ def validate_uniform_sale_data(sale_data):
 # =============================================================================
 
 def format_size_display(size):
-    """Format size for display."""
-    if not size:
-        return "One Size"
-    return f"Size {size.name}"
+    """Return a human-readable size label, or 'One Size' if size is None."""
+    return f"Size {size.name}" if size else "One Size"
 
 
 def get_student_uniform_history(student):
     """
-    Get complete uniform purchase history for a student.
+    Return all uniform sales for a student, most recent first.
 
     Args:
         student: Student instance
 
     Returns:
-        QuerySet: UniformSale instances for student
+        QuerySet: UniformSale instances with items pre-fetched.
     """
     from .models import UniformSale
 
-    return UniformSale.objects.filter(
-        student=student
-    ).order_by('-sale_date').prefetch_related(
-        'items__uniform_item', 'items__size'
+    return (
+        UniformSale.objects
+        .filter(student=student)
+        .order_by('-sale_date')
+        .prefetch_related('items__uniform_item', 'items__size')
     )
 
 
 def calculate_reorder_quantity(uniform_item, target_days=90):
     """
-    Calculate recommended reorder quantity based on sales velocity.
+    Suggest a reorder quantity based on 90-day sales velocity.
+
+    Looks back 90 days to calculate average daily sales, then projects
+    forward to cover target_days of demand. Returns the item's own
+    reorder_level if no recent sales data is available.
 
     Args:
         uniform_item: UniformItem instance
-        target_days: Number of days to stock for
+        target_days:  Days of stock to target (default 90)
 
     Returns:
-        int: Recommended reorder quantity
+        int: Recommended quantity to order.
     """
     from .models import UniformSaleItem
     from datetime import timedelta
+    from core.utils import get_school_today
 
-    lookback_date = timezone.now().date() - timedelta(days=90)
+    lookback_date = get_school_today() - timedelta(days=90)
 
-    sales_data = UniformSaleItem.objects.filter(
-        uniform_item=uniform_item,
-        sale__sale_date__gte=lookback_date,
-        sale__status__in=['PAID', 'PARTIAL', 'ISSUED'],
-        sale__cancelled=False,
-        sale__returned=False
-    ).aggregate(total_sold=Sum('quantity'))
-
-    total_sold = sales_data['total_sold'] or 0
+    total_sold = (
+        UniformSaleItem.objects
+        .filter(
+            uniform_item=uniform_item,
+            sale__sale_date__gte=lookback_date,
+            sale__status__in=['PAID', 'PARTIAL', 'ISSUED'],
+            sale__cancelled=False,
+            sale__returned=False,
+        )
+        .aggregate(total=Sum('quantity'))['total'] or 0
+    )
 
     if total_sold == 0:
         return uniform_item.reorder_level
 
-    daily_velocity = total_sold / 90.0
-    target_quantity = int(daily_velocity * target_days)
+    daily_velocity   = total_sold / 90.0
+    target_quantity  = int(daily_velocity * target_days)
     reorder_quantity = max(0, target_quantity - uniform_item.current_stock)
 
     return reorder_quantity
@@ -1083,18 +1074,21 @@ def calculate_reorder_quantity(uniform_item, target_days=90):
 @transaction.atomic
 def cancel_uniform_sale(sale, user, reason):
     """
-    Cancel a uniform sale (before items were issued).
+    Cancel a uniform sale that has NOT yet been issued.
+
+    Stock is NOT restored here. Stock is only decremented when items are
+    physically issued (status → ISSUED). A sale cancelled before issue
+    has never touched stock, so there is nothing to restore.
 
     Actions:
-    1. Mark sale as cancelled
-    2. Cancel/void the fee invoice
-    3. Log a warning if payment was already made (refund must be processed manually)
-    4. No inventory adjustment needed — items never left the warehouse
+    1. Mark the sale as CANCELLED.
+    2. Cancel the linked fee invoice if one exists.
+    3. Warn if payments were already recorded (manual refund required).
 
     Args:
-        sale: UniformSale instance
-        user: User performing cancellation
-        reason: Reason for cancellation
+        sale:   UniformSale instance
+        user:   User performing the cancellation
+        reason: str reason for cancellation
 
     Returns:
         tuple: (success: bool, message: str)
@@ -1104,44 +1098,41 @@ def cancel_uniform_sale(sale, user, reason):
         return False, msg
 
     try:
-        sale.cancelled = True
-        sale.cancelled_on = timezone.now()
-        sale.cancelled_by_id = str(user.id)
+        sale.cancelled           = True
+        sale.cancelled_on        = timezone.now()
+        sale.cancelled_by_id     = str(user.id)
         sale.cancellation_reason = reason
-        sale.status = 'CANCELLED'
+        sale.status              = 'CANCELLED'
         sale.save()
 
-        # Cancel the linked invoice if present
         if sale.fee_invoice:
-            invoice = sale.fee_invoice
-            invoice.status = 'CANCELLED'
-            invoice.save()
+            sale.fee_invoice.status = 'CANCELLED'
+            sale.fee_invoice.save()
             logger.info(
-                f"Cancelled invoice {invoice.invoice_number} "
+                f"Cancelled invoice {sale.fee_invoice.invoice_number} "
                 f"for sale {sale.sale_number}"
             )
 
-        # Warn if payment already recorded — refund must be handled separately
+        # Warn if payment was already made — a manual refund is needed.
         if sale.paid_amount > 0 and sale.fee_invoice:
-            payments = sale.fee_invoice.payments.filter(
+            outstanding = sale.fee_invoice.payments.filter(
                 status='COMPLETED',
                 reversed=False,
-                refunded=False
+                refunded=False,
             )
-            if payments.exists():
-                payment_numbers = [p.payment_number for p in payments]
+            if outstanding.exists():
+                payment_numbers = [p.payment_number for p in outstanding]
                 logger.warning(
-                    f"Uniform sale {sale.sale_number} cancelled but has outstanding "
-                    f"payments: {payment_numbers}. Process refunds manually."
+                    f"Sale {sale.sale_number} cancelled but has outstanding "
+                    f"payment(s) {payment_numbers} — process refund manually"
                 )
 
-        logger.info(f"Uniform sale {sale.sale_number} cancelled by {user}")
+        logger.info(f"Sale {sale.sale_number} cancelled by {user}")
         return True, "Sale cancelled successfully"
 
     except Exception as e:
         logger.error(
-            f"Error cancelling uniform sale {sale.sale_number}: {e}",
-            exc_info=True
+            f"Error cancelling sale {sale.sale_number}: {e}", exc_info=True
         )
         return False, f"Error: {str(e)}"
 
@@ -1149,26 +1140,24 @@ def cancel_uniform_sale(sale, user, reason):
 @transaction.atomic
 def return_uniform_sale(sale, user, reason, condition):
     """
-    Process return of issued uniforms (items come back to inventory).
+    Process a return of issued uniforms (items come back to the warehouse).
+
+    Stock IS restored here because the sale was already issued and stock
+    was decremented at that point. Restoration goes through UniformStock.save()
+    so the uniform_stock_post_save signal keeps UniformItem.current_stock
+    accurate for both sized and unsized items.
 
     Actions:
-    1. Mark sale as returned
-    2. Return items to UniformStock — both sized and unsized go through the
-       stock record so the signal keeps current_stock accurate
-    3. Create reversal journal entries via finance module
-    4. Cancel the linked invoice and warn about outstanding payments
-
-    CHANGED: unsized item branch now goes through UniformStock (get_or_create
-    with size=None + stock.save()) instead of writing current_stock directly
-    on the item. Writing current_stock directly bypassed the post_save signal
-    on UniformStock, meaning the next stock record save for that item could
-    overwrite current_stock back to the stale value.
+    1. Mark the sale as RETURNED.
+    2. Restore stock for every line item via UniformStock.
+    3. Create a reversal journal entry (revenue + COGS reversed).
+    4. Cancel the linked invoice and warn about outstanding payments.
 
     Args:
-        sale: UniformSale instance
-        user: User processing return
-        reason: Reason for return
-        condition: Condition of returned items
+        sale:      UniformSale instance (must be in ISSUED status)
+        user:      User processing the return
+        reason:    str reason for return
+        condition: str return condition code (GOOD, FAIR, WORN, DAMAGED, UNUSABLE)
 
     Returns:
         tuple: (success: bool, message: str, journal_entry: JournalEntry or None)
@@ -1182,59 +1171,42 @@ def return_uniform_sale(sale, user, reason, condition):
         from core.models import FiscalPeriod
         from .models import UniformStock
 
-        # 1. Mark sale as returned
-        sale.returned = True
-        sale.returned_on = timezone.now()
-        sale.returned_by_id = str(user.id)
-        sale.return_reason = reason
-        sale.return_condition = condition
-        sale.status = 'RETURNED'
+        # 1. Mark as returned.
+        sale.returned        = True
+        sale.returned_on     = timezone.now()
+        sale.returned_by_id  = str(user.id)
+        sale.return_reason   = reason
+        sale.return_condition= condition
+        sale.status          = 'RETURNED'
 
-        # 2. Return items to inventory via UniformStock
-        for item in sale.items.all():
-            if item.uniform_item.requires_sizing and item.size:
-                # Sized item — update the per-size stock record
-                stock, created = UniformStock.objects.get_or_create(
-                    uniform_item=item.uniform_item,
-                    size=item.size,
-                    defaults={'quantity': 0},
-                )
-                stock.quantity += item.quantity
-                stock.save()
-                # Signal syncs uniform_item.current_stock after save()
-                logger.info(
-                    f"Returned {item.quantity}x {item.uniform_item.name} "
-                    f"Size {item.size.name} to stock"
-                )
-            else:
-                # CHANGED: unsized item — go through the UniformStock record
-                # (size=None) so the signal keeps current_stock accurate.
-                stock, created = UniformStock.objects.get_or_create(
-                    uniform_item=item.uniform_item,
-                    size=None,
-                    defaults={'quantity': 0},
-                )
-                stock.quantity += item.quantity
-                stock.save()
-                # Signal syncs uniform_item.current_stock after save()
-                logger.info(
-                    f"Returned {item.quantity}x {item.uniform_item.name} "
-                    f"(unsized) to stock"
-                )
+        # 2. Restore stock for every line item.
+        for item in sale.items.select_related('uniform_item', 'size').all():
+            stock, _ = UniformStock.objects.get_or_create(
+                uniform_item=item.uniform_item,
+                size=item.size,             # None for unsized items
+                defaults={'quantity': 0},
+            )
+            stock.quantity += item.quantity
+            stock.save()
+            # uniform_stock_post_save signal syncs item.current_stock.
 
-        # 3. Create reversal journal entry
-        fiscal_period = FiscalPeriod.get_current_fiscal_period()
+            size_label = f" Size {item.size.name}" if item.size else " (unsized)"
+            logger.info(
+                f"Stock restored: {item.uniform_item.name}{size_label} "
+                f"+{item.quantity} (now {stock.quantity})"
+            )
 
-        general_journal = Journal.objects.filter(
-            journal_type='GENERAL',
-            is_active=True
+        # 3. Create reversal journal entry.
+        fiscal_period    = FiscalPeriod.get_current_fiscal_period()
+        general_journal  = Journal.objects.filter(
+            journal_type='GENERAL', is_active=True
         ).first()
-
         return_entry = None
 
         if general_journal and fiscal_period:
             return_entry = JournalEntry.objects.create(
                 journal=general_journal,
+                entry_number=f"JE-RET-{sale.sale_number}",
                 entry_date=timezone.now().date(),
                 fiscal_period=fiscal_period,
                 reference_number=sale.sale_number,
@@ -1242,96 +1214,89 @@ def return_uniform_sale(sale, user, reason, condition):
                     f"RETURN: Uniform Sale {sale.sale_number} — "
                     f"{sale.student.get_full_name()} — {reason}"
                 ),
-                status='POSTED'
+                status='POSTED',
             )
 
-            inventory_account = sale.get_inventory_account()
-            cogs_account = sale.get_cogs_account()
-            revenue_account = sale.get_revenue_account()
+            inventory_account  = sale.get_inventory_account()
+            cogs_account       = sale.get_cogs_account()
+            revenue_account    = sale.get_revenue_account()
             receivable_account = sale.get_receivable_account()
 
-            if not all([
-                inventory_account, cogs_account,
-                revenue_account, receivable_account
-            ]):
+            if not all([inventory_account, cogs_account, revenue_account, receivable_account]):
                 logger.error(
-                    f"Missing accounts for return journal entry on sale "
-                    f"{sale.sale_number}. Journal entry created without all "
-                    f"lines — review manually."
+                    f"One or more GL accounts missing for return of sale "
+                    f"{sale.sale_number} — journal entry created but may be "
+                    f"incomplete. Review manually."
                 )
 
-            # Reversal of original COGS entry:
-            # Original: DR COGS / CR Inventory
-            # Reversal: DR Inventory / CR COGS
+            # Reversal of COGS entry (original: DR COGS / CR Inventory)
+            # Reversal:                          DR Inventory / CR COGS
             if inventory_account:
                 JournalTransaction.objects.create(
                     journal_entry=return_entry,
                     account=inventory_account,
                     amount=sale.total_cost,
                     is_debit=True,
-                    description=f"Inventory restored — return of sale {sale.sale_number}"
+                    description=f"Inventory restored — return of sale {sale.sale_number}",
                 )
-
             if cogs_account:
                 JournalTransaction.objects.create(
                     journal_entry=return_entry,
                     account=cogs_account,
                     amount=sale.total_cost,
                     is_debit=False,
-                    description=f"COGS reversed — return of sale {sale.sale_number}"
+                    description=f"COGS reversed — return of sale {sale.sale_number}",
                 )
 
-            # Reversal of original revenue entry:
-            # Original: DR Receivables / CR Revenue
-            # Reversal: DR Revenue / CR Receivables
+            # Reversal of revenue entry (original: DR Receivables / CR Revenue)
+            # Reversal:                           DR Revenue / CR Receivables
             if revenue_account:
                 JournalTransaction.objects.create(
                     journal_entry=return_entry,
                     account=revenue_account,
                     amount=sale.total_amount,
                     is_debit=True,
-                    description=f"Revenue reversed — return of sale {sale.sale_number}"
+                    description=f"Revenue reversed — return of sale {sale.sale_number}",
                 )
-
             if receivable_account:
                 JournalTransaction.objects.create(
                     journal_entry=return_entry,
                     account=receivable_account,
                     amount=sale.total_amount,
                     is_debit=False,
-                    description=f"Receivables reversed — return of sale {sale.sale_number}"
+                    description=f"Receivables reversed — return of sale {sale.sale_number}",
                 )
 
             sale.return_journal_entry = return_entry
             logger.info(
-                f"Created return journal entry {return_entry.entry_number} "
+                f"Return journal entry {return_entry.entry_number} created "
                 f"for sale {sale.sale_number}"
             )
         else:
             logger.warning(
-                f"Could not create return journal entry for {sale.sale_number}: "
-                f"no active journal or fiscal period found."
+                f"No active General Journal or fiscal period found — "
+                f"return journal entry not created for sale {sale.sale_number}"
             )
 
         sale.save()
 
-        # 4. Cancel the invoice and warn about outstanding payments
+        # 4. Cancel the invoice and warn about outstanding payments.
         if sale.fee_invoice:
             sale.fee_invoice.status = 'CANCELLED'
             sale.fee_invoice.save()
 
             if sale.paid_amount > 0:
                 logger.warning(
-                    f"Uniform sale {sale.sale_number} returned but was paid "
-                    f"({sale.paid_amount}). Process payment refunds separately."
+                    f"Sale {sale.sale_number} returned but was paid "
+                    f"({sale.paid_amount}) — process payment refund separately"
                 )
 
-        logger.info(f"Uniform sale {sale.sale_number} returned by {user}")
+        logger.info(f"Sale {sale.sale_number} returned by {user}")
         return True, "Return processed successfully", return_entry
 
     except Exception as e:
         logger.error(
-            f"Error processing return for uniform sale {sale.sale_number}: {e}",
-            exc_info=True
+            f"Error processing return for sale {sale.sale_number}: {e}",
+            exc_info=True,
         )
         return False, f"Error: {str(e)}", None

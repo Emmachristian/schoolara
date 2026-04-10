@@ -1,3 +1,5 @@
+# utils/templatetags/custom_filters.py
+
 from django import template
 from decimal import Decimal
 
@@ -74,6 +76,31 @@ def abs_value(value):
 
 
 @register.filter
+def split(value, arg=','):
+    """
+    Split a string by a delimiter and return a list.
+
+    Usage:
+        {% for item in "a,b,c"|split:"," %}
+            {{ item }}
+        {% endfor %}
+
+        {% for item in "TUITION,BOARDING,MEALS"|split:"," %}
+            {{ item }}
+        {% endfor %}
+
+    Defaults to splitting on comma if no delimiter is provided.
+    Returns an empty list if value is falsy.
+    """
+    if not value:
+        return []
+    try:
+        return str(value).split(arg)
+    except (ValueError, TypeError, AttributeError):
+        return []
+
+
+@register.filter
 def money_short(value):
     """
     Format money in short form:
@@ -104,3 +131,28 @@ def money_short(value):
             return f"{currency} {intcomma(int(value))}"
     except Exception:
         return "UGX 0"
+    
+@register.filter
+def replace(value, arg):
+    """
+    Replace occurrences of a substring within a string.
+
+    Usage:
+        {{ "hello_world"|replace:"_: " }}        →  "hello world"
+        {{ "TUITION_FEE"|replace:"_: " }}        →  "TUITION FEE"
+        {{ some_var|replace:"old_str:new_str" }}
+
+    arg must be a colon-separated pair  "old:new".
+    If no colon is present the value is returned unchanged.
+    To replace with an empty string use a trailing colon: "old:".
+    """
+    if not value:
+        return value
+    try:
+        parts = str(arg).split(':', 1)
+        if len(parts) != 2:
+            return value
+        old, new = parts
+        return str(value).replace(old, new)
+    except (ValueError, TypeError, AttributeError):
+        return value

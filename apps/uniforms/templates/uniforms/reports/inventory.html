@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:#0f172a; --ink-muted:#64748b; --ink-faint:#94a3b8;
+    --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#f1f5f9;
+    --border:#e2e8f0;
+    --accent:#1d4ed8; --accent-lt:#eff6ff; --accent-bd:#bfdbfe;
+    --green:#15803d; --green-lt:#f0fdf4;
+    --amber:#b45309; --amber-lt:#fffbeb;
+    --red:#dc2626; --red-lt:#fef2f2; --radius:10px;
+}
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; display:flex; align-items:center; gap:14px; }
+.stat-icon { width:44px; height:44px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; flex-shrink:0; }
+.stat-label  { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-muted); margin-bottom:3px; }
+.stat-value  { font-size:20px; font-weight:700; color:var(--ink); line-height:1; }
+.stat-value.green { color:var(--green); }
+.stat-value.amber { color:var(--amber); }
+.stat-value.red   { color:var(--red); }
+.stat-sub    { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+
+.rep-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:22px; }
+.rep-head { background:var(--surface-2); padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.rep-title { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; margin:0; }
+
+.rep-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.rep-tbl thead th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.55px; color:var(--ink-muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.rep-tbl tbody td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.rep-tbl tbody tr:last-child td { border-bottom:none; }
+.rep-tbl tbody tr:hover td { background:var(--surface-2); }
+.rep-tbl tfoot td { padding:10px 14px; background:var(--surface-2); font-weight:700; font-size:12.5px; border-top:2px solid var(--border); }
+
+.stock-bar-wrap { width:80px; height:6px; background:#e2e8f0; border-radius:3px; display:inline-block; vertical-align:middle; margin-left:6px; }
+.stock-bar { height:100%; border-radius:3px; }
+
+.type-chip { display:inline-block; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:700; background:var(--accent-lt); color:var(--accent); }
+.badge-low  { background:var(--amber-lt); color:var(--amber); border:1px solid #fde68a; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:700; }
+.badge-out  { background:var(--red-lt); color:var(--red); border:1px solid #fecaca; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:700; }
+.badge-ok   { background:var(--green-lt); color:var(--green); border:1px solid #bbf7d0; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-box2 icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                Inventory Report
+                <div class="page-title-subheading">Stock levels and valuation for all active uniform items</div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:export_uniform_items_excel' %}" class="btn btn-sm btn-outline-success me-1">
+                <i class="fa fa-file-excel me-1"></i> Export Excel
+            </a>
+            <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+                <i class="fa fa-print me-1"></i> Print
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Summary stat cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-box2"></i></div>
+            <div>
+                <div class="stat-label">Total Items</div>
+                <div class="stat-value">{{ stats.total_items|default:0 }}</div>
+                <div class="stat-sub">{{ stats.mandatory_items|default:0 }} mandatory</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="pe-7s-graph"></i></div>
+            <div>
+                <div class="stat-label">Total Units</div>
+                <div class="stat-value">{{ stats.total_stock_units|default:0 }}</div>
+                <div class="stat-sub">across all items</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="pe-7s-wallet"></i></div>
+            <div>
+                <div class="stat-label">Cost Value</div>
+                <div class="stat-value" style="font-size:15px;">{{ valuation.total_cost_value|money }}</div>
+                <div class="stat-sub">at cost price</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="pe-7s-cash"></i></div>
+            <div>
+                <div class="stat-label">Selling Value</div>
+                <div class="stat-value" style="font-size:15px;">{{ valuation.total_selling_value|money }}</div>
+                <div class="stat-sub">at selling price</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon {% if stats.low_stock_count > 0 %}bg-warning{% else %}bg-success{% endif %}">
+                <i class="pe-7s-attention"></i>
+            </div>
+            <div>
+                <div class="stat-label">Low Stock</div>
+                <div class="stat-value {% if stats.low_stock_count > 0 %}amber{% endif %}">
+                    {{ stats.low_stock_count|default:0 }}
+                </div>
+                <div class="stat-sub">items at reorder level</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="stat-card">
+            <div class="stat-icon {% if stats.out_of_stock_count > 0 %}bg-danger{% else %}bg-success{% endif %}">
+                <i class="pe-7s-close-circle"></i>
+            </div>
+            <div>
+                <div class="stat-label">Out of Stock</div>
+                <div class="stat-value {% if stats.out_of_stock_count > 0 %}red{% endif %}">
+                    {{ stats.out_of_stock_count|default:0 }}
+                </div>
+                <div class="stat-sub">zero stock</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Valuation by item type ── #}
+{% if valuation.by_item_type %}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-chart-pie" style="color:var(--accent);"></i> Valuation by Item Type</h6>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Item Type</th>
+                    <th class="text-end">Cost Value</th>
+                    <th class="text-end">Selling Value</th>
+                    <th class="text-end">Potential Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in valuation.by_item_type %}
+                <tr>
+                    <td><span class="type-chip">{{ row.display }}</span></td>
+                    <td class="text-end" style="font-weight:600;">{{ row.cost_value|money }}</td>
+                    <td class="text-end" style="font-weight:600;">{{ row.selling_value|money }}</td>
+                    <td class="text-end" style="font-weight:600;color:var(--green);">
+                        {{ row.selling_value|subtract:row.cost_value|money }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td>Total</td>
+                    <td class="text-end">{{ valuation.total_cost_value|money }}</td>
+                    <td class="text-end">{{ valuation.total_selling_value|money }}</td>
+                    <td class="text-end" style="color:var(--green);">{{ valuation.potential_profit|money }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# ── Item-level detail ── #}
+<div class="rep-card">
+    <div class="rep-head">
+        <h6 class="rep-title"><i class="fa fa-list" style="color:var(--ink-muted);"></i> Item Detail</h6>
+        <span style="font-size:12px;color:var(--ink-muted);">{{ items|length }} items</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="rep-tbl">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Item Name</th>
+                    <th>Type</th>
+                    <th class="text-center">Stock</th>
+                    <th class="text-center">Reorder</th>
+                    <th class="text-end">Unit Cost</th>
+                    <th class="text-end">Selling</th>
+                    <th class="text-end">Stock Value</th>
+                    <th class="text-center">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td style="font-family:'Courier New',monospace;font-size:12px;color:var(--ink-muted);">
+                        {{ item.code }}
+                    </td>
+                    <td>
+                        <a href="{% url 'uniforms:uniform_item_detail' item.pk %}"
+                           style="font-weight:600;color:var(--ink);text-decoration:none;">
+                            {{ item.name }}
+                        </a>
+                        {% if item.is_mandatory %}
+                        <span style="font-size:10px;color:var(--amber);margin-left:4px;">★ Mandatory</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="type-chip">{{ item.get_item_type_display }}</span></td>
+                    <td class="text-center">
+                        <span style="font-weight:700;font-size:15px;
+                            color:{% if item.current_stock == 0 %}var(--red){% elif item.is_low_stock %}var(--amber){% else %}var(--ink){% endif %};">
+                            {{ item.current_stock }}
+                        </span>
+                        {% if item.reorder_level > 0 %}
+                        <div class="stock-bar-wrap">
+                            <div class="stock-bar"
+                                 style="width:{% with pct=item.current_stock|percentage:item.reorder_level %}{% if pct > 100 %}100{% else %}{{ pct|floatformat:0 }}{% endif %}{% endwith %}%;
+                                        background:{% if item.current_stock == 0 %}var(--red){% elif item.is_low_stock %}var(--amber){% else %}var(--green){% endif %};"></div>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-center" style="color:var(--ink-muted);">{{ item.reorder_level }}</td>
+                    <td class="text-end">{{ item.unit_cost|money }}</td>
+                    <td class="text-end">{{ item.selling_price|money }}</td>
+                    <td class="text-end" style="font-weight:600;">{{ item.stock_value|money }}</td>
+                    <td class="text-center">
+                        {% if item.current_stock == 0 %}
+                            <span class="badge-out">Out of Stock</span>
+                        {% elif item.is_low_stock %}
+                            <span class="badge-low">Low Stock</span>
+                        {% else %}
+                            <span class="badge-ok">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" style="text-align:center;padding:28px;color:var(--ink-faint);">No items found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

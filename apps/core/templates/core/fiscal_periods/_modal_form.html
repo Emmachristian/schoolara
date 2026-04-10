@@ -1,16 +1,26 @@
 {# templates/core/periods/_modal_form.html #}
 
-<div class="modal-header">
-    <h5 class="modal-title">
-        <i class="lnr-calendar-full me-2"></i>
-        {{ modal_title }}
-    </h5>
+<div class="modal-header" style="background:var(--surface-2);border-bottom:1px solid var(--border);padding:14px 22px;">
+    <div>
+        <h5 class="modal-title mb-0" style="font-size:14px;font-weight:700;color:var(--ink);">
+            <i class="lnr-calendar-full me-2"></i>{{ modal_title }}
+        </h5>
+        {% if is_edit and period %}
+        <small style="font-size:11px;color:var(--ink-muted);">
+            {{ period.fiscal_year.name }} &mdash;
+            {{ period.start_date|date:"M d, Y" }} &ndash; {{ period.end_date|date:"M d, Y" }}
+        </small>
+        {% endif %}
+    </div>
     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 </div>
 
-<div class="modal-body">
+<div class="modal-body" style="padding:22px;">
+
+    <!-- FIX: URL names corrected from period_modal_edit/create
+     to fiscal_period_edit_modal / fiscal_period_create_modal (matching urls.py) -->
     <form
-        hx-post="{% if is_edit %}{% url 'core:period_modal_edit' pk=period.pk %}{% else %}{% url 'core:period_modal_create' %}{% endif %}"
+        hx-post="{% if is_edit %}{% url 'core:fiscal_period_edit_modal' pk=period.pk %}{% else %}{% url 'core:fiscal_period_create_modal' %}{% endif %}"
         hx-target="#periodModalContent"
         hx-swap="innerHTML"
         id="periodModalForm"
@@ -18,233 +28,298 @@
         {% csrf_token %}
 
         {% if form.non_field_errors %}
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <strong>Please fix the following errors:</strong>
-            <ul class="mb-0 mt-1">
+        <div style="background:var(--red-lt);border:1px solid #fecaca;border-left:4px solid var(--red);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:18px;font-size:13px;color:#7f1d1d;">
+            <strong style="display:block;margin-bottom:6px;">
+                <i class="fa fa-exclamation-circle me-1"></i>Please fix the following errors:
+            </strong>
+            <ul style="margin:0;padding-left:18px;">
                 {% for error in form.non_field_errors %}
                 <li>{{ error }}</li>
                 {% endfor %}
             </ul>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
         {% endif %}
 
-        {% comment %}Fiscal year — disabled on edit, enabled on create{% endcomment %}
-        <div class="mb-3">
-            <label for="{{ form.fiscal_year.id_for_label }}" class="form-label">
-                {{ form.fiscal_year.label }} <span class="text-danger">*</span>
-            </label>
-            {{ form.fiscal_year }}
-            {% if form.fiscal_year.errors %}
-            <div class="invalid-feedback d-block">{{ form.fiscal_year.errors|join:", " }}</div>
-            {% endif %}
-            {% if form.fiscal_year.help_text %}
-            <small class="form-text text-muted d-block mt-1">
-                <i class="fa fa-info-circle me-1"></i>{{ form.fiscal_year.help_text }}
-            </small>
-            {% endif %}
-        </div>
+        <div class="row g-3">
 
-        <div class="row">
-            <div class="col-md-5 mb-3">
-                <label for="{{ form.name.id_for_label }}" class="form-label">
-                    {{ form.name.label }} <span class="text-danger">*</span>
+            <!-- Fiscal Year — disabled on edit, enabled on create -->
+            <div class="col-12">
+                <label class="field-label" for="{{ form.fiscal_year.id_for_label }}">
+                    {{ form.fiscal_year.label }}
+                    {% if not is_edit %}<span class="req">*</span>{% endif %}
+                </label>
+                {{ form.fiscal_year }}
+                {% if form.fiscal_year.errors %}
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.fiscal_year.errors.0 }}
+                </div>
+                {% endif %}
+                {% if form.fiscal_year.help_text %}
+                <div class="field-help">
+                    <i class="fa fa-info-circle me-1"></i>{{ form.fiscal_year.help_text }}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Name -->
+            <div class="col-md-5">
+                <label class="field-label" for="{{ form.name.id_for_label }}">
+                    {{ form.name.label }}<span class="req">*</span>
                 </label>
                 {{ form.name }}
                 {% if form.name.errors %}
-                <div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.name.errors.0 }}
+                </div>
                 {% endif %}
             </div>
 
-            <div class="col-md-4 mb-3">
-                <label for="{{ form.code.id_for_label }}" class="form-label">
-                    {{ form.code.label }} <span class="text-danger">*</span>
+            <!-- Code -->
+            <div class="col-md-4">
+                <label class="field-label" for="{{ form.code.id_for_label }}">
+                    {{ form.code.label }}<span class="req">*</span>
                 </label>
                 {{ form.code }}
                 {% if form.code.errors %}
-                <div class="invalid-feedback d-block">{{ form.code.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.code.errors.0 }}
+                </div>
                 {% endif %}
             </div>
 
-            <div class="col-md-3 mb-3">
-                <label for="{{ form.period_number.id_for_label }}" class="form-label">
-                    {{ form.period_number.label }} <span class="text-danger">*</span>
+            <!-- Period number -->
+            <div class="col-md-3">
+                <label class="field-label" for="{{ form.period_number.id_for_label }}">
+                    {{ form.period_number.label }}<span class="req">*</span>
                 </label>
                 {{ form.period_number }}
                 {% if form.period_number.errors %}
-                <div class="invalid-feedback d-block">{{ form.period_number.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.period_number.errors.0 }}
+                </div>
                 {% endif %}
-                <small class="form-text text-muted d-block mt-1">
-                    <i class="fa fa-lightbulb text-warning me-1"></i>
+                <div class="field-help">
+                    <i class="fa fa-lightbulb me-1" style="color:var(--amber);"></i>
                     Use decimals for breaks (e.g. 1.5)
-                </small>
+                </div>
             </div>
-        </div>
 
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.period_type.id_for_label }}" class="form-label">
-                    {{ form.period_type.label }} <span class="text-danger">*</span>
+            <!-- Period type -->
+            <div class="col-md-6">
+                <label class="field-label" for="{{ form.period_type.id_for_label }}">
+                    {{ form.period_type.label }}<span class="req">*</span>
                 </label>
                 {{ form.period_type }}
                 {% if form.period_type.errors %}
-                <div class="invalid-feedback d-block">{{ form.period_type.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.period_type.errors.0 }}
+                </div>
                 {% endif %}
             </div>
 
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.related_academic_session.id_for_label }}" class="form-label">
+            <!-- Related academic session -->
+            <div class="col-md-6">
+                <label class="field-label" for="{{ form.related_academic_session.id_for_label }}">
                     {{ form.related_academic_session.label }}
+                    <span class="opt">(optional)</span>
                 </label>
                 {{ form.related_academic_session }}
                 {% if form.related_academic_session.errors %}
-                <div class="invalid-feedback d-block">{{ form.related_academic_session.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.related_academic_session.errors.0 }}
+                </div>
                 {% endif %}
-                <small class="form-text text-muted d-block mt-1">Optional — for reference and tracking only</small>
+                <div class="field-help">For reference and tracking only</div>
             </div>
-        </div>
 
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.start_date.id_for_label }}" class="form-label">
-                    {{ form.start_date.label }} <span class="text-danger">*</span>
+            <!-- Start date -->
+            <div class="col-md-6">
+                <label class="field-label" for="{{ form.start_date.id_for_label }}">
+                    {{ form.start_date.label }}<span class="req">*</span>
                 </label>
                 {{ form.start_date }}
                 {% if form.start_date.errors %}
-                <div class="invalid-feedback d-block">{{ form.start_date.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.start_date.errors.0 }}
+                </div>
                 {% endif %}
             </div>
 
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.end_date.id_for_label }}" class="form-label">
-                    {{ form.end_date.label }} <span class="text-danger">*</span>
+            <!-- End date -->
+            <div class="col-md-6">
+                <label class="field-label" for="{{ form.end_date.id_for_label }}">
+                    {{ form.end_date.label }}<span class="req">*</span>
                 </label>
                 {{ form.end_date }}
                 {% if form.end_date.errors %}
-                <div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>
+                <div class="field-error">
+                    <i class="fa fa-times-circle mt-1"></i>{{ form.end_date.errors.0 }}
+                </div>
                 {% endif %}
             </div>
+
         </div>
 
-        {% comment %}Advanced settings — collapsed by default{% endcomment %}
-        <div class="accordion mb-3" id="advancedOptions">
-            <div class="accordion-item">
+        <!-- Advanced settings accordion -->
+        <div class="accordion mt-3" id="advancedOptions"
+             style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+            <div class="accordion-item" style="border:none;">
                 <h2 class="accordion-header">
-                    <button
-                        class="accordion-button collapsed"
-                        type="button"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#advancedSettings"
-                        aria-expanded="false"
-                        aria-controls="advancedSettings"
-                    >
+                    <button class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#advancedSettings"
+                            aria-expanded="false"
+                            aria-controls="advancedSettings"
+                            style="font-size:12.5px;font-weight:700;background:var(--surface-2);color:var(--ink-muted);padding:11px 16px;">
                         <i class="fa fa-cog me-2"></i> Advanced Settings
+                        <small class="ms-2" style="font-weight:400;font-size:11px;">
+                            — transaction controls, grace period, auto-close
+                        </small>
                     </button>
                 </h2>
                 <div id="advancedSettings" class="accordion-collapse collapse">
-                    <div class="accordion-body">
+                    <div class="accordion-body" style="padding:18px;background:var(--surface);">
 
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <div class="form-check form-switch">
+                        <!-- Transaction toggles -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="toggle-card-sm"
+                                       for="{{ form.allow_advance_payments.id_for_label }}">
+                                    <div class="toggle-card-sm-text">
+                                        <strong>{{ form.allow_advance_payments.label }}</strong>
+                                    </div>
                                     {{ form.allow_advance_payments }}
-                                    <label class="form-check-label" for="{{ form.allow_advance_payments.id_for_label }}">
-                                        {{ form.allow_advance_payments.label }}
-                                    </label>
-                                </div>
+                                </label>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <div class="form-check form-switch">
+                            <div class="col-md-6">
+                                <label class="toggle-card-sm"
+                                       for="{{ form.allow_arrears_payments.id_for_label }}">
+                                    <div class="toggle-card-sm-text">
+                                        <strong>{{ form.allow_arrears_payments.label }}</strong>
+                                    </div>
                                     {{ form.allow_arrears_payments }}
-                                    <label class="form-check-label" for="{{ form.allow_arrears_payments.id_for_label }}">
-                                        {{ form.allow_arrears_payments.label }}
-                                    </label>
-                                </div>
+                                </label>
                             </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <div class="form-check form-switch">
+                            <div class="col-md-6">
+                                <label class="toggle-card-sm"
+                                       for="{{ form.allow_invoice_generation.id_for_label }}">
+                                    <div class="toggle-card-sm-text">
+                                        <strong>{{ form.allow_invoice_generation.label }}</strong>
+                                    </div>
                                     {{ form.allow_invoice_generation }}
-                                    <label class="form-check-label" for="{{ form.allow_invoice_generation.id_for_label }}">
-                                        {{ form.allow_invoice_generation.label }}
-                                    </label>
-                                </div>
+                                </label>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <div class="form-check form-switch">
+                            <div class="col-md-6">
+                                <label class="toggle-card-sm"
+                                       for="{{ form.allow_refunds.id_for_label }}">
+                                    <div class="toggle-card-sm-text">
+                                        <strong>{{ form.allow_refunds.label }}</strong>
+                                    </div>
                                     {{ form.allow_refunds }}
-                                    <label class="form-check-label" for="{{ form.allow_refunds.id_for_label }}">
-                                        {{ form.allow_refunds.label }}
-                                    </label>
-                                </div>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="toggle-card-sm"
+                                       for="{{ form.require_approval_for_transactions.id_for_label }}">
+                                    <div class="toggle-card-sm-text">
+                                        <strong>{{ form.require_approval_for_transactions.label }}</strong>
+                                    </div>
+                                    {{ form.require_approval_for_transactions }}
+                                </label>
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.grace_period_days.id_for_label }}" class="form-label">
+                        <div class="row g-3">
+
+                            <!-- Grace period days -->
+                            <div class="col-md-6">
+                                <label class="field-label" for="{{ form.grace_period_days.id_for_label }}">
                                     {{ form.grace_period_days.label }}
+                                    <span class="opt">(optional)</span>
                                 </label>
                                 {{ form.grace_period_days }}
                                 {% if form.grace_period_days.errors %}
-                                <div class="invalid-feedback d-block">{{ form.grace_period_days.errors|join:", " }}</div>
+                                <div class="field-error">
+                                    <i class="fa fa-times-circle mt-1"></i>{{ form.grace_period_days.errors.0 }}
+                                </div>
                                 {% endif %}
-                                <small class="form-text text-muted d-block mt-1">
-                                    Days beyond end date when transactions are still accepted
-                                </small>
+                                <div class="field-help">{{ form.grace_period_days.help_text }}</div>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.auto_close_date.id_for_label }}" class="form-label">
+
+                            <!-- Auto close date -->
+                            <div class="col-md-6">
+                                <label class="field-label" for="{{ form.auto_close_date.id_for_label }}">
                                     {{ form.auto_close_date.label }}
+                                    <span class="opt">(optional)</span>
                                 </label>
                                 {{ form.auto_close_date }}
                                 {% if form.auto_close_date.errors %}
-                                <div class="invalid-feedback d-block">{{ form.auto_close_date.errors|join:", " }}</div>
+                                <div class="field-error">
+                                    <i class="fa fa-times-circle mt-1"></i>{{ form.auto_close_date.errors.0 }}
+                                </div>
                                 {% endif %}
                             </div>
-                        </div>
 
+                            <!-- Description -->
+                            <div class="col-12">
+                                <label class="field-label" for="{{ form.description.id_for_label }}">
+                                    {{ form.description.label }}
+                                    <span class="opt">(optional)</span>
+                                </label>
+                                {{ form.description }}
+                                {% if form.description.errors %}
+                                <div class="field-error">
+                                    <i class="fa fa-times-circle mt-1"></i>{{ form.description.errors.0 }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Notes -->
+                            <div class="col-12">
+                                <label class="field-label" for="{{ form.notes.id_for_label }}">
+                                    {{ form.notes.label }}
+                                    <span class="opt">(optional)</span>
+                                </label>
+                                {{ form.notes }}
+                                {% if form.notes.errors %}
+                                <div class="field-error">
+                                    <i class="fa fa-times-circle mt-1"></i>{{ form.notes.errors.0 }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="mb-3">
-            <label for="{{ form.description.id_for_label }}" class="form-label">
-                {{ form.description.label }}
-            </label>
-            {{ form.description }}
-            {% if form.description.errors %}
-            <div class="invalid-feedback d-block">{{ form.description.errors|join:", " }}</div>
-            {% endif %}
-        </div>
-
+        <!-- Current status strip (edit only) -->
         {% if is_edit and period %}
-        <div class="alert alert-info mb-0">
-            <h6 class="alert-heading mb-2">
+        <div style="background:var(--accent-lt);border:1px solid var(--accent-bd);border-left:4px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin-top:18px;font-size:12.5px;color:#1e3a5f;">
+            <strong style="display:block;margin-bottom:8px;font-size:12px;">
                 <i class="fa fa-info-circle me-1"></i> Current Status
-            </h6>
+            </strong>
             <div class="row g-2">
                 <div class="col-md-3">
-                    <small class="text-muted d-block">Status</small>
-                    {# FIXED: use status-badge not bg-{{ period.status|lower }} which Bootstrap doesn't have #}
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:4px;">Status</div>
+                    {# FIX: status-badge CSS class — bg-{{ period.status|lower }} is not a Bootstrap class #}
                     <span class="status-badge status-{{ period.status|lower }}">
                         {{ period.get_status_display }}
                     </span>
                 </div>
                 <div class="col-md-3">
-                    <small class="text-muted d-block">Duration</small>
-                    <strong>{{ period.get_duration_days }} days</strong>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:4px;">Duration</div>
+                    <strong style="font-size:13px;">{{ period.get_duration_days }} days</strong>
                 </div>
                 <div class="col-md-3">
-                    <small class="text-muted d-block">Progress</small>
-                    <strong>{{ period.get_progress_percentage }}%</strong>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:4px;">Progress</div>
+                    <strong style="font-size:13px;">{{ period.get_progress_percentage }}%</strong>
                 </div>
                 <div class="col-md-3">
-                    <small class="text-muted d-block">Remaining</small>
-                    <strong>{{ period.get_remaining_days }} days</strong>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:4px;">Remaining</div>
+                    <strong style="font-size:13px;">{{ period.get_remaining_days }} days</strong>
                 </div>
             </div>
         </div>
@@ -253,12 +328,73 @@
     </form>
 </div>
 
-<div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-        <i class="fa fa-times me-1"></i> Cancel
+<div class="modal-footer" style="background:var(--surface-2);border-top:1px solid var(--border);padding:14px 22px;">
+    <button type="button"
+            class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+            data-bs-dismiss="modal">
+        <i class="fa fa-times" style="font-size:11px;line-height:1;"></i> Cancel
     </button>
-    <button type="submit" class="btn btn-primary" form="periodModalForm">
-        <i class="fa fa-save me-1"></i>
+    <button type="submit"
+            form="periodModalForm"
+            class="btn btn-primary d-inline-flex align-items-center gap-1"
+            id="period-modal-submit-btn">
+        <span class="spinner-border spinner-border-sm d-none" id="period-modal-spinner"></span>
+        <i class="fa fa-save" style="font-size:11px;line-height:1;" id="period-modal-save-icon"></i>
         {% if is_edit %}Update{% else %}Create{% endif %} Period
     </button>
 </div>
+
+<style>
+/* Scoped styles — reuse design tokens from parent template */
+.field-label      { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); margin-bottom: 6px; }
+.field-label .req { color: var(--red); margin-left: 2px; }
+.field-label .opt { color: var(--ink-faint); font-weight: 400; font-style: italic; text-transform: none; letter-spacing: 0; margin-left: 4px; font-size: 10px; }
+.field-help       { font-size: 11px; color: var(--ink-muted); margin-top: 5px; line-height: 1.5; }
+.field-error      { font-size: 12px; color: var(--red); margin-top: 4px; font-weight: 600; display: flex; align-items: flex-start; gap: 4px; }
+
+/* Compact toggle card for the advanced section */
+.toggle-card-sm         { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; cursor: pointer; transition: border-color .15s; width: 100%; }
+.toggle-card-sm:hover   { border-color: var(--accent-bd); }
+.toggle-card-sm strong  { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.toggle-card-sm input[type="checkbox"] { width: 2em; height: 1.1em; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; margin-left: 12px; }
+
+/* Status badge — inherited from parent but re-declared for safety inside modal */
+.status-badge         { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; border: 1px solid; display: inline-block; white-space: nowrap; }
+.status-badge.status-draft   { background: var(--accent-lt); color: var(--accent); border-color: var(--accent-bd); }
+.status-badge.status-active  { background: var(--green-lt);  color: var(--green);  border-color: #bbf7d0; }
+.status-badge.status-closed  { background: var(--amber-lt);  color: var(--amber);  border-color: #fde68a; }
+.status-badge.status-locked  { background: var(--red-lt);    color: var(--red);    border-color: #fecaca; }
+</style>
+
+<script>
+(function () {
+    // Submit spinner
+    const form      = document.getElementById('periodModalForm');
+    const submitBtn = document.getElementById('period-modal-submit-btn');
+    const saveIcon  = document.getElementById('period-modal-save-icon');
+    const spinner   = document.getElementById('period-modal-spinner');
+
+    if (form && submitBtn) {
+        form.addEventListener('submit', function () {
+            submitBtn.disabled = true;
+            if (saveIcon) saveIcon.classList.add('d-none');
+            if (spinner)  spinner.classList.remove('d-none');
+        });
+    }
+
+    // Re-enable submit if HTMX swaps in a validation error response
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target && e.detail.target.id === 'periodModalContent') {
+            const newBtn = document.getElementById('period-modal-submit-btn');
+            if (newBtn) newBtn.disabled = false;
+        }
+    }, { once: true });
+
+    // Reinitialise date pickers inside the modal after it loads
+    if (typeof flatpickr !== 'undefined') {
+        document.querySelectorAll('.datepicker').forEach(function (el) {
+            flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y' });
+        });
+    }
+})();
+</script>

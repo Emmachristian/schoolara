@@ -1,0 +1,767 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load humanize %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --accent-bd: #bfdbfe;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --purple:    #7c3aed;
+    --purple-lt: #f5f3ff;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.detail-hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 22px; }
+.hero-icon-wrap { position: relative; flex-shrink: 0; }
+.hero-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.hero-dot { position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.hero-dot.on  { background: var(--green); }
+.hero-dot.off { background: var(--red); }
+.hero-title { font-size: 20px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+.hero-sub   { font-size: 13px; color: var(--ink-muted); }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.hero-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted); }
+.hero-badge.active   { background: #dcfce7; border-color: #bbf7d0; color: var(--green); }
+.hero-badge.inactive { background: var(--red-lt); border-color: #fecaca; color: var(--red); }
+.hero-badge.accent   { background: var(--accent-lt); border-color: var(--accent-bd); color: var(--accent); }
+.hero-badge.warning  { background: var(--amber-lt); border-color: #fde68a; color: var(--amber); }
+
+/* ── Stat strip ── */
+.stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card  { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.stat-card-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 5px; }
+.stat-card-val   { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.stat-card-val.green { color: var(--green); }
+.stat-card-val.amber { color: var(--amber); }
+.stat-card-sub   { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+/* ── Cards ── */
+.detail-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.detail-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.detail-card-head-left { display: flex; align-items: center; gap: 8px; }
+.head-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.head-icon.blue   { background: var(--accent-lt); color: var(--accent); }
+.head-icon.green  { background: #dcfce7; color: var(--green); }
+.head-icon.amber  { background: var(--amber-lt); color: var(--amber); }
+.head-icon.purple { background: var(--purple-lt); color: var(--purple); }
+.head-icon.muted  { background: var(--surface-3); color: var(--ink-muted); }
+.head-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.head-sub   { font-size: 11px; color: var(--ink-muted); }
+.detail-card-body { padding: 20px; }
+
+/* ── KV grid ── */
+.kv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.kv-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.kv-item-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.kv-item-val   { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.kv-item-val.muted { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+
+/* ── Category table ── */
+.cat-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cat-tbl thead th { background: var(--surface-2); padding: 10px 14px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
+.cat-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.cat-tbl tbody tr:last-child td { border-bottom: none; }
+.cat-tbl tbody tr:hover td { background: #fafbff; }
+.cat-tbl tbody tr.row-inactive td { color: var(--ink-faint); }
+
+.cat-name-link { font-weight: 600; font-size: 13px; color: var(--ink); text-decoration: none; display: block; }
+.cat-name-link:hover { color: var(--accent); }
+.cat-code { font-family: 'Courier New', monospace; font-size: 11px; color: var(--ink-muted); margin-top: 2px; display: block; }
+
+/* Type chips */
+.type-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.tc-tuition  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.tc-boarding { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.tc-meals    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.tc-exam     { background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; }
+.tc-transport{ background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.tc-other    { background: var(--surface-2); color: #475569; border: 1px solid #cbd5e1; }
+
+/* Freq pill */
+.freq-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 20px; font-size: 10.5px; font-weight: 700; }
+.fp-termly   { background: #ede9fe; color: #6b21a8; }
+.fp-yearly   { background: #fef9c3; color: #854d0e; }
+.fp-monthly  { background: #dcfce7; color: #15803d; }
+.fp-one_time { background: #fce7f3; color: #9d174d; }
+.fp-other    { background: var(--surface-3); color: #475569; }
+
+/* Flags */
+.flag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.flag-req    { background: #eff6ff; color: var(--accent); }
+.flag-opt    { background: var(--surface-3); color: var(--ink-muted); }
+.flag-ref    { background: var(--green-lt); color: var(--green); }
+.flag-noref  { background: var(--red-lt); color: var(--red); }
+.flag-tax    { background: var(--amber-lt); color: var(--amber); }
+
+/* Status pill */
+.s-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.sp-active   { background: #dcfce7; color: var(--green); border: 1px solid #bbf7d0; }
+.sp-inactive { background: var(--surface-3); color: var(--ink-muted); border: 1px solid var(--border); }
+
+/* ── Invoice mockup ── */
+.invoice-mockup { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.invoice-mockup-hdr { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 10px; }
+.invoice-group-section { border-left: 4px solid; border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 8px; }
+.invoice-group-section:last-child { margin-bottom: 0; }
+.invoice-group-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+.invoice-line { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-muted); padding: 2px 0; border-bottom: 1px dotted #e2e8f0; }
+.invoice-line:last-child { border-bottom: none; }
+.invoice-subtotal { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; padding-top: 6px; border-top: 1px solid var(--border); margin-top: 4px; }
+
+/* ── Empty state ── */
+.empty-state { padding: 48px 24px; text-align: center; color: var(--ink-faint); }
+.empty-state i { font-size: 2.4rem; margin-bottom: 12px; display: block; opacity: .4; }
+.empty-state p { font-size: 13px; margin: 0; }
+
+/* ── Sidebar ── */
+.sidebar-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.sidebar-card-head { background: var(--surface-2); padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+.sidebar-card-body { padding: 14px 16px; }
+.sidebar-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.sidebar-row:last-child { border-bottom: none; }
+.sidebar-row-label { color: var(--ink-muted); flex-shrink: 0; margin-right: 10px; }
+.sidebar-row-val   { font-weight: 600; color: var(--ink); text-align: right; }
+
+.action-btn-group { display: flex; flex-direction: column; gap: 8px; }
+.action-btn { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; transition: all .15s; width: 100%; }
+.action-btn:hover { background: var(--surface-2); color: var(--ink); text-decoration: none; }
+.action-btn.danger  { color: var(--red);   border-color: #fecaca; }
+.action-btn.danger:hover  { background: var(--red-lt); }
+.action-btn.warning { color: var(--amber); border-color: #fde68a; }
+.action-btn.warning:hover { background: var(--amber-lt); }
+.action-btn.success { color: var(--green); border-color: #bbf7d0; }
+.action-btn.success:hover { background: var(--green-lt); }
+.action-btn i { width: 16px; text-align: center; flex-shrink: 0; }
+
+@media (max-width: 992px) {
+    .stat-strip { grid-template-columns: repeat(2, 1fr); }
+    .kv-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 576px) {
+    .stat-strip { grid-template-columns: 1fr; }
+    .kv-grid, .kv-grid.cols-3 { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Hero ── -->
+<div class="detail-hero">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div class="d-flex align-items-start gap-3" style="flex:1; min-width:0;">
+            <div class="hero-icon-wrap">
+                <div class="hero-icon" style="background: {{ group.color_code|default:'#6f42c1' }};">
+                    <i class="fa fa-layer-group"></i>
+                </div>
+                <div class="hero-dot {% if group.is_active %}on{% else %}off{% endif %}"></div>
+            </div>
+            <div>
+                <div class="hero-title">{{ group.name }}</div>
+                {% if group.description %}
+                <div class="hero-sub">{{ group.description }}</div>
+                {% else %}
+                <div class="hero-sub" style="font-style:italic;">No description</div>
+                {% endif %}
+                <div class="hero-badges">
+                    {% if group.is_active %}
+                        <span class="hero-badge active"><i class="fa fa-check-circle"></i> Active</span>
+                    {% else %}
+                        <span class="hero-badge inactive"><i class="fa fa-times-circle"></i> Inactive</span>
+                    {% endif %}
+                    {% if group.show_as_group %}
+                        <span class="hero-badge accent"><i class="fa fa-object-group"></i> Grouped</span>
+                    {% else %}
+                        <span class="hero-badge"><i class="fa fa-list"></i> Individual</span>
+                    {% endif %}
+                    {% if group.show_as_group and group.show_group_subtotal %}
+                        <span class="hero-badge warning"><i class="fa fa-calculator"></i> Shows Subtotal</span>
+                    {% endif %}
+                    <span class="hero-badge">
+                        <i class="fa fa-sort-numeric-asc"></i> Order {{ group.display_order }}
+                    </span>
+                    <span class="hero-badge">
+                        <i class="fa fa-tags"></i> {{ categories.count }} Categor{{ categories.count|pluralize:"y,ies" }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+            <a href="{% url 'fees:display_group_edit' group.pk %}"
+               class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-edit" style="font-size:11px;"></i> Edit Group
+            </a>
+            <a href="{% url 'fees:category_create' %}?display_group={{ group.pk }}"
+               class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1">
+                <i class="fa fa-plus" style="font-size:11px;"></i> Add Category
+            </a>
+            <a href="{% url 'fees:display_group_list' %}"
+               class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <i class="fa fa-arrow-left" style="font-size:11px;"></i> All Groups
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ── Stat strip ── -->
+<div class="stat-strip">
+    <div class="stat-card">
+        <div class="stat-card-label">Total Categories</div>
+        <div class="stat-card-val {% if categories.count > 0 %}green{% endif %}">{{ categories.count }}</div>
+        <div class="stat-card-sub">Assigned to this group</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Active Categories</div>
+        <div class="stat-card-val">{{ categories|length }}</div>
+        <div class="stat-card-sub">
+            {{ categories.count }} total
+            / {{ categories|length }} shown
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Mandatory</div>
+        <div class="stat-card-val amber">
+            {% with mandatory_count=0 %}
+            {% for cat in categories %}{% if cat.is_mandatory %}{% with mandatory_count=mandatory_count|add:1 %}{% endwith %}{% endif %}{% endfor %}
+            {{ categories.filter.is_mandatory.count|default:"-" }}
+            {% endwith %}
+        </div>
+        <div class="stat-card-sub">Required for all students</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-label">Display Order</div>
+        <div class="stat-card-val">{{ group.display_order }}</div>
+        <div class="stat-card-sub">Position on invoices</div>
+    </div>
+</div>
+
+<div class="row">
+
+<!-- ══════════════ LEFT COLUMN ══════════════ -->
+<div class="col-lg-8">
+
+    <!-- ── Configuration ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon blue"><i class="pe-7s-ribbon"></i></div>
+                <div>
+                    <div class="head-title">Group Configuration</div>
+                    <div class="head-sub">Display settings and invoice behaviour</div>
+                </div>
+            </div>
+            <a href="{% url 'fees:display_group_edit' group.pk %}"
+               class="btn btn-xs btn-outline-primary d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-edit"></i> Edit
+            </a>
+        </div>
+        <div class="detail-card-body">
+
+            <!-- Colour swatch row -->
+            <div style="display:flex; align-items:center; gap:14px; background:var(--surface-2); border:1px solid var(--border); border-left:5px solid {{ group.color_code|default:'#6f42c1' }}; border-radius:0 8px 8px 0; padding:14px 18px; margin-bottom:20px;">
+                <div style="width:40px; height:40px; border-radius:10px; background:{{ group.color_code|default:'#6f42c1' }}; box-shadow:0 2px 8px rgba(0,0,0,.15); flex-shrink:0;"></div>
+                <div>
+                    <div style="font-size:13px; font-weight:700; color:var(--ink);">{{ group.color_code|default:'#6f42c1' }}</div>
+                    <div style="font-size:11px; color:var(--ink-muted); margin-top:2px;">Group colour — used on invoice borders and icons</div>
+                </div>
+            </div>
+
+            <div class="kv-grid cols-3">
+                <div>
+                    <div class="kv-item-label">Display Order</div>
+                    <div class="kv-item-val">{{ group.display_order }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Show as Group</div>
+                    <div class="kv-item-val">
+                        {% if group.show_as_group %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i> No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Show Subtotal</div>
+                    <div class="kv-item-val">
+                        {% if group.show_as_group and group.show_group_subtotal %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Yes</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i> No</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Status</div>
+                    <div class="kv-item-val">
+                        {% if group.is_active %}
+                            <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i> Active</span>
+                        {% else %}
+                            <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i> Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Created</div>
+                    <div class="kv-item-val" style="font-size:12.5px;">{{ group.created_at|date:"d M Y" }}</div>
+                </div>
+                <div>
+                    <div class="kv-item-label">Last Updated</div>
+                    <div class="kv-item-val" style="font-size:12.5px;">{{ group.updated_at|date:"d M Y" }}</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── Categories ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon green"><i class="fa fa-tags"></i></div>
+                <div>
+                    <div class="head-title">Fee Categories</div>
+                    <div class="head-sub">
+                        {{ categories.count }} categor{{ categories.count|pluralize:"y,ies" }} assigned to this group
+                    </div>
+                </div>
+            </div>
+            <a href="{% url 'fees:category_create' %}?display_group={{ group.pk }}"
+               class="btn btn-xs btn-outline-success d-inline-flex align-items-center gap-1"
+               style="font-size:11px;padding:4px 10px;">
+                <i class="fa fa-plus"></i> Add Category
+            </a>
+        </div>
+
+        {% if categories %}
+        <div style="overflow-x:auto;">
+        <table class="cat-tbl">
+            <thead>
+                <tr>
+                    <th style="width:32px;">#</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Applicability</th>
+                    <th>Flags</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center" style="width:60px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for category in categories %}
+            <tr class="{% if not category.is_active %}row-inactive{% endif %}">
+
+                <td style="color:var(--ink-faint);font-size:12px;">{{ forloop.counter }}</td>
+
+                <!-- Name + code -->
+                <td>
+                    <a href="{% url 'fees:category_detail' category.pk %}" class="cat-name-link">
+                        {{ category.name }}
+                    </a>
+                    <span class="cat-code">
+                        <i class="fa fa-hashtag" style="font-size:9px;"></i> {{ category.code }}
+                    </span>
+                </td>
+
+                <!-- Type + frequency -->
+                <td>
+                    {% with t=category.category_type %}
+                    {% if t == 'TUITION' %}
+                        <span class="type-chip tc-tuition"><i class="fa fa-graduation-cap" style="font-size:8px;"></i>Tuition</span>
+                    {% elif t == 'BOARDING' %}
+                        <span class="type-chip tc-boarding"><i class="fa fa-home" style="font-size:8px;"></i>Boarding</span>
+                    {% elif t == 'MEALS' %}
+                        <span class="type-chip tc-meals"><i class="fa fa-utensils" style="font-size:8px;"></i>Meals</span>
+                    {% elif t == 'EXAM' %}
+                        <span class="type-chip tc-exam"><i class="fa fa-pen" style="font-size:8px;"></i>Exam</span>
+                    {% elif t == 'TRANSPORT' %}
+                        <span class="type-chip tc-transport"><i class="fa fa-bus" style="font-size:8px;"></i>Transport</span>
+                    {% else %}
+                        <span class="type-chip tc-other">{{ category.get_category_type_display }}</span>
+                    {% endif %}
+                    {% endwith %}
+                    <div style="margin-top:4px;">
+                        {% with f=category.frequency|lower %}
+                        {% if f == 'termly' %}
+                            <span class="freq-pill fp-termly">Termly</span>
+                        {% elif f == 'yearly' %}
+                            <span class="freq-pill fp-yearly">Yearly</span>
+                        {% elif f == 'monthly' %}
+                            <span class="freq-pill fp-monthly">Monthly</span>
+                        {% elif f == 'one_time' %}
+                            <span class="freq-pill fp-one_time">One-time</span>
+                        {% else %}
+                            <span class="freq-pill fp-other">{{ category.get_frequency_display }}</span>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                </td>
+
+                <!-- Applicability -->
+                <td>
+                    <span style="font-size:12px;color:var(--ink-muted);">{{ category.get_applicability_display }}</span>
+                </td>
+
+                <!-- Flags -->
+                <td>
+                    <div style="display:flex;flex-direction:column;gap:3px;">
+                        {% if category.is_mandatory %}
+                            <span class="flag flag-req"><i class="fa fa-star" style="font-size:7px;"></i>Required</span>
+                        {% else %}
+                            <span class="flag flag-opt">Optional</span>
+                        {% endif %}
+                        {% if category.is_refundable %}
+                            <span class="flag flag-ref"><i class="fa fa-undo" style="font-size:7px;"></i>Refundable</span>
+                        {% else %}
+                            <span class="flag flag-noref"><i class="fa fa-lock" style="font-size:7px;"></i>Non-refund</span>
+                        {% endif %}
+                        {% if category.is_taxable %}
+                            <span class="flag flag-tax"><i class="fa fa-receipt" style="font-size:7px;"></i>Taxable {{ category.default_tax_rate }}%</span>
+                        {% endif %}
+                    </div>
+                </td>
+
+                <!-- Status -->
+                <td class="text-center">
+                    {% if category.is_active %}
+                        <span class="s-pill sp-active"><i class="fa fa-check-circle" style="font-size:9px;"></i>Active</span>
+                    {% else %}
+                        <span class="s-pill sp-inactive"><i class="fa fa-times-circle" style="font-size:9px;"></i>Inactive</span>
+                    {% endif %}
+                </td>
+
+                <!-- Actions -->
+                <td class="text-center">
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm"
+                            style="font-size:.84rem;min-width:180px;border:1px solid #e2e8f0;border-radius:8px;">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'fees:category_detail' category.pk %}">
+                                    <i class="fa fa-eye me-2 text-primary"></i>View Details
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'fees:category_edit' category.pk %}">
+                                    <i class="fa fa-edit me-2 text-warning"></i>Edit
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item"
+                                        hx-get="{% url 'fees:category_toggle_active_modal' category.pk %}"
+                                        hx-target="#modal-container"
+                                        hx-swap="innerHTML">
+                                    <i class="fa fa-{% if category.is_active %}pause-circle{% else %}play-circle{% endif %} me-2 text-secondary"></i>
+                                    {{ category.is_active|yesno:"Deactivate,Activate" }}
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        <div style="padding:12px 20px;background:var(--surface-2);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ink-muted);">
+            <span>{{ categories.count }} categor{{ categories.count|pluralize:"y,ies" }} in this group</span>
+            <a href="{% url 'fees:category_list' %}?display_group={{ group.pk }}"
+               style="color:var(--accent);font-weight:600;text-decoration:none;">
+                <i class="fa fa-external-link me-1" style="font-size:10px;"></i>View with filters
+            </a>
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <i class="fa fa-tags"></i>
+            <p>No fee categories assigned to this group yet.</p>
+            <div style="margin-top:14px;">
+                <a href="{% url 'fees:category_create' %}?display_group={{ group.pk }}"
+                   style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:13px;font-weight:600;border-radius:6px;background:var(--accent);color:#fff;text-decoration:none;">
+                    <i class="fa fa-plus" style="font-size:11px;"></i>Add First Category
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ── Invoice mockup ── -->
+    <div class="detail-card">
+        <div class="detail-card-head">
+            <div class="detail-card-head-left">
+                <div class="head-icon amber"><i class="pe-7s-note2"></i></div>
+                <div>
+                    <div class="head-title">Invoice Appearance</div>
+                    <div class="head-sub">How this group renders on a student invoice</div>
+                </div>
+            </div>
+        </div>
+        <div class="detail-card-body">
+            <div class="invoice-mockup">
+                <div class="invoice-mockup-hdr"><i class="fa fa-file-invoice me-1"></i>Invoice preview — fee groups</div>
+
+                <!-- Placeholder groups before this one -->
+                {% if group.display_order > 1 %}
+                <div class="invoice-group-section"
+                     style="border-left-color:#94a3b8; background:#f8fafc;">
+                    <div class="invoice-group-title" style="color:#94a3b8;">Earlier group(s) — order &lt; {{ group.display_order }}</div>
+                    <div class="invoice-line"><span style="color:#cbd5e1;">Fee line…</span><span style="color:#cbd5e1;">—</span></div>
+                </div>
+                {% endif %}
+
+                <!-- This group -->
+                <div class="invoice-group-section"
+                     style="border-left-color:{{ group.color_code|default:'#6f42c1' }}; background:{{ group.color_code|default:'#6f42c1' }}11;">
+                    <div class="invoice-group-title"
+                         style="color:{{ group.color_code|default:'#6f42c1' }};">
+                        {{ group.name }}
+                    </div>
+                    {% if categories %}
+                        {% for cat in categories|slice:":4" %}
+                        <div class="invoice-line">
+                            <span>{{ cat.name }}</span>
+                            <span style="color:var(--ink-muted);">—</span>
+                        </div>
+                        {% endfor %}
+                        {% if categories.count > 4 %}
+                        <div style="font-size:10.5px;color:var(--ink-faint);margin-top:4px;">
+                            + {{ categories.count|add:"-4" }} more categor{{ categories.count|add:"-4"|pluralize:"y,ies" }}…
+                        </div>
+                        {% endif %}
+                        {% if group.show_as_group and group.show_group_subtotal %}
+                        <div class="invoice-subtotal">
+                            <span>Subtotal</span>
+                            <span>—</span>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="invoice-line">
+                            <span style="color:var(--ink-faint);font-style:italic;">No categories assigned yet</span>
+                            <span>—</span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Placeholder after -->
+                <div class="invoice-group-section"
+                     style="border-left-color:#94a3b8; background:#f8fafc;">
+                    <div class="invoice-group-title" style="color:#94a3b8;">Later group(s) — order &gt; {{ group.display_order }}</div>
+                    <div class="invoice-line"><span style="color:#cbd5e1;">Fee line…</span><span style="color:#cbd5e1;">—</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>{# /col-lg-8 #}
+
+<!-- ══════════════ RIGHT COLUMN ══════════════ -->
+<div class="col-lg-4">
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-bar-chart"></i> Summary</div>
+        <div class="sidebar-card-body">
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Total Categories</span>
+                <span class="sidebar-row-val" style="color:var(--green);">{{ categories.count }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Display Order</span>
+                <span class="sidebar-row-val">{{ group.display_order }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Colour</span>
+                <span class="sidebar-row-val" style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:14px;height:14px;border-radius:50%;background:{{ group.color_code|default:'#6f42c1' }};border:1px solid rgba(0,0,0,.1);display:inline-block;"></span>
+                    <span style="font-family:'Courier New',monospace;font-size:12px;">{{ group.color_code|default:'#6f42c1' }}</span>
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Show as Group</span>
+                <span class="sidebar-row-val">{{ group.show_as_group|yesno:"Yes,No" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Show Subtotal</span>
+                <span class="sidebar-row-val">{{ group.show_group_subtotal|yesno:"Yes,No" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Status</span>
+                <span class="sidebar-row-val">
+                    {% if group.is_active %}
+                        <span style="color:var(--green);font-weight:700;">Active</span>
+                    {% else %}
+                        <span style="color:var(--red);font-weight:700;">Inactive</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Created</span>
+                <span class="sidebar-row-val">{{ group.created_at|date:"d M Y" }}</span>
+            </div>
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">Last Updated</span>
+                <span class="sidebar-row-val">{{ group.updated_at|date:"d M Y" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-cog"></i> Actions</div>
+        <div class="sidebar-card-body">
+            <div class="action-btn-group">
+                <a href="{% url 'fees:display_group_edit' group.pk %}" class="action-btn">
+                    <i class="fa fa-edit"></i> Edit Group
+                </a>
+                <a href="{% url 'fees:category_create' %}?display_group={{ group.pk }}" class="action-btn success">
+                    <i class="fa fa-plus"></i> Add Category to Group
+                </a>
+                {% if categories.count > 0 %}
+                <a href="{% url 'fees:category_list' %}?display_group={{ group.pk }}" class="action-btn">
+                    <i class="fa fa-list"></i> View All Categories
+                </a>
+                {% endif %}
+                <button type="button" class="action-btn warning"
+                        hx-get="{% url 'fees:display_group_toggle_active_modal' group.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    {% if group.is_active %}
+                        <i class="fa fa-pause-circle"></i> Deactivate Group
+                    {% else %}
+                        <i class="fa fa-play-circle"></i> Activate Group
+                    {% endif %}
+                </button>
+                {% if categories.count == 0 %}
+                <button type="button" class="action-btn danger"
+                        hx-get="{% url 'fees:display_group_delete_modal' group.pk %}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="fa fa-trash"></i> Delete Group
+                </button>
+                {% else %}
+                <button type="button" class="action-btn"
+                        style="cursor:not-allowed;opacity:.5;"
+                        disabled
+                        data-bs-toggle="tooltip"
+                        title="Cannot delete — {{ categories.count }} categor{{ categories.count|pluralize:'y,ies' }} still assigned">
+                    <i class="fa fa-trash"></i> Delete Group
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Category type breakdown -->
+    {% if categories %}
+    <div class="sidebar-card">
+        <div class="sidebar-card-head"><i class="fa fa-pie-chart"></i> Category Breakdown</div>
+        <div class="sidebar-card-body">
+            {% regroup categories by get_category_type_display as by_type %}
+            {% for group_type in by_type %}
+            <div class="sidebar-row">
+                <span class="sidebar-row-label">{{ group_type.grouper }}</span>
+                <span class="sidebar-row-val">{{ group_type.list|length }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>{# /col-lg-4 #}
+</div>{# /row #}
+
+<!-- ── HTMX modal shell ── -->
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    var currentModal = null;
+
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail.target.id !== 'modal-container') return;
+        var dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+        if (!dialog) return;
+        document.getElementById('dynamicModalWrapper')?.remove();
+        var wrapper = document.createElement('div');
+        wrapper.className = 'modal fade';
+        wrapper.id = 'dynamicModalWrapper';
+        wrapper.setAttribute('tabindex', '-1');
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(dialog);
+        document.body.appendChild(wrapper);
+        currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+        currentModal.show();
+        wrapper.addEventListener('hidden.bs.modal', function () {
+            wrapper.remove();
+            document.getElementById('modal-container').innerHTML = '';
+            currentModal = null;
+        });
+    });
+
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        var xhr      = e.detail.xhr;
+        var message  = xhr.getResponseHeader('HX-Alert-Message');
+        var type     = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+        var title    = xhr.getResponseHeader('HX-Alert-Title');
+        var close    = xhr.getResponseHeader('HX-Close-Modal');
+        var redirect = xhr.getResponseHeader('HX-Redirect');
+        if (close === 'true' && currentModal) currentModal.hide();
+        if (message && typeof Swal !== 'undefined') {
+            setTimeout(function () {
+                Swal.fire({
+                    icon: type,
+                    title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                    text: message,
+                    confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                    timer: type === 'success' ? 3000 : null,
+                    timerProgressBar: type === 'success',
+                }).then(function () {
+                    if (redirect) window.location.href = redirect;
+                    else if (type === 'success') window.location.reload();
+                });
+            }, 300);
+        }
+    });
+
+    // Tooltips
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+
+    // Dropdown Popper fix
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        var ex = bootstrap.Dropdown.getInstance(el);
+        if (ex) ex.dispose();
+        new bootstrap.Dropdown(el, {
+            popperConfig: function (d) { return Object.assign({}, d, { strategy: 'fixed' }); }
+        });
+    });
+})();
+</script>
+{% endblock %}

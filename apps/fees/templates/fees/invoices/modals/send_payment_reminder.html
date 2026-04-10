@@ -1,0 +1,84 @@
+{% load currency_filters %}
+<div class="modal-dialog modal-md">
+    <div class="modal-content">
+
+        <div class="modal-header" style="background:#fff7ed;border-bottom:1px solid #fed7aa;padding:16px 22px;">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#ffedd5;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa fa-bell" style="color:#f97316;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-weight:700;font-size:16px;color:#9a3412;">Send Payment Reminder</h5>
+                    <div style="font-size:11.5px;color:#f97316;margin-top:3px;">{{ invoice.invoice_number }} &middot; {{ invoice.student.get_full_name }}</div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form method="POST" hx-post="{% url 'fees:send_payment_reminder' invoice.pk %}" hx-target="body" hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:22px;">
+
+                {% if not is_overdue %}
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:0 7px 7px 0;margin-bottom:14px;">
+                    <i class="fa fa-info-circle" style="color:#3b82f6;margin-top:2px;flex-shrink:0;"></i>
+                    <div style="font-size:13px;color:#1e3a8a;line-height:1.6;">
+                        This invoice is not yet overdue. Due date: <strong>{{ invoice.due_date }}</strong>.
+                        You can still send an early reminder.
+                    </div>
+                </div>
+                {% else %}
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:18px;">
+                    <div style="flex:1;">
+                        <div style="font-size:12px;color:#64748b;">Balance Outstanding</div>
+                        <div style="font-size:18px;font-weight:700;color:#dc2626;">{{ invoice.balance|money }}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:12px;color:#64748b;">Days Overdue</div>
+                        <div style="font-size:18px;font-weight:700;color:#dc2626;">{{ days_overdue }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                        Reminder Type
+                    </label>
+                    <select name="reminder_type" class="form-select form-select-sm">
+                        <option value="FRIENDLY">Friendly Reminder</option>
+                        <option value="URGENT" {% if days_overdue > 14 %}selected{% endif %}>Urgent Reminder</option>
+                        <option value="FINAL" {% if days_overdue > 30 %}selected{% endif %}>Final Notice</option>
+                    </select>
+                </div>
+
+                <div class="mb-0">
+                    <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;display:block;margin-bottom:4px;">
+                        Recipients <span style="color:#ef4444;">*</span>
+                    </label>
+                    {% if invoice.student.email %}
+                    <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:13px;">
+                        <input type="checkbox" name="recipients" value="{{ invoice.student.email }}" checked>
+                        <span>{{ invoice.student.get_full_name }} (Student) &mdash; {{ invoice.student.email }}</span>
+                    </label>
+                    {% endif %}
+                    <input type="text" name="recipients" class="form-control form-control-sm mt-2"
+                           placeholder="Add email address...">
+                    <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Add additional recipients separated by commas</div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 22px;justify-content:space-between;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i> Cancel
+                </button>
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="fa fa-bell me-1"></i> Send Reminder
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+</div>

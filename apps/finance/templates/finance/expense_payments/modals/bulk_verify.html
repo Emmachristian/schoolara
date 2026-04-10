@@ -1,0 +1,132 @@
+{% load currency_filters %}
+
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+
+        <!-- HEADER -->
+        <div class="modal-header" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:8px;background:#d4edda;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa fa-check-circle" style="color:#155724;font-size:16px;"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title mb-0" style="font-size:15px;font-weight:700;color:#1a1a2e;">
+                        Bulk Verify Payments
+                    </h5>
+                    <div style="font-size:11px;color:#6c757d;margin-top:1px;">
+                        {{ unverified_payments|length }} unverified payment{{ unverified_payments|length|pluralize }}
+                        &nbsp;·&nbsp; Total: {{ total_amount|money }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        {% if not unverified_payments %}
+        <div class="modal-body" style="padding:30px;text-align:center;color:#94a3b8;">
+            <i class="fa fa-check-circle" style="font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4;color:#28a745;"></i>
+            <p style="font-size:13px;margin:0;">No unverified payments found.</p>
+        </div>
+        <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:12px 20px;">
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+
+        {% else %}
+
+        <!-- INFO -->
+        <div style="background:#e3f2fd;border-bottom:1px solid #bbdefb;padding:12px 20px;font-size:12.5px;color:#1565c0;display:flex;align-items:flex-start;gap:10px;">
+            <i class="fa fa-info-circle mt-1" style="flex-shrink:0;"></i>
+            <div>
+                Select the payments to verify. A journal entry will be created for each verified payment.
+                Only payments in <strong>Processing</strong> or <strong>Processed</strong> status are shown.
+            </div>
+        </div>
+
+        <form method="post"
+              action="{% url 'finance:bulk_expense_payment_verification' %}"
+              hx-post="{% url 'finance:bulk_expense_payment_verification' %}"
+              hx-target="body" hx-swap="none">
+            {% csrf_token %}
+
+            <div class="modal-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:#f8fafc;">
+                            <th style="padding:10px 16px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;width:36px;">
+                                <input type="checkbox" id="select-all-payments" style="cursor:pointer;">
+                            </th>
+                            <th style="padding:10px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;">Reference</th>
+                            <th style="padding:10px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;">Expense</th>
+                            <th style="padding:10px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;">Method</th>
+                            <th style="padding:10px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;">Date</th>
+                            <th style="padding:10px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;border-bottom:2px solid #e2e8f0;text-align:right;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in unverified_payments %}
+                        <tr style="border-bottom:1px solid #f1f5f9;" class="payment-row">
+                            <td style="padding:10px 16px;">
+                                <input type="checkbox" name="payment_ids" value="{{ payment.pk }}"
+                                       class="payment-checkbox" style="cursor:pointer;" checked>
+                            </td>
+                            <td style="padding:10px 12px;font-family:monospace;font-size:12.5px;color:#1d4ed8;">
+                                {{ payment.reference_number|default:"—" }}
+                            </td>
+                            <td style="padding:10px 12px;color:#334155;">
+                                <div style="font-weight:600;">{{ payment.expense.expense_number }}</div>
+                                <div style="font-size:11.5px;color:#64748b;">{{ payment.expense.category.name }}</div>
+                            </td>
+                            <td style="padding:10px 12px;color:#334155;">{{ payment.payment_method.name }}</td>
+                            <td style="padding:10px 12px;color:#334155;white-space:nowrap;">{{ payment.payment_date|date:"d M Y" }}</td>
+                            <td style="padding:10px 12px;text-align:right;font-weight:700;color:#0f172a;font-family:monospace;">
+                                {{ payment.amount|money }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
+                            <td colspan="5" style="padding:10px 12px;font-size:12px;color:#64748b;">
+                                <span id="selected-count">{{ unverified_payments|length }}</span> selected
+                            </td>
+                            <td style="padding:10px 12px;text-align:right;font-weight:800;color:#0f172a;font-family:monospace;">
+                                {{ total_amount|money }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="modal-footer" style="background:#f8f9fa;border-top:1px solid #e9ecef;padding:14px 20px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success btn-sm" style="min-width:160px;">
+                    <i class="fa fa-check-circle me-1"></i> Verify Selected
+                </button>
+            </div>
+        </form>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+(function () {
+    var selectAll  = document.getElementById('select-all-payments');
+    var checkboxes = document.querySelectorAll('.payment-checkbox');
+    var countEl    = document.getElementById('selected-count');
+
+    function updateCount() {
+        var n = document.querySelectorAll('.payment-checkbox:checked').length;
+        if (countEl) countEl.textContent = n;
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+            updateCount();
+        });
+    }
+
+    checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+})();
+</script>

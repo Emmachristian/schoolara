@@ -1,0 +1,618 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load currency_filters %}
+{% load custom_filters %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ink:       #0f172a;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --surface:   #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border:    #e2e8f0;
+    --accent:    #1d4ed8;
+    --accent-lt: #eff6ff;
+    --green:     #15803d;
+    --green-lt:  #f0fdf4;
+    --amber:     #b45309;
+    --amber-lt:  #fffbeb;
+    --red:       #dc2626;
+    --red-lt:    #fef2f2;
+    --radius:    10px;
+}
+
+/* ── Hero ── */
+.po-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 26px 30px 22px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.hero-po-num  { font-family: 'Courier New', monospace; font-size: 26px; font-weight: 900; color: var(--ink); letter-spacing: -.5px; }
+.hero-top     { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.hero-meta    { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 14px; }
+.hero-meta-item  { display: flex; flex-direction: column; gap: 2px; }
+.hero-meta-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-faint); }
+.hero-meta-value { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* ── Status pills ── */
+.st-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 700; white-space: nowrap; text-transform: uppercase; letter-spacing: .4px; }
+.sp-draft     { background: var(--surface-3); color: #64748b; border: 1px solid #cbd5e1; }
+.sp-submitted { background: var(--amber-lt); color: var(--amber); border: 1px solid #fde68a; }
+.sp-approved  { background: var(--accent-lt); color: var(--accent); border: 1px solid #bfdbfe; }
+.sp-ordered   { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.sp-partial   { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.sp-received  { background: var(--green-lt); color: var(--green); border: 1px solid #bbf7d0; }
+.sp-cancelled { background: var(--red-lt); color: var(--red); border: 1px solid #fecaca; }
+
+/* ── Stat strip ── */
+.stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.strip-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+.strip-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); margin-bottom: 4px; }
+.strip-value { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1; }
+.strip-sub   { font-size: 11px; color: var(--ink-faint); margin-top: 3px; }
+
+/* ── Cards ── */
+.det-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+.det-card-head { background: var(--surface-2); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.det-card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; margin: 0; }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0 22px; }
+.info-cell { padding: 11px 0; border-bottom: 1px solid var(--border); }
+.info-cell:nth-child(odd)  { padding-right: 24px; }
+.info-cell:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--border); }
+.info-cell:last-child, .info-cell:nth-last-child(2) { border-bottom: none; }
+.info-cell.full { grid-column: span 2; padding-right: 0; border-left: none; }
+.info-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-faint); margin-bottom: 3px; }
+.info-val { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+
+/* ── Items table ── */
+.items-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.items-tbl thead th { background: var(--surface-2); padding: 10px 14px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; color: #64748b; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.items-tbl tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.items-tbl tbody tr:last-child td { border-bottom: none; }
+.items-tbl tfoot td { padding: 11px 14px; border-top: 2px solid var(--border); font-weight: 700; background: var(--surface-2); }
+
+.size-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 24px; padding: 0 7px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; font-size: 11.5px; font-weight: 700; color: #1d4ed8; }
+
+/* ── Sidebar ── */
+.sidebar-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 18px; }
+.sidebar-head { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted); display: flex; align-items: center; gap: 7px; }
+.sidebar-body { padding: 14px 18px; }
+.side-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.side-row:last-child { border-bottom: none; }
+.s-label { color: var(--ink-muted); font-size: 12.5px; }
+.s-value { font-weight: 700; color: var(--ink); }
+.s-value.green  { color: var(--green); }
+.s-value.accent { color: var(--accent); }
+.s-value.amber  { color: var(--amber); }
+
+@media (max-width: 768px) {
+    .po-hero    { grid-template-columns: 1fr; }
+    .info-grid  { grid-template-columns: 1fr; }
+    .info-cell:nth-child(even) { border-left: none; padding-left: 0; }
+    .info-cell.full { grid-column: span 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-page-title">
+    <div class="page-title-wrapper">
+        <div class="page-title-heading">
+            <div class="page-title-icon">
+                <i class="pe-7s-cart icon-gradient bg-happy-itmeo"></i>
+            </div>
+            <div>
+                {{ po.po_number }}
+                <div class="page-title-subheading">
+                    {{ po.supplier_name }} &mdash; {{ po.order_date|date:"d M Y" }}
+                </div>
+            </div>
+        </div>
+        <div class="page-title-actions">
+            <a href="{% url 'uniforms:purchase_order_list' %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="fa fa-arrow-left me-1"></i>Back
+            </a>
+
+            {% if po.status == 'DRAFT' %}
+            <a href="{% url 'uniforms:purchase_order_edit' po.pk %}" class="btn btn-sm btn-warning me-1">
+                <i class="fa fa-edit me-1"></i>Edit
+            </a>
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    hx-get="{% url 'uniforms:purchase_order_submit_modal' po.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-paper-plane me-1"></i>Submit
+            </button>
+            {% elif po.status == 'SUBMITTED' %}
+            <button class="btn btn-sm btn-success me-1"
+                    hx-get="{% url 'uniforms:purchase_order_approve_modal' po.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-check me-1"></i>Approve
+            </button>
+            {% elif po.status == 'APPROVED' %}
+            <button class="btn btn-sm btn-info me-1"
+                    hx-get="{% url 'uniforms:purchase_order_receive_modal' po.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+                <i class="fa fa-truck me-1"></i>Receive Stock
+            </button>
+            {% endif %}
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown">
+                    <i class="fa fa-ellipsis-v"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'uniforms:purchase_order_print_detail' po.pk %}"
+                           target="_blank">
+                            <i class="fa fa-print me-2"></i>Print PO
+                        </a>
+                    </li>
+                    {% if po.status not in 'RECEIVED,CANCELLED' %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:purchase_order_cancel_modal' po.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-times me-2"></i>Cancel Order
+                        </button>
+                    </li>
+                    {% endif %}
+                    {% if po.status == 'DRAFT' %}
+                    <li>
+                        <button class="dropdown-item text-danger"
+                                hx-get="{% url 'uniforms:purchase_order_delete_modal' po.pk %}"
+                                hx-target="#modal-container" hx-swap="innerHTML">
+                            <i class="fa fa-trash me-2"></i>Delete
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Breadcrumb ── #}
+<nav aria-label="breadcrumb" style="margin-bottom:18px;">
+    <ol class="breadcrumb" style="background:none;padding:0;margin:0;font-size:12.5px;">
+        <li class="breadcrumb-item">
+            <a href="{% url 'uniforms:purchase_order_list' %}" style="color:#64748b;text-decoration:none;">
+                <i class="fa fa-shopping-cart me-1"></i>Purchase Orders
+            </a>
+        </li>
+        <li class="breadcrumb-item active" style="color:#0f172a;font-weight:600;">
+            {{ po.po_number }}
+        </li>
+    </ol>
+</nav>
+
+{# ── Hero ── #}
+<div class="po-hero">
+    <div>
+        <div class="hero-top">
+            <span class="hero-po-num">{{ po.po_number }}</span>
+            {% if po.status == 'DRAFT' %}
+                <span class="st-pill sp-draft"><i class="fa fa-pencil-alt"></i>Draft</span>
+            {% elif po.status == 'SUBMITTED' %}
+                <span class="st-pill sp-submitted"><i class="fa fa-clock"></i>Submitted</span>
+            {% elif po.status == 'APPROVED' %}
+                <span class="st-pill sp-approved"><i class="fa fa-check"></i>Approved</span>
+            {% elif po.status == 'ORDERED' %}
+                <span class="st-pill sp-ordered"><i class="fa fa-truck"></i>Ordered</span>
+            {% elif po.status == 'PARTIAL' %}
+                <span class="st-pill sp-partial"><i class="fa fa-adjust"></i>Partial</span>
+            {% elif po.status == 'RECEIVED' %}
+                <span class="st-pill sp-received"><i class="fa fa-check-circle"></i>Received</span>
+            {% elif po.status == 'CANCELLED' %}
+                <span class="st-pill sp-cancelled"><i class="fa fa-times-circle"></i>Cancelled</span>
+            {% endif %}
+        </div>
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Supplier</span>
+                <span class="hero-meta-value">{{ po.supplier_name }}</span>
+            </div>
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Order Date</span>
+                <span class="hero-meta-value">{{ po.order_date|date:"d M Y" }}</span>
+            </div>
+            {% if po.expected_delivery_date %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Expected Delivery</span>
+                <span class="hero-meta-value">{{ po.expected_delivery_date|date:"d M Y" }}</span>
+            </div>
+            {% endif %}
+            {% if po.fiscal_period %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Fiscal Period</span>
+                <span class="hero-meta-value">{{ po.fiscal_period.name }}</span>
+            </div>
+            {% endif %}
+            {% if approved_by %}
+            <div class="hero-meta-item">
+                <span class="hero-meta-label">Approved By</span>
+                <span class="hero-meta-value">{{ approved_by.get_full_name }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;color:var(--ink-faint);">Order Total</div>
+        <div style="font-size:36px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink);">
+            {{ po.total_amount|money_short }}
+        </div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">
+            {{ po.items.count }} line item{{ po.items.count|pluralize }}
+        </div>
+    </div>
+</div>
+
+{# ── Stat strip ── #}
+<div class="stat-strip">
+    <div class="strip-card">
+        <div class="strip-label">Subtotal</div>
+        <div class="strip-value" style="font-size:16px;">{{ po.total_amount|subtract:po.shipping_cost|money }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Shipping</div>
+        <div class="strip-value" style="font-size:16px;">{{ po.shipping_cost|default:0|money }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Total</div>
+        <div class="strip-value" style="font-size:16px;color:var(--accent);">{{ po.total_amount|money }}</div>
+    </div>
+    <div class="strip-card">
+        <div class="strip-label">Payment Terms</div>
+        <div class="strip-value" style="font-size:13px;font-weight:600;">{{ po.payment_terms|default:"—" }}</div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+
+        {# ── Line Items ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <h6 class="det-card-title">
+                    <i class="fa fa-list"></i>Order Line Items
+                    <span style="font-size:11px;font-weight:500;color:var(--ink-faint);">
+                        {{ po.items.count }} item{{ po.items.count|pluralize }}
+                    </span>
+                </h6>
+                {% if po.status == 'DRAFT' %}
+                <a href="{% url 'uniforms:purchase_order_edit' po.pk %}"
+                   class="btn btn-sm btn-outline-success" style="font-size:12px;">
+                    <i class="fa fa-plus me-1"></i>Edit Items
+                </a>
+                {% endif %}
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="items-tbl">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Item</th>
+                            <th class="text-center">Size</th>
+                            <th class="text-center">Qty Ordered</th>
+                            <th class="text-center">Qty Received</th>
+                            <th class="text-center">Unit Price</th>
+                            <th class="text-center">Total</th>
+                            {% if po.status == 'DRAFT' %}
+                            <th class="text-center" style="width:50px;"></th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in po.items.all %}
+                        <tr>
+                            <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                            <td>
+                                <a href="{% url 'uniforms:uniform_item_detail' item.uniform_item.pk %}"
+                                   style="font-weight:600;color:#0f172a;text-decoration:none;font-size:13px;">
+                                    {{ item.uniform_item.name }}
+                                </a>
+                                <div style="font-family:'Courier New',monospace;font-size:11px;color:#94a3b8;margin-top:1px;">
+                                    {{ item.uniform_item.code }}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                {% if item.size %}
+                                    <span class="size-chip">{{ item.size.name }}</span>
+                                {% else %}
+                                    <span style="color:#94a3b8;">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span style="font-size:15px;font-weight:700;">{{ item.quantity_ordered }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if item.quantity_received is not None %}
+                                <span style="font-size:14px;font-weight:700;
+                                             color:{% if item.quantity_received >= item.quantity_ordered %}#15803d{% elif item.quantity_received > 0 %}#b45309{% else %}#94a3b8{% endif %};">
+                                    {{ item.quantity_received }}
+                                </span>
+                                {% else %}
+                                <span style="color:#94a3b8;">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span style="font-size:13px;font-weight:600;">{{ item.unit_price|money }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span style="font-size:13px;font-weight:700;">{{ item.total_price|money }}</span>
+                            </td>
+                            {% if po.status == 'DRAFT' %}
+                            <td class="text-center">
+                                <a href="{% url 'uniforms:purchase_order_edit' po.pk %}"
+                                   class="btn btn-xs btn-outline-secondary"
+                                   style="padding:2px 7px;font-size:11px;"
+                                   title="Edit order to remove items">
+                                    <i class="fa fa-edit"></i>
+                                </a>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="{% if po.status == 'DRAFT' %}8{% else %}7{% endif %}"
+                                style="text-align:center;padding:32px 20px;color:#94a3b8;font-size:13px;">
+                                <i class="fa fa-inbox fa-2x" style="display:block;margin-bottom:10px;opacity:.3;"></i>
+                                No line items yet.
+                                {% if po.status == 'DRAFT' %}Add items using the button above.{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if po.items.exists %}
+                    <tfoot>
+                        <tr>
+                            <td colspan="{% if po.status == 'DRAFT' %}5{% else %}4{% endif %}"></td>
+                            <td class="text-end" style="color:#64748b;font-size:12px;">Items subtotal</td>
+                            <td class="text-center">{{ po.total_amount|subtract:po.shipping_cost|money }}</td>
+                            {% if po.status == 'DRAFT' %}<td></td>{% endif %}
+                        </tr>
+                        {% if po.shipping_cost and po.shipping_cost > 0 %}
+                        <tr>
+                            <td colspan="{% if po.status == 'DRAFT' %}5{% else %}4{% endif %}"></td>
+                            <td class="text-end" style="color:#64748b;font-size:12px;">Shipping</td>
+                            <td class="text-center">{{ po.shipping_cost|money }}</td>
+                            {% if po.status == 'DRAFT' %}<td></td>{% endif %}
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <td colspan="{% if po.status == 'DRAFT' %}5{% else %}4{% endif %}"></td>
+                            <td class="text-end" style="color:#0f172a;font-size:13px;font-weight:700;">Grand Total</td>
+                            <td class="text-center" style="color:#1d4ed8;font-size:15px;">{{ po.total_amount|money }}</td>
+                            {% if po.status == 'DRAFT' %}<td></td>{% endif %}
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        {# ── Order Details ── #}
+        <div class="det-card">
+            <div class="det-card-head">
+                <h6 class="det-card-title"><i class="fa fa-info-circle"></i>Order Details</h6>
+            </div>
+            <div class="info-grid">
+                <div class="info-cell">
+                    <div class="info-lbl">PO Number</div>
+                    <div class="info-val" style="font-family:'Courier New',monospace;">{{ po.po_number }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Status</div>
+                    <div class="info-val">{{ po.get_status_display }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Order Date</div>
+                    <div class="info-val">{{ po.order_date|date:"d M Y" }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Expected Delivery</div>
+                    <div class="info-val">{{ po.expected_delivery_date|date:"d M Y"|default:"Not set" }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Fiscal Period</div>
+                    <div class="info-val">{{ po.fiscal_period.name|default:"—" }}</div>
+                </div>
+                <div class="info-cell">
+                    <div class="info-lbl">Payment Terms</div>
+                    <div class="info-val">{{ po.payment_terms|default:"—" }}</div>
+                </div>
+                {% if po.notes %}
+                <div class="info-cell full">
+                    <div class="info-lbl">Notes</div>
+                    <div class="info-val" style="font-weight:500;font-size:13px;color:var(--ink-muted);">{{ po.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <div class="col-lg-4">
+
+        {# Supplier info #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-building"></i>Supplier</div>
+            <div class="sidebar-body">
+                <div class="side-row">
+                    <span class="s-label">Name</span>
+                    <span class="s-value">{{ po.supplier_name }}</span>
+                </div>
+                {% if po.supplier_contact %}
+                <div class="side-row">
+                    <span class="s-label">Contact</span>
+                    <span class="s-value" style="font-weight:500;">{{ po.supplier_contact }}</span>
+                </div>
+                {% endif %}
+                {% if po.supplier_email %}
+                <div class="side-row">
+                    <span class="s-label">Email</span>
+                    <span class="s-value" style="font-size:12px;font-weight:500;">
+                        <a href="mailto:{{ po.supplier_email }}" style="color:var(--accent);">{{ po.supplier_email }}</a>
+                    </span>
+                </div>
+                {% endif %}
+                {% if po.supplier_phone %}
+                <div class="side-row">
+                    <span class="s-label">Phone</span>
+                    <span class="s-value" style="font-weight:500;">{{ po.supplier_phone }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Financial summary #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-calculator"></i>Financial Summary</div>
+            <div class="sidebar-body">
+                <div class="side-row">
+                    <span class="s-label">Items Subtotal</span>
+                    <span class="s-value">{{ po.total_amount|subtract:po.shipping_cost|money }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Shipping Cost</span>
+                    <span class="s-value">{{ po.shipping_cost|default:0|money }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Grand Total</span>
+                    <span class="s-value accent" style="font-size:15px;">{{ po.total_amount|money }}</span>
+                </div>
+                <div class="side-row">
+                    <span class="s-label">Journal Entry</span>
+                    <span class="s-value">
+                        {% if po.journal_entry %}
+                            <a href="{% url 'finance:journal_entry_detail' po.journal_entry.pk %}"
+                               style="color:var(--accent);font-size:12px;">
+                                {{ po.journal_entry.entry_number }}
+                            </a>
+                        {% elif po.auto_create_journal_entry %}
+                            <span style="color:var(--amber);font-size:12px;font-weight:500;">Pending</span>
+                        {% else %}
+                            <span style="color:var(--ink-faint);font-weight:500;">None</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {# Quick actions #}
+        <div class="sidebar-card">
+            <div class="sidebar-head"><i class="fa fa-bolt"></i>Quick Actions</div>
+            <div class="sidebar-body" style="display:flex;flex-direction:column;gap:8px;">
+                {% if po.status == 'DRAFT' %}
+                <a href="{% url 'uniforms:purchase_order_edit' po.pk %}"
+                   class="btn btn-sm btn-outline-warning w-100 text-start">
+                    <i class="fa fa-edit me-2"></i>Edit Order
+                </a>
+                <button class="btn btn-sm btn-outline-primary w-100 text-start"
+                        hx-get="{% url 'uniforms:purchase_order_submit_modal' po.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-paper-plane me-2"></i>Submit for Approval
+                </button>
+                {% elif po.status == 'SUBMITTED' %}
+                <button class="btn btn-sm btn-outline-success w-100 text-start"
+                        hx-get="{% url 'uniforms:purchase_order_approve_modal' po.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-check me-2"></i>Approve Order
+                </button>
+                {% elif po.status == 'APPROVED' %}
+                <button class="btn btn-sm btn-outline-info w-100 text-start"
+                        hx-get="{% url 'uniforms:purchase_order_receive_modal' po.pk %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                    <i class="fa fa-truck me-2"></i>Receive Stock
+                </button>
+                {% endif %}
+                <a href="{% url 'uniforms:purchase_order_print_detail' po.pk %}" target="_blank"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-print me-2"></i>Print Purchase Order
+                </a>
+                <a href="{% url 'uniforms:purchase_order_create' %}"
+                   class="btn btn-sm btn-outline-secondary w-100 text-start">
+                    <i class="fa fa-copy me-2"></i>New Purchase Order
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentModal = null;
+
+document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'modal-container') return;
+    const dialog = document.getElementById('modal-container').querySelector('.modal-dialog');
+    if (!dialog) return;
+    document.getElementById('dynamicModalWrapper')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'modal fade'; wrapper.id = 'dynamicModalWrapper';
+    wrapper.setAttribute('tabindex', '-1'); wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.appendChild(dialog);
+    document.body.appendChild(wrapper);
+    currentModal = new bootstrap.Modal(wrapper, { backdrop: true, keyboard: true });
+    currentModal.show();
+    wrapper.addEventListener('hidden.bs.modal', function () {
+        wrapper.remove();
+        document.getElementById('modal-container').innerHTML = '';
+        currentModal = null;
+    });
+});
+
+document.body.addEventListener('htmx:beforeSwap', function (e) {
+    const xhr = e.detail.xhr;
+    const message = xhr.getResponseHeader('HX-Alert-Message');
+    const type    = xhr.getResponseHeader('HX-Alert-Type') || 'success';
+    const title   = xhr.getResponseHeader('HX-Alert-Title');
+    const close   = xhr.getResponseHeader('HX-Close-Modal');
+    const redirect= xhr.getResponseHeader('HX-Redirect');
+    if (close === 'true' && currentModal) currentModal.hide();
+    if (message && typeof Swal !== 'undefined') {
+        setTimeout(() => {
+            Swal.fire({
+                icon: type,
+                title: title || (type.charAt(0).toUpperCase() + type.slice(1)),
+                text: message,
+                confirmButtonColor: type === 'success' ? '#15803d' : type === 'error' ? '#dc2626' : '#b45309',
+                timer: type === 'success' ? 3000 : null,
+                timerProgressBar: type === 'success',
+            }).then(() => {
+                if (redirect) window.location.href = redirect;
+                else if (type === 'success') window.location.reload();
+            });
+        }, 300);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        new bootstrap.Dropdown(el, {
+            popperConfig: d => Object.assign({}, d, { strategy: 'fixed' })
+        });
+    });
+});
+</script>
+{% endblock %}

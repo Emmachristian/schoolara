@@ -996,6 +996,13 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
     Uses school timezone for all date validations. ⭐
     """
 
+    gender = forms.ChoiceField(
+        label="Gender",
+        choices=Student.GENDER_CHOICES,
+        widget=forms.RadioSelect(),
+        required=True
+    )
+
     religious_affiliation = forms.ChoiceField(
         choices=Student.RELIGIOUS_AFFILIATION_CHOICES,
         required=False,
@@ -1009,38 +1016,38 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             'admission_number', 'admission_date', 'national_student_number',
             'birth_certificate_number', 'first_name', 'middle_name', 'last_name',
             'date_of_birth', 'gender',
-            
+
             # Academic Information
             'current_academic_level', 'admission_academic_level',
-            
+
             # Demographics & Cultural Info
             'nationality', 'ethnicity', 'birth_place', 'birth_country',
             'religious_affiliation',
-            
+
             # Contact & Address Information
             'personal_email', 'phone_number', 'home_address', 'mailing_address',
             'district', 'region', 'country_of_residence',
-            
+
             # Health & Medical Information
             'health_condition', 'blood_type', 'medical_conditions', 'allergies',
             'medications', 'special_medical_needs', 'emergency_medical_contact',
             'preferred_hospital', 'medical_insurance', 'insurance_policy_number',
-            
+
             # Special Needs & Accommodations
             'has_special_needs', 'special_needs_description', 'requires_special_diet',
             'special_diet_details', 'learning_disabilities', 'learning_accommodations',
-            
+
             # Transport Information
             'transportation_required', 'transport_route', 'pickup_point', 'pickup_time',
-            
+
             # Previous Education
             'previous_school', 'previous_school_address', 'previous_academic_level',
             'transfer_reason', 'transfer_certificate_number',
             'previous_school_completion_date',
-            
+
             # Media & Documents
             'photo',
-            
+
             # Status & Tracking
             'enrollment_status', 'graduation_date', 'withdrawal_date',
         ]
@@ -1049,7 +1056,6 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             'admission_number': forms.TextInput(attrs={'class': 'form-control'}),
             'admission_date': DatePickerInput(),
             'date_of_birth': DatePickerInput(),
-            'gender': forms.Select(choices=Student.GENDER_CHOICES, attrs={'class': 'form-select'}),
             'photo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
             'graduation_date': DatePickerInput(),
             'withdrawal_date': DatePickerInput(),
@@ -1061,7 +1067,7 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         from academics.models import AcademicLevel
-        
+
         # Set up academic level querysets
         try:
             queryset = AcademicLevel.objects.filter(is_active=True).order_by('order')
@@ -1070,19 +1076,19 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             self.fields['previous_academic_level'].queryset = queryset
         except Exception as e:
             logger.error(f"Error setting academic level queryset: {e}")
-        
+
         # Set up nationality choices
         nationality_choices = [('UG', 'Uganda')] + [
             (code, name) for code, name in countries if code != 'UG'
         ]
         self.fields['nationality'].choices = nationality_choices
         self.fields['nationality'].initial = 'UG'
-        
+
         # Set default admission date (school timezone) ⭐
         if not self.is_bound and not self.instance.pk:
             from core.utils import get_school_today
             self.fields['admission_date'].initial = get_school_today()
-    
+
     def clean_date_of_birth(self):
         """Validate DOB using school timezone ⭐"""
         dob = self.cleaned_data.get('date_of_birth')
@@ -1090,22 +1096,22 @@ class StudentForm(BootstrapFormMixin, RequiredFieldsMixin, forms.ModelForm):
             validate_future_date(dob)
             validate_age(dob, min_age=2, max_age=30)
         return dob
-    
+
     def clean_admission_date(self):
         """Validate admission date using school timezone ⭐"""
         admission_date = self.cleaned_data.get('admission_date')
         if admission_date:
             from core.utils import get_school_today
             from datetime import timedelta
-            
+
             today = get_school_today()  # ⭐
-            
+
             if admission_date > today:
                 raise ValidationError("Admission date cannot be in the future.")
-            
+
             if admission_date < (today - timedelta(days=10*365)):
                 raise ValidationError("Admission date seems too far in the past.")
-        
+
         return admission_date
 
 

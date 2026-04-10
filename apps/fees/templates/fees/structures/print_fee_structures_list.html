@@ -1,0 +1,91 @@
+{% extends "fees/print_base.html" %}
+{% load currency_filters %}
+
+{% block page_title %}Fee Structures{% endblock %}
+{% block doc_title %}Fee Structures{% endblock %}
+{% block record_count %}{{ structures|length }}{% endblock %}
+{% block print_orientation %}{% if landscape %}size: A4 landscape;{% else %}size: A4 portrait;{% endif %}{% endblock %}
+
+{% block stats_bar %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.total|default:0 }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.active|default:0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.inactive|default:0 }}</span>
+        <span class="stat-label">Inactive</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-value">{{ stats.with_late_fees|default:0 }}</span>
+        <span class="stat-label">Late Fee Enabled</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block table_body %}
+{% if structures %}
+    {% for struct in structures %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        {% for field in selected_fields %}
+        <td{% if field in "total_amount,late_fee_amount" %} class="num"{% elif field in "item_count,priority,payment_terms_days,late_fee_pct,grace_period" %} class="ctr"{% endif %}>
+            {% if field == 'name' %}
+                <strong>{{ struct.name }}</strong>
+            {% elif field == 'structure_type' %}
+                {{ struct.get_structure_type_display }}
+            {% elif field == 'academic_year' %}
+                {{ struct.academic_year|default:"—" }}
+            {% elif field == 'billing_frequency' %}
+                {{ struct.get_billing_frequency_display }}
+            {% elif field == 'boarding_filter' %}
+                {{ struct.get_boarding_type_filter_display }}
+            {% elif field == 'student_filter' %}
+                {{ struct.get_student_type_filter_display }}
+            {% elif field == 'total_amount' %}
+                {% with total=struct.get_total_amount %}
+                    {% if total %}<strong>{{ total|amount }}</strong>{% else %}—{% endif %}
+                {% endwith %}
+            {% elif field == 'item_count' %}
+                {{ struct.items.count }}
+            {% elif field == 'payment_terms_days' %}
+                {{ struct.payment_terms_days }} days
+            {% elif field == 'priority' %}
+                {{ struct.priority }}
+            {% elif field == 'charges_late_fee' %}
+                {% if struct.charges_late_fee %}<span class="bool-yes">Yes</span>{% else %}<span class="bool-no">No</span>{% endif %}
+            {% elif field == 'late_fee_amount' %}
+                {% if struct.late_fee_amount and struct.late_fee_amount > 0 %}{{ struct.late_fee_amount|amount }}{% else %}—{% endif %}
+            {% elif field == 'late_fee_pct' %}
+                {% if struct.late_fee_percentage and struct.late_fee_percentage > 0 %}{{ struct.late_fee_percentage|percentage }}{% else %}—{% endif %}
+            {% elif field == 'grace_period' %}
+                {{ struct.grace_period_days }} days
+            {% elif field == 'effective_date' %}
+                {% if struct.effective_date %}{{ struct.effective_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% elif field == 'expiry_date' %}
+                {% if struct.expiry_date %}{{ struct.expiry_date|date:"d M Y" }}{% else %}<span class="text-muted">No expiry</span>{% endif %}
+            {% elif field == 'is_active' %}
+                {% if struct.is_active %}<span class="badge s-active">Active</span>{% else %}<span class="badge s-void">Inactive</span>{% endif %}
+            {% elif field == 'applicable_levels' %}
+                {% for level in struct.academic_levels.all %}{{ level.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+            {% elif field == 'applicable_sessions' %}
+                {% for session in struct.applicable_sessions.all %}{{ session.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+            {% elif field == 'description' %}
+                {{ struct.description|default:"—"|truncatechars:60 }}
+            {% else %}—{% endif %}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="{{ selected_fields|length|add:1 }}">
+        <div class="empty-state"><strong>No fee structures found</strong><p>No records match the applied filters.</p></div>
+    </td></tr>
+{% endif %}
+{% endblock %}
